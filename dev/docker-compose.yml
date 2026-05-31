@@ -1,0 +1,41 @@
+# ClawMate v0.1 — docker-compose
+# Run: docker-compose up -d
+# clawmate: file browser + preview on port 5533
+# onlyoffice: optional document server (uncomment to enable)
+
+services:
+  clawmate:
+    build: .
+    container_name: clawmate
+    ports:
+      - "${CLAWMATE_PORT:-5533}:5533"
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ${HOME:-/home/clawmate}:/home/clawmate:ro
+      # Add specific data volumes as needed, e.g.:
+      # - /path/to/media:/data/media:ro
+      # - /path/to/projects:/data/projects:ro
+    environment:
+      - CLAWMATE_PORT=5533
+      - CLAWMATE_CONFIG=/app/config.json
+      - CLAWMATE_ONLYOFFICE_JWT_SECRET=${CLAWMATE_ONLYOFFICE_JWT_SECRET:-}
+      - CLAWMATE_ONLYOFFICE_URL=${CLAWMATE_ONLYOFFICE_URL:-}
+      - CLAWMATE_PUBLIC_BASE_URL=${CLAWMATE_PUBLIC_BASE_URL:-}
+    restart: unless-stopped
+
+  # Uncomment to add ONLYOFFICE DocumentServer
+  # onlyoffice:
+  #   image: onlyoffice/documentserver:latest
+  #   container_name: onlyoffice
+  #   ports:
+  #     - "8080:80"
+  #   environment:
+  #     - JWT_SECRET=${CLAWMATE_ONLYOFFICE_JWT_SECRET:-}
+  #   volumes:
+  #     - onlyoffice_data:/var/www/onlyoffice/Data
+  #     - onlyoffice_log:/var/log/onlyoffice
+  #   restart: unless-stopped
+  #
+  # volumes:
+  #   onlyoffice_data:
+  #   onlyoffice_log:

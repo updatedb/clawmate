@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ClawMate</title>
+  <link rel="stylesheet" href="./css/style.css?v=20260530d" />
+  <link rel="stylesheet" href="./vendor/github-markdown-dark.min.css" id="github-markdown-css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <button id="hamburgerBtn" aria-label="菜单">☰</button>
+      <div class="brand">ClawMate</div>
+      <div class="search-group">
+        <input id="searchInput" type="text" placeholder="搜索文件名" />
+        <button id="searchBtn">搜索</button>
+        <button id="clearSearchBtn">清除</button>
+      </div>
+      <div class="topbar-actions">
+        <button id="themeToggle" class="topbar-btn" title="切换主题">🌓</button>
+      </div>
+    </header>
+    <div class="content">
+      <div class="sidebar-overlay" id="sidebarOverlay"></div>
+      <aside class="sidebar" id="sidebar">
+        <div class="section">
+          <select id="rootSelect" style="font-weight:600"></select>
+          <div id="breadcrumb" class="breadcrumb" style="margin:8px 0"></div>
+          <ul id="dirList" class="dir-list"></ul>
+        </div>
+      </aside>
+      <main class="main">
+        <div class="toolbar">
+          <div class="path-block">
+            <div id="currentPath" class="path"></div>
+            <div class="controls">
+              <div class="control">
+                <label>类型</label>
+                <select id="filterType">
+                  <option value="all">全部</option>
+                  <option value="dir">目录</option>
+                  <option value="image">图片</option>
+                  <option value="video">视频</option>
+                  <option value="audio">音频</option>
+                  <option value="text">文本</option>
+                  <option value="other">其他</option>
+                </select>
+              </div>
+              <div class="control">
+                <label>排序</label>
+                <select id="sortKey">
+                  <option value="name">名称</option>
+                  <option value="mtime">时间</option>
+                  <option value="size">大小</option>
+                </select>
+                <button id="sortDir">降序</button>
+                <button id="multiSelectToggle" title="多选">☐ 多选</button>
+              </div>
+            </div>
+          </div>
+          <div class="toolbar-right">
+            <div class="view-toggle">
+              <button id="viewGrid" class="active">画廊</button>
+              <button id="viewList">列表</button>
+            </div>
+          </div>
+        </div>
+        <div id="status" class="status"></div>
+        <div id="gallery" class="gallery"></div>
+        <div id="list" class="list hidden"></div>
+        <div class="pagination">
+          <button id="prevPage">上一页</button>
+          <span id="pageInfo"></span>
+          <button id="nextPage">下一页</button>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- 批量操作栏 -->
+  <div id="batchBar" class="batch-bar hidden">
+    <div class="batch-bar-inner">
+      <span class="batch-count" id="batchCount">已选 0 个文件</span>
+      <div class="batch-actions">
+        <button id="batchDeleteBtn" class="danger">🗑 批量删除</button>
+        <button id="batchDownloadBtn2">📦 批量下载</button>
+        <button id="batchSelectAllBtn">全选当前页</button>
+        <button id="batchClearBtn">取消选择</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="previewModal" class="modal hidden">
+    <div class="modal-content">
+      <button id="closePreview" class="close">×</button>
+      <button id="openInPreview" class="preview-link-btn" title="在 Preview 页面打开">🔗</button>
+      <button id="toggleMaximize" class="maximize-btn" title="最大化/还原">⛶</button>
+      <div id="previewBody" class="preview-body"></div>
+    </div>
+  </div>
+
+  <script src="./vendor/purify.min.js"></script>
+  <script src="./vendor/marked.min.js"></script>
+  <script src="./vendor/highlight.min.js"></script>
+  <!-- KaTeX for math rendering -->
+  <link rel="stylesheet" href="./vendor/katex.min.css">
+  <script src="./vendor/katex.min.js"></script>
+  <script src="./vendor/auto-render.min.js"></script>
+  <!-- Mermaid v11 UMD (同步加载，确保 window.mermaid 在 app.js 执行前可用) -->
+  <script src="./vendor/mermaid-v11.min.js"></script>
+  <script src="./js/app.js?v=20260530d"></script>
+</body>
+</html>

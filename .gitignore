@@ -1,0 +1,16 @@
+node_modules/ .npm/ .pnpm-store/
+__pycache__/ *.py[cod] .venv/ venv/ .env*
+*.log logs/
+.DS_Store Thumbs.db
+.vscode/ .idea/
+dist/ build/
+
+# Sensitive: contains local paths and secrets
+config.json
+
+# Internal docs (not for public)
+PROJECT_NOTE.md
+RESEARCH_PLAN.md
+
+# Large test files
+test/DeepSeek*.pdf
