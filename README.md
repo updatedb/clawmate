@@ -1,12 +1,17 @@
-# ClawMate 龙虾伴侣 — 产品介绍与宣传（v1.3）
+# ClawMate 🦞
 
-> 基于当前产品功能，自动生成。版本：2026-06-01
+> Agent 产出的每一个文件，点击即预览，选中即反馈。
+
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/docker-ready-brightgreen.svg)](https://hub.docker.com/)
 
 ---
 
-## 一句话定位
+## 📸 预览
 
-**Agent 产出的每一个文件，点击即预览，选中即反馈。** ClawMate 是 OpenClaw Agent 工作流的文件层闭环加速器。
+| 文件浏览 | Markdown 预览 |
+|:---:|:---:|
+| ![File Browser](assets/screenshot-browser.png) | ![Markdown Preview](assets/screenshot-preview.png) |
 
 ---
 
@@ -86,14 +91,18 @@
 ## 快速开始
 
 ```bash
-# Docker
+# 1. 准备配置
+cp config.example.json config.json
+# 编辑 config.json，填入你的目录路径
+
+# 2. Docker 启动
 docker run -d -p 5533:5533 \
-  -v /path/to/config.json:/app/config.json \
+  -v ./config.json:/app/config.json:ro \
   -v /your/projects:/data \
   clawmate
 
-# Daemon
-curl -fsSL https://raw.githubusercontent.com/.../install.sh | bash
+# 3. 或使用 docker-compose
+docker compose up -d
 ```
 
 打开 `http://localhost:5533/clawmate/`，选择项目目录，点击文件即可预览。

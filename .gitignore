@@ -1,9 +1,19 @@
-node_modules/ .npm/ .pnpm-store/
-__pycache__/ *.py[cod] .venv/ venv/ .env*
-*.log logs/
-.DS_Store Thumbs.db
-.vscode/ .idea/
-dist/ build/
+node_modules/
+.npm/
+.pnpm-store/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env*
+*.log
+logs/
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+dist/
+build/
 
 # Sensitive: contains local paths and secrets
 config.json
