@@ -2429,12 +2429,9 @@
         const htmlIframe = document.createElement('iframe');
         htmlIframe.id = 'htmlIframe';
         htmlIframe.style.cssText = 'flex:1;border:none;overflow:auto;background:#fff;';
-        // Sanitize HTML content before embedding via srcdoc
-        let safeHtml = content;
-        if (window.DOMPurify) {
-          safeHtml = DOMPurify.sanitize(content, { ADD_TAGS: ['style', 'link'], ADD_ATTR: ['srcdoc', 'rel', 'href', 'type'] });
-        }
-        htmlIframe.srcdoc = safeHtml;
+        // Use raw HTML content directly (files come from white-listed dirs)
+        // DOMPurify would strip scripts/styles needed by complex HTML pages
+        htmlIframe.srcdoc = content;
         htmlIframe.style.display = isRawMode ? 'none' : '';
         htmlWrap.appendChild(htmlIframe);
 
