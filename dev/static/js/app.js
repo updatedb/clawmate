@@ -1148,6 +1148,9 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
       actions.className = "card-actions";
 
       if (entry.is_dir) {
+        const actionsLeft = document.createElement("div");
+        actionsLeft.className = "card-actions-left";
+
         const batchBtn = document.createElement("button");
         batchBtn.type = "button";
         batchBtn.textContent = "打包下载";
@@ -1157,6 +1160,10 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
           const url = buildBatchDownloadLink(entry.relPath);
           triggerBatchDownload(url, folderName);
         });
+        actionsLeft.appendChild(batchBtn);
+
+        const actionsRight = document.createElement("div");
+        actionsRight.className = "card-actions-right";
 
         const deleteDirBtn = document.createElement("button");
         deleteDirBtn.type = "button";
@@ -1165,20 +1172,20 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
           e.stopPropagation();
           deleteEntry(entry);
         });
+        actionsRight.appendChild(deleteDirBtn);
 
-        actions.appendChild(batchBtn);
-        actions.appendChild(deleteDirBtn);
-        deleteDirBtn.classList.add('danger');
-        deleteDirBtn.style.marginLeft = 'auto';
+        actions.appendChild(actionsLeft);
+        actions.appendChild(actionsRight);
       } else {
-        const deleteBtn = document.createElement("button");
-        deleteBtn.type = "button";
-        deleteBtn.textContent = "删除";
-        deleteBtn.classList.add('danger');
-        deleteBtn.style.marginLeft = 'auto';
-        deleteBtn.addEventListener("click", (e) => {
+        const actionsLeft = document.createElement("div");
+        actionsLeft.className = "card-actions-left";
+
+        const downloadBtn = document.createElement("button");
+        downloadBtn.type = "button";
+        downloadBtn.textContent = "下载";
+        downloadBtn.addEventListener("click", (e) => {
           e.stopPropagation();
-          deleteEntry(entry);
+          triggerDownload(buildDownloadLink(entry.relPath));
         });
 
         const renameBtn = document.createElement("button");
@@ -1195,17 +1202,23 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
           }
         });
 
-        const downloadBtn = document.createElement("button");
-        downloadBtn.type = "button";
-        downloadBtn.textContent = "下载";
-        downloadBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          triggerDownload(buildDownloadLink(entry.relPath));
-        });
+        actionsLeft.appendChild(downloadBtn);
+        actionsLeft.appendChild(renameBtn);
 
-        actions.appendChild(downloadBtn);
-        actions.appendChild(renameBtn);
-        actions.appendChild(deleteBtn);
+        const actionsRight = document.createElement("div");
+        actionsRight.className = "card-actions-right";
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.textContent = "删除";
+        deleteBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          deleteEntry(entry);
+        });
+        actionsRight.appendChild(deleteBtn);
+
+        actions.appendChild(actionsLeft);
+        actions.appendChild(actionsRight);
       }
 
       card.appendChild(actions);
@@ -1647,7 +1660,6 @@ function buildPreviewFooter(entry, copyContent, rawContent, canExportPdf) {
 
   const deleteBtn = document.createElement("button");
   deleteBtn.type = "button";
-  deleteBtn.className = "danger";
   deleteBtn.textContent = "删除";
   deleteBtn.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -1844,7 +1856,6 @@ async function openPreview(entry) {
 
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
-    deleteBtn.className = "danger";
     deleteBtn.textContent = "删除";
     deleteBtn.addEventListener("click", (e) => {
       e.stopPropagation();

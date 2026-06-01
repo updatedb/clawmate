@@ -180,7 +180,7 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
 .card .meta { font-size: 11px; color: var(--text-secondary); display: flex; justify-content: space-between; margin-top: auto; padding-top: 4px; }
 
 /* Card actions — at card bottom */
-.card-actions { display: flex; gap: 5px; flex-wrap: wrap; flex-shrink: 0; }
+.card-actions { display: flex; justify-content: space-between; gap: 5px; flex-wrap: wrap; flex-shrink: 0; }
 .card-actions-left { display: flex; gap: 5px; flex-wrap: wrap; }
 .card-actions-right { display: flex; gap: 5px; flex-wrap: wrap; }
 .card-actions button, .card-actions-left button, .card-actions-right button { padding: 4px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); cursor: pointer; font-size: 11px; background: var(--btn-bg); color: var(--btn-text); font-weight: 500; transition: all 0.12s; }
@@ -319,12 +319,10 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
 .close { position: absolute; right: 12px; top: 12px; border: none; background: var(--bg-tertiary); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 16px; line-height: 1; color: var(--text-primary); flex-shrink: 0; }
 
 /* Modal footer toolbar — matches preview-footer style */
-.modal-footer { display: flex; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-color); flex-wrap: wrap; flex-shrink: 0; }
+.modal-footer { display: flex; justify-content: space-between; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-color); flex-wrap: wrap; flex-shrink: 0; }
 .modal-footer button { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--btn-bg); cursor: pointer; font-size: 12px; color: var(--btn-text); }
 .modal-footer button:hover { background: var(--border-color); }
-.modal-footer button.danger { color: var(--danger); border-color: var(--danger-border); }
-.modal-footer button.danger:hover { background: var(--danger-bg); border-color: var(--danger); }
-.modal-footer button.danger { margin-left: auto; }
+.modal-footer button:last-child { margin-left: auto; }
 
 /* Maximize button */
 .preview-link-btn { position: absolute; right: 76px; top: 12px; border: none; background: var(--bg-tertiary); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 14px; line-height: 1; color: var(--text-primary); text-decoration: none; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -406,11 +404,10 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
 .preview-actions a { display: inline-block; margin-top: 8px; color: var(--accent); }
 
 /* ===== Preview Footer (copy / download / delete / ONLYOFFICE) ===== */
-.preview-footer { display: flex; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-color); flex-wrap: wrap; flex-shrink: 0; }
+.preview-footer { display: flex; justify-content: flex-start; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-color); flex-wrap: wrap; flex-shrink: 0; }
 .preview-footer button { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--btn-bg); cursor: pointer; font-size: 12px; color: var(--btn-text); }
 .preview-footer button:hover { background: var(--border-color); }
-.preview-footer button.danger { color: var(--danger); border-color: var(--danger-border); }
-.preview-footer button.danger:hover { background: var(--danger-bg); border-color: var(--danger); }
+.preview-footer button:last-child { margin-left: auto; }
 .preview-footer button.copied { background: var(--success); border-color: var(--success); color: #fff; }
 
 /* ===== HTML Preview Iframe ===== */
