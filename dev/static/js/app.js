@@ -1574,6 +1574,7 @@ function openPdfPreview(entry) {
 
   const { header } = buildPreviewHeader(entry);
   const topbar = els.modalContent.querySelector('.modal-topbar');
+  topbar.querySelectorAll('.preview-header').forEach(el => el.remove());
   topbar.insertBefore(header, topbar.firstChild);
 
   const notice = document.createElement('div');
@@ -1752,6 +1753,7 @@ async function openPreview(entry) {
 
   const { header } = buildPreviewHeader(entry);
   const topbar = els.modalContent.querySelector('.modal-topbar');
+  topbar.querySelectorAll('.preview-header').forEach(el => el.remove());
   topbar.insertBefore(header, topbar.firstChild);
 
   if (entry.category === "image") {
