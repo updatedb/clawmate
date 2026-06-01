@@ -1153,7 +1153,7 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
 
         const batchBtn = document.createElement("button");
         batchBtn.type = "button";
-        batchBtn.textContent = "打包下载";
+        batchBtn.textContent = "下载";
         batchBtn.addEventListener("click", (e) => {
           e.stopPropagation();
           const folderName = entry.name;
@@ -1161,6 +1161,21 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
           triggerBatchDownload(url, folderName);
         });
         actionsLeft.appendChild(batchBtn);
+
+        const renameDirBtn = document.createElement("button");
+        renameDirBtn.type = "button";
+        renameDirBtn.textContent = "重命名";
+        renameDirBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const newName = prompt("请输入新名称：", entry.name);
+          if (newName && newName !== entry.name) {
+            fetch(`/api/clawmate/rename?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}&new_name=${encodeURIComponent(newName)}`, { method: 'POST' })
+              .then(r => r.json())
+              .then(data => { if (data.success) { refresh(); } else { alert('重命名失败：' + (data.error || '未知错误')); } })
+              .catch(() => alert('重命名失败'));
+          }
+        });
+        actionsLeft.appendChild(renameDirBtn);
 
         const actionsRight = document.createElement("div");
         actionsRight.className = "card-actions-right";
