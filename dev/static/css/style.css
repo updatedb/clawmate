@@ -345,7 +345,13 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
 .modal.maximized .maximize-btn { top: 16px; right: 48px; }
 
 /* ===== Preview ===== */
-.preview-body { flex: 1; min-height: 0; overflow-y: auto; }
+.preview-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+.preview-body > .preview-header,
+.preview-body > .preview-notice,
+.preview-body > .preview-meta { flex-shrink: 0; }
+.preview-body > .markdown-body,
+.preview-body > pre.raw-text { flex: 1 0 0px; min-height: 0; max-height: none; overflow: visible; }
+.preview-body > img { max-height: 100%; width: auto; object-fit: contain; }
 .preview-body img { max-width: 100%; }
 .preview-body pre { white-space: pre-wrap; background: var(--bg-code); padding: 12px; border-radius: 8px; border: 1px solid var(--code-border); max-height: 60vh; overflow: auto; }
 /* highlight.js colors for raw-text previews (matches github-markdown-dark) */
