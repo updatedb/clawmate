@@ -1573,7 +1573,7 @@ function openPdfPreview(entry) {
   els.previewModal.classList.remove('hidden');
 
   const { header } = buildPreviewHeader(entry);
-  els.previewBody.appendChild(header);
+  els.modalContent.querySelector('.modal-topbar').appendChild(header);
 
   const notice = document.createElement('div');
   notice.className = 'preview-notice';
@@ -1750,7 +1750,7 @@ async function openPreview(entry) {
   els.previewBody.dataset.feedbackProject = entry.relPath.split("/")[0] || "";
 
   const { header } = buildPreviewHeader(entry);
-  els.previewBody.appendChild(header);
+  els.modalContent.querySelector('.modal-topbar').appendChild(header);
 
   if (entry.category === "image") {
     const img = document.createElement("img");
