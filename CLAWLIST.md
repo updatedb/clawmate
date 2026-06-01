@@ -527,3 +527,45 @@
 ---
 
 ## 🕐 待决策（2026-06-01 17:37）
+
+## ✅ 完成 — CSS/Style 统一收口（2026-06-02 03:55）
+
+> 目标：消除 preview.html 和 style.css 之间的双体系，将 style.css 确立为单一权威源。
+> 结果：preview.html `<style>` 1,298→838 行（-36%），style.css 1,420→1,596 行（+12%）。
+
+### P0: CSS Variables 单源化
+- [x] 删除 preview 的 `:root, body:not(.dark)` light mode 变量块（33行）
+- [x] 删除 preview 的 `body.dark` dark mode 变量块（29行）
+- [x] hljs 暗色语法色 `body.dark` → `[data-theme="dark"]`（26行）
+- [x] 验证：brace balance ✅, body.dark 残留 0 ✅, :root 残留 0 ✅
+
+### P1: 杂项冲突 + 死代码 + pst/fb-detail 统一
+- [x] 删除 22 个内容相同的重复选择器（scrollbar/keyframes/mermaid/pst-*/markdown-body/fb-detail-*）
+- [x] `body` 规则冲突修复（preview 删除，font-family 由 style.css 提供）
+- [x] `.code-copy-btn` → 统一到 style.css hover-reveal 版本
+- [x] `.mermaid svg` → 删除（style.css 已有）
+- [x] 死代码 `.fb-btn-send` ×2 从 style.css 删除
+- [x] 死代码 `.fb-card-location/.fb-loading/.fb-section-label/.fb-submit-all-wrap` ×4 从 preview 删除
+- [x] `pst-*` 7 个 + `fb-detail-*` 12 个统一到 style.css
+
+### P2: hljs 暗色语法色 + 组件搬运
+- [x] hljs 暗色语法色 14 条规则从 preview 移入 style.css `[data-theme="dark"]` 块
+- [x] 媒体播放器 `.media-container/.media-player-wrap` 移入 style.css
+- [x] 字幕面板 `.subtitle-*` 系列移入 style.css
+- [x] 拖拽分隔条 `.drag-handle` 移入 style.css
+
+### topbar 统一
+- [x] style.css `.topbar` 更新为规范版本（padding 0 20px, height 48px, z-index 10）
+- [x] preview HTML `preview-topbar-*` → `topbar`/`brand`/`topbar-btn`
+- [x] preview `<style>` 删除旧 `.preview-topbar-*` 规则
+- [x] 新增 `.topbar-btn.active` 到 style.css
+
+### Bug Fix
+- [x] `.markdown-body` 不充满高度：删除 `max-height: 70vh` + `overflow: auto`
+
+### FD-CM-015/016 追因
+- [x] FD-CM-015：根因确认 — Agent 处理端 `\n` 转义误判为空（非解析器 bug），待重处理
+- [x] FD-CM-016：根因确认 — Agent 处理端嵌套引号误判为空（非解析器 bug），待重处理
+
+### 三栏布局审计
+- [x] 确认 `.preview-three-col` 为唯一实现，`.standalone-three-col` 不存在（之前误判）
