@@ -2419,6 +2419,9 @@
         banner.style.display = 'none';
         contentBody.appendChild(banner);
 
+        // Make contentBody a flex column so htmlWrap fills remaining space
+        contentBody.style.cssText = 'display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;padding:0;';
+
         // Wrapper for iframe + source pre (allows coordinated show/hide)
         const htmlWrap = document.createElement('div');
         htmlWrap.id = 'htmlContentWrap';
