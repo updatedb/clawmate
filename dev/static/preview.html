@@ -1155,13 +1155,50 @@
     .subtitle-sync-panel {
       flex: 1;
       overflow-y: auto;
-      padding: 0 16px 16px;
       min-height: 0;
     }
     .subtitle-sync-panel.hidden { display: none; }
 
+    /* Subtitle header */
+    .subtitle-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 16px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border-color);
+      flex-shrink: 0;
+      background: var(--bg-secondary);
+    }
+    .subtitle-header.editing {
+      background: var(--accent-light);
+      border-bottom-color: var(--accent);
+      color: var(--accent);
+    }
+    .subtitle-header-btn {
+      padding: 3px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: var(--btn-bg);
+      color: var(--btn-text);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 500;
+      transition: background 0.15s;
+    }
+    .subtitle-header-btn:hover { background: var(--border-color); }
+    .subtitle-header-btn.danger { border-color: var(--danger-border); color: var(--danger); }
+    .subtitle-header-btn.danger:hover { background: var(--danger-bg); }
+    .subtitle-header-btn.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
+    .subtitle-header-btn.primary:hover { opacity: 0.88; }
+    .subtitle-header-actions { display: flex; gap: 6px; align-items: center; }
+
     /* Subtitle line */
     .subtitle-item {
+      display: flex;
+      align-items: baseline;
       padding: 5px 10px;
       border-radius: 6px;
       cursor: pointer;
@@ -1176,6 +1213,22 @@
       border-color: var(--accent);
       font-weight: 600;
     }
+    .subtitle-item input[type="text"] {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--text-primary);
+      font-size: 13px;
+      line-height: 1.5;
+      padding: 1px 4px;
+      border-radius: 4px;
+      font-family: inherit;
+      min-width: 0;
+    }
+    .subtitle-item input[type="text"]:focus {
+      outline: none;
+      background: var(--bg-code);
+    }
     .subtitle-time {
       font-family: monospace;
       font-size: 11px;
@@ -1185,6 +1238,8 @@
     }
     .subtitle-text {
       color: var(--text-primary);
+      flex: 1;
+      min-width: 0;
     }
     .subtitle-item.active .subtitle-text {
       color: var(--accent);
@@ -1195,121 +1250,46 @@
       padding: 20px 10px;
       text-align: center;
     }
-
-    /* Full subtitle panel (full-height scrollable, edit mode) */
-    .subtitle-full-panel {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-      overflow: hidden;
-    }
-    .subtitle-full-panel.hidden { display: none; }
-    .subtitle-full-header {
-      padding: 10px 16px;
-      font-size: 12px;
-      font-weight: 700;
+    .subtitle-extract-btn {
+      display: block;
+      margin: 12px auto;
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      background: var(--btn-bg);
       color: var(--text-secondary);
-      border-bottom: 1px solid var(--border-color);
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .subtitle-full-body {
-      flex: 1;
-      overflow-y: auto;
-      padding: 8px 12px;
-    }
-    .subtitle-edit-row {
-      display: flex;
-      align-items: flex-start;
-      gap: 8px;
-      padding: 6px 8px;
-      border-radius: 6px;
-      border: 1px solid transparent;
-      transition: border-color 0.15s;
-    }
-    .subtitle-edit-row:hover { border-color: var(--border-color); }
-    .subtitle-edit-row.active { border-color: var(--accent); background: var(--accent-light); }
-    .subtitle-edit-time {
-      font-family: monospace;
-      font-size: 11px;
-      color: var(--text-muted);
-      white-space: nowrap;
-      padding-top: 5px;
-      min-width: 90px;
-      flex-shrink: 0;
-    }
-    .subtitle-edit-input {
-      flex: 1;
-      background: transparent;
-      border: none;
-      color: var(--text-primary);
-      font-size: 13px;
-      line-height: 1.5;
-      resize: none;
-      padding: 2px 4px;
-      border-radius: 4px;
-      font-family: inherit;
-      min-height: 28px;
-    }
-    .subtitle-edit-input:focus {
-      outline: none;
-      background: var(--bg-code);
-    }
-    .subtitle-save-bar {
-      padding: 8px 12px;
-      border-top: 1px solid var(--border-color);
-      flex-shrink: 0;
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      background: var(--bg-secondary);
-    }
-    .subtitle-save-bar.hidden { display: none; }
-    .subtitle-save-btn {
-      padding: 6px 14px;
-      border-radius: 6px;
-      border: 1px solid var(--accent);
-      background: var(--accent);
-      color: #fff;
       cursor: pointer;
       font-size: 12px;
-      font-weight: 600;
-      transition: opacity 0.15s;
+      transition: background 0.15s, border-color 0.15s;
     }
-    .subtitle-save-btn:hover { opacity: 0.88; }
-    .subtitle-save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .subtitle-mode-btn {
-      padding: 6px 12px;
-      border-radius: 6px;
-      border: 1px solid var(--border-color);
-      background: var(--btn-bg);
-      color: var(--btn-text);
-      cursor: pointer;
-      font-size: 12px;
-      transition: background 0.15s;
-    }
-    .subtitle-mode-btn:hover { background: var(--border-color); }
-    .subtitle-picker-btn {
-      padding: 6px 10px;
-      border-radius: 6px;
-      border: 1px solid var(--border-color);
-      background: var(--btn-bg);
-      color: var(--btn-text);
-      cursor: pointer;
-      font-size: 12px;
-    }
-    .subtitle-picker-btn:hover { background: var(--border-color); }
-    .subtitle-save-status {
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-    .subtitle-save-status.ok { color: var(--success); }
-    .subtitle-save-status.error { color: var(--danger); }
+    .subtitle-extract-btn:hover { background: var(--border-color); border-color: var(--text-muted); }
 
-    /* Media feedback panel styles removed — unified into .fb-input-card above */
+    /* Draggable divider between player and subtitle panel */
+    .drag-handle {
+      height: 6px;
+      background: var(--border-color);
+      cursor: row-resize;
+      flex-shrink: 0;
+      transition: background 0.15s;
+      position: relative;
+    }
+    .drag-handle:hover, .drag-handle.dragging {
+      background: var(--accent);
+    }
+    .drag-handle::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 32px;
+      height: 2px;
+      background: var(--text-muted);
+      border-radius: 1px;
+    }
+    .drag-handle:hover::after, .drag-handle.dragging::after {
+      background: var(--accent);
+    }
 
     /* Hidden file input for subtitle picker */
     #subtitleFileInput { display: none; }
@@ -1344,22 +1324,7 @@
         </div>
         <!-- Subtitle / media panels (hidden by default) -->
         <div class="subtitle-sync-panel hidden" id="subtitleSyncPanel"></div>
-        <div class="subtitle-full-panel hidden" id="subtitleFullPanel">
-          <div class="subtitle-full-header">
-            <span>📝 字幕</span>
-            <div style="display:flex;gap:6px;align-items:center;">
-              <button class="subtitle-picker-btn" id="subtitlePickerBtn">📂 选择字幕文件</button>
-              <button class="subtitle-mode-btn" id="subtitleBackToPlayerBtn">← 返回播放器</button>
-            </div>
-          </div>
-          <div class="subtitle-full-body" id="subtitleFullBody"></div>
-          <div class="subtitle-save-bar" id="subtitleSaveBar">
-            <button class="subtitle-save-btn" id="subtitleSaveBtn">💾 保存字幕</button>
-            <span class="subtitle-save-status" id="subtitleSaveStatus"></span>
-          </div>
-        </div>
       </main>
-      <input type="file" accept=".srt" id="subtitleFileInput" />
 
       <!-- Right: Feedback Panel -->
       <aside class="preview-right" id="rightSidebar">
@@ -2597,7 +2562,7 @@
   // ============ Unified Media Mode Setup (audio + video) ============
   let mediaEl = null;         // the <audio> or <video> element
   let currentMediaType = '';  // 'audio' | 'video'
-  let subtitleMode = 'sync';  // 'sync' | 'full'
+  let subtitleMode = 'view';  // 'view' | 'edit'
   let currentSrt = [];        // parsed SRT entries
   let currentSrtPath = '';    // path of currently loaded SRT
   let subtitleDirty = false;  // unsaved edits flag
@@ -2627,6 +2592,11 @@
     playerWrap.appendChild(mediaEl);
     container.appendChild(playerWrap);
 
+    // Draggable divider
+    const dragHandle = document.createElement('div');
+    dragHandle.className = 'drag-handle';
+    container.appendChild(dragHandle);
+
     // Subtitle sync panel (below player)
     const syncPanel = document.getElementById('subtitleSyncPanel');
     syncPanel.classList.remove('hidden');
@@ -2637,9 +2607,6 @@
     // Build dynamic toolbar buttons
     buildMediaToolbar();
 
-    // Set up subtitle picker
-    setupSubtitlePicker();
-
     // Try auto-loading .srt with same base name
     autoLoadSrt();
 
@@ -2648,49 +2615,15 @@
 
     // Wire subtitle timeupdate
     mediaEl.addEventListener('timeupdate', onMediaTimeUpdate);
+
+    // Init drag handle for resizing player vs subtitle panel
+    initDragHandle();
   }
 
   function buildMediaToolbar() {
     const dyn = document.getElementById('bottombarDynamic');
     dyn.innerHTML = '';
-
-    const icon = currentMediaType === 'audio' ? '🎵' : '🎬';
-    // Button text shows the action: in subtitle mode → "播放" to exit subtitles; in player mode → "字幕" to enter subtitles
-    const isInSubtitleMode = subtitleMode === 'full';
-    const label = isInSubtitleMode ? '播放' : '字幕';
-
-    const toggleBtn = document.createElement('button');
-    toggleBtn.className = 'preview-bottom-btn' + (isInSubtitleMode ? ' active' : '');
-    toggleBtn.id = 'mediaToggleSubtitle';
-    toggleBtn.textContent = `${icon} ${label}`;
-    toggleBtn.addEventListener('click', toggleSubtitleMode);
-    dyn.appendChild(toggleBtn);
-  }
-
-  function toggleSubtitleMode() {
-    const syncPanel = document.getElementById('subtitleSyncPanel');
-    const fullPanel = document.getElementById('subtitleFullPanel');
-    const toggleBtn = document.getElementById('mediaToggleSubtitle');
-    const container = document.getElementById('mediaContainer');
-    const contentBody = document.getElementById('contentBody');
-
-    if (subtitleMode === 'sync') {
-      // Switch to full subtitle panel mode — button shows "播放" to return to player
-      subtitleMode = 'full';
-      syncPanel.classList.add('hidden');
-      fullPanel.classList.remove('hidden');
-      const icon = currentMediaType === 'audio' ? '🎵' : '🎬';
-      toggleBtn.textContent = `${icon} 播放`;
-      renderSubtitleFullPanel();
-    } else {
-      // Switch back to player + sync panel — button shows "字幕" to enter subtitle mode
-      subtitleMode = 'sync';
-      fullPanel.classList.add('hidden');
-      syncPanel.classList.remove('hidden');
-      const icon = currentMediaType === 'audio' ? '🎵' : '🎬';
-      toggleBtn.textContent = `${icon} 字幕`;
-      renderSubtitleSyncPanel();
-    }
+    // Dynamic toolbar for media mode — no subtitle toggle button needed
   }
 
   // ============ SRT Parsing ============
@@ -2774,8 +2707,8 @@
     currentSrtPath = srtPath;
     subtitleEntries = entries.map(e => ({ ...e }));
     subtitleDirty = false;
+    subtitleMode = 'view';
     renderSubtitleSyncPanel();
-    if (subtitleMode === 'full') renderSubtitleFullPanel();
   }
 
   // ============ Subtitle Sync Panel (below player) ============
@@ -2783,69 +2716,145 @@
     const panel = document.getElementById('subtitleSyncPanel');
     panel.innerHTML = '';
 
+    // ---- Subtitle header ----
+    const header = document.createElement('div');
+    header.className = 'subtitle-header';
+    header.id = 'subtitleHeader';
+
+    const headerLabel = document.createElement('span');
+    headerLabel.textContent = '📝 字幕';
+    header.appendChild(headerLabel);
+
+    const actions = document.createElement('div');
+    actions.className = 'subtitle-header-actions';
+    actions.id = 'subtitleHeaderActions';
+    header.appendChild(actions);
+    panel.appendChild(header);
+
     if (!currentSrt.length) {
-      const empty = document.createElement('div');
-      empty.className = 'subtitle-empty';
-      empty.textContent = '暂无字幕 — 可点击右下「🎵 字幕」切换全字幕面板';
-      panel.appendChild(empty);
+      // No SRT — show extract button
+      const extractBtn = document.createElement('button');
+      extractBtn.className = 'subtitle-extract-btn';
+      extractBtn.textContent = '🎤 提取字幕';
+      extractBtn.title = '语音识别功能待实现';
+      extractBtn.addEventListener('click', () => {
+        showToast('语音识别功能待实现', 2500);
+      });
+      panel.appendChild(extractBtn);
       return;
     }
 
-    // Render all entries (active one gets highlighted by onMediaTimeUpdate)
-    currentSrt.forEach((entry, idx) => {
+    if (subtitleMode === 'edit') {
+      // Edit mode: show cancel + save buttons, header accent
+      header.classList.add('editing');
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'subtitle-header-btn danger';
+      cancelBtn.textContent = '❌ 取消';
+      cancelBtn.addEventListener('click', cancelSubtitleEdit);
+      actions.appendChild(cancelBtn);
+
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'subtitle-header-btn primary';
+      saveBtn.textContent = '💾 保存';
+      saveBtn.addEventListener('click', saveSubtitleEdit);
+      actions.appendChild(saveBtn);
+    } else {
+      // View mode: show edit button
+      const editBtn = document.createElement('button');
+      editBtn.className = 'subtitle-header-btn';
+      editBtn.textContent = '✏️ 编辑';
+      editBtn.addEventListener('click', enterSubtitleEdit);
+      actions.appendChild(editBtn);
+    }
+
+    // ---- Subtitle items ----
+    // In edit mode, use subtitleEntries (editable copy); otherwise use currentSrt (original)
+    const entries = subtitleMode === 'edit' ? subtitleEntries : currentSrt;
+    entries.forEach((entry, idx) => {
       const row = document.createElement('div');
       row.className = 'subtitle-item';
       row.id = `sub-item-${idx}`;
-      row.innerHTML = `<span class="subtitle-time">${formatTimestamp(entry.start)}</span><span class="subtitle-text">${escHtml(entry.text)}</span>`;
-      row.addEventListener('click', () => {
-        if (mediaEl) {
-          mediaEl.currentTime = entry.start;
-          mediaEl.play().catch(() => {});
-        }
-      });
+
+      const timeSpan = document.createElement('span');
+      timeSpan.className = 'subtitle-time';
+      timeSpan.textContent = formatTimestamp(entry.start);
+      row.appendChild(timeSpan);
+
+      if (subtitleMode === 'edit') {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = entry.text;
+        input.dataset.idx = idx;
+        input.addEventListener('input', () => {
+          subtitleEntries[idx].text = input.value;
+          subtitleDirty = true;
+        });
+        input.addEventListener('click', e => e.stopPropagation());
+        row.appendChild(input);
+      } else {
+        const textSpan = document.createElement('span');
+        textSpan.className = 'subtitle-text';
+        textSpan.textContent = entry.text;
+        row.appendChild(textSpan);
+
+        row.addEventListener('click', () => {
+          if (mediaEl) {
+            mediaEl.currentTime = entry.start;
+            mediaEl.play().catch(() => {});
+          }
+        });
+      }
+
       panel.appendChild(row);
     });
   }
 
-  // ============ Subtitle Full Panel (full-height editable) ============
-  function renderSubtitleFullPanel() {
-    const body = document.getElementById('subtitleFullBody');
-    body.innerHTML = '';
+  // ============ Subtitle Edit Mode ============
+  // snapshot of entries before edit started
+  let subtitleEditSnapshot = [];
 
-    if (!subtitleEntries.length) {
-      const empty = document.createElement('div');
-      empty.className = 'subtitle-empty';
-      empty.textContent = '暂无字幕';
-      body.appendChild(empty);
-      return;
-    }
+  function enterSubtitleEdit() {
+    subtitleEditSnapshot = currentSrt.map(e => ({ ...e }));
+    subtitleMode = 'edit';
+    renderSubtitleSyncPanel();
+  }
 
-    subtitleEntries.forEach((entry, idx) => {
-      const row = document.createElement('div');
-      row.className = 'subtitle-edit-row';
-      row.id = `sub-edit-row-${idx}`;
-      row.innerHTML = `
-        <span class="subtitle-edit-time">${formatTimestamp(entry.start)} → ${formatTimestamp(entry.end)}</span>
-        <textarea class="subtitle-edit-input" data-idx="${idx}" rows="1" placeholder="字幕文本...">${escHtml(entry.text)}</textarea>
-      `;
-      const ta = row.querySelector('textarea');
-      // Auto-resize
-      ta.addEventListener('input', () => {
-        ta.style.height = 'auto';
-        ta.style.height = ta.scrollHeight + 'px';
-        subtitleEntries[idx].text = ta.value;
-        subtitleDirty = true;
+  function cancelSubtitleEdit() {
+    subtitleEntries = subtitleEditSnapshot.map(e => ({ ...e }));
+    subtitleDirty = false;
+    subtitleMode = 'view';
+    renderSubtitleSyncPanel();
+  }
+
+  async function saveSubtitleEdit() {
+    const srtContent = serializeSrt(subtitleEntries);
+    const savePath = currentSrtPath || filePath.replace(/\.[^.]+$/, '') + '.srt';
+    try {
+      const res = await fetch('/api/clawmate/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ root: rootId, path: savePath, content: srtContent }),
       });
-      ta.style.height = ta.scrollHeight + 'px';
-      body.appendChild(row);
-    });
+      const data = await res.json();
+      if (data.ok) {
+        currentSrt = subtitleEntries.map(e => ({ ...e }));
+        subtitleDirty = false;
+        subtitleMode = 'view';
+        renderSubtitleSyncPanel();
+        showToast('字幕已保存', 2000);
+      } else {
+        throw new Error(data.detail || '保存失败');
+      }
+    } catch (e) {
+      showToast('保存失败: ' + e.message, 3000);
+    }
   }
 
   // ============ Media timeupdate — sync subtitle highlight ============
   let lastHighlightedIdx = -1;
 
   function onMediaTimeUpdate() {
-    if (!mediaEl || !currentSrt.length) return;
+    if (!mediaEl || !currentSrt.length || subtitleMode === 'edit') return;
     const t = mediaEl.currentTime;
     let activeIdx = -1;
     for (let i = 0; i < currentSrt.length; i++) {
@@ -2872,87 +2881,53 @@
     }
   }
 
-  // ============ Subtitle Picker ============
-  function setupSubtitlePicker() {
-    const pickerBtn = document.getElementById('subtitlePickerBtn');
-    const fileInput = document.getElementById('subtitleFileInput');
+  // ============ Draggable Resize Handle ============
+  function initDragHandle() {
+    const handle = document.querySelector('.drag-handle');
+    const playerWrap = document.querySelector('.media-player-wrap');
+    if (!handle || !playerWrap) return;
 
-    if (pickerBtn) {
-      pickerBtn.addEventListener('click', () => fileInput.click());
+    let dragging = false;
+    let startY = 0;
+    let startHeight = 0;
+
+    function onMouseMove(e) {
+      if (!dragging) return;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const delta = startY - clientY;
+      const newHeight = Math.max(150, Math.min(startHeight + delta, window.innerHeight * 0.7));
+      playerWrap.style.height = newHeight + 'px';
     }
 
-    if (fileInput) {
-      fileInput.addEventListener('change', async () => {
-        const file = fileInput.files && fileInput.files[0];
-        if (!file) return;
-        const text = await file.text();
-        const entries = parseSrt(text);
-        if (entries.length === 0) {
-          showToast('无法解析 SRT 文件', 2500);
-          return;
-        }
-        // Use file name as path hint (we'll send content directly on save)
-        const fakePath = filePath.replace(/\.[^.]+$/, '') + '.srt';
-        loadSrtEntries(entries, fakePath);
-        showToast(`已加载字幕: ${file.name}`, 2000);
-        fileInput.value = '';
-      });
+    function onMouseUp() {
+      if (!dragging) return;
+      dragging = false;
+      handle.classList.remove('dragging');
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('touchmove', onMouseMove);
+      document.removeEventListener('touchend', onMouseUp);
     }
 
-    // Save button
-    const saveBtn = document.getElementById('subtitleSaveBtn');
-    const saveStatus = document.getElementById('subtitleSaveStatus');
-    if (saveBtn) {
-      saveBtn.addEventListener('click', async () => {
-        if (!subtitleDirty) {
-          showToast('字幕未修改', 1500);
-          return;
-        }
-        saveBtn.disabled = true;
-        saveStatus.textContent = '保存中...';
-        saveStatus.className = 'subtitle-save-status';
-        try {
-          const srtContent = serializeSrt(subtitleEntries);
-          // Save via the same path as the media file's SRT, or use a provided path
-          const savePath = currentSrtPath || filePath.replace(/\.[^.]+$/, '') + '.srt';
-          const res = await fetch('/api/clawmate/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ root: rootId, path: savePath, content: srtContent }),
-          });
-          const data = await res.json();
-          if (data.ok) {
-            subtitleDirty = false;
-            currentSrt = subtitleEntries.map(e => ({ ...e }));
-            saveStatus.textContent = '已保存';
-            saveStatus.className = 'subtitle-save-status ok';
-            showToast('字幕已保存', 2000);
-          } else {
-            throw new Error(data.detail || '保存失败');
-          }
-        } catch (e) {
-          saveStatus.textContent = '保存失败';
-          saveStatus.className = 'subtitle-save-status error';
-          showToast('保存失败: ' + e.message, 3000);
-        } finally {
-          saveBtn.disabled = false;
-        }
-      });
-    }
+    handle.addEventListener('mousedown', e => {
+      e.preventDefault();
+      dragging = true;
+      startY = e.clientY;
+      startHeight = playerWrap.offsetHeight;
+      handle.classList.add('dragging');
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
 
-    // Back to player button
-    const backBtn = document.getElementById('subtitleBackToPlayerBtn');
-    if (backBtn) {
-      backBtn.addEventListener('click', () => {
-        subtitleMode = 'sync';
-        document.getElementById('subtitleFullPanel').classList.add('hidden');
-        document.getElementById('subtitleSyncPanel').classList.remove('hidden');
-        const icon = currentMediaType === 'audio' ? '🎵' : '🎬';
-        const toggleBtn = document.getElementById('mediaToggleSubtitle');
-        if (toggleBtn) toggleBtn.textContent = `${icon} 字幕`;
-        renderSubtitleSyncPanel();
-      });
-    }
+    handle.addEventListener('touchstart', e => {
+      e.preventDefault();
+      dragging = true;
+      startY = e.touches[0].clientY;
+      startHeight = playerWrap.offsetHeight;
+      handle.classList.add('dragging');
+      document.addEventListener('touchmove', onMouseMove, { passive: false });
+      document.addEventListener('touchend', onMouseUp);
+    }, { passive: false });
   }
 
   // ============ Media Feedback Panel ============
