@@ -1166,15 +1166,33 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
           deleteEntry(entry);
         });
 
-        actions.appendChild(deleteDirBtn);
         actions.appendChild(batchBtn);
+        actions.appendChild(deleteDirBtn);
+        deleteDirBtn.classList.add('danger');
+        deleteDirBtn.style.marginLeft = 'auto';
       } else {
         const deleteBtn = document.createElement("button");
         deleteBtn.type = "button";
         deleteBtn.textContent = "删除";
+        deleteBtn.classList.add('danger');
+        deleteBtn.style.marginLeft = 'auto';
         deleteBtn.addEventListener("click", (e) => {
           e.stopPropagation();
           deleteEntry(entry);
+        });
+
+        const renameBtn = document.createElement("button");
+        renameBtn.type = "button";
+        renameBtn.textContent = "重命名";
+        renameBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const newName = prompt("请输入新名称：", entry.name);
+          if (newName && newName !== entry.name) {
+            fetch(`/api/clawmate/rename?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}&new_name=${encodeURIComponent(newName)}`, { method: 'POST' })
+              .then(r => r.json())
+              .then(data => { if (data.success) { refresh(); } else { alert('重命名失败：' + (data.error || '未知错误')); } })
+              .catch(() => alert('重命名失败'));
+          }
         });
 
         const downloadBtn = document.createElement("button");
@@ -1185,8 +1203,9 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
           triggerDownload(buildDownloadLink(entry.relPath));
         });
 
-        actions.appendChild(deleteBtn);
         actions.appendChild(downloadBtn);
+        actions.appendChild(renameBtn);
+        actions.appendChild(deleteBtn);
       }
 
       card.appendChild(actions);

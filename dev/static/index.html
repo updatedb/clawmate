@@ -25,11 +25,11 @@
     <div class="content">
       <div class="sidebar-overlay" id="sidebarOverlay"></div>
       <aside class="sidebar" id="sidebar">
-        <div class="section">
+        <div class="sidebar-section-top">
           <select id="rootSelect" style="font-weight:600"></select>
           <div id="breadcrumb" class="breadcrumb" style="margin:8px 0"></div>
-          <ul id="dirList" class="dir-list"></ul>
         </div>
+        <ul id="dirList" class="dir-list"></ul>
       </aside>
       <main class="main">
         <div class="toolbar">
@@ -68,12 +68,14 @@
           </div>
         </div>
         <div id="status" class="status"></div>
-        <div id="gallery" class="gallery"></div>
-        <div id="list" class="list hidden"></div>
-        <div class="pagination">
-          <button id="prevPage">上一页</button>
-          <span id="pageInfo"></span>
-          <button id="nextPage">下一页</button>
+        <div class="main-scroll">
+          <div id="gallery" class="gallery"></div>
+          <div id="list" class="list hidden"></div>
+          <div class="pagination">
+            <button id="prevPage">上一页</button>
+            <span id="pageInfo"></span>
+            <button id="nextPage">下一页</button>
+          </div>
         </div>
       </main>
     </div>
