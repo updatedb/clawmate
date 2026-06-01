@@ -314,7 +314,7 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
 }
 
 /* ===== Modal ===== */
-.modal { position: fixed; inset: 0; background: var(--modal-overlay); display: flex; align-items: center; justify-content: center; z-index: 20; }
+.modal { position: fixed; inset: 0; background: var(--modal-overlay); display: flex; align-items: center; justify-content: center; z-index: 101; }
 .modal.hidden { display: none; }
 .modal-content { background: var(--bg-modal); width: min(900px, 90vw); max-height: 90vh; overflow: hidden; border-radius: 12px; padding: 16px; position: relative; display: flex; flex-direction: column; }
 .close { position: absolute; right: 12px; top: 12px; border: none; background: var(--bg-tertiary); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 16px; line-height: 1; color: var(--text-primary); flex-shrink: 0; }
