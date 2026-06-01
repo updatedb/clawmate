@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="data:," />
   <title>预览 — ClawMate</title>
   <link rel="stylesheet" href="./css/style.css?v=20260531a" />
   <link rel="stylesheet" href="./vendor/github-markdown-light.min.css" id="github-markdown-css" />
@@ -143,6 +144,14 @@
     .preview-toc-item.toc-h2 a { padding-left: 28px; }
     .preview-toc-item.toc-h3 a { padding-left: 40px; font-size: 12px; }
     .preview-toc-item.toc-h4 a { padding-left: 52px; font-size: 12px; color: var(--text-secondary); }
+    .preview-toc-item.toc-code a {
+      padding-left: 16px;
+      font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
     .preview-toc-empty {
       color: var(--text-muted);
       font-size: 12px;
@@ -495,6 +504,13 @@
     .pst-note:focus { outline: none; border-color: var(--accent); }
 
     .pst-actions { display: flex; gap: 8px; }
+    .pst-tags { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+    .pst-tag {
+      padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border-color);
+      background: var(--bg-secondary); color: var(--text-secondary);
+      font-size: 12px; cursor: pointer; transition: all 0.15s;
+    }
+    .pst-tag:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
     .pst-btn-add {
       flex: 1;
       padding: 9px 12px;
@@ -864,6 +880,54 @@
       overflow: hidden;
       text-overflow: ellipsis;
       padding: 2px 0;
+    }
+    .fb-card-result {
+      font-size: 12px;
+      color: var(--accent);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding: 4px 8px;
+      margin-top: 4px;
+      background: var(--accent-light, rgba(99,102,241,0.08));
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    /* Feedback detail modal */
+    .fb-detail-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5); z-index: 10000;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .fb-detail-modal {
+      background: var(--bg-primary); border-radius: 12px;
+      max-width: 520px; width: 90%; max-height: 80vh;
+      display: flex; flex-direction: column;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+    .fb-detail-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid var(--border-color);
+    }
+    .fb-detail-header-left { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+    .fb-detail-close {
+      background: none; border: none; font-size: 18px; cursor: pointer;
+      color: var(--text-muted); padding: 2px 6px; border-radius: 4px;
+    }
+    .fb-detail-close:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+    .fb-detail-body { padding: 16px 20px; overflow-y: auto; }
+    .fb-detail-row { margin-bottom: 12px; }
+    .fb-detail-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; }
+    .fb-detail-value { font-size: 13px; color: var(--text-primary); line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+    .fb-detail-value.result { color: var(--accent); background: var(--accent-light, rgba(99,102,241,0.06)); padding: 8px 12px; border-radius: 6px; }
+    .fb-detail-value.selection {
+      min-height: 4em;
+      font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+      font-size: 12px;
+      background: var(--bg-secondary);
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
     }
     .fb-card-completed .fb-card-selection {
       font-size: 11px;
@@ -1329,6 +1393,12 @@
       <input type="text" id="pstLocationInput" class="pst-location" placeholder="位置：L{start}-{end}" style="flex:1;" />
     </div>
     <textarea class="pst-note" id="pstNote" placeholder="必填 · 简要说明需要的改动" rows="3"></textarea>
+    <div class="pst-tags">
+      <button class="pst-tag" data-tag="删除">🗑 删除</button>
+      <button class="pst-tag" data-tag="修复">🔧 修复</button>
+      <button class="pst-tag" data-tag="扩展">📈 扩展</button>
+      <button class="pst-tag" data-tag="简化">📉 简化</button>
+    </div>
     <div class="pst-actions">
       <button class="pst-btn-add" id="pstBtnAdd">📋 加入待办</button>
       <button class="pst-btn-send" id="pstBtnSend">⚡ 立刻执行</button>
@@ -1434,10 +1504,6 @@
     else currentTheme = 'auto';
     localStorage.setItem('clawmate-theme', currentTheme);
     applyTheme();
-
-    if (window.mermaid) {
-      window.mermaid.initialize({ startOnLoad: false, theme: getResolvedTheme() === 'dark' ? 'dark' : 'default' });
-    }
   }
 
   document.getElementById('themeToggle').addEventListener('click', cycleTheme);
@@ -1510,13 +1576,17 @@
     const mermaidStore = [];
     const renderer = new marked.Renderer();
 
-    renderer.image = function(href, title, text) {
+    renderer.image = function(token) {
+      // marked v15+ passes a single token object {href, title, text}
+      let href = token.href || '';
+      const title = token.title || '';
+      const text = token.text || '';
       if (!/^https?:\/\//i.test(href) && !href.startsWith('/')) {
         const dir = entryRelPath.split('/').slice(0, -1).join('/');
         const fullPath = dir ? dir + '/' + href : href;
         href = `/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(fullPath)}`;
       }
-      return `<img src="${href}" alt="${escHtml(text || '')}"${title ? ` title="${escHtml(title)}"` : ''}>`;
+      return `<img src="${href}" alt="${escHtml(text)}"${title ? ` title="${escHtml(title)}"` : ''}>`;
     };
 
     renderer.code = function(codeInfo, lang) {
@@ -1544,35 +1614,68 @@
   }
 
   async function renderMermaid(div, mermaidStore) {
-    const blocks = div.querySelectorAll('.mermaid');
+    var blocks = div.querySelectorAll('.mermaid');
     if (!blocks.length) return;
-    if (!window.mermaid) return;
+    console.log('[ClawMate] renderMermaid: found ' + blocks.length + ' mermaid block(s), store size=' + mermaidStore.length);
 
-    window.mermaid.initialize({
-      startOnLoad: false,
-      securityLevel: 'strict',
-      fontFamily: 'ui-monospace, SF Mono, Cascadia Code, Consolas, monospace',
-      maxWidth: 800,
-      theme: getResolvedTheme() === 'dark' ? 'dark' : 'default'
-    });
+    var scopeClass = 'mermaid-scope-' + Date.now();
+    div.classList.add(scopeClass);
 
-    for (const block of blocks) {
-      const id = block.getAttribute('data-mermaid-id');
-      if (id == null || !mermaidStore[id]) {
-        block.classList.add('mermaid-error');
-        block.textContent = '⚠️ 图表数据丢失';
-        continue;
+    if (!window.mermaid) {
+      console.warn('[ClawMate] Mermaid \u5e93\u672a\u52a0\u8f7d');
+      for (var i = 0; i < blocks.length; i++) {
+        blocks[i].classList.add('mermaid-error');
+        blocks[i].textContent = '\u26a0\ufe0f Mermaid \u5e93\u672a\u52a0\u8f7d\uff0c\u8bf7\u5237\u65b0\u9875\u9762\u91cd\u8bd5';
       }
-      block.textContent = mermaidStore[id];
+      return;
     }
 
     try {
-      await window.mermaid.run({ querySelector: '.preview-center-body .mermaid' });
-    } catch (err) {
-      blocks.forEach(b => {
-        b.classList.add('mermaid-error');
-        b.textContent = '⚠️ 图表渲染失败，请检查语法';
+      var resolvedTheme = getResolvedTheme();
+      var mermaidTheme = resolvedTheme === 'dark' ? 'dark' : 'default';
+
+      window.mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'strict',
+        fontFamily: 'ui-monospace, SF Mono, Cascadia Code, Consolas, monospace',
+        maxWidth: 800,
+        theme: mermaidTheme
       });
+
+      // Restore stored code into each .mermaid block before calling mermaid.run()
+      for (var i = 0; i < blocks.length; i++) {
+        var b = blocks[i];
+        var id = b.getAttribute('data-mermaid-id');
+        if (id == null || !mermaidStore[id]) {
+          b.classList.add('mermaid-error');
+          b.textContent = '\u26a0\ufe0f \u56fe\u8868\u6570\u636e\u4e22\u5931\uff08id=' + (id || 'null') + '\uff09';
+          continue;
+        }
+        b.textContent = mermaidStore[id];
+      }
+
+      console.log('[ClawMate] Calling mermaid.run() with scope=' + scopeClass + ', store has ' + mermaidStore.length + ' entries');
+      await window.mermaid.run({ querySelector: '.' + scopeClass + ' .mermaid' });
+      console.log('[ClawMate] mermaid.run() completed successfully');
+
+      // Fix quadrantChart NaN% colors (Mermaid v11 bug)
+      for (var i = 0; i < blocks.length; i++) {
+        blocks[i].querySelectorAll('[fill*="NaN%"], [stroke*="NaN%"]').forEach(function(el) {
+          var fill = el.getAttribute('fill') || '';
+          var stroke = el.getAttribute('stroke') || '';
+          if (fill.indexOf('NaN%') !== -1) el.setAttribute('fill', fill.replace(/hsl\([^)]*NaN%[^)]*\)/g, resolvedTheme === 'dark' ? '#58a6ff' : '#4f46e5'));
+          if (stroke.indexOf('NaN%') !== -1) el.setAttribute('stroke', stroke.replace(/hsl\([^)]*NaN%[^)]*\)/g, resolvedTheme === 'dark' ? '#58a6ff' : '#4f46e5'));
+        });
+      }
+    } catch (err) {
+      var errMsg = err && (err.message || err.str || String(err));
+      console.error('[ClawMate] Mermaid \u6e32\u67d3\u5931\u8d25:', errMsg, err);
+      for (var i = 0; i < blocks.length; i++) {
+        blocks[i].classList.add('mermaid-error');
+        blocks[i].textContent = '\u26a0\ufe0f Mermaid \u6e32\u67d3\u5931\u8d25 \u2014 ' + errMsg + '\n\n\u2193 \u539f\u6587\u5185\u5bb9\u89c1\u4e0b\u65b9\u6e90\u7801\u6a21\u5f0f';
+      }
+    } finally {
+      div.classList.remove(scopeClass);
     }
   }
 
@@ -1584,6 +1687,9 @@
       updateGridColumns();
       return;
     }
+    // Show sidebar and build TOC
+    leftSidebar.classList.remove('hidden');
+    updateGridColumns();
     headings.forEach((h, i) => { if (!h.id) h.id = `heading-${i}`; });
 
     const list = document.createElement('ul');
@@ -1654,6 +1760,141 @@
     });
   }
 
+  // ============ Code Outline ============
+  let codeOutlineItems = [];
+
+  function parseCodeOutline(content, ext) {
+    var lines = content.split('\n');
+    var items = [];
+    var patterns = {
+      py: [
+        [/^\s*def\s+(\w+)\s*\(/, function(m) { return 'def ' + m[1] + '(...)'; }],
+        [/^\s*class\s+(\w+)/, function(m) { return 'class ' + m[1]; }],
+        [/^\s*async\s+def\s+(\w+)\s*\(/, function(m) { return 'async def ' + m[1] + '(...)'; }],
+      ],
+      js: [
+        [/^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)/, function(m) { return 'function ' + m[1] + '()'; }],
+        [/^\s*(?:export\s+)?class\s+(\w+)/, function(m) { return 'class ' + m[1]; }],
+        [/^\s*(?:static\s+)?(?:async\s+)?(\w+)\s*\([^)]*\)\s*\{/, function(m) { return m[1] + '()'; }, true],
+        [/^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?\(/, function(m) { return 'const ' + m[1] + ' = (...) =>'; }],
+        [/^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?function/, function(m) { return 'const ' + m[1] + ' = function'; }],
+      ],
+      ts: [
+        [/^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)/, function(m) { return 'function ' + m[1] + '()'; }],
+        [/^\s*(?:export\s+)?(?:abstract\s+)?class\s+(\w+)/, function(m) { return 'class ' + m[1]; }],
+        [/^\s*(?:export\s+)?interface\s+(\w+)/, function(m) { return 'interface ' + m[1]; }],
+        [/^\s*(?:async\s+)?(\w+)\s*\([^)]*\)\s*(?::\s*\w+)?\s*\{/, function(m) { return m[1] + '()'; }, true],
+        [/^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*:\s*(?:.*=>|[\w<>]+)\s*=/, function(m) { return 'const ' + m[1]; }],
+      ],
+      tsx: [
+        [/^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)/, function(m) { return 'function ' + m[1] + '()'; }],
+        [/^\s*(?:export\s+)?(?:abstract\s+)?class\s+(\w+)/, function(m) { return 'class ' + m[1]; }],
+        [/^\s*(?:export\s+)?interface\s+(\w+)/, function(m) { return 'interface ' + m[1]; }],
+        [/^\s*(?:async\s+)?(\w+)\s*\([^)]*\)\s*(?::\s*\w+)?\s*\{/, function(m) { return m[1] + '()'; }, true],
+      ],
+      go: [
+        [/^\s*func\s+\((\w+)\s+(\*?\w+)\)\s+(\w+)\s*\(/, function(m) { return 'func (' + m[1] + ' ' + m[2] + ') ' + m[3] + '(...)'; }],
+        [/^\s*func\s+(\w+)\s*\(/, function(m) { return 'func ' + m[1] + '(...)'; }],
+        [/^\s*type\s+(\w+)\s+(?:struct|interface)/, function(m) { return 'type ' + m[1]; }],
+      ],
+      java: [
+        [/^\s*(?:public|private|protected)?\s*(?:static|final|abstract)?\s*(?:class|interface)\s+(\w+)/, function(m) { return m[0].trim().split(/\s+/)[0] + ' ' + m[1]; }],
+        [/^\s*(?:public|private|protected)?\s*(?:static|final|abstract|\s)+[\w<>\[\],\s]+\s+(\w+)\s*\(/, function(m) { return m[1] + '()'; }],
+      ],
+      rs: [
+        [/^\s*(?:pub\s+)?fn\s+(\w+)/, function(m) { return 'fn ' + m[1] + '()'; }],
+        [/^\s*(?:pub\s+)?struct\s+(\w+)/, function(m) { return 'struct ' + m[1]; }],
+        [/^\s*(?:pub\s+)?trait\s+(\w+)/, function(m) { return 'trait ' + m[1]; }],
+        [/^\s*(?:pub\s+)?impl\s+(\w+)/, function(m) { return 'impl ' + m[1]; }],
+        [/^\s*(?:pub\s+)?enum\s+(\w+)/, function(m) { return 'enum ' + m[1]; }],
+      ],
+      c: [
+        [/^\s*(?:static\s+)?(?:inline\s+)?(?:\w+[\s*]+)+(\w+)\s*\([^)]*\)\s*\{/, function(m) { return m[1] + '()'; }],
+      ],
+      cpp: [
+        [/^\s*(?:static\s+)?(?:inline\s+)?(?:virtual\s+)?(?:\w+(?:::)?)+[\s*&]+(\w+)\s*\([^)]*\)\s*(?:const\s*)?\{/, function(m) { return m[1] + '()'; }],
+        [/^\s*(?:template\s*<[^>]*>\s*)?class\s+(\w+)/, function(m) { return 'class ' + m[1]; }],
+      ],
+      h: [
+        [/^\s*(?:static\s+)?(?:inline\s+)?(?:\w+[\s*]+)+(\w+)\s*\([^)]*\)\s*(?:const\s*)?;/, function(m) { return m[1] + '()'; }],
+        [/^\s*(?:template\s*<[^>]*>\s*)?class\s+(\w+)/, function(m) { return 'class ' + m[1]; }],
+      ],
+      sh: [
+        [/^\s*(\w+)\s*\(\)\s*\{/, function(m) { return m[1] + '()'; }],
+        [/^\s*function\s+(\w+)/, function(m) { return 'function ' + m[1] + '()'; }],
+      ],
+      bash: [
+        [/^\s*(\w+)\s*\(\)\s*\{/, function(m) { return m[1] + '()'; }],
+        [/^\s*function\s+(\w+)/, function(m) { return 'function ' + m[1] + '()'; }],
+      ],
+    };
+    var langPatterns = patterns[ext] || [];
+    var JS_KEYS = [
+      'if','else','for','while','switch','case','break','continue','return',
+      'throw','try','catch','finally','do','with','new','delete','typeof',
+      'instanceof','void','in','of','await','debugger','export','import',
+      'yield','super','this','async','true','false','null','undefined',
+      'let','var','const','function','class','extends','implements','static',
+      'get','set','enum','interface','type','namespace','module','require',
+      'from','as','default','public','private','protected','readonly'
+    ];
+    var JS_KEYWORDS = {};
+    for (var k = 0; k < JS_KEYS.length; k++) JS_KEYWORDS[JS_KEYS[k]] = true;
+    if (!langPatterns.length) return items;
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      for (var j = 0; j < langPatterns.length; j++) {
+        var entry = langPatterns[j];
+        var regex = entry[0];
+        var formatter = entry[1];
+        var skipKws = entry[2];
+        var m = line.match(regex);
+        if (m) {
+          if (skipKws && JS_KEYWORDS[m[1]]) break;
+          items.push({ text: formatter(m).trim(), line: i + 1 });
+          break;
+        }
+      }
+    }
+    return items;
+  }
+
+  function scrollToCodeLine(lineNum) {
+    var pre = contentBody.querySelector('pre');
+    if (!pre) return;
+    var lineHeight = parseFloat(getComputedStyle(pre).lineHeight) || 22;
+    var scrollTarget = Math.max(0, (lineNum - 4) * lineHeight);
+    pre.parentElement.scrollTop = scrollTarget;
+  }
+
+  function renderCodeOutline(items) {
+    var tocBody = document.getElementById('tocBody');
+    // Only update content; do NOT change sidebar visibility
+    // (sidebar visibility is controlled by the outline toggle button)
+    if (items.length < 2) {
+      tocBody.innerHTML = '<div class="preview-toc-empty">无可索引的函数或类定义</div>';
+      return false;
+    }
+    var list = document.createElement('ul');
+    list.className = 'preview-toc-list';
+    items.forEach(function(item) {
+      var li = document.createElement('li');
+      li.className = 'preview-toc-item toc-code';
+      var a = document.createElement('a');
+      a.href = '#';
+      a.textContent = item.text;
+      a.addEventListener('click', function(e) {
+        e.preventDefault();
+        scrollToCodeLine(item.line);
+      });
+      li.appendChild(a);
+      list.appendChild(li);
+    });
+    tocBody.innerHTML = '';
+    tocBody.appendChild(list);
+    return true;
+  }
+
   // ============ Source Edit Mode (Markdown / HTML raw) ============
   let isPlainTextEditMode = false;
   let sourceDirty = false;
@@ -1674,6 +1915,11 @@
     isPlainTextEditMode = true;
     sourceDirty = false;
     srcPre.style.display = 'none';
+    // Also hide the HTML iframe when entering edit mode (HTML mode only)
+    if (isHtmlMode) {
+      const htmlIframe = document.getElementById('htmlIframe');
+      if (htmlIframe) htmlIframe.style.display = 'none';
+    }
     const ta = document.createElement('textarea');
     ta.id = 'plainTextEditor';
     ta.className = 'edit-textarea';
@@ -1707,6 +1953,11 @@
     if (banner) banner.style.display = 'none';
     if (srcPre) {
       srcPre.style.display = isRawMode ? '' : 'none';
+    }
+    // Restore iframe visibility when exiting HTML edit mode
+    if (isHtmlMode) {
+      const htmlIframe = document.getElementById('htmlIframe');
+      if (htmlIframe) htmlIframe.style.display = isRawMode ? 'none' : '';
     }
     isPlainTextEditMode = false;
     sourceDirty = false;
@@ -1783,34 +2034,50 @@
   }
 
   function updatePlainTextDynamicButtons() {
-    const dyn = document.getElementById('bottombarDynamic');
+    var dyn = document.getElementById('bottombarDynamic');
     dyn.innerHTML = '';
-    const sep = document.getElementById('bottombarDynamicSep');
+    var sep = document.getElementById('bottombarDynamicSep');
     if (sep) sep.style.display = '';
 
-    if (isPlainTextEditMode) {
-      // Unified: Cancel always visible, Save only when content changed
-      const cancelBtn = document.createElement('button');
-      cancelBtn.className = 'preview-bottom-btn active';
-      cancelBtn.id = 'btnPlainTextCancel';
-      cancelBtn.textContent = '❌ 取消';
-      cancelBtn.addEventListener('click', () => {
-        isPlainTextEditMode = false;
-        sourceDirty = false;
-        loadContent();
+    // Outline toggle — always present for code files with symbols (same as markdown)
+    if (codeOutlineItems.length >= 2) {
+      var outlineBtn = document.createElement('button');
+      outlineBtn.className = 'preview-bottom-btn' + (leftSidebar.classList.contains('hidden') ? '' : ' active');
+      outlineBtn.id = 'btnCodeOutline';
+      outlineBtn.textContent = '📑 大纲';
+      outlineBtn.addEventListener('click', function() {
+        leftSidebar.classList.toggle('hidden');
+        updateGridColumns();
+        updatePlainTextDynamicButtons();
       });
-      dyn.appendChild(cancelBtn);
+      dyn.appendChild(outlineBtn);
+      // Use existing preview-bottom-divider as separator (same as markdown)
+      var divider = document.createElement('div');
+      divider.className = 'preview-bottom-divider';
+      dyn.appendChild(divider);
+    }
+
+    if (isPlainTextEditMode) {
       if (sourceDirty) {
-        const saveBtn = document.createElement('button');
+        var saveBtn = document.createElement('button');
         saveBtn.className = 'preview-bottom-btn active';
         saveBtn.id = 'btnPlainTextSave';
         saveBtn.textContent = '💾 保存';
         saveBtn.addEventListener('click', savePlainTextContent);
         dyn.appendChild(saveBtn);
       }
+      var cancelBtn = document.createElement('button');
+      cancelBtn.className = 'preview-bottom-btn active';
+      cancelBtn.id = 'btnPlainTextCancel';
+      cancelBtn.textContent = '❌ 取消';
+      cancelBtn.addEventListener('click', function() {
+        isPlainTextEditMode = false;
+        sourceDirty = false;
+        loadContent();
+      });
+      dyn.appendChild(cancelBtn);
     } else {
-      // Edit button in display mode
-      const editBtn = document.createElement('button');
+      var editBtn = document.createElement('button');
       editBtn.className = 'preview-bottom-btn';
       editBtn.id = 'btnPlainTextEdit';
       editBtn.textContent = '✏️ 编辑';
@@ -1964,6 +2231,7 @@
   async function loadContent() {
     // Clean up Office/PDF mode class from body (will be re-added if needed)
     const contentBody = document.getElementById('contentBody');
+    codeOutlineItems = [];
 
     try {
       // For binary file types, the API returns raw bytes — do NOT call res.json()
@@ -2097,47 +2365,123 @@
         mdDiv.className = 'markdown-body';
         mdDiv.style.display = isRawMode ? 'none' : '';
 
+        let html;
+        let mermaidStore = [];
         try {
-          const { renderer, mermaidStore } = createMarkdownRenderer(filePath);
-          marked.use({ renderer, breaks: false, gfm: true });
-          let html = marked.parse(content);
+          const result = createMarkdownRenderer(filePath);
+          const renderer = result.renderer;
+          mermaidStore = result.mermaidStore;
+          marked.use({ renderer: renderer, breaks: false, gfm: true });
+          html = marked.parse(content);
           if (window.DOMPurify) {
             html = DOMPurify.sanitize(html, { ADD_ATTR: ['class', 'target', 'data-highlighted'] });
           }
-          mdDiv.innerHTML = html;
-          contentBody.appendChild(mdDiv);
-
-          buildTOC(mdDiv);
-          openLinksInNewTab(mdDiv);
-          addCopyButtons(mdDiv);
-
-          if (window.hljs) {
-            try { hljs.highlightAll(); } catch (_) {}
-          }
-
-          if (window.renderMathInElement) {
-            try {
-              renderMathInElement(mdDiv, {
-                delimiters: [
-                  {left: '$$', right: '$$', display: true},
-                  {left: '$', right: '$', display: false},
-                  {left: '\\(', right: '\\)', display: false},
-                  {left: '\\[', right: '\\]', display: true}
-                ],
-                throwOnError: false,
-                errorColor: '#dc2626',
-                strict: false,
-                ignoredClasses: ['mermaid', 'mermaid-error', 'pre', 'code']
-              });
-            } catch (_) {}
-          }
-
-          await renderMermaid(mdDiv, mermaidStore);
         } catch (e) {
-          // Fallback to source view on error
+          const errMsg = e && e.message ? (e.message + '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : String(e || '未知错误');
+          // Use mdDiv to show error so source <-> render toggle works both ways
+          mdDiv.innerHTML = '<div style="padding:40px;color:var(--danger);font-family:monospace;font-size:14px;line-height:1.6;"><strong>\u26a0\ufe0f Markdown \u6e32\u67d3\u5931\u8d25</strong><br><br>' + errMsg + '<br><br><span style="color:var(--text-secondary)">\u4e0b\u65b9\u5df2\u5207\u6362\u81f3\u6e90\u7801\u6a21\u5f0f\uff0c\u53ef\u70b9\u51fb\u300c\ud83d\udcdd \u6e32\u67d3\u300d\u5207\u56de\u9519\u8bef\u63d0\u793a</span></div>';
           mdDiv.style.display = 'none';
+          contentBody.appendChild(mdDiv);
+          // Force source view so user can still read the file
           srcPre.style.display = '';
+          isRawMode = true;
+          leftSidebar.classList.add('hidden');
+          updateGridColumns();
+          removeLoading();
+          updateMarkdownDynamicButtons();
+          return;
         }
+        // Parse succeeded — render markdown
+        mdDiv.innerHTML = html;
+        contentBody.appendChild(mdDiv);
+
+        buildTOC(mdDiv);
+        openLinksInNewTab(mdDiv);
+        addCopyButtons(mdDiv);
+
+        if (window.hljs) {
+          try { hljs.highlightAll(); } catch (_) {}
+        }
+
+        if (window.renderMathInElement) {
+          try {
+            renderMathInElement(mdDiv, {
+              delimiters: [
+                {left: '$$', right: '$$', display: true},
+                {left: '$', right: '$', display: false},
+                {left: '\(', right: '\)', display: false},
+                {left: '\[', right: '\]', display: true}
+              ],
+              throwOnError: false,
+              errorColor: '#dc2626',
+              strict: false,
+              ignoredClasses: ['mermaid', 'mermaid-error', 'pre', 'code']
+            });
+          } catch (_) {}
+        }
+
+        console.log('[ClawMate] About to call renderMermaid, mermaidStore has ' + mermaidStore.length + ' entries');
+        try { await renderMermaid(mdDiv, mermaidStore); } catch (e) { console.error('[ClawMate] renderMermaid threw:', e); }
+        removeLoading();
+        updateMarkdownDynamicButtons();
+        loadCompletedFeedback();
+        return;
+      }
+
+      // ======== HTML: render via iframe + source view with hljs ========
+      if (isHtmlMode) {
+        contentBody.innerHTML = '';
+
+        // Edit banner (hidden until edit mode is entered)
+        const banner = document.createElement('div');
+        banner.id = 'sourceEditBanner';
+        banner.className = 'edit-mode-banner';
+        banner.innerHTML = '<span class="edit-badge">编辑中</span> 你正在编辑源文件';
+        banner.style.display = 'none';
+        contentBody.appendChild(banner);
+
+        // Wrapper for iframe + source pre (allows coordinated show/hide)
+        const htmlWrap = document.createElement('div');
+        htmlWrap.id = 'htmlContentWrap';
+        htmlWrap.style.cssText = 'display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;';
+        contentBody.appendChild(htmlWrap);
+
+        // iframe for rendered HTML view
+        const htmlIframe = document.createElement('iframe');
+        htmlIframe.id = 'htmlIframe';
+        htmlIframe.style.cssText = 'flex:1;border:none;overflow:auto;background:#fff;';
+        // Sanitize HTML content before embedding via srcdoc
+        let safeHtml = content;
+        if (window.DOMPurify) {
+          safeHtml = DOMPurify.sanitize(content, { ADD_ATTR: ['srcdoc'] });
+        }
+        htmlIframe.srcdoc = safeHtml;
+        htmlIframe.style.display = isRawMode ? 'none' : '';
+        htmlWrap.appendChild(htmlIframe);
+
+        // Source view (highlighted pre, hidden by default unless isRawMode)
+        const srcPre = document.createElement('pre');
+        srcPre.id = 'sourceRawPre';
+        srcPre.className = 'code-highlighted';
+        srcPre.style.display = isRawMode ? '' : 'none';
+        srcPre.style.flex = '1';
+        srcPre.style.overflow = 'auto';
+        srcPre.style.margin = '0';
+        srcPre.style.borderRadius = '0';
+        if (window.hljs) {
+          try {
+            const highlighted = hljs.highlight(content, { language: 'html', ignoreIllegals: true }).value;
+            const code = document.createElement('code');
+            code.className = 'language-html';
+            code.innerHTML = highlighted;
+            srcPre.appendChild(code);
+          } catch (_) {
+            srcPre.textContent = content;
+          }
+        } else {
+          srcPre.textContent = content;
+        }
+        htmlWrap.appendChild(srcPre);
 
         removeLoading();
         updateMarkdownDynamicButtons();
@@ -2145,47 +2489,9 @@
         return;
       }
 
-      // ======== HTML: iframe or source textarea ========
-      if (isHtmlMode) {
-        // Clear any previous content before building
-        contentBody.innerHTML = '';
-        contentBody.style.cssText = 'display:flex;flex-direction:column;flex:1;min-height:0;padding:0;';
-
-        // Always create both iframe and source pre for clean toggle
-        const iframe = document.createElement('iframe');
-        iframe.id = 'htmlIframe';
-        iframe.src = `/api/clawmate/raw?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`;
-        iframe.style.cssText = 'width:100%;flex:1;border:1px solid var(--border-color);border-radius:8px;min-height:70vh;';
-        iframe.sandbox = 'allow-scripts';
-        iframe.style.display = isRawMode ? 'none' : '';
-        contentBody.appendChild(iframe);
-
-        const srcPre = document.createElement('pre');
-        srcPre.id = 'sourceRawPre';
-        srcPre.textContent = content;
-        if (window.hljs) {
-          try {
-            const highlighted = hljs.highlight(content, { language: 'xml', ignoreIllegals: true }).value;
-            const code = document.createElement('code');
-            code.className = 'language-xml';
-            code.innerHTML = highlighted;
-            srcPre.appendChild(code);
-            srcPre.className = 'code-highlighted';
-          } catch (_) {
-            srcPre.className = 'raw-text';
-          }
-        } else {
-          srcPre.className = 'raw-text';
-        }
-        srcPre.style.display = isRawMode ? '' : 'none';
-        contentBody.appendChild(srcPre);
-
-        removeLoading();
-        updateMarkdownDynamicButtons();
-        loadCompletedFeedback();
-        return;
-      } else {
-        // Plain text / code with highlight + optional edit mode
+      // Plain text / code with highlight + optional edit mode
+        // Parse code outline once for both edit and display modes
+        codeOutlineItems = parseCodeOutline(rawContent, ext);
         contentBody.innerHTML = '';
 
         if (isPlainTextEditMode) {
@@ -2207,6 +2513,10 @@
           });
           contentBody.appendChild(ta);
           removeLoading();
+          // Render outline sidebar for code (edit mode: populate content, don't change visibility)
+          if (codeOutlineItems.length >= 2) {
+            renderCodeOutline(codeOutlineItems);
+          }
           updatePlainTextDynamicButtons();
         } else {
           // Display mode: syntax-highlighted pre
@@ -2227,6 +2537,13 @@
           }
           contentBody.appendChild(pre);
           removeLoading();
+          // Render outline sidebar for code (display mode: auto-open on first load)
+          if (codeOutlineItems.length >= 2) {
+            renderCodeOutline(codeOutlineItems);
+            // Show sidebar on initial display render (same behavior as markdown buildTOC)
+            leftSidebar.classList.remove('hidden');
+            updateGridColumns();
+          }
           updatePlainTextDynamicButtons();
         }
       }
@@ -2705,7 +3022,7 @@
     if (mediaCompletedItems.length > 0) {
       const sep = document.createElement('div');
       sep.className = 'fb-section-sep';
-      sep.innerHTML = '<span>✅ 已完成</span>';
+      sep.innerHTML = '<span>✅ 已提交</span>';
       body.appendChild(sep);
       mediaCompletedItems.forEach(item => body.appendChild(renderCompletedFeedbackCard(item)));
     }
@@ -2809,7 +3126,7 @@
     if (officePdfCompletedItems.length > 0) {
       const sep = document.createElement('div');
       sep.className = 'fb-section-sep';
-      sep.innerHTML = '<span>✅ 已完成</span>';
+      sep.innerHTML = '<span>✅ 已提交</span>';
       body.appendChild(sep);
       officePdfCompletedItems.forEach(item => body.appendChild(renderCompletedFeedbackCard(item)));
     }
@@ -3036,7 +3353,13 @@
     submitBtn.textContent = '立刻执行';
     submitBtn.addEventListener('click', e => {
       e.stopPropagation();
-      submitSingleItem(item);
+      if (submitBtn.disabled) return;
+      submitBtn.disabled = true;
+      submitBtn.textContent = '⏳ 执行中...';
+      submitSingleItem(item).finally(() => {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '立刻执行';
+      });
     });
     actions.appendChild(submitBtn);
     card.appendChild(actions);
@@ -3129,7 +3452,7 @@
     if (completedItems.length > 0) {
       const sep = document.createElement('div');
       sep.className = 'fb-section-sep';
-      sep.innerHTML = '<span>✅ 已完成</span>';
+      sep.innerHTML = '<span>✅ 已提交</span>';
       body.appendChild(sep);
 
       completedItems.forEach(item => {
@@ -3309,7 +3632,6 @@
     });
     header.appendChild(left);
     header.appendChild(delBtn);
-
     card.appendChild(header);
 
     if (selDisplay) {
@@ -3327,7 +3649,83 @@
     pos.textContent = item.position || item.location || '';
     card.appendChild(pos);
 
+    // 处理结果: only show for done/failed items with result text
+    const isDoneFailed = item.status === 'done' || item.status === 'failed';
+    if (isDoneFailed && (item.result || item.processing_result)) {
+      const resDiv = document.createElement('div');
+      resDiv.className = 'fb-card-result';
+      const txt = (item.result || item.processing_result || '');
+      resDiv.textContent = '📋 ' + (txt.length > 100 ? txt.substring(0, 100) + '…' : txt);
+      card.appendChild(resDiv);
+    }
+
+    // Click to show detail modal with full info
+    card.addEventListener('click', e => {
+      if (e.target.closest('button')) return; // skip button clicks
+      showFeedbackDetailModal(item, statusIcon);
+    });
+
     return card;
+  }
+
+  // ============ Feedback Detail Modal ============
+  function showFeedbackDetailModal(item, statusIcon) {
+    // Remove existing modal if any
+    var existing = document.querySelector('.fb-detail-overlay');
+    if (existing) existing.remove();
+
+    var overlay = document.createElement('div');
+    overlay.className = 'fb-detail-overlay';
+
+    var modal = document.createElement('div');
+    modal.className = 'fb-detail-modal';
+
+    // Header
+    var hdr = document.createElement('div');
+    hdr.className = 'fb-detail-header';
+    hdr.innerHTML = '<div class="fb-detail-header-left">' +
+      '<span>' + (statusIcon || '📋') + '</span>' +
+      '<span>' + escHtml(item.id || '') + '</span>' +
+      '</div>';
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'fb-detail-close';
+    closeBtn.textContent = '✕';
+    closeBtn.addEventListener('click', function() { overlay.remove(); });
+    hdr.appendChild(closeBtn);
+
+    // Body
+    var body = document.createElement('div');
+    body.className = 'fb-detail-body';
+
+    function addRow(label, value, cls) {
+      if (!value) return;
+      var row = document.createElement('div');
+      row.className = 'fb-detail-row';
+      row.innerHTML = '<div class="fb-detail-label">' + label + '</div>' +
+        '<div class="fb-detail-value' + (cls ? ' ' + cls : '') + '">' + escHtml(value) + '</div>';
+      body.appendChild(row);
+    }
+
+    addRow('文件', item.file || '');
+    addRow('选中位置', item.position || item.location || '');
+    addRow('选区内容', item.selection_content || item.text || item.content || '', 'selection');
+    addRow('用户备注', item.user_note || item.note || '', 'selection');
+    addRow('处理结果', item.result || item.processing_result || '', 'result');
+    addRow('更新时间', item.updated || '');
+
+    modal.appendChild(hdr);
+    modal.appendChild(body);
+    overlay.appendChild(modal);
+
+    // Click overlay to close (but not modal itself)
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) overlay.remove();
+    });
+    // Escape key to close
+    var escHandler = function(e) { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', escHandler); } };
+    document.addEventListener('keydown', escHandler);
+
+    document.body.appendChild(overlay);
   }
 
   // ============ Image Feedback Panel ============
@@ -3407,7 +3805,7 @@
     if (imageCompletedItems.length > 0) {
       const sep = document.createElement('div');
       sep.className = 'fb-section-sep';
-      sep.innerHTML = '<span>✅ 已完成</span>';
+      sep.innerHTML = '<span>✅ 已提交</span>';
       body.appendChild(sep);
       imageCompletedItems.forEach(item => body.appendChild(renderCompletedFeedbackCard(item)));
     }
@@ -3797,6 +4195,17 @@
   }
 
   // Add to panel
+  // Quick tags: auto-fill note
+  document.querySelectorAll('.pst-tag').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var tag = this.getAttribute('data-tag');
+      var noteEl = document.getElementById('pstNote');
+      // Single tag mode: replace any existing content with the selected tag
+      noteEl.value = tag;
+      noteEl.focus();
+    });
+  });
+
   document.getElementById('pstBtnAdd').addEventListener('click', function() {
     const note = document.getElementById('pstNote').value.trim();
     if (!note) {
@@ -3838,6 +4247,8 @@
 
   // Send immediately
   document.getElementById('pstBtnSend').addEventListener('click', async function() {
+    var btn = this;
+    if (btn.disabled) return;
     const note = document.getElementById('pstNote').value.trim();
     if (!note) {
       const st = document.getElementById('pstStatus');
@@ -3848,6 +4259,8 @@
     }
     if (!currentSelText) return;
 
+    btn.disabled = true;
+    btn.textContent = '⏳ ...';
     const st = document.getElementById('pstStatus');
     st.textContent = '发送中...';
     st.className = 'pst-status pst-status-loading';
@@ -3897,6 +4310,8 @@
       st.textContent = '❌ 网络错误';
       st.className = 'pst-status pst-status-error';
     }
+    btn.disabled = false;
+    btn.textContent = '⚡ 立刻执行';
   });
 
   // ============ postMessage: ONLYOFFICE error → PDF fallback to pdf.js ============

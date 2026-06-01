@@ -5,7 +5,7 @@
 **原始版本**: v1.0（2026-05-29）
 **类型**: 研发需求 → **已交付**
 
-> ⚠️ 2026-06-01 更新：本文档已从「设计蓝图」更新为「现状记录」。所有 P0/P1/P2 需求已交付（v1.3），额外交付了音视频 SRT、Office 编辑链路、反馈面板统一等能力。
+> ⚠️ 2026-06-01 更新：本文档已从「设计蓝图」更新为「现状记录」。所有 P0/P1/P2 需求已交付（v1.4），额外交付了音视频 SRT、Office 编辑链路、反馈面板统一、代码大纲索引、处理结果字段、快捷标签等能力。
 
 ---
 
@@ -143,7 +143,7 @@ flowchart TB
     end
 
     subgraph 集成层
-        SKILL[OpenClaw Slash Commands<br>/clawmate preview|list|todo|do|feedback]
+        SKILL["OpenClaw Slash Commands<br>/clawmate preview|list|todo|do|feedback"]
         WAKE[Push Wake<br>system event --mode now]
     end
 

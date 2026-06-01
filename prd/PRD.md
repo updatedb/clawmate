@@ -5,8 +5,8 @@
 | 字段 | 内容 |
 |-----|------|
 | 产品名称 | ClawMate 龙虾伴侣 |
-| 文档版本 | V1.3 |
-| 编写日期 | 2026-05-31 |
+| 文档版本 | V1.4 |
+| 编写日期 | 2026-06-01 |
 | 前置文档 | [MRD](prd/MRD.md) · [需求澄清](REQUIREMENT_CLARIFICATION.md) · [竞品分析](research/competitor-analysis.md) |
 | 项目类型 | 研发需求 |
 
@@ -51,6 +51,7 @@ mindmap
       音视频播放+SRT
       Markdown/HTML双模式
       preview.html统一架构
+      代码大纲索引
     部署形态
       Docker Image
       Daemon安装
@@ -70,6 +71,9 @@ mindmap
       状态流转
       per-preview面板
       心跳cron自动处理
+      处理结果字段
+      详情弹窗
+      快捷标签
 ```
 
 ### 3.2 系统架构图
@@ -120,7 +124,7 @@ flowchart TD
     J --> K{继续选择?}
     K -->|是| I
     K -->|✅ 提交| L[批量 POST /feedback]
-    L --> M[写入 FEEDBACK.md<br>FD-{abbr}-{seq}]
+    L --> M["写入 FEEDBACK.md<br>FD-{abbr}-{seq}"]
     M --> N[Push Wake Agent]
     N --> O[Agent 心跳检索<br>处理反馈]
     O --> P[POST /feedback/update<br>status=done]
@@ -165,6 +169,7 @@ flowchart TD
 | `onlyoffice.callback_url` | string | - | 回调保存 URL，可覆盖默认构造值 |
 | `public_base_url` | string | - | ClawMate 对外的可访问地址（生成预览链接用）|
 | `port` | number | - | 监听端口，默认 5533 |
+| `max_upload_mb` | number | - | 上传文件大小限制（MB），默认 100 |
 | `projects` | object | - | 项目级配置，如 abbr 自定义 |
 
 ### 5.2 API 响应模型
@@ -190,6 +195,7 @@ interface FeedbackItem {
   file: string;        // 文件路径
   location: string;    // 选中位置 L{start}-{end}
   content: string;     // 选区内容
+  result: string;      // 处理结果摘要（仅 done/failed 时有值）
   updated: string;     // 更新时间 YYYY-MM-DD HH:MM:SS
 }
 
@@ -243,7 +249,7 @@ interface ListResponse {
 | POST | `/api/clawmate/feedback` | 统一反馈创建 → FEEDBACK.md + Push Wake |
 | GET | `/api/clawmate/feedback/list` | 列出反馈（status/file/since 过滤）|
 | GET | `/api/clawmate/feedback/status` | 状态摘要（counts + items）|
-| POST | `/api/clawmate/feedback/update` | 按 ID 更新状态（支持 deleted 软删除）|
+| POST | `/api/clawmate/feedback/update` | 按 ID 更新状态（done/failed 时必须附带 `result` 参数）|
 
 ### 7.3 反馈创建请求体
 
@@ -324,6 +330,7 @@ interface ListResponse {
 | **v1.1** | Slash Commands（preview/list/todo/do/feedback） + /preview-link + /feedback/list | #5 #6 |
 | **v1.2** | Feedback 重构（统一提交/去类型化/per-preview面板） + Standalone 三栏布局 + 移动端适配 | #6 #3 |
 | **v1.3** | preview.html 统一架构 + ONLYOFFICE 编辑链路 + 音视频/SRT + Markdown/HTML 双模式 + 图片工具栏 + save/rename API | #3 #6 |
+| **v1.4** | 代码大纲索引 + 反馈处理结果字段 + 详情弹窗 + 多行内容完整保存 + 无后缀文本检测 + 防重复提交 + Mermaid 预览修复 + 快捷标签 + Bug 修复 | #3 #6 #1 |
 
 ## 11. 子场景 PRD 索引
 

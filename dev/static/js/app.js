@@ -524,7 +524,137 @@ function addCopyButtons(div) {
   });
 }
 
-// ===== Open external links in new tab =====
+// ===== Code Outline Parser =====
+function parseCodeOutline(content, ext) {
+  const lines = content.split('\n');
+  const items = [];
+  const patterns = {
+    py: [
+      [/^\s*def\s+(\w+)\s*\(/, m => 'def ' + m[1] + '(...)'],
+      [/^\s*class\s+(\w+)/, m => 'class ' + m[1]],
+      [/^\s*async\s+def\s+(\w+)\s*\(/, m => 'async def ' + m[1] + '(...)'],
+    ],
+    js: [
+      [/^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)/, m => 'function ' + m[1] + '()'],
+      [/^\s*(?:export\s+)?class\s+(\w+)/, m => 'class ' + m[1]],
+      [/^\s*(?:static\s+)?(?:async\s+)?(\w+)\s*\([^)]*\)\s*\{/, m => m[1] + '()', true],
+      [/^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?\(/, m => 'const ' + m[1] + ' = (...) =>'],
+      [/^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?function/, m => 'const ' + m[1] + ' = function'],
+    ],
+    ts: [
+      [/^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)/, m => 'function ' + m[1] + '()'],
+      [/^\s*(?:export\s+)?(?:abstract\s+)?class\s+(\w+)/, m => 'class ' + m[1]],
+      [/^\s*(?:export\s+)?interface\s+(\w+)/, m => 'interface ' + m[1]],
+      [/^\s*(?:async\s+)?(\w+)\s*\([^)]*\)\s*(?::\s*\w+)?\s*\{/, m => m[1] + '()', true],
+      [/^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*:\s*(?:.*=>|[\w<>]+)\s*=/, m => 'const ' + m[1]],
+    ],
+    tsx: [
+      [/^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)/, m => 'function ' + m[1] + '()'],
+      [/^\s*(?:export\s+)?(?:abstract\s+)?class\s+(\w+)/, m => 'class ' + m[1]],
+      [/^\s*(?:export\s+)?interface\s+(\w+)/, m => 'interface ' + m[1]],
+      [/^\s*(?:async\s+)?(\w+)\s*\([^)]*\)\s*(?::\s*\w+)?\s*\{/, m => m[1] + '()', true],
+    ],
+    go: [
+      [/^\s*func\s+\((\w+)\s+(\*?\w+)\)\s+(\w+)\s*\(/, m => 'func (' + m[1] + ' ' + m[2] + ') ' + m[3] + '(...)'],
+      [/^\s*func\s+(\w+)\s*\(/, m => 'func ' + m[1] + '(...)'],
+      [/^\s*type\s+(\w+)\s+(?:struct|interface)/, m => 'type ' + m[1]],
+    ],
+    java: [
+      [/^\s*(?:public|private|protected)?\s*(?:static|final|abstract)?\s*(?:class|interface)\s+(\w+)/, m => m[0].trim().split(/\s+/)[0] + ' ' + m[1]],
+      [/^\s*(?:public|private|protected)?\s*(?:static|final|abstract|\s)+[\w<>\[\],\s]+\s+(\w+)\s*\(/, m => m[1] + '()'],
+    ],
+    rs: [
+      [/^\s*(?:pub\s+)?fn\s+(\w+)/, m => 'fn ' + m[1] + '()'],
+      [/^\s*(?:pub\s+)?struct\s+(\w+)/, m => 'struct ' + m[1]],
+      [/^\s*(?:pub\s+)?trait\s+(\w+)/, m => 'trait ' + m[1]],
+      [/^\s*(?:pub\s+)?impl\s+(\w+)/, m => 'impl ' + m[1]],
+      [/^\s*(?:pub\s+)?enum\s+(\w+)/, m => 'enum ' + m[1]],
+    ],
+    c: [
+      [/^\s*(?:static\s+)?(?:inline\s+)?(?:\w+[\s*]+)+(\w+)\s*\([^)]*\)\s*\{/, m => m[1] + '()'],
+    ],
+    cpp: [
+      [/^\s*(?:static\s+)?(?:inline\s+)?(?:virtual\s+)?(?:\w+(?:::)?)+[\s*&]+(\w+)\s*\([^)]*\)\s*(?:const\s*)?\{/, m => m[1] + '()'],
+      [/^\s*(?:template\s*<[^>]*>\s*)?class\s+(\w+)/, m => 'class ' + m[1]],
+    ],
+    h: [
+      [/^\s*(?:static\s+)?(?:inline\s+)?(?:\w+[\s*]+)+(\w+)\s*\([^)]*\)\s*(?:const\s*)?;/, m => m[1] + '()'],
+      [/^\s*(?:template\s*<[^>]*>\s*)?class\s+(\w+)/, m => 'class ' + m[1]],
+    ],
+    sh: [
+      [/^\s*(\w+)\s*\(\)\s*\{/, m => m[1] + '()'],
+      [/^\s*function\s+(\w+)/, m => 'function ' + m[1] + '()'],
+    ],
+    bash: [
+      [/^\s*(\w+)\s*\(\)\s*\{/, m => m[1] + '()'],
+      [/^\s*function\s+(\w+)/, m => 'function ' + m[1] + '()'],
+    ],
+  };
+  const langPatterns = patterns[ext] || [];
+  const JS_KEYWORDS = new Set([
+    'if','else','for','while','switch','case','break','continue','return',
+    'throw','try','catch','finally','do','with','new','delete','typeof',
+    'instanceof','void','in','of','await','debugger','export','import',
+    'yield','super','this','async','true','false','null','undefined',
+    'let','var','const','function','class','extends','implements','static',
+    'get','set','enum','interface','type','namespace','module','require',
+    'from','as','default','public','private','protected','readonly'
+  ]);
+  if (!langPatterns.length) return items;
+  for (let i = 0; i < lines.length; i++) {
+    for (const entry of langPatterns) {
+      const regex = entry[0], formatter = entry[1], skipKeywords = entry[2];
+      const m = lines[i].match(regex);
+      if (m) {
+        if (skipKeywords && JS_KEYWORDS.has(m[1])) break;
+        items.push({ text: formatter(m).trim(), line: i + 1 }); break;
+      }
+    }
+  }
+  return items;
+}
+
+function scrollModalToLine(preEl, lineNum) {
+  if (!preEl) return;
+  const lineHeight = parseFloat(getComputedStyle(preEl).lineHeight) || 22;
+  preEl.parentElement.scrollTop = Math.max(0, (lineNum - 4) * lineHeight);
+}
+
+function renderCodeOutlineModal(entry, preEl, rawContent) {
+  const ext = getEntryExt(entry).toLowerCase();
+  const items = parseCodeOutline(rawContent, ext);
+  if (items.length < 2) return null;
+
+  const nav = document.createElement('div');
+  nav.className = 'code-outline-nav';
+  nav.id = 'codeOutlineNav';
+
+  const header = document.createElement('div');
+  header.className = 'code-outline-header';
+  header.innerHTML = '<span>📑 代码大纲 (' + items.length + ')</span><span class="code-outline-toggle">▾</span>';
+  header.addEventListener('click', () => {
+    nav.classList.toggle('collapsed');
+  });
+
+  const list = document.createElement('ul');
+  list.className = 'code-outline-list';
+  items.forEach(item => {
+    const li = document.createElement('li');
+    const a = document.createElement('a');
+    a.href = '#';
+    a.textContent = item.text;
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      scrollModalToLine(preEl, item.line);
+    });
+    li.appendChild(a);
+    list.appendChild(li);
+  });
+
+  nav.appendChild(header);
+  nav.appendChild(list);
+  return nav;
+}
 function openLinksInNewTab(div) {
   div.querySelectorAll('a').forEach(a => {
     a.setAttribute('target', '_blank');
@@ -598,14 +728,18 @@ function createMarkdownRenderer(entryRelPath, mermaidStore) {
   const renderer = new marked.Renderer();
 
   // Rewrite relative image paths
-  renderer.image = function(href, title, text) {
+  renderer.image = function(token) {
+    // marked v15+ passes a single token object {href, title, text}
+    let href = token.href || '';
+    const title = token.title || '';
+    const text = token.text || '';
     // If href is not absolute URL or /-prefixed, treat as relative
     if (!/^https?:\/\//i.test(href) && !href.startsWith('/')) {
       const dir = entryRelPath.split('/').slice(0, -1).join('/');
       const fullPath = dir ? dir + '/' + href : href;
       href = `/api/clawmate/preview?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(fullPath)}`;
     }
-    return `<img src="${href}" alt="${escHtml(text || '')}"${title ? ` title="${escHtml(title)}"` : ''}>`;
+    return `<img src="${href}" alt="${escHtml(text)}"${title ? ` title="${escHtml(title)}"` : ''}>`;
   };
 
   renderer.code = function(codeInfo, lang) {
@@ -688,23 +822,19 @@ function getParentDir(dir) {
 
 // Load parent directory entries for sidebar
 async function loadSidebarParent(dir) {
-  // When at root directory, show only "." entry, no siblings
-  if (dir === "") {
-    sidebarParentDir = "";
-    sidebarEntries = [{ name: ".", relPath: "" }];
-    return;
-  }
-  const parentDir = getParentDir(dir);
   if (!state.rootId) return;
+  // At root level: load root's own directory listing (not parent, which doesn't exist)
+  // At subdirectory: load parent directory listing to show sibling dirs
+  const fetchDir = (dir === "") ? "" : getParentDir(dir);
   try {
-    const res = await fetch(`/api/clawmate/list?root=${encodeURIComponent(state.rootId)}&dir=${encodeURIComponent(parentDir)}`);
+    const res = await fetch(`/api/clawmate/list?root=${encodeURIComponent(state.rootId)}&dir=${encodeURIComponent(fetchDir)}`);
     if (!res.ok) {
-      sidebarParentDir = parentDir;
+      sidebarParentDir = fetchDir;
       sidebarEntries = [];
       return;
     }
     const data = await res.json();
-    sidebarParentDir = parentDir;
+    sidebarParentDir = fetchDir;
     sidebarEntries = (data.entries || [])
       .filter(e => e.is_dir)
       .map(e => ({
@@ -713,7 +843,7 @@ async function loadSidebarParent(dir) {
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
   } catch (_) {
-    sidebarParentDir = parentDir;
+    sidebarParentDir = fetchDir;
     sidebarEntries = [];
   }
 }
@@ -1831,6 +1961,12 @@ async function openPreview(entry) {
         pre.textContent = content;
       }
       els.previewBody.appendChild(pre);
+
+      // Code outline for supported languages
+      const codeOutline = renderCodeOutlineModal(entry, pre, content);
+      if (codeOutline) {
+        els.previewBody.insertBefore(codeOutline, pre);
+      }
     }
 
     // Single footer row: 复制内容 + 下载 + 删除
@@ -2035,6 +2171,12 @@ function initSelectionFeedback() {
       <input type="text" class="pst-location" placeholder="位置：L{start}-{end}" style="flex:1;" />
     </div>
     <textarea class="pst-note" placeholder="必填 · 简要说明需要的改动" rows="3"></textarea>
+    <div class="pst-tags">
+      <button class="pst-tag" data-tag="删除">🗑 删除</button>
+      <button class="pst-tag" data-tag="修复">🔧 修复</button>
+      <button class="pst-tag" data-tag="扩展">📈 扩展</button>
+      <button class="pst-tag" data-tag="简化">📉 简化</button>
+    </div>
     <div class="pst-actions">
       <button class="pst-btn-send">⚡ 立刻执行</button>
     </div>
@@ -2066,6 +2208,17 @@ function initSelectionFeedback() {
   // Bind send button (add-to-panel is hidden in modal context via CSS)
   const sendBtn = feedbackTooltipEl.querySelector(".pst-btn-send");
   sendBtn.addEventListener("click", handleSendNow);
+
+  // Quick tags: auto-fill note
+  feedbackTooltipEl.querySelectorAll('.pst-tag').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var tag = this.getAttribute('data-tag');
+      var noteEl = feedbackTooltipEl.querySelector('.pst-note');
+      // Single tag mode: replace any existing content with the selected tag
+      noteEl.value = tag;
+      noteEl.focus();
+    });
+  });
 }
 
 function restoreSavedSelection() {
@@ -2325,6 +2478,7 @@ function handleAddToPanel() {
 }
 
 function handleSendNow() {
+  if (sendBtn.disabled) return;
   const noteEl = feedbackTooltipEl.querySelector(".pst-note");
   const statusEl = feedbackTooltipEl.querySelector(".pst-status");
   let ctx;
@@ -2344,6 +2498,8 @@ function handleSendNow() {
   statusEl.textContent = "发送中...";
   statusEl.className = "pst-status pst-status-loading";
   noteEl.value = "";
+  sendBtn.disabled = true;
+  sendBtn.textContent = '⏳ ...';
 
   fetch("/api/clawmate/feedback", {
     method: "POST",
@@ -2366,10 +2522,14 @@ function handleSendNow() {
     }
     statusEl.textContent = "✅ 已发送";
     statusEl.className = "pst-status pst-status-ok";
+    sendBtn.disabled = false;
+    sendBtn.textContent = '⚡ 立刻执行';
     setTimeout(hideFeedbackTooltip, 800);
   }).catch(err => {
     statusEl.textContent = "❌ " + (err.message || "发送失败");
     statusEl.className = "pst-status pst-status-error";
+    sendBtn.disabled = false;
+    sendBtn.textContent = '⚡ 立刻执行';
   });
 }
 
@@ -2398,6 +2558,62 @@ async function _batchSendItems(panel, items) {
   if (panel && panel.clearItems) {
     panel.clearItems();
   }
+}
+
+// ===== Feedback Detail Modal =====
+function showFeedbackDetailModal(item, statusIcon) {
+  // Remove existing
+  var existing = document.querySelector('.fb-detail-overlay');
+  if (existing) existing.remove();
+
+  var overlay = document.createElement('div');
+  overlay.className = 'fb-detail-overlay';
+  var modal = document.createElement('div');
+  modal.className = 'fb-detail-modal';
+
+  var hdr = document.createElement('div');
+  hdr.className = 'fb-detail-header';
+  hdr.innerHTML = '<div class="fb-detail-header-left">' +
+    '<span>' + (statusIcon || '📋') + '</span>' +
+    '<span>' + escHtml(item.id || '') + '</span>' +
+    '</div>';
+  var closeBtn = document.createElement('button');
+  closeBtn.className = 'fb-detail-close';
+  closeBtn.textContent = '✕';
+  closeBtn.addEventListener('click', function() { overlay.remove(); });
+  hdr.appendChild(closeBtn);
+
+  var body = document.createElement('div');
+  body.className = 'fb-detail-body';
+
+  function addRow(label, value, cls) {
+    if (!value) return;
+    var row = document.createElement('div');
+    row.className = 'fb-detail-row';
+    row.innerHTML = '<div class="fb-detail-label">' + label + '</div>' +
+      '<div class="fb-detail-value' + (cls ? ' ' + cls : '') + '">' + escHtml(value) + '</div>';
+    body.appendChild(row);
+  }
+
+  addRow('文件', item.file || '');
+  addRow('选中位置', item.position || item.location || '');
+  addRow('选区内容', item.selection_content || item.text || item.content || '', 'selection');
+  addRow('用户备注', item.user_note || item.note || '', 'selection');
+  addRow('处理结果', item.result || item.processing_result || '', 'result');
+  addRow('更新时间', item.updated || '');
+
+  modal.appendChild(hdr);
+  modal.appendChild(body);
+  overlay.appendChild(modal);
+
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) overlay.remove();
+  });
+  var escHandler = function(e) {
+    if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', escHandler); }
+  };
+  document.addEventListener('keydown', escHandler);
+  document.body.appendChild(overlay);
 }
 
 // ===== Per-Preview Feedback Panel =====
@@ -2590,6 +2806,11 @@ function createFeedbackPanel(container, context) {
         const statusIcon = item.status === 'done' || item.status === '已完成' ? '✅' :
                            item.status === 'doing' || item.status === '处理中' ? '🔄' :
                            item.status === 'failed' || item.status === '失败' ? '❌' : '⏳';
+        const isDoneFailed = item.status === 'done' || item.status === 'failed';
+        const resultText = (item.result || item.processing_result || '');
+        const resultHtml = (isDoneFailed && resultText)
+          ? '<div class="sfb-result">📋 ' + escHtml(resultText.length > 100 ? resultText.substring(0, 100) + '…' : resultText) + '</div>'
+          : '';
         card.innerHTML = `
           <div class="sfb-header">
             <span class="sfb-status">${statusIcon}</span>
@@ -2598,7 +2819,13 @@ function createFeedbackPanel(container, context) {
           </div>
           <div class="sfb-note">${escHtml(item.user_note || item.note || '（无备注）')}</div>
           <div class="sfb-location">${escHtml(item.location || item.file || '')}</div>
+          ${resultHtml}
         `;
+        // Click to show detail modal
+        card.style.cursor = 'pointer';
+        card.addEventListener('click', () => {
+          showFeedbackDetailModal(item, statusIcon);
+        });
         body.appendChild(card);
       });
     }

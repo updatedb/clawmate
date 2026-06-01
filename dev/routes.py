@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Query, HTTPException, Request
-from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
+from fastapi.responses import JSONResponse, FileResponse
 from urllib.parse import quote, unquote_to_bytes
 import base64
 import hashlib
 import hmac
-import io
 import json
 import os
 import time
@@ -450,9 +449,6 @@ async def clawmate_upload(
 ):
     """Upload a file to the given root/directory."""
     try:
-        import tempfile, os
-        from starlette.datastructures import UploadFile
-
         form = await request.form()
         file_obj = form.get("file")
         if not file_obj:
@@ -559,6 +555,7 @@ async def clawmate_feedback_list(
             "file": item.get("file", ""),
             "content": item.get("selection", ""),
             "updated": item.get("updated", ""),
+            "result": item.get("result", ""),
         }
         if item.get("position"):
             entry["location"] = item["position"]
@@ -875,7 +872,7 @@ def _parse_items(content: str) -> list:
             current = {
                 "file": val.strip(),
                 "id": "", "note": "", "status": "pending", "selection": "",
-                "position": "", "updated": "",
+                "position": "", "updated": "", "result": "",
             }
             continue
 
@@ -891,15 +888,20 @@ def _parse_items(content: str) -> list:
                 rev = {label: k for k, label in STATUS_LABELS.items()}
                 current["status"] = rev.get(v, "pending")
             elif key == "用户备注":
-                current["note"] = v
+                # Decode \\n → newline, \\\\ → \\
+                current["note"] = v.replace("\\n", "\n").replace("\\\\", "\\")
             elif key == "选区内容":
                 if len(v) >= 2 and ((v.startswith('"') and v.endswith('"')) or                                     (v.startswith("'") and v.endswith("'"))):
                     v = v[1:-1]
+                # Decode \\n → newline, \\\\ → \\ (stored escaped in FEEDBACK.md)
+                v = v.replace("\\n", "\n").replace("\\\\", "\\")
                 current["selection"] = v
             elif key == "选中位置":
                 current["position"] = v
             elif key == "更新":
                 current["updated"] = v
+            elif key == "处理结果":
+                current["result"] = v
 
     # finalize last item
     if current and current.get("id"):
@@ -910,10 +912,8 @@ def _parse_items(content: str) -> list:
 def _format_item(item: dict) -> list:
     """Format a single feedback item as file-first flat markdown.
 
-    Readability rules:
-    - 选区内容 ≤80 chars → 一行内联
-    - 选区内容 >80 chars  → 截断 + … 后缀
-    - 统一双引号包裹，内部双引号转义为 \"
+    - 选区内容/用户备注 完整保留（换行转 \\n 编码，反斜杠转 \\\\）
+    - 内容 >200 chars 截断为前 197 + …
     - 条目间空行分隔
     """
     now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
@@ -923,18 +923,24 @@ def _format_item(item: dict) -> list:
     lines.append(f"编号：# {item['id']}".replace("# ", "#"))
     status_label = STATUS_LABELS.get(item.get("status", "pending"), "待处理")
     lines.append(f"状态：{status_label}")
-    lines.append(f"用户备注：{item.get('note', '')}")
+    # 用户备注：换行 → \\n，\\ → \\\\，软上限 200
+    note_raw = item.get('note', '')
+    note_escaped = note_raw.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "")
+    note_display = (note_escaped[:197] + "...") if len(note_escaped) > 200 else note_escaped
+    lines.append(f"用户备注：{note_display}")
     if item.get("position"):
         lines.append(f"选中位置: {item['position']}")
     if item.get("selection"):
         sel = item["selection"]
-        # 截断长内容保持文件紧凑
-        truncated = len(sel) > 80
-        display = (sel[:77] + "...") if truncated else sel
-        # 统一双引号，内部双引号转义
-        safe = display.replace('"', '\\"')
-        lines.append(f"选区内容: \"{safe}\"")
+        # 保留完整内容：换行 → \\n, 反斜杠 → \\\\
+        escaped = sel.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "")
+        # 过长的内容截断（200 char 软上限，避免 FEEDBACK.md 过大）
+        MAX_SEL = 200
+        display = (escaped[:MAX_SEL - 3] + "...") if len(escaped) > MAX_SEL else escaped
+        lines.append(f'选区内容: "{display}"')
     lines.append(f"更新: {item.get('updated', now)}")
+    if item.get("result"):
+        lines.append(f"处理结果: {item['result']}")
     lines.append("")
     return lines
 
@@ -1080,7 +1086,7 @@ async def clawmate_feedback_status(root: str = "", project: str = ""):
         "feedbackPath": str(fb_path),
         "exists": fb_path.exists(),
         "counts": counts,
-        "items": [{"id": i["id"], "note": i["note"], "status": i["status"], "file": i["file"]} for i in items],
+        "items": [{"id": i["id"], "note": i["note"], "status": i["status"], "file": i["file"], "result": i.get("result", "")} for i in items],
         "sessionInfo": session_info,
     })
 
@@ -1097,11 +1103,15 @@ async def clawmate_feedback_update(request: Request):
     project = str(body.get("project", "")).strip()
     feedback_id = str(body.get("id", "")).strip()
     new_status = str(body.get("status", "")).strip()
+    result_text = str(body.get("result", "")).strip()
 
     if not root_id or not project or not feedback_id:
         raise HTTPException(status_code=422, detail="Missing root/project/id")
     if new_status not in ("pending", "in_progress", "done", "failed", "deleted"):
         raise HTTPException(status_code=422, detail="status must be pending|in_progress|done|failed|deleted")
+    # Require result summary when marking as done/failed
+    if new_status in ("done", "failed") and not result_text:
+        raise HTTPException(status_code=422, detail="Missing result summary (required for done/failed)")
 
     try:
         fb_path = _get_feedback_path(root_id, project)
@@ -1116,6 +1126,8 @@ async def clawmate_feedback_update(request: Request):
         if item["id"] == feedback_id:
             item["status"] = new_status
             item["updated"] = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
+            if result_text:
+                item["result"] = result_text
             updated = True
             break
 

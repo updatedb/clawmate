@@ -464,3 +464,66 @@
 - [ ] **save 接口格式校验** — `.json` 文件保存时自动验证 JSON 合法性
   - 背景：2026-06-01 用户通过 ClawMate 编辑 `config.json` 时引入语法错误（缺逗号 + 多余逗号），导致服务端 JSON 解析失败，所有接口返回 403
   - 方案：`POST /api/clawmate/save` 检测文件扩展名为 `.json` 时，保存前尝试 `json.loads(content)`；不合法则拒绝写入并返回具体错误位置
+- [ ] **config.example.json ↔ config.json 同步** — 两边的 roots/projects 配置项对齐
+  - `config.example.json` 有 `projects` 节（`my-project: {abbr: MP}`），实际 `config.json` 缺少 `projects` 节
+  - 同时 `config.example.json` 的 roots 是示例值，需确认是否遗漏了实际使用的 root 条目
+
+---
+
+## v1.4 — 反馈增强 + 代码大纲 + 质量提升 ✅ (2026-06-01)
+
+### Bug Fixes
+- [x] marked v15 兼容性：`renderer.image` 签名适配 token 对象（preview.html + app.js）
+- [x] Markdown 渲染失败后无法查看源码：catch 块保留 srcPre，错误信息放入 mdDiv（preview.html）
+- [x] KaTeX 字体文件缺失：60 个字体文件下载到 `vendor/fonts/`（KaTeX v0.16.45）
+- [x] favicon.ico 404：`index.html` + `preview.html` 添加 `<link rel="icon" href="data:,">`
+- [x] 切换 rootId 后 sidebar 只显示 `.`：`loadSidebarParent("")` 改为请求 root 目录列表
+- [x] 编辑模式破坏大纲面板：`renderCodeOutline()` 不再强制改变 sidebar 可见性
+- [x] 编辑模式下大纲按钮消失：`parseCodeOutline` 提到 `if/else` 前，编辑/显示共享
+
+### 新功能
+- [x] **代码文件大纲索引** 📑：解析函数/类定义为大纲，与 Markdown 大纲共用左侧栏
+  - 支持 12 种语言：py, js, ts, tsx, go, java, rs, c, cpp, h, sh, bash
+  - 点击大纲项跳转到源码对应行（scroll-to-line 计算）
+  - 工具栏「📑 大纲」按钮 + `preview-bottom-divider` 分隔（与 Markdown 一致）
+  - JS/TS 关键词过滤（if/for/while 等黑名单 ~50 词）
+  - Modal 内嵌 `code-outline-nav` 折叠面板（app.js）
+- [x] **反馈处理结果字段** 📋：
+  - FEEDBACK.md 新增 `处理结果: xxx` 行（仅 status=done/failed 时写入）
+  - `feedback/update` 强制要求 done/failed 时附带 `result` 参数（否则 422）
+  - 已完成卡片显示 📋 摘要（≤100字截断）
+  - 点击已完成卡片 → 详情弹窗（全部字段只读，✕/ESC/遮罩关闭）
+- [x] **多行内容完整保存**：FEEDBACK.md 换行 → `\n` 编码、`\` → `\\`，解析时还原
+  - 选区内容 + 用户备注 均适用（软上限 200 chars）
+  - 详情弹窗中 选区 + 备注 使用 `.selection` 样式（monospace, min-height 4em）
+- [x] **无后缀文件文本检测**：`guess_category()` 嗅探文件头 8KB
+  - UTF-8 解码成功且无 null 字节 → `text` → 显示预览
+  - 含 null 字节或解码失败 → `other` → 仅下载
+- [x] **防重复提交**：浮窗 + 卡片「立刻执行」按钮点击后 disabled + 文字变「⏳ ...」
+
+### UX 优化
+- [x] 大纲按钮位置：在编辑按钮前面，`preview-bottom-divider` 分隔（与 Markdown 统一）
+- [x] 详情弹窗：移除冗余「状态」字段（标题已体现），「更新时间」放最底部
+- [x] 选区内容详情弹窗：min-height 4em + monospace 背景
+
+### 清理
+- [x] routes.py 死 import 清理：`StreamingResponse`、`io`、`tempfile`、`os`（函数内）、`UploadFile`
+- [x] service.py FILTER_CONFIG 硬编码过滤逻辑删除（FD-CM-003）
+
+### 配置
+- [x] `config.example.json`：新增 `max_upload_mb` 字段
+- [x] `docker-compose.yml`：新增 `CLAWMATE_MAX_UPLOAD_MB` 环境变量
+
+### Bug Fixes（后续）
+- [x] **Preview mermaid 完全失效**：`const { mermaidStore } = ...` 声明在 `try {}` 块内 → 块级作用域导致 `mermaidStore is not defined` → 改为外部 `let` 声明
+- [x] **Preview mermaid 双重初始化**：删除全局 `mermaid.initialize()`（与 `renderMermaid` 内初始化冲突）→ 对齐 app.js 的 scope class 模式
+- [x] **Mermaid 错误可见性**：Console 输出 `console.error` + 文档内显示具体错误信息占位符
+
+### 新功能（追加）
+- [x] **反馈浮窗快捷标签**：🗑 删除 / 🔧 修复 / 📈 扩展 / 📉 简化 — 点击自动填入备注
+  - 支持追加：已有备注时追加 `；删除` 格式，不重复
+  - 两个入口（preview.html + app.js）+ 统一样式（`.pst-tag` pill buttons）
+
+---
+
+## 🕐 待决策（2026-06-01 17:37）

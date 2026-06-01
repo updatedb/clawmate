@@ -5,6 +5,7 @@
   ],
   "defaultRootId": "projects",
   "port": 5533,
+  "max_upload_mb": 100,
   "public_base_url": "https://clawmate.example.com",
   "onlyoffice": {
     "api_js_url": "https://onlyoffice.example.com/web-apps/apps/api/documents/api.js",

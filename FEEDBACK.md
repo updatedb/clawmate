@@ -1,8 +1,8 @@
 # 反馈清单
 
 ## 会话
-- 最后活跃会话: `agent:work:cron-clawmate-feedback`
-- 最后活跃时间: 2026-05-31 23:40
+- 最后活跃会话: `(未关联)`
+- 最后活跃时间: 2026-06-01 22:40
 
 ## FEEDBACK列表
 文件: clawmate/test/短篇小说-黄昏图书馆.md
@@ -11,3 +11,123 @@
 用户备注：期望将这边文章扩展为10个章节的中篇小说，建立章节体系。
 选区内容: "黄昏图书馆"
 更新: 2026-05-31 21:43:18
+
+文件: clawmate/dev/service.py
+编号：#FD-CM-003
+状态：已完成
+用户备注：这是一个硬编码的领域特定过滤，看代码就知道它很「个性化」—— 不像通用产品的功能，更像某个教育项目临时加的需求。 建议删除，清理想关的引用。
+选中位置: L20-30
+选区内容: "\\\\\\\\\\\\\\\\\\"FILTER_CONFIG = {"
+更新: 2026-06-01 12:23:17
+处理结果: FILTER_CONFIG 已删除，list_dir 和 search_media 中所有过滤逻辑已清理
+
+文件: clawmate/README.md
+编号：#FD-CM-004
+状态：已完成
+用户备注：突出这部分功能，这是核心。 \n\nopenclaw->生成内容->接受建议->修复内容->通知结果 clawmate->审核内容->反馈建议  \n\n应该增加:\n1. "modal windows"、preview的浮窗截图\n2. feedback panel添加feedback card后，不同feedback状态的截图\n3. feedback card详情展示的截图。
+选区内容: "💬 反馈闭环\n选中文本 → 弹出浮层 → 填备注 → 「加入待办」或「立刻执行」\n批量累积 + 一键提交 → FEEDBACK.md 托管\nPush Wake 即时唤醒 Agent → Agent 处理 → 状态流转"
+更新: 2026-06-01 13:07:25
+处理结果: README.md 反馈闭环章节已重写: 新增 Mermaid 流程图、选中反馈操作流表格、四态流转 state diagram、FEEDBACK.md 格式示例、Agent 处理流程说明，反馈闭环从 3 行扩展为完整技术文档级别的功能描述
+
+文件: clawmate/README.md
+编号：#FD-CM-005
+状态：已完成
+用户备注：需要检查，更新到最新的状态。
+选区内容: "- [待处理] #FD-CM-004\n  - 用户备注: 突出这部分功能，这是核心\n  - 文件: clawmate/README.md\n  - 选区内容: "💬 反馈闭环\\\n选中文本..."\n  - 更新: 2026-06-01 12:51:37"
+更新: 2026-06-01 13:13:50
+处理结果: FD-CM-004 已处理完成，FEEDBACK.md 已更新为已完成状态
+
+文件: clawmate/README.md
+编号：#FD-CM-006
+状态：已完成
+用户备注：没有能被正确渲染
+选中位置: L69-83
+选区内容: "**完整的反馈生命周期**: \n\n```mermaid\nstateDiagram-v2\n    [*] --> 选中文本\n    选中文本 --> 浮层弹出: mouseup 事件\n    浮层弹出 --> 累计反馈: 填写备注 → 加入 panel\n    累计反馈 --> 提交: ✅ 一键批量 POST\n    提交 --> pending: 写入 FEEDBACK.md..."
+更新: 2026-06-01 13:13:50
+处理结果: stateDiagram-v2 改为 stateDiagram（mermaid v11 不支持 -v2 后缀）。根本原因: mermaid v11 中语法为 stateDiagram 而非 stateDiagram-v2，已修复 README.md
+
+文件: clawmate/README.md
+编号：#FD-CM-007
+状态：已完成
+用户备注：检查所有的mermaid，相关的内容，都没有被正确的渲染。\n前端也没有明确的提示，分析问题所在。是markdown文件问题，还是渲染功能问题。
+选区内容: "📸 核心工作流"
+更新: 2026-06-01 13:13:50
+处理结果: 根因分析: 1) README.md 中使用了 stateDiagram-v2 语法，mermaid v11 不支持 -v2 后缀，导致该图表渲染失败并可能阻塞后续图表；2) mermaid-v11.min.js window.mermaid 已正确暴露，preview.html 的 mermaid.run() 调用逻辑无误；3) 已修复为 stateDiagram 语法并验证无其他语法问题
+
+文件: clawmate/prd/MRD.md
+编号：#FD-CM-008
+状态：已完成
+用户备注：修复
+选区内容: "3.1 竞品矩阵\n⚠️ Mermaid 渲染失败 — Parse error on line 15:\n...r/>/clawmate preview|list|todo|do|feedba\n-----------------------^\nExpecting 'SQE', 'TAGEND', 'UNICODE_TEXT', 'TEXT', 'TAGSTART', got 'PIPE'..."
+更新: 2026-06-01 14:26:56
+处理结果: MRD.md §5.2 SKILL 节点 pipe 字符用双引号包裹修复
+
+文件: clawmate/prd/MRD.md
+编号：#FD-CM-009
+状态：已完成
+用户备注：修复
+选区内容: "4.1 需求全景\n⚠️ Mermaid 渲染失败 — Parse error on line 15:\n...r/>/clawmate preview|list|todo|do|feedba\n-----------------------^\nExpecting 'SQE', 'TAGEND', 'UNICODE_TEXT', 'TEXT', 'TAGSTART', got 'PIPE'..."
+更新: 2026-06-01 14:26:56
+处理结果: 同上（§5.2 根因同 FD-CM-008）
+
+文件: clawmate/prd/MRD.md
+编号：#FD-CM-010
+状态：已完成
+用户备注：修复
+选区内容: "⚠️ Mermaid 渲染失败 — Parse error on line 15:\n...r/>/clawmate preview|list|todo|do|feedba\n-----------------------^\nExpecting 'SQE', 'TAGEND', 'UNICODE_TEXT', 'TEXT', 'TAGSTART', got 'PIPE'\n\n↓ 原文内容..."
+更新: 2026-06-01 14:26:56
+处理结果: 同上（§5.2 根因同 FD-CM-008）
+
+文件: clawmate/prd/MRD.md
+编号：#FD-CM-011
+状态：已完成
+用户备注：修复
+选区内容: "6. 实施路径（实际交付）\n⚠️ Mermaid 渲染失败 — Parse error on line 15:\n...r/>/clawmate preview|list|todo|do|feedba\n-----------------------^\nExpecting 'SQE', 'TAGEND', 'UNICODE_TEXT', 'TEXT', 'TAGSTART', got '..."
+更新: 2026-06-01 14:26:56
+处理结果: 同上（§5.2 根因同 FD-CM-008）
+
+文件: clawmate/prd/PRD.md
+编号：#FD-CM-012
+状态：已完成
+用户备注：修复这些mermaid渲染失败的问题。
+选区内容: "3.1 功能架构图\n⚠️ Mermaid 渲染失败 — Parse error on line 15:\n... FEEDBACK.md<br/>FD-{abbr}-{seq}]M --> \n-----------------------^\nExpecting 'SQE', 'DOUBLECIRCLEEND', 'PE', '-)', 'STADIUMEND', 'SUBROUTINE..."
+更新: 2026-06-01 14:26:56
+处理结果: PRD.md §4 M 节点 {abbr} 花括号用双引号包裹修复
+
+文件: clawmate/README.md
+编号：#FD-CM-013
+状态：待处理
+用户备注：修复：将HTML预览作为独立的一条。\n因为markdown和html的预览、编辑是openclaw生成的两种最重要的形式。
+选中位置: L58-62
+选区内容: "- **Markdown**: Mermaid 图表 + KaTeX 公式 + 代码语法高亮 + 大纲导航\n- **Office**: ONLYOFFICE 浏览/编辑双模式，编辑自动回写保存\n- **PDF**: ONLYOFFICE 优先，自动降级 pdf.js\n- **音视频**: 内嵌播放器 + SRT 字幕面板\n- **代码/文本**：JSON/XML/GPX/KML/HT..."
+更新: 2026-06-01 22:34:22
+
+文件: clawmate/README.md
+编号：#FD-CM-014
+状态：待处理
+用户备注：扩展：自动解析SRT字幕面版，基本时间轴与自幕面板进行音频、视频的内容的改进。
+选中位置: L61-61
+选区内容: "- **音视频**: 内嵌播放器 + SRT 字幕面板"
+更新: 2026-06-01 22:36:05
+
+文件: clawmate/README.md
+编号：#FD-CM-015
+状态：待处理
+用户备注：删除
+选中位置: L69-82
+选区内容: "**完整的反馈生命周期**: \n\n```mermaid\nstateDiagram\n    [*] --> 选中文本\n    选中文本 --> 浮层弹出: mouseup 事件\n    浮层弹出 --> 累计反馈: 填写备注 → 加入 panel\n    累计反馈 --> 提交: ✅ 一键批量 POST\n    提交 --> pending: 写入 FEEDBACK.md\n ..."
+更新: 2026-06-01 22:36:33
+
+文件: clawmate/README.md
+编号：#FD-CM-016
+状态：待处理
+用户备注：修复：这个描述不完整，需要包含完成后的反馈，最好截个图。
+选区内容: "- [待处理] #FD-CM-004\n  - 用户备注: 突出这部分功能，这是核心\n  - 文件: clawmate/README.md\n  - 选区内容: "💬 反馈闭环\\\n选中文本..."\n  - 更新: 2026-06-01 12:51:37"
+更新: 2026-06-01 22:38:01
+
+文件: clawmate/README.md
+编号：#FD-CM-017
+状态：待处理
+用户备注：修复：目前还没有docker, 而且openclaw system event 依赖于和openclaw在同一主机上，所以方这里采用于行代码curl 的方式在本地起动。 \n\n暂时不描述docker的用法。
+选区内容: "# 1. 准备配置\ncp config.example.json config.json\n# 编辑 config.json，填入你的目录路径\n\n# 2. Docker 启动\ndocker run -d -p 5533:5533 \\\n  -v ./config.json:/app/config.json:ro \\\n  -v /your/projects:/data \\\n ..."
+更新: 2026-06-01 22:40:04

@@ -16,19 +16,6 @@ TEXT_EXTENSIONS = {
     ".ps1", ".sql", ".r", ".go", ".java", ".c", ".cpp", ".h", ".hpp", ".vue", ".srt",
 }
 
-# 文件过滤配置：针对特定目录只显示允许的文件类型
-FILTER_CONFIG = {
-    "enabled": True,
-    "target_directories": {"math", "physics", "chemical"},
-    "allowed_extensions": {".html", ".htm", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf"},
-    "forbidden_extensions": {
-        ".js", ".ts", ".py", ".sh", ".bash", ".zsh", ".fish",
-        ".ps1", ".bat", ".cmd", ".rb", ".php", ".pl", ".lua",
-        ".mjs", ".cjs", ".jsx", ".tsx", ".vue", ".svelte",
-        ".exe", ".bin", ".dll", ".so", ".dylib", ".class",
-    },
-}
-
 _CONFIG_CACHE: Dict[str, Optional[object]] = {"mtime": None, "data": None}
 
 
@@ -47,37 +34,6 @@ def _normalize_rel_path(rel_path: str) -> str:
     if any(part in ("", "..") for part in parts):
         raise ValueError("Invalid path segment")
     return "/".join(parts)
-
-
-def _is_in_target_directory(rel_path: str) -> bool:
-    """检查文件路径是否在目标过滤目录中（math、physics、chemical）"""
-    if not FILTER_CONFIG["enabled"]:
-        return False
-    parts = rel_path.lower().split("/") if rel_path else []
-    return any(part in FILTER_CONFIG["target_directories"] for part in parts)
-
-
-def _should_show_file(filename: str, rel_path: str) -> bool:
-    """检查文件是否应该显示"""
-    if not FILTER_CONFIG["enabled"]:
-        return True
-
-    # 不在目标目录，显示所有文件
-    if not _is_in_target_directory(rel_path):
-        return True
-
-    ext = Path(filename).suffix.lower()
-
-    # 禁止的扩展名
-    if ext in FILTER_CONFIG["forbidden_extensions"]:
-        return False
-
-    # 允许的扩展名
-    if ext in FILTER_CONFIG["allowed_extensions"]:
-        return True
-
-    # 其他文件在目标目录中不显示
-    return False
 
 
 def _load_config() -> Dict:
@@ -184,6 +140,21 @@ def guess_category(path: Path) -> str:
             return "text"
     if path.suffix.lower() in TEXT_EXTENSIONS:
         return "text"
+    # Fallback for extensionless files: sniff content to distinguish text/binary
+    try:
+        with open(path, "rb") as f:
+            head = f.read(8192)
+        # Null byte → binary
+        if b"\x00" in head:
+            return "other"
+        # Try UTF-8 decode
+        try:
+            head.decode("utf-8")
+            return "text"
+        except UnicodeDecodeError:
+            return "other"
+    except (OSError, PermissionError):
+        pass
     return "other"
 
 
@@ -208,16 +179,9 @@ def list_dir(root_id: str, rel_dir: str = "") -> Dict:
         raise FileNotFoundError("Directory not found")
 
     entries: List[Dict] = []
-    hidden_count = 0
 
     for entry in sorted(target.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
         rel_path = str(entry.relative_to(root_path))
-
-        # 应用文件过滤规则
-        if entry.is_file() and not _should_show_file(entry.name, rel_path):
-            hidden_count += 1
-            continue
-
         entries.append(file_info(entry, rel_path))
 
     result = {
@@ -225,11 +189,6 @@ def list_dir(root_id: str, rel_dir: str = "") -> Dict:
         "name": target.name if target != root_path else root_path.name,
         "entries": entries,
     }
-
-    # 如果有隐藏的文件，添加统计信息
-    if hidden_count > 0:
-        result["hidden_count"] = hidden_count
-        result["filter_applied"] = _is_in_target_directory(rel_dir)
 
     return result
 
@@ -241,16 +200,11 @@ def search_media(query: str, root_id: str, rel_dir: str = "", recursive: bool = 
 
     query_lower = query.lower().strip()
     results: List[Dict] = []
-    hidden_count = 0
     if not query_lower:
         return {"query": query, "results": results}
 
     def maybe_add(path: Path, rel_path: str):
-        nonlocal results, hidden_count
-        # 应用文件过滤规则
-        if path.is_file() and not _should_show_file(path.name, rel_path):
-            hidden_count += 1
-            return
+        nonlocal results
         results.append(file_info(path, rel_path))
 
     if recursive:
@@ -270,11 +224,7 @@ def search_media(query: str, root_id: str, rel_dir: str = "", recursive: bool = 
                 if len(results) >= limit:
                     break
 
-    result = {"query": query, "results": results}
-    if hidden_count > 0:
-        result["hidden_count"] = hidden_count
-
-    return result
+    return {"query": query, "results": results}
 
 
 def preview_text(path: Path) -> Tuple[str, bool]:
