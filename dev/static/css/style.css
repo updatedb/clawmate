@@ -413,7 +413,7 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
 .preview-actions a { display: inline-block; margin-top: 8px; color: var(--accent); }
 
 /* ===== Preview Footer (copy / download / delete / ONLYOFFICE) ===== */
-.preview-footer { display: flex; justify-content: flex-start; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-color); flex-wrap: wrap; flex-shrink: 0; }
+.preview-footer { display: flex; justify-content: flex-start; gap: 8px; margin-top: 0; padding: 6px 12px; border-top: 1px solid var(--border-color); flex-wrap: wrap; flex-shrink: 0; }
 .preview-footer button { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--btn-bg); cursor: pointer; font-size: 12px; color: var(--btn-text); }
 .preview-footer button:hover { background: var(--border-color); }
 .preview-footer button:last-child { margin-left: auto; }
