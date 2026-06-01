@@ -69,7 +69,7 @@ flowchart LR
 **完整的反馈生命周期**：
 
 ```mermaid
-stateDiagram-v2
+stateDiagram
     [*] --> 选中文本
     选中文本 --> 浮层弹出: mouseup 事件
     浮层弹出 --> 累计反馈: 填写备注 → 加入 panel
