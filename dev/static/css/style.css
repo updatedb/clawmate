@@ -287,13 +287,13 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
 /* ===== Modal ===== */
 .modal { position: fixed; inset: 0; background: var(--modal-overlay); display: flex; align-items: center; justify-content: center; z-index: 20; }
 .modal.hidden { display: none; }
-.modal-content { background: var(--bg-modal); width: min(900px, 90vw); max-height: 90vh; overflow: auto; border-radius: 12px; padding: 16px; position: relative; }
-.close { position: absolute; right: 12px; top: 12px; border: none; background: var(--bg-tertiary); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 16px; line-height: 1; color: var(--text-primary); }
+.modal-content { background: var(--bg-modal); width: min(900px, 90vw); max-height: 90vh; overflow: hidden; border-radius: 12px; padding: 16px; position: relative; display: flex; flex-direction: column; }
+.close { position: absolute; right: 12px; top: 12px; border: none; background: var(--bg-tertiary); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 16px; line-height: 1; color: var(--text-primary); flex-shrink: 0; }
 
 /* Maximize button */
-.preview-link-btn { position: absolute; right: 76px; top: 12px; border: none; background: var(--bg-tertiary); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 14px; line-height: 1; color: var(--text-primary); text-decoration: none; display: flex; align-items: center; justify-content: center; }
+.preview-link-btn { position: absolute; right: 76px; top: 12px; border: none; background: var(--bg-tertiary); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 14px; line-height: 1; color: var(--text-primary); text-decoration: none; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .preview-link-btn:hover { background: var(--border-color); }
-.maximize-btn { position: absolute; right: 44px; top: 12px; border: none; background: var(--bg-tertiary); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 14px; line-height: 1; color: var(--text-primary); }
+.maximize-btn { position: absolute; right: 44px; top: 12px; border: none; background: var(--bg-tertiary); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 14px; line-height: 1; color: var(--text-primary); flex-shrink: 0; }
 .maximize-btn:hover { background: var(--border-color); }
 .modal.maximized { align-items: stretch; }
 .modal.maximized .modal-content { width: 100%; max-width: 100%; max-height: 100vh; height: 100vh; border-radius: 0; display: grid; grid-template-rows: 1fr auto; overflow: hidden; }
@@ -310,6 +310,7 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
 .modal.maximized .maximize-btn { top: 16px; right: 48px; }
 
 /* ===== Preview ===== */
+.preview-body { flex: 1; min-height: 0; overflow-y: auto; }
 .preview-body img { max-width: 100%; }
 .preview-body pre { white-space: pre-wrap; background: var(--bg-code); padding: 12px; border-radius: 8px; border: 1px solid var(--code-border); max-height: 60vh; overflow: auto; }
 /* highlight.js colors for raw-text previews (matches github-markdown-dark) */
@@ -369,7 +370,7 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
 .preview-actions a { display: inline-block; margin-top: 8px; color: var(--accent); }
 
 /* ===== Preview Footer (copy / download / delete / ONLYOFFICE) ===== */
-.preview-footer { display: flex; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-color); flex-wrap: wrap; }
+.preview-footer { display: flex; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-color); flex-wrap: wrap; flex-shrink: 0; }
 .preview-footer button { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--btn-bg); cursor: pointer; font-size: 12px; color: var(--btn-text); }
 .preview-footer button:hover { background: var(--border-color); }
 .preview-footer button.danger { color: var(--danger); border-color: var(--danger-border); }
@@ -601,7 +602,71 @@ pre:hover .code-copy-btn,
 .markdown-toc-list a { color: var(--link-color); text-decoration: none; font-size: 13px; }
 .markdown-toc-list a:hover { text-decoration: underline; }
 .toc-h2 { padding-left: 0; }
+
+/* ===== Code Outline Nav (Modal) ===== */
+.code-outline-nav { margin-bottom: 16px; border: 1px solid var(--code-border); border-radius: 6px; overflow: hidden; }
+.code-outline-nav.collapsed .code-outline-list { display: none; }
+.code-outline-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; background: var(--bg-tertiary);
+  font-size: 13px; font-weight: 600; color: var(--text-primary);
+  cursor: pointer; user-select: none;
+}
+.code-outline-header:hover { background: var(--border-color); }
+.code-outline-toggle { color: var(--text-muted); font-size: 12px; }
+.code-outline-list { list-style: none; margin: 0; padding: 8px 12px; background: var(--bg-secondary); max-height: 260px; overflow-y: auto; }
+.code-outline-list li { padding: 2px 0; }
+.code-outline-list a {
+  display: block; padding: 3px 8px; border-radius: 4px;
+  color: var(--link-color); text-decoration: none; font-size: 13px; font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.code-outline-list a:hover { background: var(--bg-tertiary); color: var(--accent); }
 .toc-h3 { padding-left: 16px; }
+
+/* ===== Completed Feedback Card Result ===== */
+.sfb-result {
+  font-size: 12px; color: var(--accent); padding: 4px 8px; margin-top: 4px;
+  background: rgba(99,102,241,0.08); border-radius: 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ===== Feedback Detail Modal (shared) ===== */
+.fb-detail-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.5); z-index: 10000;
+  display: flex; align-items: center; justify-content: center;
+}
+.fb-detail-modal {
+  background: var(--bg-primary, #fff); border-radius: 12px;
+  max-width: 520px; width: 90%; max-height: 80vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+.fb-detail-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+.fb-detail-header-left { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+.fb-detail-close {
+  background: none; border: none; font-size: 18px; cursor: pointer;
+  color: var(--text-muted, #999); padding: 2px 6px; border-radius: 4px;
+}
+.fb-detail-close:hover { background: var(--bg-tertiary, #f3f4f6); color: var(--text-primary, #111); }
+.fb-detail-body { padding: 16px 20px; overflow-y: auto; }
+.fb-detail-row { margin-bottom: 12px; }
+.fb-detail-label { font-size: 11px; color: var(--text-muted, #999); margin-bottom: 4px; text-transform: uppercase; }
+.fb-detail-value { font-size: 13px; color: var(--text-primary, #333); line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.fb-detail-value.result { color: var(--accent, #6366f1); background: rgba(99,102,241,0.06); padding: 8px 12px; border-radius: 6px; }
+.fb-detail-value.selection {
+  min-height: 4em;
+  font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  font-size: 12px;
+  background: var(--bg-secondary, #f9fafb);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color, #e5e7eb);
+}
 
 /* ===== Standalone Mode ===== */
 
@@ -980,6 +1045,13 @@ pre:hover .code-copy-btn,
 }
 .pst-note:focus { outline: none; border-color: var(--accent); }
 .pst-actions { display: flex; gap: 8px; padding-top: 2px; }
+.pst-tags { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+.pst-tag {
+  padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border-color);
+  background: var(--bg-secondary); color: var(--text-secondary);
+  font-size: 12px; cursor: pointer; transition: all 0.15s;
+}
+.pst-tag:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
 .pst-btn-send {
   flex: 1;
   padding: 9px 12px;
