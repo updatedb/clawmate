@@ -3,7 +3,6 @@
 > Agent 产出的每一个文件，点击即预览，选中即反馈。
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Docker](https://img.shields.io/badge/docker-ready-brightgreen.svg)](https://hub.docker.com/)
 
 ---
 
@@ -56,10 +55,11 @@ flowchart LR
 
 ### 🔍 预览引擎
 - **Markdown**：Mermaid 图表 + KaTeX 公式 + 代码语法高亮 + 大纲导航
+- **HTML**：独立渲染预览 + 实时编辑，与 Markdown 并列为 Agent 产出两大核心格式
 - **Office**：ONLYOFFICE 浏览/编辑双模式，编辑自动回写保存
 - **PDF**：ONLYOFFICE 优先，自动降级 pdf.js
-- **音视频**：内嵌播放器 + SRT 字幕面板
-- **代码/文本**：JSON/XML/GPX/KML/HTML 语法高亮 + 编辑模式
+- **音视频**：内嵌播放器 + SRT 字幕面板，自动解析字幕文件，支持时间轴同步、字幕内容浏览与编辑改进
+- **代码/文本**：JSON/XML/GPX/KML 语法高亮 + 编辑模式
 - **图片**：全屏渲染 + 工具栏
 
 ### 💬 反馈闭环 🔑 核心差异化
@@ -115,7 +115,7 @@ stateDiagram
 - `/clawmate do` — 自动执行反馈
 
 ### 🚀 部署
-- Docker 一行启动，多架构支持（x86_64 + ARM64）
+- curl 一行命令本地启动，与 OpenClaw 同主机运行
 - Systemd Daemon 安装，开机自启
 - GitHub Actions CI 自动构建发布
 
@@ -144,7 +144,7 @@ stateDiagram
 | 前端 | Vanilla JS + CSS，14万行预览引擎 + 9.5万行业务逻辑 |
 | Markdown | marked + highlight.js + mermaid v11 + KaTeX |
 | Office | ONLYOFFICE Document Server，JWT HS256 安全集成 |
-| 部署 | Docker 多架构 + Systemd Daemon + GitHub Actions |
+| 部署 | curl 本地启动 + Systemd Daemon + GitHub Actions |
 
 ---
 
@@ -155,17 +155,17 @@ stateDiagram
 cp config.example.json config.json
 # 编辑 config.json，填入你的目录路径
 
-# 2. Docker 启动
-docker run -d -p 5533:5533 \
-  -v ./config.json:/app/config.json:ro \
-  -v /your/projects:/data \
-  clawmate
+# 2. 安装依赖并启动
+pip install -r requirements.txt
+python3 server.py &
 
-# 3. 或使用 docker-compose
-docker compose up -d
+# 3. 或使用 curl 一键启动（配合 systemd daemon）
+# 详见下方部署章节
 ```
 
 打开 `http://localhost:5533/clawmate/`，选择项目目录，点击文件即可预览。
+
+> **注意**：ClawMate 依赖与 OpenClaw 在同一主机上运行（通过 system event 唤醒 Agent）。Docker 部署方案暂未提供，当前仅支持本地直接启动。
 
 ---
 
@@ -177,7 +177,7 @@ docker compose up -d
 | 预览引擎（Markdown/Office/音视频/代码） | ✅ v1.3 |
 | ONLYOFFICE 编辑链路 | ✅ v1.3 |
 | 反馈闭环（选中→提交→Agent处理） | ✅ v1.3 |
-| Docker + Daemon 部署 | ✅ |
+| Daemon 部署 | ✅ |
 | Slash Commands 集成 | ✅ v1.1 |
 | 移动端响应式 | ✅ v1.2 |
 

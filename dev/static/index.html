@@ -33,8 +33,16 @@
       </aside>
       <main class="main">
         <div class="toolbar">
-          <div class="path-block">
+          <div class="toolbar-top">
             <div id="currentPath" class="path"></div>
+            <div class="toolbar-right">
+              <div class="view-toggle">
+                <button id="viewGrid" class="active">画廊</button>
+                <button id="viewList">列表</button>
+              </div>
+            </div>
+          </div>
+          <div class="toolbar-bottom">
             <div class="controls">
               <div class="control">
                 <label>类型</label>
@@ -59,15 +67,9 @@
                 <button id="multiSelectToggle" title="多选">☐ 多选</button>
               </div>
             </div>
-          </div>
-          <div class="toolbar-right">
-            <div class="view-toggle">
-              <button id="viewGrid" class="active">画廊</button>
-              <button id="viewList">列表</button>
-            </div>
+            <div id="status" class="status"></div>
           </div>
         </div>
-        <div id="status" class="status"></div>
         <div class="main-scroll">
           <div id="gallery" class="gallery"></div>
           <div id="list" class="list hidden"></div>
@@ -86,7 +88,7 @@
     <div class="batch-bar-inner">
       <span class="batch-count" id="batchCount">已选 0 个文件</span>
       <div class="batch-actions">
-        <button id="batchDeleteBtn" class="danger">🗑 批量删除</button>
+        <button id="batchDeleteBtn">🗑 批量删除</button>
         <button id="batchDownloadBtn2">📦 批量下载</button>
         <button id="batchSelectAllBtn">全选当前页</button>
         <button id="batchClearBtn">取消选择</button>
