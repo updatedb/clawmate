@@ -1132,19 +1132,19 @@
       overflow: hidden;
     }
     .media-player-wrap {
-      flex-shrink: 0;
+      flex: none;
       padding: 12px 16px;
       background: var(--bg-secondary);
       border-bottom: 1px solid var(--border-color);
+      overflow: hidden;
     }
     .media-player-wrap audio,
     .media-player-wrap video {
       width: 100%;
+      height: 100%;
       display: block;
       border-radius: 8px;
-    }
-    .media-player-wrap video {
-      max-height: 70vh;
+      object-fit: contain;
     }
     .media-player-wrap audio {
       max-width: 700px;
@@ -1153,13 +1153,14 @@
 
     /* Subtitle sync panel (shown below player) */
     .subtitle-sync-panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
       flex: 1;
-      overflow-y: auto;
-      min-height: 0;
     }
     .subtitle-sync-panel.hidden { display: none; }
 
-    /* Subtitle header */
+    /* Subtitle header — fixed at top, does not scroll */
     .subtitle-header {
       display: flex;
       align-items: center;
@@ -1194,6 +1195,13 @@
     .subtitle-header-btn.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
     .subtitle-header-btn.primary:hover { opacity: 0.88; }
     .subtitle-header-actions { display: flex; gap: 6px; align-items: center; }
+
+    /* Scrollable subtitle items area */
+    .subtitle-scroll {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+    }
 
     /* Subtitle line */
     .subtitle-item {
@@ -2585,6 +2593,7 @@
     // Player wrapper
     const playerWrap = document.createElement('div');
     playerWrap.className = 'media-player-wrap';
+    playerWrap.style.height = type === 'video' ? '320px' : '80px';
     mediaEl = document.createElement(type === 'video' ? 'video' : 'audio');
     mediaEl.controls = true;
     mediaEl.id = 'mediaEl';
@@ -2623,7 +2632,42 @@
   function buildMediaToolbar() {
     const dyn = document.getElementById('bottombarDynamic');
     dyn.innerHTML = '';
-    // Dynamic toolbar for media mode — no subtitle toggle button needed
+    // Dynamic toolbar for media mode — subtitle buttons in bottombar
+    if (!currentSrt.length) {
+      // No subtitles: show extract placeholder button
+      const extractBtn = document.createElement('button');
+      extractBtn.className = 'preview-bottom-btn';
+      extractBtn.id = 'btnSubtitleExtract';
+      extractBtn.textContent = '🎤 提取字幕';
+      extractBtn.title = '功能待实现';
+      extractBtn.addEventListener('click', () => {
+        showToast('语音识别功能待实现', 2500);
+      });
+      dyn.appendChild(extractBtn);
+    } else if (subtitleMode === 'edit') {
+      // Editing: show cancel + save buttons
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'preview-bottom-btn active';
+      cancelBtn.id = 'btnSubtitleCancel';
+      cancelBtn.textContent = '❌ 取消';
+      cancelBtn.addEventListener('click', cancelSubtitleEdit);
+      dyn.appendChild(cancelBtn);
+
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'preview-bottom-btn active';
+      saveBtn.id = 'btnSubtitleSave';
+      saveBtn.textContent = '💾 保存';
+      saveBtn.addEventListener('click', saveSubtitleEdit);
+      dyn.appendChild(saveBtn);
+    } else {
+      // Has subtitles, not editing: show edit button
+      const editBtn = document.createElement('button');
+      editBtn.className = 'preview-bottom-btn';
+      editBtn.id = 'btnSubtitleEdit';
+      editBtn.textContent = '✏️ 编辑';
+      editBtn.addEventListener('click', enterSubtitleEdit);
+      dyn.appendChild(editBtn);
+    }
   }
 
   // ============ SRT Parsing ============
@@ -2709,6 +2753,7 @@
     subtitleDirty = false;
     subtitleMode = 'view';
     renderSubtitleSyncPanel();
+    buildMediaToolbar();
   }
 
   // ============ Subtitle Sync Panel (below player) ============
@@ -2718,56 +2763,28 @@
 
     // ---- Subtitle header ----
     const header = document.createElement('div');
-    header.className = 'subtitle-header';
+    header.className = 'subtitle-header' + (subtitleMode === 'edit' ? ' editing' : '');
     header.id = 'subtitleHeader';
 
     const headerLabel = document.createElement('span');
     headerLabel.textContent = '📝 字幕';
     header.appendChild(headerLabel);
 
-    const actions = document.createElement('div');
-    actions.className = 'subtitle-header-actions';
-    actions.id = 'subtitleHeaderActions';
-    header.appendChild(actions);
     panel.appendChild(header);
 
     if (!currentSrt.length) {
-      // No SRT — show extract button
-      const extractBtn = document.createElement('button');
-      extractBtn.className = 'subtitle-extract-btn';
-      extractBtn.textContent = '🎤 提取字幕';
-      extractBtn.title = '语音识别功能待实现';
-      extractBtn.addEventListener('click', () => {
-        showToast('语音识别功能待实现', 2500);
-      });
-      panel.appendChild(extractBtn);
+      // No SRT — show empty message
+      const empty = document.createElement('div');
+      empty.className = 'subtitle-empty';
+      empty.textContent = '暂无字幕文件';
+      panel.appendChild(empty);
       return;
     }
 
-    if (subtitleMode === 'edit') {
-      // Edit mode: show cancel + save buttons, header accent
-      header.classList.add('editing');
-      const cancelBtn = document.createElement('button');
-      cancelBtn.className = 'subtitle-header-btn danger';
-      cancelBtn.textContent = '❌ 取消';
-      cancelBtn.addEventListener('click', cancelSubtitleEdit);
-      actions.appendChild(cancelBtn);
+    // ---- Scrollable subtitle items ----
+    const scrollArea = document.createElement('div');
+    scrollArea.className = 'subtitle-scroll';
 
-      const saveBtn = document.createElement('button');
-      saveBtn.className = 'subtitle-header-btn primary';
-      saveBtn.textContent = '💾 保存';
-      saveBtn.addEventListener('click', saveSubtitleEdit);
-      actions.appendChild(saveBtn);
-    } else {
-      // View mode: show edit button
-      const editBtn = document.createElement('button');
-      editBtn.className = 'subtitle-header-btn';
-      editBtn.textContent = '✏️ 编辑';
-      editBtn.addEventListener('click', enterSubtitleEdit);
-      actions.appendChild(editBtn);
-    }
-
-    // ---- Subtitle items ----
     // In edit mode, use subtitleEntries (editable copy); otherwise use currentSrt (original)
     const entries = subtitleMode === 'edit' ? subtitleEntries : currentSrt;
     entries.forEach((entry, idx) => {
@@ -2805,8 +2822,9 @@
         });
       }
 
-      panel.appendChild(row);
+      scrollArea.appendChild(row);
     });
+    panel.appendChild(scrollArea);
   }
 
   // ============ Subtitle Edit Mode ============
@@ -2817,6 +2835,7 @@
     subtitleEditSnapshot = currentSrt.map(e => ({ ...e }));
     subtitleMode = 'edit';
     renderSubtitleSyncPanel();
+    buildMediaToolbar();
   }
 
   function cancelSubtitleEdit() {
@@ -2824,6 +2843,7 @@
     subtitleDirty = false;
     subtitleMode = 'view';
     renderSubtitleSyncPanel();
+    buildMediaToolbar();
   }
 
   async function saveSubtitleEdit() {
@@ -2841,6 +2861,7 @@
         subtitleDirty = false;
         subtitleMode = 'view';
         renderSubtitleSyncPanel();
+        buildMediaToolbar();
         showToast('字幕已保存', 2000);
       } else {
         throw new Error(data.detail || '保存失败');
@@ -2894,7 +2915,8 @@
     function onMouseMove(e) {
       if (!dragging) return;
       const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-      const delta = startY - clientY;
+      // Mouse down = clientY increases = height increases
+      const delta = clientY - startY;
       const newHeight = Math.max(150, Math.min(startHeight + delta, window.innerHeight * 0.7));
       playerWrap.style.height = newHeight + 'px';
     }
