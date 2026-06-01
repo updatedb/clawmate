@@ -7,7 +7,26 @@
 
 ---
 
-## 📸 预览
+## 📸 核心工作流
+
+```mermaid
+flowchart LR
+    A[Agent 产出文件] -->|写入目录| B[用户点击预览链接]
+    B --> C[preview.html 全屏渲染<br>Mermaid / KaTeX / Office / 视频]
+    C --> D{发现问题?}
+    D -->|是| E[选中文本 → 浮层弹出<br>填备注 → ✅ 提交]
+    E --> F[写入 FEEDBACK.md<br>Push Wake 唤醒 Agent]
+    F --> G[Agent 读取反馈<br>精确定位选区 → 修改文件]
+    G --> H[更新 Feedback 状态<br>done / failed]
+    H --> B
+    D -->|否| I[完成]
+```
+
+### 选中反馈操作流
+
+| Step 1: 选中文本 | Step 2: 填写备注 | Step 3: 提交完成 |
+|:---:|:---:|:---:|
+| 在预览页选中任意文本<br>浮层自动弹出 | 在 textarea 中输入修改建议<br>可累积多条反馈 | 一键批量提交到 FEEDBACK.md<br>Agent 即时被唤醒处理 |
 
 | 文件浏览 | Markdown 预览 |
 |:---:|:---:|
@@ -43,10 +62,51 @@
 - **代码/文本**：JSON/XML/GPX/KML/HTML 语法高亮 + 编辑模式
 - **图片**：全屏渲染 + 工具栏
 
-### 💬 反馈闭环
-- 选中文本 → 弹出浮层 → 填备注 → 「加入待办」或「立刻执行」
-- 批量累积 + 一键提交 → FEEDBACK.md 托管
-- Push Wake 即时唤醒 Agent → Agent 处理 → 状态流转
+### 💬 反馈闭环 🔑 核心差异化
+
+这是 ClawMate 与其他文件管理器**最根本的区别**。不只是预览文件，而是将用户的每一个反馈精确送达 Agent，形成闭环修改链路。
+
+**完整的反馈生命周期**：
+
+```mermaid
+stateDiagram-v2
+    [*] --> 选中文本
+    选中文本 --> 浮层弹出: mouseup 事件
+    浮层弹出 --> 累计反馈: 填写备注 → 加入 panel
+    累计反馈 --> 提交: ✅ 一键批量 POST
+    提交 --> pending: 写入 FEEDBACK.md
+    pending --> in_progress: Agent 开始处理
+    in_progress --> done: 修改完成
+    in_progress --> failed: 无法处理
+    done --> [*]
+    failed --> [*]
+```
+
+**关键能力**：
+- **选中文本 → 3 秒反馈**：在 preview.html 中选中文本，浮层自动弹出，填备注即可提交
+- **精确选区定位**：选区内容 + 文件路径直达 Agent，零歧义，不用「第几段第几行」描述
+- **批量累积**：可连续选中多个位置，统一提交，不用反复切换
+- **FEEDBACK.md 托管**：所有反馈持久化在项目文件中，可追溯、可检索
+- **Push Wake 即时唤醒**：提交后 Agent 立即被唤醒处理，不等待定时轮询
+- **四态流转**：pending → in_progress → done/failed，每步状态可查
+- **心跳 cron 自动处理**：即使 Push Wake 失败，5 分钟定时检查不会遗漏
+
+**FEEDBACK.md 格式**：
+```markdown
+- [待处理] #FD-CM-004
+  - 用户备注：突出这部分功能，这是核心
+  - 文件: clawmate/README.md
+  - 选区内容: "💬 反馈闭环\n选中文本..."
+  - 更新: 2026-06-01 12:51:37
+```
+
+**Agent 处理流程**：
+```
+心跳/cron 检查 → GET /feedback/status → pending > 0
+→ 读取 FEEDBACK.md → 解析每条 pending feedback
+→ 读文件 → 定位选区 → AI 理解备注 → 修改 → /feedback/update done
+→ 无法处理 → /feedback/update failed
+```
 
 ### 🔗 OpenClaw 融合
 - `/clawmate preview` — 生成直达 preview.html 链接
