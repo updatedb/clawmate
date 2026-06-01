@@ -125,6 +125,7 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
 #multiSelectToggle.active { background: var(--accent); color: #fff; }
 .breadcrumb { font-size: 12px; margin-bottom: 8px; color: var(--text-secondary); }
 .path.breadcrumb { font-size: 14px; margin-bottom: 0; }
+.path.breadcrumb a, .breadcrumb-link { font-size: 12px; }
 .breadcrumb-link { color: var(--accent); text-decoration: none; cursor: pointer; }
 .breadcrumb-link:hover { opacity: 0.8; text-decoration: underline; }
 .breadcrumb-sep { color: var(--text-muted); }
