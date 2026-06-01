@@ -2453,7 +2453,7 @@
         // Sanitize HTML content before embedding via srcdoc
         let safeHtml = content;
         if (window.DOMPurify) {
-          safeHtml = DOMPurify.sanitize(content, { ADD_ATTR: ['srcdoc'] });
+          safeHtml = DOMPurify.sanitize(content, { ADD_TAGS: ['style', 'link'], ADD_ATTR: ['srcdoc', 'rel', 'href', 'type'] });
         }
         htmlIframe.srcdoc = safeHtml;
         htmlIframe.style.display = isRawMode ? 'none' : '';
@@ -2755,8 +2755,8 @@
       try {
         const res = await fetch(`/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(srtPath)}`);
         if (res.ok) {
-          const text = await res.text();
-          const entries = parseSrt(text);
+          const data = await res.json();
+          const entries = parseSrt(data.content);
           if (entries.length > 0) {
             loadSrtEntries(entries, srtPath);
             showToast('已自动加载字幕: ' + srtPath.split('/').pop(), 2500);
