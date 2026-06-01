@@ -80,7 +80,7 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
 * { scrollbar-width: thin; scrollbar-color: var(--border-color) transparent; }
 
 /* ===== Layout ===== */
-.app { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+.app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .topbar { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background: var(--brand-bg); color: var(--brand-text); gap: 16px; flex-shrink: 0; position: sticky; top: 0; z-index: 100; }
 .brand { font-weight: 700; letter-spacing: 0.3px; font-size: 15px; flex-shrink: 0; }
 
@@ -261,7 +261,7 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
     position: fixed;
     top: 0; left: 0; bottom: 0;
     width: var(--sidebar-w);
-    height: 100dvh;
+    height: 100vh;
     z-index: 10;
     transform: translateX(-100%);
     transition: transform 0.25s ease;
@@ -293,7 +293,7 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
   .list-table-wrap { min-width: 500px; }
 
   /* Modal: full-screen */
-  .modal-content { width: 100vw !important; max-width: 100vw !important; max-height: 100dvh !important; height: 100dvh !important; border-radius: 0 !important; padding: 0 !important; }
+  .modal-content { width: 100vw !important; max-width: 100vw !important; max-height: 100vh !important; height: 100vh !important; border-radius: 0 !important; padding: 0 !important; }
   .modal-topbar { padding: 0 8px; }
   .close, .preview-link-btn, .maximize-btn { width: 32px; height: 32px; font-size: 18px; }
 
@@ -316,7 +316,7 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
 /* ===== Modal ===== */
 .modal { position: fixed; inset: 0; background: var(--modal-overlay); display: flex; align-items: center; justify-content: center; z-index: 101; }
 .modal.hidden { display: none; }
-.modal-content { background: var(--bg-modal); width: min(900px, 90vw); max-height: calc(100dvh - 54px - 32px); overflow: hidden; border-radius: 12px; padding: 0; position: relative; display: flex; flex-direction: column; }
+.modal-content { background: var(--bg-modal); width: min(900px, 90vw); height: calc(100vh - 54px - 32px); overflow: hidden; border-radius: 12px; padding: 0; position: relative; display: flex; flex-direction: column; }
 .modal-topbar { flex-shrink: 0; min-height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 12px; }
 .modal-topbar .preview-header { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 0; border: none; margin: 0; min-width: 0; }
 .modal-topbar .preview-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -335,7 +335,7 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
 .maximize-btn { border: none; background: var(--bg-tertiary); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 14px; line-height: 1; color: var(--text-primary); flex-shrink: 0; }
 .maximize-btn:hover { background: var(--border-color); }
 .modal.maximized { align-items: stretch; }
-.modal.maximized .modal-content { width: 100%; max-width: 100%; max-height: 100dvh; height: 100dvh; border-radius: 0; display: flex; flex-direction: column; overflow: hidden; }
+.modal.maximized .modal-content { width: 100%; max-width: 100%; max-height: 100vh; height: 100vh; border-radius: 0; display: flex; flex-direction: column; overflow: hidden; }
 .modal.maximized .preview-body { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
 .modal.maximized .preview-body > .preview-header,
 .modal.maximized .preview-body > .preview-notice,
