@@ -34,13 +34,7 @@
       <main class="main">
         <div class="toolbar">
           <div class="toolbar-top">
-            <div id="currentPath" class="path"></div>
-            <div class="toolbar-right">
-              <div class="view-toggle">
-                <button id="viewGrid" class="active">画廊</button>
-                <button id="viewList">列表</button>
-              </div>
-            </div>
+            <div id="currentPath" class="path breadcrumb"></div>
           </div>
           <div class="toolbar-bottom">
             <div class="controls">
@@ -67,8 +61,14 @@
                 <button id="multiSelectToggle" title="多选">☐ 多选</button>
               </div>
             </div>
-            <div id="status" class="status"></div>
+            <div class="toolbar-right">
+              <div class="view-toggle">
+                <button id="viewGrid" class="active">画廊</button>
+                <button id="viewList">列表</button>
+              </div>
+            </div>
           </div>
+          <div id="status" class="status"></div>
         </div>
         <div class="main-scroll">
           <div id="gallery" class="gallery"></div>
