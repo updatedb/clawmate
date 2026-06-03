@@ -189,7 +189,9 @@ def _resolve_cron_id(cron_bin, name):
     if result.returncode != 0:
         return None
     for line in result.stdout.split("\n"):
-        if name in line:
+        # cron list 可能截断名字为 "clawmate-feedback-inb..."
+        # 用前缀匹配：名字前 20 个字符匹配即可
+        if name[:24] in line or line.startswith(name[:24]):
             return line.split()[0] if line.strip() else None
     return None
 
