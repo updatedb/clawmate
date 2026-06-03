@@ -462,8 +462,9 @@
   - 多候选冲突时返回 409 + 候选列表；无候选时 project=root 名兜底
   - 状态：已解决
 - [ ] **save 接口格式校验** — `.json` 文件保存时自动验证 JSON 合法性
-  - 背景：2026-06-01 用户通过 ClawMate 编辑 `config.json` 时引入语法错误（缺逗号 + 多余逗号），导致服务端 JSON 解析失败，所有接口返回 403
-  - 方案：`POST /api/clawmate/save` 检测文件扩展名为 `.json` 时，保存前尝试 `json.loads(content)`；不合法则拒绝写入并返回具体错误位置
+  - 方案文档：`research/save-validation-plan.md` ✅ 待评审
+  - 覆盖范围：JSON（json.loads）+ CSS（tinycss2）+ HTML（html5lib）
+  - API：`POST /api/clawmate/save` 新增 `validate` 参数，默认 true
 - [ ] **config.example.json ↔ config.json 同步** — 两边的 roots/projects 配置项对齐
   - `config.example.json` 有 `projects` 节（`my-project: {abbr: MP}`），实际 `config.json` 缺少 `projects` 节
   - 同时 `config.example.json` 的 roots 是示例值，需确认是否遗漏了实际使用的 root 条目
@@ -587,11 +588,10 @@
   - 依赖：bcrypt（纯 Python，无系统依赖）
 
 - [ ] **字幕提取 — 从音频/视频文件中提取人声生成字幕**
-  - 输入：音频文件（mp3/wav）或视频文件（mp4/webm/mov）
-  - 输出：SRT 字幕文件（含时间轴 + 文本）
-  - 场景：用户在 ClawMate 中预览音视频文件时，可一键提取人声并生成字幕
-  - 关联组件：字幕面板 `.subtitle-*`（已移入 style.css）
-  - 技术参考：Whisper / faster-whisper 本地推理
+  - 方案文档：`research/subtitle-extraction-plan.md` ✅ 待评审
+  - 技术：faster-whisper (small) + ffmpeg，本地 CPU 推理
+  - API：`POST /api/clawmate/subtitle/extract` SSE 进度流
+  - 输出：同目录同名 .srt，字幕面板自动加载
 
 ## ✅ 完成 — Feedback sessionKey 全链路 + Cron 修复（2026-06-02 11:30）
 
