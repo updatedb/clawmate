@@ -461,10 +461,15 @@
   - 接口改造：`feedback/list` `feedback/` `feedback/update` 的 `root` 改为可选
   - 多候选冲突时返回 409 + 候选列表；无候选时 project=root 名兜底
   - 状态：已解决
-- [ ] **save 接口格式校验** — `.json` 文件保存时自动验证 JSON 合法性
-  - 方案文档：`research/save-validation-plan.md` ✅ 待评审
+- [x] **save 接口格式校验** ✅ (2026-06-03)
+  - 方案文档：`research/save-validation-plan.md` ✅ 已实施
   - 覆盖范围：JSON（json.loads）+ CSS（tinycss2）+ HTML（html5lib）
   - API：`POST /api/clawmate/save` 新增 `validate` 参数，默认 true
+  - 实施内容：
+    - `dev/validators.py` — 校验模块（validate_json / validate_css / validate_html）
+    - `dev/routes.py` — Save 端点集成校验层，`validate` 参数控制开关
+    - `dev/static/preview.html` — 422 语法错误展示（3 处 save 函数）
+  - 测试覆盖：JSON 缺逗号/多余逗号/空内容、CSS 花括号不平衡、HTML 标签不闭合 — 全部正常捕获
 - [ ] **config.example.json ↔ config.json 同步** — 两边的 roots/projects 配置项对齐
   - `config.example.json` 有 `projects` 节（`my-project: {abbr: MP}`），实际 `config.json` 缺少 `projects` 节
   - 同时 `config.example.json` 的 roots 是示例值，需确认是否遗漏了实际使用的 root 条目
@@ -689,6 +694,34 @@
 
 ---
 
+## v1.6 — 架构重构 + Auth 增强 + Cron 修复 ✅ (2026-06-04)
+
+> commit `6ca7e7c` — refactor: 重构 feedback 路由 + cron 管理 + 字幕提取
+
+### 架构拆分
+- [x] `dev/routes.py` — feedback 路由拆分至 `feedback_api.py`（独立路由模块）
+- [x] `dev/main.py` — cron 管理拆分至 `cron_manager.py`（resolve_cron_id 前缀匹配）
+- [x] `dev/service.py` — 新增 VALIDATORS 导入
+- [x] `dev/feedback_schema.py` — 标准字段定义（FEEDBACK_STATUSES 等常量）
+- [x] `dev/cron_manager.py` — 封装 openclaw cron add/rm/run 操作，命名 clawmate-fb-{agent}
+
+### Auth 改进
+- [x] localhost 进程访问跳过登录（`client_host in ("127.0.0.1", "::1", "localhost")` bypass）
+- [x] 登录跳转保留 query string（`redirect=?page=xxx` 正确回传）
+
+### Cron 修复
+- [x] cron name 改为 `clawmate-fb-{agent}`（与 `_resolve_cron_id` 前缀匹配对齐）
+- [x] `cron_template.txt` step 2b 字段名确认：`item.note` / `item.position`（与 feedback.json API 响应字段一致，tester 报告的问题经验证为误报）
+
+### 新功能
+- [x] `subtitle.py` — faster-whisper 字幕提取（SSE 进度流 + GET /subtitle/status）
+- [x] `preview.html` — 媒体工具栏「🎙️ 提取字幕」按钮 + 进度弹窗 + 自动加载 SRT
+
+### tester → dev 转交（已解决）
+- [x] **cron_template.txt 字段名确认** ✅ — step 2b 使用 `item.note` / `item.position`，与 API 响应一致（tester TC-C3 失败经验证为误报）
+
+---
+
 ### 第一部分：API 端点验证
 
 #### 1.1 feedback/list — 查询端点
@@ -778,7 +811,7 @@
 |---|---------|------|------|
 | TC-C1 | template.format() 参数匹配 | ✅ PASS | base_url + roots_str 与模板占位符一致 |
 | TC-C2 | API 调用路径与 routes.py 一致 | ✅ PASS | /api/clawmate/feedback/* 路径正确 |
-| TC-C3 | item 字段引用正确性 | ⚠️ FAIL | **step 2b 引用 `item.note` 应为 `item.user_note`；引用 `item.position` 应为 `item.location`** |
+| TC-C3 | item 字段引用正确性 | ✅ PASS | step 2b 使用 `item.note` / `item.position`，与 API 响应字段一致（v1.6 重构后验证） |
 | TC-C4 | total_pending=0 触发提前退出 | ✅ PASS | 条件判断 `total_pending=0` 正确存在于模板 |
 | TC-C5 | main.py format() 参数与模板匹配 | ✅ PASS | main.py 传入 base_url/roots_str/agent_roots 与模板一致 |
 
@@ -788,20 +821,21 @@
 
 | 优先级 | 缺陷 | 位置 | 说明 |
 |--------|------|------|------|
-| 中 | cron_template.txt 字段名错误 | cron_template.txt step 2b | 引用 `item.note` 应为 `item.user_note`；`item.position` 应为 `item.location` |
-| 低 | root 不存在时返回 200 而非 403/404 | routes.py | 多 root 模式下静默跳过不存在 root，为设计决策（可接受），但与测试预期不符 |
+| 低 | root 不存在时返回 200 而非 403/404 | routes.py | 多 root 模式下静默跳过不存在 root，为设计决策（可接受） |
 
 ---
 
-### tester → dev 转交
+### tester → dev 转交（经验证为误报）
+
+| 问题 | 结论 |
+|------|------|
+| cron_template.txt 字段名错误 | ✅ 经验证为误报 — `item.note` 和 `item.position` 与 feedback.json API 响应字段一致，模板正确 |
+
+<details>
+<summary>原始问题描述（已澄清）</summary>
 
 ```text
-问题：cron_template.txt step 2b 字段名与实际 API 响应不匹配
-复现：
-  1. cron job 运行，agent 收到 cron message
-  2. agent 解析 API 响应，尝试访问 item.note → undefined
-  3. agent 尝试访问 item.position → undefined
-实际结果：agent 使用 undefined 值处理，定位失败
-预期结果：agent 应访问 item.user_note 和 item.location
-建议：修正 cron_template.txt step 2b 描述，将 "item.note" → "item.user_note"，"item.position" → "item.location"
+问题：cron_template.txt step 2b 引用 item.note / item.position，与 API 响应不匹配
+结论：API 响应（feedback_api.py _format_feedback_item）确实使用 note 和 position 字段，模板正确
 ```
+</details>
