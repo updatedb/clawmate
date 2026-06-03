@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>登录 — ClawMate</title>
+  <link rel="stylesheet" href="/clawmate/css/login.css" />
+</head>
+<body>
+  <div class="login-bg">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="login-logo">🦞↔📂</div>
+        <h1 class="login-title">ClawMate</h1>
+      </div>
+
+      <form class="login-form" id="loginForm" novalidate>
+        <div class="form-group">
+          <label for="username">用户名</label>
+          <input
+            type="text"
+            id="username"
+            name="username"
+            placeholder="admin"
+            autocomplete="username"
+            required
+            autofocus
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="password">密码</label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            placeholder="••••••••"
+            autocomplete="current-password"
+            required
+          />
+        </div>
+
+        <div class="form-error hidden" id="formError" role="alert"></div>
+
+        <button type="submit" class="btn-login" id="submitBtn">登 录</button>
+      </form>
+
+
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('loginForm');
+    const errorEl = document.getElementById('formError');
+    const submitBtn = document.getElementById('submitBtn');
+
+    function showError(msg) {
+      errorEl.textContent = msg;
+      errorEl.classList.remove('hidden');
+    }
+
+    function clearError() {
+      errorEl.textContent = '';
+      errorEl.classList.add('hidden');
+    }
+
+    function setLoading(loading) {
+      submitBtn.disabled = loading;
+      submitBtn.textContent = loading ? '登录中...' : '登 录';
+    }
+
+    // Read redirect target from query string
+    function getRedirect() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('redirect') || '/clawmate/';
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearError();
+
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+
+      if (!username || !password) {
+        showError('请输入用户名和密码。');
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const res = await fetch('/api/clawmate/auth/login', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({username, password}),
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.ok) {
+          // Redirect to target or default
+          const redirect = getRedirect();
+          window.location.href = redirect;
+        } else {
+          const msg = data.detail || data.error || '登录失败，请检查用户名和密码。';
+          showError(msg);
+          setLoading(false);
+        }
+      } catch (err) {
+        showError('网络错误，请稍后重试。');
+        setLoading(false);
+      }
+    });
+  </script>
+</body>
+</html>

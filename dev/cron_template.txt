@@ -1,0 +1,64 @@
+执行 clawmate 反馈收件箱检查。
+
+## 环境
+base_url = {base_url}
+
+## 步骤 1：获取待处理列表
+GET {base_url}/api/clawmate/feedback/list?root={roots_str}&status=pending
+
+响应结构：
+```json
+{{
+  "total_pending": N,
+  "results": [
+    {{
+      "root": "...",
+      "project": "...",
+      "items": [
+        {{
+          "id": "FD-XX-0001",
+          "status": "pending",
+          "file": "相对路径/文件名.md",
+          "note": "用户的修改建议或指令",
+          "content": "用户选中的原文片段",
+          "position": "L20-30 或 时间戳",
+          "updated": "2026-06-03 10:00:00",
+          "result": ""
+        }}
+      ]
+    }}
+  ]
+}}
+```
+
+**关键判断**：total_pending=0 时，<important>立即结束任务，不做任何输出。</important>
+
+## 步骤 2：逐条处理（仅当 total_pending > 0）
+
+对每条 pending item，按以下流程处理：
+
+a. 标记处理中：
+   POST {base_url}/api/clawmate/feedback/update
+   Body: {{"root":"<root>","project":"<project>","id":"<item.id>","status":"in_progress"}}
+
+b. 执行处理动作：
+   根据 item.user_note（用户建议/指令），对 item.file 文件中 item.content 对应的内容执行操作：
+   - **删除**：移除 item.content 指向的段落/代码/章节
+   - **修改**：用 item.user_note 的要求改写对应内容
+   - **扩展**：基于 item.content 扩写，如增加章节、补充细节
+   - **简化**：精简或重构对应内容
+   - **执行文档方案**：如果 item.user_note 指向 research/*.md 中的方案文档，按方案实施
+   
+   定位方式：item.location 存在时定位到该行/位置附近查找 item.content；否则全文搜索 item.content。
+   处理完成后将 item.file 写回磁盘。
+
+c. 标记完成：
+   POST {base_url}/api/clawmate/feedback/update
+   Body: {{"root":"<root>","project":"<project>","id":"<item.id>","status":"done","result":"<简短描述做了什么>"}}
+
+处理失败时标记 failed：
+   POST {base_url}/api/clawmate/feedback/update
+   Body: {{"root":"<root>","project":"<project>","id":"<item.id>","status":"failed","result":"<失败原因>"}}
+
+## 步骤 3：输出统计
+格式：共 N 条 pending，完成 X 条，失败 Y 条。无 pending 时不输出。

@@ -2,7 +2,7 @@
 
 ## 会话
 - 最后活跃会话: `(未关联)`
-- 最后活跃时间: 2026-06-02 00:27
+- 最后活跃时间: 2026-06-02 14:30
 
 ## FEEDBACK列表
 文件: clawmate/test/短篇小说-黄昏图书馆.md
@@ -120,7 +120,6 @@
 选区内容: "**完整的反馈生命周期**: \n\n```mermaid\nstateDiagram\n    [*] --> 选中文本\n    选中文本 --> 浮层弹出: mouseup 事件\n    浮层弹出 --> 累计反馈: 填写备注 → 加入 panel\n    累计反馈 --> 提交: ✅ 一键批量 POST\n    提交 --> pending: 写入 FEEDBACK.md\n ..."
 更新: 2026-06-02 00:27:08
 处理结果: 无法处理: 选区内容为空，无法确定需要删除的具体内容。请重新提交反馈并附带选区内容
-追因结果 (2026-06-02): 解析器 _parse_items() 正确提取 content (191字符)。根因为 Agent 处理端未正确处理 \n 转义序列，将非空内容误判为空。已加入 CLAWLIST 待办，需重新执行 /clawmate do #FD-CM-015。
 
 文件: clawmate/README.md
 编号：#FD-CM-016
@@ -129,7 +128,6 @@
 选区内容: "- [待处理] #FD-CM-004\n  - 用户备注: 突出这部分功能，这是核心\n  - 文件: clawmate/README.md\n  - 选区内容: "💬 反馈闭环\\\n选中文本..."\n  - 更新: 2026-06-01 12:51:37"
 更新: 2026-06-02 00:27:08
 处理结果: 无法处理: 选区内容为空，无法确定「描述不完整」指的是哪一段。请重新提交反馈并附带选区内容
-追因结果 (2026-06-02): 解析器 _parse_items() 正确提取 content (124字符)。根因为 Agent 处理端未正确处理嵌套引号+双重转义内容，将非空内容误判为空。已加入 CLAWLIST 待办，需重新执行 /clawmate do #FD-CM-016。
 
 文件: clawmate/README.md
 编号：#FD-CM-017
@@ -137,4 +135,108 @@
 用户备注：修复：目前还没有docker, 而且openclaw system event 依赖于和openclaw在同一主机上，所以方这里采用于行代码curl 的方式在本地起动。 \n\n暂时不描述docker的用法。
 选区内容: "# 1. 准备配置\ncp config.example.json config.json\n# 编辑 config.json，填入你的目录路径\n\n# 2. Docker 启动\ndocker run -d -p 5533:5533 \\\n  -v ./config.json:/app/config.json:ro \\\n  -v /your/projects:/data \\\n ..."
 更新: 2026-06-02 00:27:27
-处理结果: README.md 已全面移除 Docker 相关描述：1) 删除 Docker badge 2) 部署章节改为 curl 本地启动 3) 快速开始替换为 pip + python3 启动方式，增加同主机运行说明 4) 技术栈/产品状态表同步更新
+处理结果: README.md 已全面移除 Docker 相关描述: 1) 删除 Docker badge 2) 部署章节改为 curl 本地启动 3) 快速开始替换为 pip + python3 启动方式，增加同主机运行说明 4) 技术栈/产品状态表同步更新
+
+文件: clawmate/README.md
+编号：#FD-CM-018
+状态：已完成
+用户备注：和openclaw融合部分 说明一下 openclaw system event 的push wake机制
+选区内容: "openclaw 融合"
+更新: 2026-06-02 10:28:55
+处理结果: OpenClaw 融合章节已扩展: 新增 Push Wake 机制说明，包含 system event 格式(/clawmate do root=... project=... path=... <id>)、Mermaid 流程图、即时推送/精确路由/容错兜底/会话无关四大关键特性，Slash Commands 列表同步更新为完整命令集
+
+文件: clawmate/research/mobile-optimization-plan.md
+编号：#FD-CM-019
+状态：已完成
+用户备注：添加：[⬇ 下载]
+选区内容: "手机端:  [← 返回] [📑 大纲] [📖 渲染]"
+更新: 2026-06-02 13:30:19
+处理结果: 已处理
+
+文件: clawmate/research/mobile-optimization-plan.md
+编号：#FD-CM-020
+状态：已完成
+用户备注：修复：右侧滑入浮层，高度全屏，点击内容消失，点击卡片弹详情。
+选区内容: "手机端改为 底部滑入浮层（不同于桌面端的右侧栏）\n高度占屏幕 60%，从底部滑入\n底部有拖拽手柄，可上下调整\n反馈卡片缩小，按钮触控化（≥44px）"
+更新: 2026-06-02 13:30:19
+处理结果: 已处理
+
+文件: clawmate/research/mobile-optimization-plan.md
+编号：#FD-CM-021
+状态：已完成
+用户备注：修复：保留“立刻执行”和“加入待办”
+选区内容: "手机端:  touchend → 底部 Sheet 滑出（备注 + 加入面板）\n                    去掉"立刻执行"，统一走面板累积"
+更新: 2026-06-02 13:30:19
+处理结果: 已处理
+
+文件: clawmate/research/mobile-optimization-plan.md
+编号：#FD-CM-022
+状态：已完成
+用户备注：面板累积满后？不存在满，随时可提交
+选区内容: "面板累积满后统一「✅ 提交」"
+更新: 2026-06-02 13:30:19
+处理结果: 已处理
+
+文件: clawmate/research/mobile-optimization-plan.md
+编号：#FD-CM-023
+状态：已完成
+用户备注：修复：手机端只显示未提交的内容项，已经提交的就不显示了。
+选区内容: "提交按钮固定在面板底部，不随滚动"
+更新: 2026-06-02 13:30:19
+处理结果: 已处理
+
+文件: clawmate/dev/static/login.html
+编号：#FD-CM-024
+状态：已完成
+用户备注：图标调整成： [openclaw]<->[clawmate]
+选中位置: L13-13
+选区内容: "<div class="login-logo">📂</div>"
+更新: 2026-06-02 13:30:19
+处理结果: 已处理
+
+文件: clawmate/research/absolute-path-plan.md
+编号：#FD-CM-025
+状态：已完成
+会话: agent:work:webchat:direct
+用户备注：修复：方案评审未通过，建议重构建方案。\n\n思路： 1. 只在preview中实现路径拷贝。\n2. 将现有的拷贝按键更换为“路径”按钮，实现真实路径的拷贝。
+选区内容: "文件真实路径展示方案\n状态: 待评审 | 日期: 2026-06-02"
+更新: 2026-06-02 13:30:19
+处理结果: 已处理
+
+文件: clawmate/research/absolute-path-plan.md
+编号：#FD-CM-026
+状态：已完成
+会话: agent:work:webchat:direct
+用户备注：修复: 建议采用该方案，不希望对外提供一个接口获取文件的决对路径。
+选中位置: L32-42
+选区内容: "`service.py` 中的 `file_info()` 增加 `abs_path` 字段: \n\n```python\ndef file_info(path: Path, rel_path: str) -> Dict:\n    return {\n        "name": path.name,\n        "path": rel_path,\n        "abs_p..."
+更新: 2026-06-02 14:10:24
+处理结果: 已删除§3.1 API方案及P1任务，保留§3.1前端方案
+
+文件: clawmate/dev/static/login.html
+编号：#FD-CM-027
+状态：已完成
+会话: agent:work:webchat:direct
+用户备注：删除
+选中位置: L15-15
+选区内容: "<p class="login-subtitle">请登录以继续</p>"
+更新: 2026-06-02 14:10:36
+处理结果: 已删除login-subtitle段落
+
+文件: clawmate/dev/static/login.html
+编号：#FD-CM-028
+状态：已完成
+会话: agent:work:webchat:direct
+用户备注：删除
+选中位置: L49-51
+选区内容: "<div class="login-footer">\n        <span>ClawMate</span>\n      </div>"
+更新: 2026-06-02 14:10:36
+处理结果: 已删除login-footer区段
+
+文件: clawmate/research/absolute-path-plan.md
+编号：#FD-CM-029
+状态：已完成
+用户备注：审批通过，开始实施。
+选区内容: "文件真实路径展示方案\n状态: 评审未通过，需重构建 | 日期: 2026-06-02"
+更新: 2026-06-02 14:30:13
+处理结果: 状态已更新：评审未通过→审批通过，§3 方案（重构建）→方案（已批准）

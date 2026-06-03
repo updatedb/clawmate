@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Query, HTTPException, Request
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from urllib.parse import quote, unquote_to_bytes
 import base64
 import hashlib
 import hmac
 import json
 import os
+import re
 import time
 import zipfile
 import httpx
@@ -24,6 +25,7 @@ from service import (
     delete_file,
     delete_dir,
     resolve_root,
+    _root_map,
 )
 
 
@@ -142,6 +144,8 @@ async def clawmate_search(
 
 @router.get("/api/clawmate/preview")
 async def clawmate_preview(root: str = "", path: str = ""):
+    if not root or not root.strip():
+        return RedirectResponse(url="/clawmate/", status_code=302)
     try:
         root_path, target, safe_rel = safe_path(root, path)
     except FileNotFoundError:
@@ -499,53 +503,113 @@ async def clawmate_feedback_list(
     project: str = "",
     status: str = "",
     file: str = "",
-    since: str = "today",
+    since: str = "",
 ):
-    """列出 FEEDBACK.md 中的条目，支持 status/file/since 过滤.
+    """列出 feedback.json 中的条目，支持 status/file/since 过滤.
+
+    两种模式:
+    - project 指定: 单项目查询 (root=webprojects&project=clawmate)
+    - project 省略: 自动扫描所有 root (root=x,y) 下的项目，聚合结果
 
     Args:
-        status: 单值过滤，如 wait/doing/done/failed（不传=全部）
-        file:   文件名模糊匹配（不传=全部）
-        since:  today=当天 00:00 CST，或 YYYY-MM-DD 格式日期（不传=today）
+        root:    逗号分隔的 root_id，如 root=writer,weixin（必填）
+        project: 项目名（可选，省略时扫描该 root 下所有项目）
+        status:  单值过滤，如 pending/in_progress/done
+        file:    文件名模糊匹配
+        since:   today=当天 00:00 CST，或 YYYY-MM-DD 格式
     """
-    if not root or not project:
-        raise HTTPException(status_code=422, detail="Missing root or project")
-    try:
-        fb_path = _get_feedback_path(root, project)
-    except (PermissionError, FileNotFoundError) as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    if not root:
+        raise HTTPException(status_code=422, detail="Missing root")
 
-    content = _read_feedback_md(fb_path)
-    items = _parse_items(content)
+    root_ids = [r.strip() for r in root.split(",") if r.strip()]
 
-    # status filter
+    if project:
+        # 单项目模式 — 传统行为
+        results = []
+        total_pending = 0
+        for rid in root_ids:
+            try:
+                fb_path = _get_feedback_path(rid, project)
+            except (PermissionError, FileNotFoundError) as e:
+                continue  # skip missing projects in multi-root mode
+
+            items = _filter_items(fb_path, status, file, since)
+            total_pending += sum(1 for i in items if i.get("status") == "pending")
+            results.append({
+                "root": rid,
+                "project": project,
+                "total": len(items),
+                "pending": sum(1 for i in items if i.get("status") == "pending"),
+                "items": items,
+            })
+        # flatten if single root
+        if len(results) == 1:
+            return JSONResponse(content={
+                "total_pending": total_pending,
+                "total": results[0]["total"],
+                "items": results[0]["items"],
+            })
+        return JSONResponse(content={
+            "total_pending": total_pending,
+            "results": results,
+        })
+
+    # 自动扫描模式 — 遍历所有 project
+    results = []
+    total_pending = 0
+    for root_id in root_ids:
+        root_dir = resolve_root(root_id)
+        for entry in sorted(root_dir.iterdir()):
+            if not entry.is_dir():
+                continue
+            proj = entry.name
+            fb_path = entry / "feedback.json"
+            if not fb_path.exists():
+                continue
+            items = _filter_items(fb_path, status, file, since)
+            pending = sum(1 for i in items if i.get("status") == "pending")
+            if items:
+                results.append({
+                    "root": root_id,
+                    "project": proj,
+                    "pending_count": pending,
+                    "items": items,
+                })
+                total_pending += pending
+
+    return JSONResponse(content={
+        "total_pending": total_pending,
+        "results": results,
+    })
+
+
+def _filter_items(fb_path: Path, status: str, file: str, since: str) -> list:
+    """从 feedback.json 读取条目并过滤，返回统一格式的 dict 列表"""
+    data = _read_feedback_json(fb_path)
+    items = _parse_items(data)
+
     if status:
         items = [i for i in items if i.get("status") == status]
 
-    # file filter: fuzzy match
     if file:
         items = [i for i in items if file in i.get("file", "")]
 
-    # since filter
-    if since == "today":
-        cutoff = datetime.now(CST).replace(hour=0, minute=0, second=0, microsecond=0)
-    elif since:
-        try:
-            cutoff = datetime.strptime(since, "%Y-%m-%d").replace(tzinfo=CST)
-        except ValueError:
-            cutoff = None
-    else:
-        cutoff = None
-
-    if cutoff:
-        def _parse_updated(ts: str):
+    if since:
+        if since == "today":
+            cutoff = datetime.now(CST).replace(hour=0, minute=0, second=0, microsecond=0)
+        else:
             try:
-                return datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=CST)
-            except Exception:
-                return datetime.min.replace(tzinfo=CST)
-        items = [i for i in items if _parse_updated(i.get("updated", "")) >= cutoff]
+                cutoff = datetime.strptime(since, "%Y-%m-%d").replace(tzinfo=CST)
+            except ValueError:
+                cutoff = None
+        if cutoff:
+            def _parse_updated(ts: str):
+                try:
+                    return datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=CST)
+                except Exception:
+                    return datetime.min.replace(tzinfo=CST)
+            items = [i for i in items if _parse_updated(i.get("updated", "")) >= cutoff]
 
-    # Return structured data (no type field)
     result = []
     for item in items:
         entry = {
@@ -553,19 +617,14 @@ async def clawmate_feedback_list(
             "status": item.get("status", "pending"),
             "user_note": item.get("note", ""),
             "file": item.get("file", ""),
-            "content": item.get("selection", ""),
+            "content": item.get("content", "") or item.get("selection", ""),
             "updated": item.get("updated", ""),
             "result": item.get("result", ""),
         }
         if item.get("position"):
             entry["location"] = item["position"]
         result.append(entry)
-
-    return JSONResponse(content={
-        "feedbackPath": str(fb_path),
-        "total": len(result),
-        "items": result,
-    })
+    return result
 
 
 @router.get("/api/clawmate/onlyoffice/config", response_class=JSONResponse)
@@ -779,7 +838,7 @@ async def clawmate_onlyoffice_callback(request: Request, token: str = ""):
     return JSONResponse(content={"error": 0})
 
 
-# ── ClawMate feedback (FEEDBACK.md 单列表 + 内联状态) ──────────────
+# ── ClawMate feedback (feedback.json 单列表 + 内联状态) ──────────────
 
 CST = timezone(timedelta(hours=8))
 
@@ -788,14 +847,17 @@ def _get_feedback_path(root_id: str, project: str) -> Path:
     root_dir = resolve_root(root_id)
     project_dir = root_dir / project
     project_dir.mkdir(parents=True, exist_ok=True)
-    return project_dir / "FEEDBACK.md"
+    return project_dir / "feedback.json"
 
 
-def _read_feedback_md(path: Path) -> str:
+def _read_feedback_json(path: Path) -> dict:
+    if not path.exists():
+        return {"items": []}
     try:
-        return path.read_text(encoding="utf-8")
-    except Exception:
-        return ""
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, FileNotFoundError):
+        return {"items": []}
 
 
 def _project_abbr(project: str) -> str:
@@ -819,155 +881,37 @@ def _project_abbr(project: str) -> str:
     return (project[0] + project[n // 2]).upper()
 
 
-def _next_id(content: str, project: str) -> str:
-    import re
-    abbr = _project_abbr(project)
-    pattern = rf"#FD-{abbr}-(\d+)"
-    ids = re.findall(pattern, content)
-    n = max(int(x) for x in ids) + 1 if ids else 1
-    return f"FD-{abbr}-{n:03d}"
+# _next_id removed — ID generation now uses last_id from feedback.json + 4-digit zero-padding
 
 
-def _parse_items(content: str) -> list:
-    """Parse FEEDBACK.md (new file-centric flat format) into structured item list.
-
-    New format (flat, list-bullet-free, file-first):
-
-        文件: clawmate/test/短篇小说-黄昏图书馆.md
-        编号：#FD-CM-001
-        状态：已完成
-        用户备注：扩展这一段，引入她已经过世的媳妇
-        选区内容: ''内容...'
-        选中位置: L2-4              ← 可选字段，无选中位置时不出现
-        更新: 2026-05-30 19:57:21
-    """
-    if not content.strip():
-        return []
-    items = []
-    current = None
-    for line in content.split("\n"):
-        stripped = line.strip()
-        if not stripped:
-            # empty line = item separator
-            if current and current.get("id"):
-                items.append(current)
-                current = None
-            continue
-        # skip headers
-        if stripped.startswith("#") or stripped.startswith("##"):
-            continue
-        if stripped.startswith("- 最后活跃") or stripped.startswith("- 会话"):
-            continue
-        if stripped == "## FEEDBACK列表" or "_暂无反馈_" in stripped:
-            continue
-
-        # Normalize Chinese colon to ASCII
-        normalized = stripped.replace("\uff1a", ": ", 1)
-
-        # Detect item start: "文件: filename"
-        if normalized.startswith("文件:") or stripped.startswith("文件:"):
-            if current and current.get("id"):
-                items.append(current)
-            _, val = (normalized.split(": ", 1) if ": " in normalized else ["", ""])
-            current = {
-                "file": val.strip(),
-                "id": "", "note": "", "status": "pending", "selection": "",
-                "position": "", "updated": "", "result": "",
-            }
-            continue
-
-        if current is None:
-            continue
-
-        if ": " in normalized:
-            key, val = normalized.split(": ", 1)
-            v = val.strip()
-            if key == "编号":
-                current["id"] = v.lstrip("#")
-            elif key == "状态":
-                rev = {label: k for k, label in STATUS_LABELS.items()}
-                current["status"] = rev.get(v, "pending")
-            elif key == "用户备注":
-                # Decode \\n → newline, \\\\ → \\
-                current["note"] = v.replace("\\n", "\n").replace("\\\\", "\\")
-            elif key == "选区内容":
-                if len(v) >= 2 and ((v.startswith('"') and v.endswith('"')) or                                     (v.startswith("'") and v.endswith("'"))):
-                    v = v[1:-1]
-                # Decode \\n → newline, \\\\ → \\ (stored escaped in FEEDBACK.md)
-                v = v.replace("\\n", "\n").replace("\\\\", "\\")
-                current["selection"] = v
-            elif key == "选中位置":
-                current["position"] = v
-            elif key == "更新":
-                current["updated"] = v
-            elif key == "处理结果":
-                current["result"] = v
-
-    # finalize last item
-    if current and current.get("id"):
-        items.append(current)
-    return items
+def _parse_items(raw):
+    if isinstance(raw, dict):
+        return raw.get("items", [])
+    return []
 
 
-def _format_item(item: dict) -> list:
-    """Format a single feedback item as file-first flat markdown.
 
-    - 选区内容/用户备注 完整保留（换行转 \\n 编码，反斜杠转 \\\\）
-    - 内容 >200 chars 截断为前 197 + …
-    - 条目间空行分隔
-    """
-    now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
-    lines = []
-    if item.get("file"):
-        lines.append(f"文件: {item['file']}")
-    lines.append(f"编号：# {item['id']}".replace("# ", "#"))
-    status_label = STATUS_LABELS.get(item.get("status", "pending"), "待处理")
-    lines.append(f"状态：{status_label}")
-    # 用户备注：换行 → \\n，\\ → \\\\，软上限 200
-    note_raw = item.get('note', '')
-    note_escaped = note_raw.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "")
-    note_display = (note_escaped[:197] + "...") if len(note_escaped) > 200 else note_escaped
-    lines.append(f"用户备注：{note_display}")
-    if item.get("position"):
-        lines.append(f"选中位置: {item['position']}")
-    if item.get("selection"):
-        sel = item["selection"]
-        # 保留完整内容：换行 → \\n, 反斜杠 → \\\\
-        escaped = sel.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "")
-        # 过长的内容截断（200 char 软上限，避免 FEEDBACK.md 过大）
-        MAX_SEL = 200
-        display = (escaped[:MAX_SEL - 3] + "...") if len(escaped) > MAX_SEL else escaped
-        lines.append(f'选区内容: "{display}"')
-    lines.append(f"更新: {item.get('updated', now)}")
-    if item.get("result"):
-        lines.append(f"处理结果: {item['result']}")
-    lines.append("")
-    return lines
-
-
-def _build_feedback_md(session_key: str, items: list) -> str:
-    """Build complete FEEDBACK.md flat list."""
-    now = datetime.now(CST).strftime("%Y-%m-%d %H:%M")
-    lines = ["# 反馈清单", ""]
-    lines.append("## 会话")
-    # Preserve existing session when new one is empty
-    session_display = session_key or "(未关联)"
-    lines.append(f"- 最后活跃会话: `{session_display}`")
-    lines.append(f"- 最后活跃时间: {now}")
-    lines.append("")
-    lines.append("## FEEDBACK列表")
+def _build_feedback_json(root: str, project: str, items: list) -> str:
+    ts = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
+    # Extract max ID number from items as last_id
+    max_id = 0
     for item in items:
-        if item.get("status") == "deleted":
-            continue  # skip deleted items
-        lines.extend(_format_item(item))
-    if not items:
-        lines.append("_暂无反馈_")
-    return "\n".join(lines)
+        m = re.search(r'FD-\w+-(\d+)', item.get("id", ""))
+        if m:
+            max_id = max(max_id, int(m.group(1)))
+    data = {
+        "root": root,
+        "project": project,
+        "updated": ts,
+        "last_id": max_id,
+        "items": items,
+    }
+    return json.dumps(data, indent=2, ensure_ascii=False)
 
 
 @router.post("/api/clawmate/feedback", response_class=JSONResponse)
 async def clawmate_feedback(request: Request):
-    """统一反馈入口 — FEEDBACK.md 单列表 + 内联状态."""
+    """统一反馈入口 — feedback.json 单列表 + 内联状态."""
     try:
         body = await request.json()
     except Exception:
@@ -978,7 +922,6 @@ async def clawmate_feedback(request: Request):
     file_path = str(body.get("path", "")).strip()
     selections = body.get("selections", [])
     preview_url = str(body.get("previewUrl", "")).strip()
-    session_key = str(body.get("sessionKey", "")).strip()
 
     if not root_id or not project or not file_path:
         raise HTTPException(status_code=422, detail="Missing root/project/path")
@@ -994,15 +937,23 @@ async def clawmate_feedback(request: Request):
         public_base = _get_public_base_url(request)
         preview_url = f"{public_base}/clawmate/preview.html?root={quote(root_id)}&file={quote(file_path)}"
 
-    existing = _read_feedback_md(fb_path)
-    existing_items = _parse_items(existing)
+    existing_data = _read_feedback_json(fb_path)
+    existing_items = _parse_items(existing_data)
+    last_id = existing_data.get("last_id", 0) if isinstance(existing_data, dict) else 0
     ts = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
 
-    for sel in selections:
+    # Deduplication: build set of (content, file) pairs already in existing_items
+    existing_keys = {(item.get("content", ""), item.get("file", "")) for item in existing_items}
+
+    new_items = []
+    for idx, sel in enumerate(selections):
         text = str(sel.get("text", "")).strip()
         if not text:
             continue
         note = str(sel.get("note", "")).strip()
+        # Deduplication check
+        if (text, file_path) in existing_keys:
+            continue
         # position 语义灵活：文本=行号，音频=时间，PDF=页码
         # 优先直接取 position，fallback 到 startLine/endLine 兼容旧前端
         position = str(sel.get("position", "") or "").strip()
@@ -1012,30 +963,45 @@ async def clawmate_feedback(request: Request):
             if start_line and end_line:
                 position = f"L{start_line}-{end_line}"
 
-        nid = _next_id(existing, project)
-        existing_items.append({
-            "id": nid,
-            "note": note or text[:80],
+        new_id_num = last_id + idx + 1
+        item_id = f"FD-{_project_abbr(project)}-{new_id_num:04d}"
+        new_items.append({
+            "id": item_id,
             "status": "pending",
             "file": file_path,
-            "selection": text,
+            "note": note or text[:80],
+            "content": text,
             "position": position,
             "updated": ts,
+            "result": "",
         })
-        existing += f"\n#FD-{_project_abbr(project)}-{nid.split('-')[-1]}"
+        existing_keys.add((text, file_path))
 
-    new_content = _build_feedback_md(session_key, existing_items)
+    existing_items.extend(new_items)
+
+    new_content = _build_feedback_json(root_id, project, existing_items)
     fb_path.write_text(new_content, encoding="utf-8")
 
-    ids = [i["id"] for i in existing_items[-len(selections):] if i["id"]]
-    new_id = ids[0] if ids else ""
+    ids = [i["id"] for i in new_items if i["id"]]
 
-    # Wake agent immediately (non-blocking)
+    # Wake agent via cron run (select cron by root's agent_id)
     import subprocess, shutil
     openclaw_bin = shutil.which("openclaw") or "openclaw"
+    config_path = Path(os.environ.get("CLAWMATE_CONFIG", str(Path(__file__).parent / "config.json")))
+    cron_name = "clawmate-feedback-inbox-check"  # default fallback
+    try:
+        with open(config_path) as f:
+            cfg = json.load(f)
+        for r in cfg.get("roots", []):
+            if r.get("id") == root_id:
+                aid = r.get("agent_id", "work")
+                cron_name = f"clawmate-feedback-inbox-{aid}"
+                break
+    except Exception:
+        pass
     try:
         subprocess.run(
-            [openclaw_bin, "system", "event", "--text", f"ClawMate 新反馈: {new_id}", "--mode", "now"],
+            [openclaw_bin, "cron", "run", cron_name],
             timeout=10, capture_output=True
         )
     except Exception:
@@ -1052,7 +1018,7 @@ async def clawmate_feedback(request: Request):
 
     return JSONResponse(content={
         "ok": True, "ids": ids,
-        "feedbackPath": str(fb_path),
+        "feedbackFile": str(fb_path),
         "feedbackText": "\n".join(lines),
         "previewUrl": preview_url,
     })
@@ -1060,7 +1026,7 @@ async def clawmate_feedback(request: Request):
 
 @router.get("/api/clawmate/feedback/status", response_class=JSONResponse)
 async def clawmate_feedback_status(root: str = "", project: str = ""):
-    """查询 FEEDBACK.md 状态."""
+    """查询 feedback.json 状态."""
     if not root or not project:
         raise HTTPException(status_code=422, detail="Missing root or project")
     try:
@@ -1068,7 +1034,7 @@ async def clawmate_feedback_status(root: str = "", project: str = ""):
     except PermissionError:
         raise HTTPException(status_code=403, detail="Root not allowed")
 
-    content = _read_feedback_md(fb_path)
+    content = _read_feedback_json(fb_path)
     items = _parse_items(content)
 
     counts = {"pending": 0, "in_progress": 0, "done": 0, "failed": 0}
@@ -1077,17 +1043,11 @@ async def clawmate_feedback_status(root: str = "", project: str = ""):
         if s in counts:
             counts[s] += 1
 
-    session_info = []
-    for line in content.split("\n"):
-        if line.strip().startswith("- 最后活跃"):
-            session_info.append(line.strip())
-
     return JSONResponse(content={
-        "feedbackPath": str(fb_path),
+        "feedbackFile": str(fb_path),
         "exists": fb_path.exists(),
         "counts": counts,
         "items": [{"id": i["id"], "note": i["note"], "status": i["status"], "file": i["file"], "result": i.get("result", "")} for i in items],
-        "sessionInfo": session_info,
     })
 
 
@@ -1116,9 +1076,9 @@ async def clawmate_feedback_update(request: Request):
     try:
         fb_path = _get_feedback_path(root_id, project)
     except (PermissionError, FileNotFoundError):
-        raise HTTPException(status_code=404, detail="FEEDBACK.md not found")
+        raise HTTPException(status_code=404, detail="feedback.json not found")
 
-    content = _read_feedback_md(fb_path)
+    content = _read_feedback_json(fb_path)
     items = _parse_items(content)
 
     updated = False
@@ -1134,14 +1094,157 @@ async def clawmate_feedback_update(request: Request):
     if not updated:
         raise HTTPException(status_code=404, detail=f"Item {feedback_id} not found")
 
-    # Rebuild: extract session block, rebuild list
-    session_key = ""
-    for line in content.split("\n"):
-        if line.startswith("- 最后活跃会话: "):
-            session_key = line.split("`")[1] if "`" in line else ""
-            break
-
-    new_content = _build_feedback_md(session_key, items)
+    new_content = _build_feedback_json(root_id, project, items)
     fb_path.write_text(new_content, encoding="utf-8")
 
     return JSONResponse(content={"ok": True, "id": feedback_id, "newStatus": new_status})
+
+
+# ── Auth endpoints ─────────────────────────────────────────────────────────────
+
+def _get_client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+@router.post("/api/clawmate/auth/login")
+async def auth_login(request: Request):
+    """Verify credentials, issue session, set session cookie."""
+    from auth import (
+        is_auth_enabled, check_ip_lockout, record_failure, clear_failures,
+        create_session, get_session_from_cookie, verify_password,
+        load_auth_config, get_session_ttl,
+    )
+
+    client_ip = _get_client_ip(request)
+    locked, remaining = check_ip_lockout(client_ip)
+    if locked:
+        return JSONResponse(
+            {"error": "too_many_requests", "detail": f"登录失败次数过多，请 {remaining} 秒后重试"},
+            status_code=429,
+        )
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid_request", "detail": "Invalid JSON"}, status_code=400)
+
+    username = str(body.get("username", "")).strip()
+    password = str(body.get("password", ""))
+
+    if not username or not password:
+        return JSONResponse({"error": "invalid_request", "detail": "用户名和密码不能为空"}, status_code=400)
+
+    config_path = Path(os.environ.get(CONFIG_PATH_ENV, "config.json"))
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        config = {}
+
+    if not is_auth_enabled(config):
+        return JSONResponse({"error": "auth_not_configured", "detail": "认证未配置"}, status_code=503)
+
+    ac = config.get("auth") or {}
+    expected_user = ac.get("username", "admin")
+    stored_hash = ac.get("password_hash", "")
+
+    if username != expected_user or not verify_password(password, stored_hash):
+        record_failure(client_ip)
+        return JSONResponse({"error": "invalid_credentials", "detail": "用户名或密码错误"}, status_code=401)
+
+    # Success
+    clear_failures(client_ip)
+    ttl = get_session_ttl(config)
+    sid, _ = await create_session(username, ttl)
+
+    response = JSONResponse({"ok": True, "username": username})
+    response.set_cookie(
+        key="clawmate_session",
+        value=sid,
+        max_age=ttl,
+        httponly=True,
+        samesite="lax",
+        path="/",
+    )
+    return response
+
+
+@router.post("/api/clawmate/auth/logout")
+async def auth_logout(request: Request):
+    """Clear session and cookie."""
+    from auth import get_session, delete_session, get_session_from_cookie
+
+    sid = get_session_from_cookie(request)
+    if sid:
+        await delete_session(sid)
+    response = JSONResponse({"ok": True})
+    response.delete_cookie(key="clawmate_session", path="/")
+    return response
+
+
+@router.get("/api/clawmate/auth/status")
+async def auth_status(request: Request):
+    """Return current login state."""
+    from auth import get_session, get_session_from_cookie
+
+    sid = get_session_from_cookie(request)
+    if not sid:
+        return JSONResponse({"logged_in": False})
+    session = await get_session(sid)
+    if not session:
+        return JSONResponse({"logged_in": False})
+    return JSONResponse({"logged_in": True, "username": session.get("user", "")})
+
+
+@router.post("/api/clawmate/auth/change-password")
+async def auth_change_password(request: Request):
+    """Change password for logged-in user."""
+    from auth import get_session, delete_session, get_session_from_cookie
+    from auth import verify_password, hash_password, load_auth_config
+
+    sid = get_session_from_cookie(request)
+    if not sid:
+        return JSONResponse({"error": "unauthorized", "detail": "请先登录"}, status_code=401)
+    session = await get_session(sid)
+    if not session:
+        return JSONResponse({"error": "unauthorized", "detail": "会话已过期，请重新登录"}, status_code=401)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid_request"}, status_code=400)
+
+    old_password = str(body.get("old_password", ""))
+    new_password = str(body.get("new_password", ""))
+
+    if not new_password or len(new_password) < 4:
+        return JSONResponse({"error": "invalid_request", "detail": "新密码至少4个字符"}, status_code=400)
+
+    config_path = Path(os.environ.get(CONFIG_PATH_ENV, "config.json"))
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return JSONResponse({"error": "server_error", "detail": "配置文件读取失败"}, status_code=500)
+
+    ac = config.get("auth") or {}
+    stored_hash = ac.get("password_hash", "")
+
+    # Verify old password if hash exists
+    if stored_hash and old_password and not verify_password(old_password, stored_hash):
+        return JSONResponse({"error": "invalid_credentials", "detail": "原密码错误"}, status_code=401)
+
+    new_hash = hash_password(new_password)
+    if "auth" not in config:
+        config["auth"] = {}
+    config["auth"]["username"] = ac.get("username", "admin")
+    config["auth"]["password_hash"] = new_hash
+    config["auth"]["session_ttl_minutes"] = ac.get("session_ttl_minutes", 480)
+
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+
+    return JSONResponse({"ok": True, "detail": "密码已更新"})

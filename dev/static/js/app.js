@@ -14,6 +14,24 @@ function escHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
+// ── Auth error handler ─────────────────────────────────────────────
+function handleAuthError(res) {
+  if (res.status === 401 || res.status === 302) {
+    const redirectTo = '/clawmate/login.html?redirect=' + encodeURIComponent(window.location.pathname + window.location.search);
+    window.location.href = redirectTo;
+    return true;
+  }
+  return false;
+}
+
+async function authFetch(url, options = {}) {
+  const res = await fetch(url, options);
+  if (handleAuthError(res)) {
+    throw new Error('auth_redirect');
+  }
+  return res;
+}
+
 const state = {
   roots: [],
   defaultRootId: "",
@@ -57,12 +75,6 @@ const els = {
   clearSearchBtn: document.getElementById("clearSearchBtn"),
   viewGrid: document.getElementById("viewGrid"),
   viewList: document.getElementById("viewList"),
-  previewModal: document.getElementById("previewModal"),
-  previewBody: document.getElementById("previewBody"),
-  modalContent: document.querySelector("#previewModal .modal-content"),
-  closePreview: document.getElementById("closePreview"),
-  toggleMaximize: document.getElementById("toggleMaximize"),
-  openInPreview: document.getElementById("openInPreview"),
   filterType: document.getElementById("filterType"),
   sortKey: document.getElementById("sortKey"),
   sortDir: document.getElementById("sortDir"),
@@ -301,14 +313,13 @@ async function deleteEntry(entry) {
   setStatus("删除中...");
   try {
     const url = isDir ? buildDirDeleteUrl(entry.relPath) : buildDeleteUrl(entry.relPath);
-    const res = await fetch(url, { method: "DELETE" });
+    const res = await authFetch(url, { method: "DELETE" });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: "删除失败" }));
       setStatus(err.error || "删除失败");
       return;
     }
     setStatus("删除成功");
-    els.previewModal.classList.add("hidden");
     await loadDir(state.dir);
   } catch (e) {
     setStatus("删除失败: " + e.message);
@@ -613,48 +624,6 @@ function parseCodeOutline(content, ext) {
   }
   return items;
 }
-
-function scrollModalToLine(preEl, lineNum) {
-  if (!preEl) return;
-  const lineHeight = parseFloat(getComputedStyle(preEl).lineHeight) || 22;
-  preEl.parentElement.scrollTop = Math.max(0, (lineNum - 4) * lineHeight);
-}
-
-function renderCodeOutlineModal(entry, preEl, rawContent) {
-  const ext = getEntryExt(entry).toLowerCase();
-  const items = parseCodeOutline(rawContent, ext);
-  if (items.length < 2) return null;
-
-  const nav = document.createElement('div');
-  nav.className = 'code-outline-nav';
-  nav.id = 'codeOutlineNav';
-
-  const header = document.createElement('div');
-  header.className = 'code-outline-header';
-  header.innerHTML = '<span>📑 代码大纲 (' + items.length + ')</span><span class="code-outline-toggle">▾</span>';
-  header.addEventListener('click', () => {
-    nav.classList.toggle('collapsed');
-  });
-
-  const list = document.createElement('ul');
-  list.className = 'code-outline-list';
-  items.forEach(item => {
-    const li = document.createElement('li');
-    const a = document.createElement('a');
-    a.href = '#';
-    a.textContent = item.text;
-    a.addEventListener('click', e => {
-      e.preventDefault();
-      scrollModalToLine(preEl, item.line);
-    });
-    li.appendChild(a);
-    list.appendChild(li);
-  });
-
-  nav.appendChild(header);
-  nav.appendChild(list);
-  return nav;
-}
 function openLinksInNewTab(div) {
   div.querySelectorAll('a').forEach(a => {
     a.setAttribute('target', '_blank');
@@ -827,7 +796,7 @@ async function loadSidebarParent(dir) {
   // At subdirectory: load parent directory listing to show sibling dirs
   const fetchDir = (dir === "") ? "" : getParentDir(dir);
   try {
-    const res = await fetch(`/api/clawmate/list?root=${encodeURIComponent(state.rootId)}&dir=${encodeURIComponent(fetchDir)}`);
+    const res = await authFetch(`/api/clawmate/list?root=${encodeURIComponent(state.rootId)}&dir=${encodeURIComponent(fetchDir)}`);
     if (!res.ok) {
       sidebarParentDir = fetchDir;
       sidebarEntries = [];
@@ -992,7 +961,7 @@ async function batchDelete() {
       const entry = (state.searchResults || state.entries).find(e => e.relPath === path);
       const isDir = entry ? entry.is_dir : false;
       const url = isDir ? buildDirDeleteUrl(path) : buildDeleteUrl(path);
-      const res = await fetch(url, { method: "DELETE" });
+      const res = await authFetch(url, { method: "DELETE" });
       if (res.ok) {
         deleted++;
         state.selectedPaths.delete(path);
@@ -1169,7 +1138,7 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
           e.stopPropagation();
           const newName = prompt("请输入新名称：", entry.name);
           if (newName && newName !== entry.name) {
-            fetch(`/api/clawmate/rename?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}&new_name=${encodeURIComponent(newName)}`, { method: 'POST' })
+            authFetch(`/api/clawmate/rename?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}&new_name=${encodeURIComponent(newName)}`, { method: 'POST' })
               .then(r => r.json())
               .then(data => { if (data.success) { refresh(); } else { alert('重命名失败：' + (data.error || '未知错误')); } })
               .catch(() => alert('重命名失败'));
@@ -1210,7 +1179,7 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
           e.stopPropagation();
           const newName = prompt("请输入新名称：", entry.name);
           if (newName && newName !== entry.name) {
-            fetch(`/api/clawmate/rename?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}&new_name=${encodeURIComponent(newName)}`, { method: 'POST' })
+            authFetch(`/api/clawmate/rename?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}&new_name=${encodeURIComponent(newName)}`, { method: 'POST' })
               .then(r => r.json())
               .then(data => { if (data.success) { refresh(); } else { alert('重命名失败：' + (data.error || '未知错误')); } })
               .catch(() => alert('重命名失败'));
@@ -1312,7 +1281,6 @@ function renderList(markdownEntries, folderEntries, otherEntries) {
 }
 
 function render() {
-  clearSkeleton();
   renderBreadcrumbs();
   renderDirs();
 
@@ -1383,26 +1351,6 @@ function showListSkeleton() {
   els.list.appendChild(wrap);
 }
 
-function showPreviewSkeleton() {
-  const skeleton = document.createElement('div');
-  skeleton.className = 'skeleton-markdown';
-  skeleton.innerHTML = `
-    <div class="skeleton-title"></div>
-    <div class="skeleton-heading"></div>
-    <div class="skeleton-text full"></div>
-    <div class="skeleton-text medium"></div>
-    <div class="skeleton-text short"></div>
-    <div class="skeleton-text full"></div>
-    <div class="skeleton-text medium"></div>
-  `;
-  els.previewBody.appendChild(skeleton);
-}
-
-function clearSkeleton() {
-  els.gallery.querySelectorAll('.skeleton-card').forEach(el => el.remove());
-  els.list.querySelectorAll('.skeleton-card, .list-table-wrap').forEach(el => el.remove());
-  els.previewBody.querySelectorAll('.skeleton-markdown').forEach(el => el.remove());
-}
 
 // ===== Drag-and-Drop Upload =====
 async function checkOnlyofficeAvailable() {
@@ -1450,7 +1398,7 @@ function setupDragDrop() {
       try {
         const formData = new FormData();
         formData.append('file', file);
-        const res = await fetch(
+        const res = await authFetch(
           `/api/clawmate/upload?root=${encodeURIComponent(state.rootId)}&dir=${encodeURIComponent(state.dir)}`,
           { method: 'POST', body: formData }
         );
@@ -1481,7 +1429,7 @@ async function loadDir(dir) {
   // Show skeleton while loading
   if (state.view === 'grid') { showGallerySkeleton(); } else { showListSkeleton(); }
   console.log("loadDir API call:", "/api/clawmate/list?root=" + state.rootId + "&dir=" + safeDir);
-  const res = await fetch(`/api/clawmate/list?root=${encodeURIComponent(state.rootId)}&dir=${encodeURIComponent(safeDir)}`);
+  const res = await authFetch(`/api/clawmate/list?root=${encodeURIComponent(state.rootId)}&dir=${encodeURIComponent(safeDir)}`);
   if (!res.ok) {
     if (res.status === 404) {
       setStatus("目录不存在");
@@ -1511,7 +1459,7 @@ async function search() {
   if (!q) return;
   setStatus("搜索中...");
   const recursive = "true";
-  const res = await fetch(
+  const res = await authFetch(
     `/api/clawmate/search?root=${encodeURIComponent(state.rootId)}&q=${encodeURIComponent(q)}&dir=${encodeURIComponent(state.dir)}&recursive=${recursive}`
   );
   if (!res.ok) {
@@ -1543,508 +1491,10 @@ function handleEntryClick(entry) {
 
 function openEntryPreview(entry) {
   if (!entry || entry.is_dir) return;
-  const ext = getEntryExt(entry);
-  if (ext === 'pdf') {
-    // Open PDF in preview.html (ONLYOFFICE 优先, pdf.js 降级)
-    const previewUrl = `/clawmate/preview.html?root=${encodeURIComponent(state.rootId)}&file=${encodeURIComponent(entry.relPath)}`;
-    window.open(previewUrl, "_blank", "noopener");
-    return;
-  }
-  if (isOfficeFile(entry)) {
-    const previewUrl = `/clawmate/preview.html?root=${encodeURIComponent(state.rootId)}&file=${encodeURIComponent(entry.relPath)}`;
-    window.open(previewUrl, "_blank", "noopener");
-    return;
-  }
-  openPreview(entry);
+  const previewUrl = `/clawmate/preview.html?root=${encodeURIComponent(state.rootId)}&file=${encodeURIComponent(entry.relPath)}`;
+  window.open(previewUrl, "_blank", "noopener");
 }
 
-function openPdfPreview(entry) {
-  // pdf.js CDN viewer fallback
-  const rawUrl = buildRawLink(entry.relPath);
-  const encodedUrl = encodeURIComponent(toAbsoluteUrl(rawUrl));
-  const pdfViewerUrl = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.12.1/web/viewer.html?file=${encodedUrl}#toolbar=0&navpanes=0&scrollbar=1`;
-
-  // Show embedded iframe preview
-  clearActiveFeedbackPanel();
-  els.previewBody.innerHTML = '';
-  els.previewBody.classList.remove('fb-flex-row');
-  els.previewBody.querySelectorAll('.preview-content-wrapper, .preview-feedback-panel').forEach(el => el.remove());
-  els.modalContent.querySelectorAll('.feedback-toggle-btn, .preview-footer').forEach(el => el.remove());
-  els.previewModal.classList.remove('hidden');
-
-  const { header } = buildPreviewHeader(entry);
-  const topbar = els.modalContent.querySelector('.modal-topbar');
-  topbar.querySelectorAll('.preview-header').forEach(el => el.remove());
-  topbar.insertBefore(header, topbar.firstChild);
-
-  const notice = document.createElement('div');
-  notice.className = 'preview-notice';
-  notice.style.color = 'var(--warning-text)';
-  notice.textContent = '📕 PDF 预览（pdf.js 降级模式，ONLYOFFICE 不可用）';
-  els.previewBody.appendChild(notice);
-
-  const iframe = document.createElement('iframe');
-  iframe.src = pdfViewerUrl;
-  iframe.style.cssText = 'width:100%;flex:1;border:1px solid var(--border-color);border-radius:var(--radius-md);min-height:60vh;background:#fff;display:block;';
-  iframe.loading = 'lazy';
-  els.previewBody.appendChild(iframe);
-
-  const footer = buildPreviewFooter(entry, false);
-  els.modalContent.appendChild(footer);
-}
-
-function buildPreviewHeader(entry) {
-  const header = document.createElement("div");
-  header.className = "preview-header";
-
-  const title = document.createElement("div");
-  title.className = "preview-title";
-  title.textContent = entry.name || "未命名";
-
-  const subtitle = document.createElement("div");
-  subtitle.className = "preview-subtitle";
-
-  const rel = entry.relPath || entry.name || "-";
-
-  const pathSpan = document.createElement("span");
-  pathSpan.className = "preview-dir-path";
-  pathSpan.textContent = rel;
-  pathSpan.title = "点击复制文件路径";
-  pathSpan.addEventListener("click", async () => {
-    const root = state.roots.find(r => r.id === state.rootId);
-    const rootDir = root?.dir || "";
-    const sysPath = rootDir.replace(/\/+$/, "") + "/" + rel;
-    await copyText(sysPath, "文件路径已复制到剪贴板");
-  });
-
-  const metaSpan = document.createElement("span");
-  metaSpan.textContent = ` · ${formatSize(entry.size)} · ${formatMtime(entry.mtime)}`;
-
-  subtitle.appendChild(pathSpan);
-  subtitle.appendChild(metaSpan);
-
-  header.appendChild(title);
-  header.appendChild(subtitle);
-
-  return { header };
-}
-
-function buildPreviewFooter(entry, copyContent, rawContent, canExportPdf) {
-  const footer = document.createElement("div");
-  footer.className = "preview-footer";
-
-  if (copyContent) {
-    const copyBtn = document.createElement("button");
-    copyBtn.type = "button";
-    copyBtn.textContent = "复制内容";
-    copyBtn.addEventListener("click", async () => {
-      // Prefer explicit rawContent; fallback to DOM query for pre.raw-text (plain text files)
-      let text = rawContent || '';
-      if (!text) {
-        const pre = els.previewBody.querySelector('pre.raw-text');
-        text = pre ? pre.textContent : '';
-      }
-      const ok = await copyText(text, "内容已复制到剪贴板");
-      if (ok) {
-        copyBtn.textContent = '✓ 已复制';
-        copyBtn.classList.add('copied');
-        setTimeout(() => {
-          copyBtn.textContent = '复制内容';
-          copyBtn.classList.remove('copied');
-        }, 1500);
-      }
-    });
-    footer.appendChild(copyBtn);
-  }
-
-  if (canExportPdf) {
-    const pdfBtn = document.createElement("button");
-    pdfBtn.type = "button";
-    pdfBtn.textContent = "导出 PDF";
-    pdfBtn.title = "通过浏览器打印保存为 PDF（内容完整，Mermaid 图表正确）";
-    pdfBtn.addEventListener("click", () => exportToPDF(entry));
-    footer.appendChild(pdfBtn);
-  }
-
-  const downloadUrl = buildDownloadLink(entry.relPath);
-  const downloadBtn = document.createElement("button");
-  downloadBtn.type = "button";
-  downloadBtn.textContent = "下载";
-  downloadBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    triggerDownload(downloadUrl);
-  });
-
-  const deleteBtn = document.createElement("button");
-  deleteBtn.type = "button";
-  deleteBtn.textContent = "删除";
-  deleteBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    deleteEntry(entry);
-  });
-
-  footer.appendChild(downloadBtn);
-  footer.appendChild(deleteBtn);
-
-  if (isOfficeFile(entry)) {
-    const previewBtn = document.createElement("button");
-    previewBtn.type = "button";
-    previewBtn.textContent = "预览";
-    previewBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const previewUrl = `/clawmate/preview.html?root=${encodeURIComponent(state.rootId)}&file=${encodeURIComponent(entry.relPath)}`;
-      window.open(previewUrl, "_blank", "noopener");
-    });
-    footer.appendChild(previewBtn);
-  }
-
-  return footer;
-}
-
-function exportToPDF(entry) {
-  const name = entry.name || 'preview';
-  const origTitle = document.title;
-
-  // Maximize modal for full-page print
-  const wasMaximized = els.previewModal.classList.contains('maximized');
-  if (!wasMaximized) {
-    els.previewModal.classList.add('maximized');
-  }
-
-  // Wait for any pending Mermaid renders / images to settle
-  // Small delay ensures the browser has laid out maximized content
-  setTimeout(() => {
-    document.title = name;
-    window.print();
-    document.title = origTitle;
-
-    // Restore original modal state
-    if (!wasMaximized) {
-      els.previewModal.classList.remove('maximized');
-    }
-  }, 200);
-}
-
-async function openPreview(entry) {
-  if (!state.rootId) {
-    setStatus("请先选择根目录");
-    return;
-  }
-  // Clean up previous feedback panel
-  clearActiveFeedbackPanel();
-  els.previewBody.innerHTML = "";
-  // Reset preview body layout
-  els.previewBody.classList.remove('fb-flex-row');
-  // Remove old content wrappers
-  els.previewBody.querySelectorAll('.preview-content-wrapper').forEach(el => {
-    while (el.firstChild) els.previewBody.insertBefore(el.firstChild, el);
-    el.remove();
-  });
-
-  // Remove old toggle button
-  els.modalContent.querySelectorAll('.feedback-toggle-btn').forEach(el => el.remove());
-  // Remove old footers previously appended to modal-content
-  els.modalContent.querySelectorAll('.preview-footer').forEach(el => el.remove());
-  els.previewModal.classList.remove("hidden");
-  // Set feedback context for all file types (maximize button reads these)
-  els.previewBody.dataset.feedbackRoot = state.rootId;
-  els.previewBody.dataset.feedbackPath = entry.relPath;
-  els.previewBody.dataset.feedbackProject = entry.relPath.split("/")[0] || "";
-
-  const { header } = buildPreviewHeader(entry);
-  const topbar = els.modalContent.querySelector('.modal-topbar');
-  topbar.querySelectorAll('.preview-header').forEach(el => el.remove());
-  topbar.insertBefore(header, topbar.firstChild);
-
-  if (entry.category === "image") {
-    const img = document.createElement("img");
-    img.src = `/api/clawmate/preview?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}`;
-    els.previewBody.appendChild(img);
-    const footer = buildPreviewFooter(entry, false);
-    els.modalContent.appendChild(footer);
-    return;
-  }
-  if (entry.category === "video") {
-    const video = document.createElement("video");
-    video.controls = true;
-    video.style.maxWidth = "100%";
-    video.style.maxHeight = "70vh";
-    video.src = `/api/clawmate/preview?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}`;
-    els.previewBody.appendChild(video);
-    const footer = buildPreviewFooter(entry, false);
-    els.modalContent.appendChild(footer);
-    return;
-  }
-  if (entry.category === "audio") {
-    const audio = document.createElement("audio");
-    audio.controls = true;
-    audio.src = `/api/clawmate/preview?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}`;
-    els.previewBody.appendChild(audio);
-    const footer = buildPreviewFooter(entry, false);
-    els.modalContent.appendChild(footer);
-    return;
-  }
-  // HTML file — render in iframe
-  const ext = getEntryExt(entry);
-  if (ext === "html" || ext === "htm") {
-    const res = await fetch(`/api/clawmate/preview?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}`);
-    if (!res.ok) {
-      const notice = document.createElement("div");
-      notice.className = "preview-notice";
-      notice.textContent = "无法获取文件内容";
-      els.previewBody.appendChild(notice);
-      return;
-    }
-    const data = await res.json();
-    const content = data.content || "";
-
-    // Iframe for rendered HTML
-    const iframe = document.createElement("iframe");
-    iframe.className = "html-preview-iframe";
-    iframe.srcdoc = content;
-    iframe.loading = "lazy";
-    iframe.addEventListener("load", function onLoad() {
-      try {
-        const doc = iframe.contentWindow.document;
-        const h = Math.max(doc.documentElement.scrollHeight, doc.body ? doc.body.scrollHeight : 0);
-        iframe.style.height = Math.min(h + 40, window.innerHeight - 160) + "px";
-      } catch (_) {
-        iframe.style.height = "80vh";
-      }
-    });
-    els.previewBody.appendChild(iframe);
-
-    // Footer
-    const footer = document.createElement("div");
-    footer.className = "preview-footer";
-
-    const viewSrcBtn = document.createElement("button");
-    viewSrcBtn.type = "button";
-    viewSrcBtn.textContent = "查看源代码";
-    viewSrcBtn.addEventListener("click", () => {
-      const body = els.previewBody;
-      const existingIframe = body.querySelector("iframe.html-preview-iframe");
-      const existingPre = body.querySelector("pre.html-source");
-      if (existingIframe && existingIframe.style.display !== "none") {
-        existingIframe.style.display = "none";
-        if (!existingPre) {
-          const pre = document.createElement("pre");
-          pre.className = "raw-text html-source";
-          if (window.hljs) {
-            try {
-              const highlighted = hljs.highlight(content, { language: 'xml', ignoreIllegals: true }).value;
-              const code = document.createElement("code");
-              code.className = "language-html";
-              code.innerHTML = highlighted;
-              pre.appendChild(code);
-            } catch (_) {
-              pre.textContent = content;
-            }
-          } else {
-            pre.textContent = content;
-          }
-          body.appendChild(pre);
-        } else {
-          existingPre.style.display = "";
-          if (existingPre.querySelector("code")) {
-            // Re-highlight (content may have changed)
-            try {
-              const code = existingPre.querySelector("code");
-              code.innerHTML = hljs.highlight(content, { language: 'xml', ignoreIllegals: true }).value;
-            } catch (_) {}
-          }
-        }
-        viewSrcBtn.textContent = "查看渲染页";
-      } else if (existingIframe) {
-        existingIframe.style.display = "";
-        if (existingPre) existingPre.style.display = "none";
-        viewSrcBtn.textContent = "查看源代码";
-      }
-    });
-    footer.appendChild(viewSrcBtn);
-
-    const downloadUrl = buildDownloadLink(entry.relPath);
-    const downloadBtn = document.createElement("button");
-    downloadBtn.type = "button";
-    downloadBtn.textContent = "下载";
-    downloadBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      triggerDownload(downloadUrl);
-    });
-    footer.appendChild(downloadBtn);
-
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.textContent = "删除";
-    deleteBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      deleteEntry(entry);
-    });
-    footer.appendChild(deleteBtn);
-
-    els.modalContent.appendChild(footer);
-    return;
-  }
-
-  if (isTextFile(entry)) {
-    showPreviewSkeleton(); // show skeleton before async fetch
-    const res = await fetch(`/api/clawmate/preview?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}`);
-    if (!res.ok) {
-      els.previewBody.querySelectorAll('.skeleton-markdown').forEach(el => el.remove());
-      const notice = document.createElement("div");
-      notice.className = "preview-notice";
-      notice.textContent = "无法预览文本";
-      els.previewBody.appendChild(notice);
-      const footer = buildPreviewFooter(entry, false);
-      els.modalContent.appendChild(footer);
-      return;
-    }
-    // Remove skeleton before rendering
-    els.previewBody.querySelectorAll('.skeleton-markdown').forEach(el => el.remove());
-    const data = await res.json();
-    if (data.truncated) {
-      const notice = document.createElement("div");
-      notice.className = "preview-notice";
-      notice.textContent = "内容已截断（仅显示前 " + (data.content || "").length + " 字符）";
-      els.previewBody.appendChild(notice);
-    }
-    const content = data.content || "";
-
-    // Store raw content and feedback context for selection feedback
-    els.previewBody.dataset.rawContent = content;
-    els.previewBody.dataset.feedbackRoot = state.rootId;
-    els.previewBody.dataset.feedbackPath = entry.relPath;
-    els.previewBody.dataset.feedbackProject = entry.relPath.split("/")[0] || "";
-
-    const ext = getEntryExt(entry).toLowerCase();
-    const isMarkdown = ext === "md" || ext === "markdown";
-
-    if (isMarkdown && window.marked && window.DOMPurify) {
-      try {
-        const entryRelPath = entry.relPath;
-        const mermaidStore = [];
-        const renderer = createMarkdownRenderer(entryRelPath, mermaidStore);
-
-        marked.use({ renderer, breaks: false, gfm: true });
-        let html = marked.parse(content);
-
-        // DOMPurify: optimized config - only add needed attributes
-        if (window.DOMPurify) {
-          html = DOMPurify.sanitize(html, { ADD_ATTR: ['class', 'target', 'data-highlighted'] });
-        }
-
-        const div = document.createElement("div");
-        div.className = "markdown-body";
-        div.innerHTML = html;
-        els.previewBody.appendChild(div);
-
-        // TOC generation (P2)
-        buildTOC(div);
-
-        // Open external links in new tab (P2)
-        openLinksInNewTab(div);
-
-        // Code copy buttons (P2) - must be after DOM is in place
-        addCopyButtons(div);
-
-        // Apply syntax highlighting to non-mermaid code blocks
-        els.previewBody.querySelectorAll('pre code:not([data-highlighted])').forEach(block => {
-          if (window.hljs) try { hljs.highlightElement(block); } catch (_) {}
-        });
-
-        // KaTeX math rendering using auto-render (P1)
-        // Must run after markdown is in DOM, before mermaid
-        if (window.renderMathInElement) {
-          try {
-            renderMathInElement(div, {
-              delimiters: [
-                {left: '$$', right: '$$', display: true},
-                {left: '$', right: '$', display: false},
-                {left: '\\(', right: '\\)', display: false},
-                {left: '\\[', right: '\\]', display: true}
-              ],
-              throwOnError: false,
-              errorColor: '#dc2626',
-              strict: false,
-              ignoredClasses: ['mermaid', 'mermaid-error', 'pre', 'code']
-            });
-          } catch (_) {}
-        }
-
-        // Mermaid diagrams — code stored in memory, restored before render (P1)
-        await renderMermaid(div, mermaidStore);
-
-      } catch (e) {
-        // Fallback to plain text
-        const pre = document.createElement("pre");
-        pre.className = "raw-text";
-        pre.textContent = content;
-        els.previewBody.appendChild(pre);
-      }
-    } else {
-      // Plain text (JSON, txt, log, etc.) — apply syntax highlighting by extension
-      const extLangMap = {
-        'json': 'json', 'xml': 'xml', 'html': 'html', 'htm': 'html',
-        'yaml': 'yaml', 'yml': 'yaml', 'py': 'python', 'js': 'javascript',
-        'ts': 'typescript', 'css': 'css', 'sh': 'bash', 'bash': 'bash',
-        'ini': 'ini', 'conf': 'ini', 'cfg': 'ini', 'toml': 'ini',
-        'sql': 'sql', 'php': 'php', 'rb': 'ruby', 'go': 'go',
-        'rs': 'rust', 'java': 'java', 'c': 'c', 'cpp': 'cpp',
-        'kml': 'xml', 'gpx': 'xml', 'csv': 'plaintext', 'tsv': 'plaintext',
-        'log': 'plaintext', 'txt': 'plaintext', 'md': 'markdown'
-      };
-      const lang = extLangMap[ext] || 'plaintext';
-      const pre = document.createElement("pre");
-      pre.className = "raw-text";
-      if (lang !== 'plaintext' && window.hljs) {
-        try {
-          const highlighted = hljs.highlight(content, { language: lang, ignoreIllegals: true }).value;
-          const code = document.createElement("code");
-          code.className = `language-${lang}`;
-          code.innerHTML = highlighted;
-          pre.appendChild(code);
-        } catch (_) {
-          pre.textContent = content;
-        }
-      } else {
-        pre.textContent = content;
-      }
-      els.previewBody.appendChild(pre);
-
-      // Code outline for supported languages
-      const codeOutline = renderCodeOutlineModal(entry, pre, content);
-      if (codeOutline) {
-        els.previewBody.insertBefore(codeOutline, pre);
-      }
-    }
-
-    // Single footer row: 复制内容 + 下载 + 删除
-    const footer = buildPreviewFooter(entry, true, content, true);
-    els.modalContent.appendChild(footer);
-
-
-
-    return;
-  }
-
-  const res = await fetch(`/api/clawmate/preview?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}`);
-  if (!res.ok) {
-    const notice = document.createElement("div");
-    notice.className = "preview-notice";
-    notice.textContent = "无法获取文件信息";
-    els.previewBody.appendChild(notice);
-    return;
-  }
-  const data = await res.json();
-  const meta = document.createElement("div");
-  meta.className = "preview-meta";
-  meta.textContent = `${data.meta.name} · ${formatSize(data.meta.size)} · ${data.meta.mime}`;
-  els.previewBody.appendChild(meta);
-
-  // Append action footer
-  const footer = buildPreviewFooter(entry, false);
-  els.modalContent.appendChild(footer);
-}
 
 function setView(view) {
   state.view = view;
@@ -2137,40 +1587,13 @@ els.viewList.addEventListener("click", () => setView("list"));
 // Hamburger menu (mobile)
 els.hamburgerBtn && els.hamburgerBtn.addEventListener("click", () => {
   els.sidebar && els.sidebar.classList.toggle("open");
+  if (els.sidebarOverlay) {
+    els.sidebarOverlay.style.display = els.sidebar.classList.contains("open") ? "block" : "none";
+  }
 });
 els.sidebarOverlay && els.sidebarOverlay.addEventListener("click", () => {
   els.sidebar && els.sidebar.classList.remove("open");
-});
-function closePreviewModal() {
-  clearActiveFeedbackPanel();
-  els.modalContent.querySelectorAll('.feedback-toggle-btn').forEach(el => el.remove());
-  delete els.previewBody.dataset.feedbackPath;
-  delete els.previewBody.dataset.feedbackRoot;
-  delete els.previewBody.dataset.feedbackProject;
-  delete els.previewBody.dataset.rawContent;
-  els.previewModal.classList.add("hidden");
-  els.previewModal.classList.remove("maximized");
-}
-
-els.closePreview.addEventListener("click", () => {
-  closePreviewModal();
-});
-els.toggleMaximize && els.toggleMaximize.addEventListener("click", () => {
-  // Maximize / restore inline modal
-  els.previewModal.classList.toggle("maximized");
-});
-els.openInPreview && els.openInPreview.addEventListener("click", () => {
-  const root = els.previewBody.dataset.feedbackRoot || state.rootId;
-  const file = els.previewBody.dataset.feedbackPath || "";
-  if (root && file) {
-    const url = `/clawmate/preview.html?root=${encodeURIComponent(root)}&file=${encodeURIComponent(file)}`;
-    window.open(url, "_blank");
-  }
-});
-els.previewModal.addEventListener("click", (e) => {
-  if (e.target === els.previewModal) {
-    closePreviewModal();
-  }
+  if (els.sidebarOverlay) els.sidebarOverlay.style.display = "none";
 });
 els.filterType.addEventListener("change", (e) => setFilterType(e.target.value));
 els.sortKey.addEventListener("change", (e) => setSortKey(e.target.value));
@@ -2204,410 +1627,6 @@ els.batchDownloadBtn && els.batchDownloadBtn.addEventListener("click", () => {
   if (!state.rootId) { setStatus("请先选择根目录"); return; }
   triggerBatchDownload(buildBatchDownloadLink(state.dir), state.dir || "root");
 });
-
-// ===== Selection Feedback Tooltip =====
-let feedbackTooltipEl = null;
-let feedbackDismissTimer = null;
-let savedSelectionRange = null;
-
-function initSelectionFeedback() {
-  // Create tooltip DOM once
-  feedbackTooltipEl = document.createElement("div");
-  feedbackTooltipEl.className = "feedback-tooltip";
-  feedbackTooltipEl.innerHTML = `
-    <div class="pst-header">💬 反馈选中内容</div>
-    <div class="pst-location-row">
-      <input type="text" class="pst-location" placeholder="位置：L{start}-{end}" style="flex:1;" />
-    </div>
-    <textarea class="pst-note" placeholder="必填 · 简要说明需要的改动" rows="3"></textarea>
-    <div class="pst-tags">
-      <button class="pst-tag" data-tag="删除">🗑 删除</button>
-      <button class="pst-tag" data-tag="修复">🔧 修复</button>
-      <button class="pst-tag" data-tag="扩展">📈 扩展</button>
-      <button class="pst-tag" data-tag="简化">📉 简化</button>
-    </div>
-    <div class="pst-actions">
-      <button class="pst-btn-send">⚡ 立刻执行</button>
-    </div>
-    <div class="pst-status"></div>
-  `;
-  feedbackTooltipEl.style.display = "none";
-  document.body.appendChild(feedbackTooltipEl);
-
-  // Close tooltip on outside click
-  document.addEventListener("click", function(e) {
-    if (feedbackTooltipEl && feedbackTooltipEl.style.display !== "none") {
-      if (!feedbackTooltipEl.contains(e.target)) {
-        hideFeedbackTooltip();
-      }
-    }
-  });
-
-  // Also close on Escape key
-  document.addEventListener("keydown", function(e) {
-    if (e.key === "Escape") hideFeedbackTooltip();
-  });
-
-  // Detect text selection on mouseup
-  document.addEventListener("mouseup", function(e) {
-    // Small delay to let selection settle
-    setTimeout(() => handleSelection(e), 10);
-  });
-
-  // Bind send button (add-to-panel is hidden in modal context via CSS)
-  const sendBtn = feedbackTooltipEl.querySelector(".pst-btn-send");
-  sendBtn.addEventListener("click", handleSendNow);
-
-  // Quick tags: auto-fill note
-  feedbackTooltipEl.querySelectorAll('.pst-tag').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      var tag = this.getAttribute('data-tag');
-      var noteEl = feedbackTooltipEl.querySelector('.pst-note');
-      // Single tag mode: replace any existing content with the selected tag
-      noteEl.value = tag;
-      noteEl.focus();
-    });
-  });
-}
-
-function restoreSavedSelection() {
-  if (!savedSelectionRange) return;
-  // Don't interfere with focused input/textarea
-  const el = document.activeElement;
-  if (el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT")) return;
-  const sel = window.getSelection();
-  if (!sel) return;
-  sel.removeAllRanges();
-  try {
-    sel.addRange(savedSelectionRange);
-  } catch (_) {}
-}
-
-function hideFeedbackTooltip() {
-  if (feedbackTooltipEl) {
-    feedbackTooltipEl.style.display = "none";
-    feedbackTooltipEl.dataset.context = "";
-  }
-  savedSelectionRange = null;
-  clearHighlight();
-  // Remove restored selection when closing
-  if (window.getSelection) {
-    window.getSelection().removeAllRanges();
-  }
-  if (feedbackDismissTimer) {
-    clearTimeout(feedbackDismissTimer);
-    feedbackDismissTimer = null;
-  }
-}
-
-function highlightSelection() {
-  if (!savedSelectionRange || !window.Highlight) return;
-  try {
-    const h = new Highlight(savedSelectionRange);
-    CSS.highlights.set('feedback-selection', h);
-  } catch (_) {}
-}
-
-function clearHighlight() {
-  try { CSS.highlights.delete('feedback-selection'); } catch (_) {}
-  try { CSS.highlights.delete('preview-hl'); } catch (_) {}
-}
-
-function highlightLinesInContainer(container, startLine, endLine) {
-  if (!window.Highlight || !container) return;
-  const text = container.textContent || '';
-  const lines = text.split('\n');
-  if (startLine > lines.length) return;
-  const actualEnd = Math.min(endLine, lines.length);
-
-  // Calculate character offsets for start and end lines
-  let startOffset = 0;
-  for (let i = 0; i < startLine - 1; i++) {
-    startOffset += (lines[i] || '').length + 1;
-  }
-  let endOffset = startOffset;
-  for (let i = startLine - 1; i < actualEnd; i++) {
-    endOffset += (lines[i] || '').length + (i < lines.length - 1 ? 1 : 0);
-  }
-
-  // Convert character offsets to DOM positions using TreeWalker
-  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
-  let charCount = 0;
-  let startNode = null, startNodeOffset = 0;
-  let endNode = null, endNodeOffset = 0;
-  let node;
-
-  while ((node = walker.nextNode())) {
-    const nodeLen = node.textContent.length;
-    if (!startNode && charCount + nodeLen > startOffset) {
-      startNode = node;
-      startNodeOffset = startOffset - charCount;
-    }
-    if (!endNode && charCount + nodeLen >= endOffset) {
-      endNode = node;
-      endNodeOffset = endOffset - charCount;
-    }
-    charCount += nodeLen;
-    if (startNode && endNode) break;
-  }
-
-  if (startNode && endNode) {
-    try {
-      const range = new Range();
-      range.setStart(startNode, Math.min(startNodeOffset, startNode.textContent.length));
-      range.setEnd(endNode, Math.min(endNodeOffset, endNode.textContent.length));
-      const h = new Highlight(range);
-      CSS.highlights.set('preview-hl', h);
-    } catch (_) {}
-  }
-}
-
-function findPreviewContainer(node) {
-  // Walk up to find .preview-body
-  while (node) {
-    if (node.classList && node.classList.contains("preview-body")) {
-      return node;
-    }
-    node = node.parentElement;
-  }
-  return null;
-}
-
-function calcLineNumber(rawContent, offset) {
-  if (!rawContent || offset <= 0) return 1;
-  const before = rawContent.substring(0, Math.min(offset, rawContent.length));
-  return (before.match(/\n/g) || []).length + 1;
-}
-
-function handleSelection(e) {
-  const sel = window.getSelection();
-  if (!sel || sel.isCollapsed || !sel.toString().trim()) {
-    // User clicked somewhere without a selection — dismiss if not clicking the tooltip
-    if (feedbackTooltipEl && feedbackTooltipEl.style.display !== "none") {
-      if (!feedbackTooltipEl.contains(e.target)) {
-        hideFeedbackTooltip();
-      }
-    }
-    return;
-  }
-
-  // Find if selection is within a preview container
-  const container = findPreviewContainer(sel.anchorNode);
-  if (!container) return;
-
-  // Only show tooltip for .preview-body (not TOC, sidebars, etc.)
-  if (!container.classList.contains("preview-body")) {
-    return;
-  }
-
-  // Get feedback context from container
-  const root = container.dataset.feedbackRoot || "";
-  const path = container.dataset.feedbackPath || "";
-  const project = container.dataset.feedbackProject || "";
-  const rawContent = container.dataset.rawContent || "";
-
-  if (!root || !path) return;
-
-  // Get selection info
-  const text = sel.toString().trim();
-  if (!text) return;
-
-  // Calculate line numbers from raw content
-  const range = sel.getRangeAt(0);
-  const preRange = document.createRange();
-  preRange.selectNodeContents(container);
-  preRange.setEnd(range.startContainer, range.startOffset);
-  const textBefore = preRange.toString();
-  const startLineFromDOM = (textBefore.match(/\n/g) || []).length + 1;
-  const textInRange = range.toString();
-  const endLineFromDOM = startLineFromDOM + (textInRange.match(/\n/g) || []).length;
-
-  // Store context for button handlers
-  const sessionFromUrl = new URLSearchParams(window.location.search).get("session") || "";
-  const ctx = {
-    root: root,
-    project: project,
-    path: path,
-    previewUrl: window.location.href,
-    text: text,
-    startLine: startLineFromDOM,
-    endLine: endLineFromDOM,
-    sessionKey: sessionFromUrl,
-  };
-  feedbackTooltipEl.dataset.context = JSON.stringify(ctx);
-
-  // Save selection range to restore after button clicks
-  try {
-    savedSelectionRange = sel.getRangeAt(0).cloneRange();
-    highlightSelection();
-  } catch (_) {
-    savedSelectionRange = null;
-    clearHighlight();
-  }
-
-  // Update tooltip content
-  const locEl = feedbackTooltipEl.querySelector(".pst-location");
-  const noteEl = feedbackTooltipEl.querySelector(".pst-note");
-  const statusEl = feedbackTooltipEl.querySelector(".pst-status");
-
-  locEl.value = path + " L" + ctx.startLine + "-L" + ctx.endLine;
-  noteEl.value = "";
-  statusEl.textContent = "";
-  statusEl.className = "pst-status";
-
-  // Position tooltip near the end of selection
-  const rect = range.getBoundingClientRect();
-  let top = rect.bottom + 8;
-  let left = rect.left + rect.width / 2;
-
-  // Keep tooltip within viewport
-  const tooltipW = Math.min(360, window.innerWidth - 20);
-  feedbackTooltipEl.style.maxWidth = tooltipW + "px";
-  feedbackTooltipEl.style.display = "flex";
-
-  // Wait one frame for tooltip dimensions to be known
-  requestAnimationFrame(() => {
-    const h = feedbackTooltipEl.offsetHeight;
-    const w = feedbackTooltipEl.offsetWidth;
-
-    // If tooltip would go below viewport, show above selection
-    if (top + h > window.innerHeight - 10) {
-      top = rect.top - h - 8;
-    }
-    // Clamp to viewport top
-    if (top < 10) top = 10;
-
-    // Center horizontally, clamp to viewport
-    left = Math.max(10 + w / 2, Math.min(window.innerWidth - 10 - w / 2, left));
-
-    feedbackTooltipEl.style.top = top + "px";
-    feedbackTooltipEl.style.left = left + "px";
-    feedbackTooltipEl.style.transform = "translateX(-50%)";
-  });
-}
-
-function handleAddToPanel() {
-  const noteEl = feedbackTooltipEl.querySelector(".pst-note");
-  const statusEl = feedbackTooltipEl.querySelector(".pst-status");
-  let ctx;
-  try {
-    ctx = JSON.parse(feedbackTooltipEl.dataset.context || "{}");
-  } catch (_) { return; }
-
-  const note = noteEl.value.trim();
-  if (!note) {
-    statusEl.textContent = "⚠️ 请填写备注";
-    statusEl.className = "pst-status pst-status-warn";
-    noteEl.focus();
-    restoreSavedSelection();
-    return;
-  }
-
-  const item = {
-    root: ctx.root,
-    project: ctx.project,
-    path: ctx.path,
-    text: ctx.text,
-    startLine: ctx.startLine,
-    endLine: ctx.endLine,
-    note: note,
-  };
-
-  // Find active per-preview feedback panel
-  const panel = getActiveFeedbackPanel();
-  if (!panel) return;
-
-  // Add to panel only — do NOT send yet; user uses panel "提交全部" button
-  panel.addItem(item);
-  const count = panel.getPendingCount ? panel.getPendingCount() : 0;
-  statusEl.textContent = `✅ 已加入面板（共 ${count} 条）`;
-  statusEl.className = "pst-status pst-status-ok";
-  noteEl.value = "";
-  setTimeout(hideFeedbackTooltip, 800);
-}
-
-function handleSendNow() {
-  if (sendBtn.disabled) return;
-  const noteEl = feedbackTooltipEl.querySelector(".pst-note");
-  const statusEl = feedbackTooltipEl.querySelector(".pst-status");
-  let ctx;
-  try {
-    ctx = JSON.parse(feedbackTooltipEl.dataset.context || "{}");
-  } catch (_) { return; }
-
-  const note = noteEl.value.trim();
-  if (!note) {
-    statusEl.textContent = "⚠️ 请填写备注";
-    statusEl.className = "pst-status pst-status-warn";
-    noteEl.focus();
-    restoreSavedSelection();
-    return;
-  }
-
-  statusEl.textContent = "发送中...";
-  statusEl.className = "pst-status pst-status-loading";
-  noteEl.value = "";
-  sendBtn.disabled = true;
-  sendBtn.textContent = '⏳ ...';
-
-  fetch("/api/clawmate/feedback", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      mode: "send",
-      root: ctx.root,
-      project: ctx.project,
-      path: ctx.path,
-      selections: [{
-        text: ctx.text,
-        startLine: ctx.startLine,
-        endLine: ctx.endLine,
-        note: note,
-      }],
-    }),
-  }).then(res => {
-    if (!res.ok) {
-      return res.json().then(err => { throw new Error(err.detail || "发送失败"); });
-    }
-    statusEl.textContent = "✅ 已发送";
-    statusEl.className = "pst-status pst-status-ok";
-    sendBtn.disabled = false;
-    sendBtn.textContent = '⚡ 立刻执行';
-    setTimeout(hideFeedbackTooltip, 800);
-  }).catch(err => {
-    statusEl.textContent = "❌ " + (err.message || "发送失败");
-    statusEl.className = "pst-status pst-status-error";
-    sendBtn.disabled = false;
-    sendBtn.textContent = '⚡ 立刻执行';
-  });
-}
-
-async function _batchSendItems(panel, items) {
-  if (!items || items.length === 0) return;
-  const res = await fetch("/api/clawmate/feedback", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      root: items[0].root,
-      project: items[0].project,
-      path: items[0].path,
-      selections: items.map(it => ({
-        text: it.text,
-        startLine: it.startLine,
-        endLine: it.endLine,
-        note: it.note,
-      })),
-    }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "提交失败");
-  }
-  // Clear panel items after successful send
-  if (panel && panel.clearItems) {
-    panel.clearItems();
-  }
-}
 
 // ===== Feedback Detail Modal =====
 function showFeedbackDetailModal(item, statusIcon) {
@@ -2886,7 +1905,7 @@ function createFeedbackPanel(container, context) {
       return;
     }
     try {
-      const res = await fetch('/api/clawmate/feedback', {
+      const res = await authFetch('/api/clawmate/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3054,7 +2073,6 @@ function clearActiveFeedbackPanel() {
 async function init() {
   await loadConfig();
   initTheme(); // Apply theme before render
-  initSelectionFeedback(); // Activate text selection feedback
   setupDragDrop(); // Activate drag-and-drop upload
   // Pre-check ONLYOFFICE availability in background
   checkOnlyofficeAvailable();

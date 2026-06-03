@@ -349,7 +349,7 @@
       position: fixed;
       z-index: 9999;
       width: min(400px, calc(100vw - 20px));
-      background: var(--bg-modal);
+      background: var(--bg-secondary);
       border: 1px solid var(--border-color);
       border-radius: 12px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.25);
@@ -831,7 +831,7 @@
     <div class="preview-bottombar">
       <a class="preview-bottom-btn" id="btnBack" title="返回目录">← 返回</a>
       <div class="preview-bottom-divider"></div>
-      <button class="preview-bottom-btn" id="btnCopy" title="复制内容">📋 拷贝</button>
+      <button class="preview-bottom-btn" id="btnPath" title="复制绝对路径">📁 路径</button>
       <button class="preview-bottom-btn" id="btnPdf" title="导出">📥 导出</button>
       <button class="preview-bottom-btn" id="btnDownload" title="下载文件">⬇ 下载</button>
       <button class="preview-bottom-btn" id="btnRename" title="重命名">✏️ 重命名</button>
@@ -851,10 +851,11 @@
     </div>
     <textarea class="pst-note" id="pstNote" placeholder="必填 · 简要说明需要的改动" rows="3"></textarea>
     <div class="pst-tags">
-      <button class="pst-tag" data-tag="删除">🗑 删除</button>
-      <button class="pst-tag" data-tag="修复">🔧 修复</button>
-      <button class="pst-tag" data-tag="扩展">📈 扩展</button>
-      <button class="pst-tag" data-tag="简化">📉 简化</button>
+      <button class="pst-tag" data-tag="清除选中内容">🗑 删除</button>
+      <button class="pst-tag" data-tag="修改选中内容，思路如下：">🔧 修改</button>
+      <button class="pst-tag" data-tag="详细解释选中内容">📈 扩展</button>
+      <button class="pst-tag" data-tag="抽象选中内容，简单描述">📉 简化</button>
+      <button class="pst-tag" data-tag="文档审批通过，执行方案">⚡ 执行</button>
     </div>
     <div class="pst-actions">
       <button class="pst-btn-add" id="pstBtnAdd">📋 加入待办</button>
@@ -889,6 +890,19 @@
   const AUDIO_EXTS = ['mp3','ogg','wav','flac','m4a','aac','wma'];
   const VIDEO_EXTS = ['mp4','webm','mov','avi','mkv','wmv','flv','m4v'];
   const PLAIN_TEXT_EXTS = ['txt','json','csv','yaml','yml','py','js','ts','tsx','css','sh','bash','sql','toml','ini','conf','cfg','env','xml','gpx','kml','srt','log'];
+
+  // ── Auth session expiry handler ──────────────────────────────
+  const _origFetch = window.fetch;
+  window.fetch = function(url, options) {
+    return _origFetch.apply(this, arguments).then(function(res) {
+      if (res.status === 401 || res.status === 302) {
+        const redirectTo = '/clawmate/login.html?redirect=' + encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.href = redirectTo;
+        return Promise.reject(new Error('auth_redirect'));
+      }
+      return res;
+    });
+  };
   const MARKDOWN_EXTS = ['md','markdown'];
   const HTML_EXTS = ['html','htm'];
   const OFFICE_EXTS = ['doc','docx','xls','xlsx','ppt','pptx','odt','ods','odp'];
@@ -2518,7 +2532,7 @@
       const res = await fetch(`/api/clawmate/feedback/list?root=${encodeURIComponent(rootId)}&project=${encodeURIComponent(project)}&file=${encodeURIComponent(fn)}`);
       if (!res.ok) return;
       const data = await res.json();
-      mediaCompletedItems = (data.items || []).filter(i => i.status !== 'deleted');
+      mediaCompletedItems = (data.items || []).filter(i => i.status !== 'deleted').sort((a, b) => (b.updated || '').localeCompare(a.updated || ''));
       renderMediaFeedbackPanel();
     } catch (_) {}
   }
@@ -2622,28 +2636,45 @@
       const res = await fetch(`/api/clawmate/feedback/list?root=${encodeURIComponent(rootId)}&project=${encodeURIComponent(project)}&file=${encodeURIComponent(fn)}`);
       if (!res.ok) return;
       const data = await res.json();
-      officePdfCompletedItems = (data.items || []).filter(i => i.status !== 'deleted');
+      officePdfCompletedItems = (data.items || []).filter(i => i.status !== 'deleted').sort((a, b) => (b.updated || '').localeCompare(a.updated || ''));
       renderOfficePdfFeedbackPanel();
     } catch (_) {}
   }
 
   // ============ Bottom Bar Actions ============
-  document.getElementById('btnCopy').addEventListener('click', async () => {
-    if (isImageMode || isMediaMode || isOfficePdfMode) {
-      // For images, media, Office/PDF: copy path to clipboard
-      await copyText(filePath, '路径已复制');
-      return;
+  // Cached config for absolute path resolution
+  let _cachedRootsConfig = null;
+  async function getRootsConfig() {
+    if (_cachedRootsConfig) return _cachedRootsConfig;
+    const cached = sessionStorage.getItem('clawmate-roots-config');
+    if (cached) { _cachedRootsConfig = JSON.parse(cached); return _cachedRootsConfig; }
+    try {
+      const res = await fetch('/api/clawmate/config');
+      if (res.ok) {
+        const data = await res.json();
+        _cachedRootsConfig = data;
+        sessionStorage.setItem('clawmate-roots-config', JSON.stringify(data));
+        return data;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  async function getAbsolutePath() {
+    const cfg = await getRootsConfig();
+    if (!cfg || !cfg.roots) return null;
+    const root = cfg.roots.find(r => r.id === rootId);
+    if (!root || !root.dir) return null;
+    return root.dir.replace(/\/+$/, '') + '/' + filePath;
+  }
+
+  document.getElementById('btnPath').addEventListener('click', async () => {
+    const absPath = await getAbsolutePath();
+    if (absPath) {
+      await copyText(absPath, '✅ 路径已复制');
+    } else {
+      showToast('无法获取路径', 2000);
     }
-    const body = document.getElementById('contentBody');
-    let text = '';
-    const pre = body.querySelector('pre.raw-text');
-    if (pre) text = pre.textContent;
-    else {
-      const md = body.querySelector('.markdown-body');
-      if (md) text = md.textContent;
-    }
-    const raw = body.dataset.rawContent || '';
-    await copyText(text || raw, '内容已复制到剪贴板');
   });
 
   document.getElementById('btnPdf').addEventListener('click', () => {
@@ -3301,7 +3332,7 @@
       const res = await fetch(`/api/clawmate/feedback/list?root=${encodeURIComponent(rootId)}&project=${encodeURIComponent(project)}&file=${encodeURIComponent(fn)}`);
       if (!res.ok) return;
       const data = await res.json();
-      imageCompletedItems = (data.items || []).filter(i => i.status !== 'deleted');
+      imageCompletedItems = (data.items || []).filter(i => i.status !== 'deleted').sort((a, b) => (b.updated || '').localeCompare(a.updated || ''));
       renderImageFeedbackPanel();
     } catch (_) {}
   }
@@ -3321,7 +3352,7 @@
       const res = await fetch(`/api/clawmate/feedback/list?root=${encodeURIComponent(rootId)}&project=${encodeURIComponent(project)}&file=${encodeURIComponent(fn)}`);
       if (!res.ok) return;
       const data = await res.json();
-      completedItems = (data.items || []).filter(i => i.status !== 'deleted');
+      completedItems = (data.items || []).filter(i => i.status !== 'deleted').sort((a, b) => (b.updated || '').localeCompare(a.updated || ''));
       renderFeedbackPanel();
     } catch (_) {}
   }
@@ -3678,14 +3709,16 @@
   }
 
   // Add to panel
-  // Quick tags: auto-fill note
+  // Quick tags: auto-fill note with descriptive prefix
   document.querySelectorAll('.pst-tag').forEach(function(btn) {
     btn.addEventListener('click', function() {
       var tag = this.getAttribute('data-tag');
       var noteEl = document.getElementById('pstNote');
-      // Single tag mode: replace any existing content with the selected tag
+      // 直接替换为标签描述，不追加
       noteEl.value = tag;
+      // Move cursor to end
       noteEl.focus();
+      noteEl.setSelectionRange(noteEl.value.length, noteEl.value.length);
     });
   });
 

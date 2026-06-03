@@ -1,0 +1,24 @@
+{
+  "roots": [
+    {
+      "id": "media",
+      "label": "媒体文件",
+      "dir": "/home/user/media"
+    }
+  ],
+  "defaultRootId": "media",
+  "port": 5533,
+  "public_base_url": "",
+  "max_upload_mb": 100,
+  "onlyoffice": {
+    "api_js_url": "https://file.updatedb.online:18443/web-apps/apps/api/documents/api.js",
+    "jwt_secret": "change-me-in-production",
+    "mode": "edit",
+    "callback_url": ""
+  },
+  "auth": {
+    "username": "admin",
+    "password_hash": "",
+    "session_ttl_minutes": 480
+  }
+}
