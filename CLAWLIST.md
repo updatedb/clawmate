@@ -587,11 +587,9 @@
   - 目标：公网部署下保护 ClawMate 所有页面和 API
   - 依赖：bcrypt（纯 Python，无系统依赖）
 
-- [ ] **字幕提取 — 从音频/视频文件中提取人声生成字幕**
-  - 方案文档：`research/subtitle-extraction-plan.md` ✅ 待评审
-  - 技术：faster-whisper (small) + ffmpeg，本地 CPU 推理
-  - API：`POST /api/clawmate/subtitle/extract` SSE 进度流
-  - 输出：同目录同名 .srt，字幕面板自动加载
+- [x] **字幕提取 — 从音频/视频文件中提取人声生成字幕**
+  - 方案文档：`research/subtitle-extraction-plan.md` ✅ 待评审 → 已审批
+  - 状态：正在实施（dev 执行中）
 
 ## ✅ 完成 — Feedback sessionKey 全链路 + Cron 修复（2026-06-02 11:30）
 
