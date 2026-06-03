@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -179,25 +178,11 @@ async def health():
 
 # ── 启动时同步 cron job（根据 config.json roots 自动生成）───────
 
-def _resolve_cron_id(cron_bin, name):
-    """通过 cron list 解析名字对应的 UUID（cron rm/run 都需要 UUID）"""
-    import subprocess
-    result = subprocess.run(
-        [cron_bin, "cron", "list"],
-        timeout=10, capture_output=True, text=True
-    )
-    if result.returncode != 0:
-        return None
-    for line in result.stdout.split("\n"):
-        # cron list 可能截断名字为 "clawmate-feedback-inb..."
-        # 用前缀匹配：名字前 20 个字符匹配即可
-        if name[:24] in line or line.startswith(name[:24]):
-            return line.split()[0] if line.strip() else None
-    return None
+from cron_manager import add_cron, remove_all, _get_cron_bin  # noqa: E402
+
 
 def _sync_cron_jobs():
     """读取 config.json，为每个 unique agent_id 创建/更新 cron job"""
-    import subprocess
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             cfg = json.load(f)
@@ -209,23 +194,17 @@ def _sync_cron_jobs():
     if not roots:
         return
 
-    cron_bin = shutil.which("openclaw") if not hasattr(sys, "_called_from_test") else "echo"
+    cron_bin = _get_cron_bin()
 
     # 按 agent_id 分组
     agent_roots_map = {}
     for r in roots:
-        aid = r.get("agent_id", "work")
+        aid = r.get("agent_id", "default")
         agent_roots_map.setdefault(aid, []).append(r["id"])
 
-    # 删除旧的泛用 cron job（被 per-agent 替代）
-    # 删除旧的泛用 cron job（通过 UUID）
-    for old_name in ("clawmate-feedback-inbox-check",):
-        old_id = _resolve_cron_id(cron_bin, old_name)
-        if old_id:
-            try:
-                subprocess.run([cron_bin, "cron", "rm", old_id], timeout=5, capture_output=True)
-            except Exception:
-                pass
+    # 删除旧的泛用 cron job（历史遗留命名）
+    for old_name in ("clawmate-feedback-inbox-check", "clawmate-feedback-inbox"):
+        remove_all(cron_bin, old_name)
 
     # 读取 cron message 模板
     template_path = Path(__file__).parent / "cron_template.txt"
@@ -239,7 +218,7 @@ def _sync_cron_jobs():
     base_url = "http://localhost:5533"
 
     for agent_id, root_ids in agent_roots_map.items():
-        cron_name = f"clawmate-feedback-inbox-{agent_id}"
+        cron_name = f"clawmate-fb-{agent_id}"
         roots_str = ",".join(root_ids)
         agent_roots = ", ".join(root_ids)
         message = template.format(
@@ -247,28 +226,10 @@ def _sync_cron_jobs():
             roots_str=roots_str,
             agent_roots=agent_roots,
         )
-        # 删除同名的所有旧 cron job（通过 UUID，防止重复累积）
-        while True:
-            old_id = _resolve_cron_id(cron_bin, cron_name)
-            if not old_id:
-                break
-            try:
-                subprocess.run([cron_bin, "cron", "rm", old_id], timeout=5, capture_output=True)
-            except Exception:
-                break
-        try:
-            result = subprocess.run(
-                [cron_bin, "cron", "add", "--name", cron_name, "--agent", agent_id,
-                 "--session", "isolated", "--every", "6h", "--no-deliver",
-                 "--message", message[:40000]],
-                timeout=10, capture_output=True, text=True
-            )
-            if result.returncode == 0:
-                print(f"[clawmate] cron job 已创建: {cron_name} (agent={agent_id}, roots={root_ids})")
-            else:
-                print(f"[clawmate] WARNING: 创建失败 {cron_name}: {result.stderr or result.stdout[:200]}")
-        except Exception as e:
-            print(f"[clawmate] WARNING: 异常 {cron_name}: {e}")
+        if add_cron(cron_bin, cron_name, agent_id, message):
+            print(f"[clawmate] cron job 已创建: {cron_name} (agent={agent_id}, roots={root_ids})")
+        else:
+            print(f"[clawmate] WARNING: 创建失败 {cron_name}")
 
 
 # ── entrypoint ─────────────────────────────────────────────────────

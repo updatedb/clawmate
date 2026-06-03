@@ -18,6 +18,7 @@ from typing import Optional
 import bcrypt
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
+from urllib.parse import quote
 from starlette.responses import JSONResponse, PlainTextResponse, RedirectResponse
 
 # ── Config keys (read from shared config dict injected by main.py) ────────────
@@ -219,6 +220,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if _is_whitelisted(path):
             return await call_next(request)
 
+        # Localhost bypass: 服务器本机进程访问不需要登录
+        # request.client.host 在直接连接时有效，代理场景走 x-forwarded-for
+        client_host = self._get_client_ip(request)  # already normalizes to IP
+        if client_host in ("127.0.0.1", "::1", "localhost"):
+            return await call_next(request)
+
         # IP lockout check
         client_ip = self._get_client_ip(request)
         locked, remaining = check_ip_lockout(client_ip)
@@ -259,5 +266,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
     def _auth_failure_redirect(self, request: Request, message: str) -> PlainTextResponse | RedirectResponse:
         if self._is_api_route(request.url.path):
             return JSONResponse({"error": "unauthorized", "detail": message}, status_code=401)
-        redirect_to = f"/clawmate/login.html?redirect={request.url.path}"
+        # Build full path with query string so login can redirect back to the original URL
+        full_path = request.url.path
+        if request.url.query:
+            full_path += "?" + request.url.query
+        redirect_to = f"/clawmate/login.html?redirect={quote(full_path, safe='')}"
         return RedirectResponse(url=redirect_to, status_code=302)

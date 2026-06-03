@@ -1,13 +1,15 @@
 """
-字幕提取模块 — faster-whisper 本地语音识别
+字幕提取模块 — faster-whisper 本地语音识别 + LLM 纠错
 从音频/视频文件中提取人声，生成 SRT 字幕文件。
 """
 from __future__ import annotations
 
-import subprocess
+import json
 import os
+import re
+import subprocess
 from pathlib import Path
-from typing import AsyncIterator, Optional
+from typing import Optional
 
 # faster-whisper 延迟导入，首次调用时下载模型
 _WHISPER_MODEL: Optional[object] = None
@@ -32,8 +34,24 @@ def _get_whisper_model(size: str = "small"):
     return _WHISPER_MODEL
 
 
+def has_audio_stream(input_path: Path) -> bool:
+    """用 ffprobe 检查文件是否包含音频流."""
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-select_streams", "a",
+        "-show_entries", "stream=codec_type",
+        "-of", "csv=p=0",
+        str(input_path),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    return "audio" in result.stdout
+
+
 def extract_audio(input_path: Path) -> Path:
     """用 ffmpeg 提取 16kHz mono wav 到临时文件，返回 wav 路径。"""
+    if not has_audio_stream(input_path):
+        raise RuntimeError("文件中没有音频轨道，无法提取字幕")
+
     output = input_path.with_suffix(".wav")
     cmd = [
         "ffmpeg", "-y",
@@ -144,4 +162,127 @@ async def extract_subtitle(
         "language": info.language,
         "duration": total_duration,
         "segments": len(seg_list),
+    }
+
+
+# ── LLM 字幕纠错 ─────────────────────────────────────────────
+
+
+def _load_llm_config() -> dict:
+    """从 config.json 加载 LLM 配置."""
+    from service import CONFIG_PATH
+    try:
+        with open(CONFIG_PATH) as f:
+            cfg = json.load(f)
+        return cfg.get("llm", {}) or {}
+    except Exception:
+        return {}
+
+
+def _parse_srt(srt_content: str) -> list:
+    """解析 SRT 内容，返回 [(index, start, end, text), ...]"""
+    blocks = re.split(r'\n\n+', srt_content.strip())
+    segments = []
+    for block in blocks:
+        lines = block.strip().split('\n')
+        if len(lines) < 3:
+            continue
+        index_line = lines[0].strip()
+        timing_line = lines[1].strip()
+        text = '\n'.join(lines[2:])
+        if '-->' not in timing_line:
+            continue
+        start, end = timing_line.split('-->', 1)
+        start = start.strip()
+        end = end.strip()
+        try:
+            idx = int(index_line)
+        except ValueError:
+            continue
+        segments.append((idx, start, end, text))
+    return segments
+
+
+def _build_srt(segments: list) -> str:
+    """将分段重新组装为 SRT 文本."""
+    out = []
+    for idx, start, end, text in segments:
+        out.append(f"{idx}\n{start} --> {end}\n{text}\n")
+    return '\n'.join(out)
+
+
+def correct_srt(srt_path: Path, progress_callback=None) -> dict:
+    """
+    读取 SRT 文件，通过 LLM 纠错后写回。
+    时间戳不变，只修正文字内容（转录错误、标点、可读性）。
+
+    Returns:
+        dict，含 corrected_count / error
+    """
+    llm_cfg = _load_llm_config()
+    if not llm_cfg.get("enabled", False):
+        raise RuntimeError("LLM 纠错未启用，请在 config.json 的 llm.enabled 设置为 true，并配置 api_url / api_key")
+
+    api_url = llm_cfg.get("api_url", "")
+    model = llm_cfg.get("model", "gpt-4o")
+    api_key = llm_cfg.get("api_key", "")
+    if not api_url or not api_key:
+        raise RuntimeError("LLM api_url 或 api_key 未配置")
+
+    if progress_callback:
+        # 空实现，LLM 调用暂无进度回调
+        pass
+
+    # 读取原始 SRT
+    srt_content = srt_path.read_text(encoding="utf-8")
+    segments = _parse_srt(srt_content)
+    if not segments:
+        raise RuntimeError("SRT 文件为空或格式无效")
+
+    # 构建提示词
+    prompt = (
+        "You are an expert subtitle proofreader. "
+        "Given an SRT subtitle file, correct the transcript text while keeping ALL timestamps EXACTLY the same.\n\n"
+        "Rules:\n"
+        "- Keep ALL timestamps (the '-->' lines) UNCHANGED\n"
+        "- Only correct transcription errors in the text\n"
+        "- Add proper punctuation\n"
+        "- Do NOT merge or split segments\n"
+        "- Keep original segment numbering\n"
+        "- Output valid SRT format only, nothing else\n\n"
+        "Input SRT:\n"
+        + srt_content.strip() + "\n\nCorrected SRT:\n"
+    )
+
+    # 调用 LLM
+    import urllib.request
+    payload = json.dumps({
+        "model": model,
+        "messages": [
+            {"role": "system", "content": "You are a subtitle correction assistant. Output ONLY the corrected SRT text, nothing else."},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.3,
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        api_url,
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        result = json.loads(resp.read().decode("utf-8"))
+
+    corrected_text = result["choices"][0]["message"]["content"]
+
+    # 写回文件
+    srt_path.write_text(corrected_text.strip() + "\n", encoding="utf-8")
+
+    return {
+        "srt_path": str(srt_path),
+        "corrected_count": len(segments),
     }

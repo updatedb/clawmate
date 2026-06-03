@@ -44,14 +44,15 @@ a. 标记处理中：
 b. 执行处理动作：
    切换到: root
    打开项目: project
-   根据 item.user_note（用户建议/指令），对 item.file 文件中 item.content 对应的内容执行操作：
+   根据 item.note（用户建议/指令），对 item.file 文件中 item.content 对应的内容执行操作：
    - **删除**：移除 item.content 指向的段落/代码/章节
-   - **修改**：用 item.user_note 的要求改写对应内容
+   - **修改**：用 item.note 的要求改写对应内容
    - **扩展**：基于 item.content 扩写，如增加章节、补充细节
    - **简化**：精简或重构对应内容
-   - **执行文档方案**：如果 item.user_note 指向 research/*.md 中的方案文档，按方案实施
+   - **审批**: 文档通过人工审核
+   - **执行**：如果 item.note 指向 research/*.md 中的方案文档，将该方案作为工作实施的内容，完成方案计划。
    
-   定位方式：item.location 存在时定位到该行/位置附近查找 item.content；否则全文搜索 item.content。
+   定位方式：item.position 存在时定位到该行/位置附近查找 item.content；否则全文搜索 item.content。
    处理完成后将 item.file 写回磁盘。
 
 c. 标记完成：

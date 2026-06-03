@@ -2183,10 +2183,91 @@
       editBtn.textContent = '✏️ 编辑';
       editBtn.addEventListener('click', enterSubtitleEdit);
       dyn.appendChild(editBtn);
+
+      // AI 纠错按钮（仅在有字幕时显示）
+      const correctBtn = document.createElement('button');
+      correctBtn.className = 'preview-bottom-btn';
+      correctBtn.id = 'btnSubtitleCorrect';
+      correctBtn.textContent = '🤖 AI 纠错';
+      correctBtn.title = '用大模型修正字幕转录错误（时间戳不变）';
+      correctBtn.addEventListener('click', correctSrt);
+      dyn.appendChild(correctBtn);
     }
   }
 
-  // ============ Subtitle Extraction (faster-whisper) ============
+  // ============ SRT AI Correction ============
+  async function correctSrt() {
+    if (!currentSrtPath) {
+      showToast('请先生成或加载字幕文件', 3000);
+      return;
+    }
+    const btn = document.getElementById('btnSubtitleCorrect');
+    if (btn) { btn.disabled = true; btn.textContent = '🤖 纠错中...'; }
+    try {
+      const res = await fetch('/api/clawmate/subtitle/correct', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ root: rootId, media_path: filePath, srt_path: currentSrtPath }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast('❌ ' + (data.detail || data.message || '纠错失败'), 4000);
+        return;
+      }
+      showToast('🤖 ' + (data.message || '纠错任务已提交'), 3000);
+      // 等待 agent 处理，然后重新加载字幕
+      pollSrtReload(currentSrtPath, 30000);
+    } catch(e) {
+      showToast('❌ ' + e.message, 3000);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🤖 AI 纠错'; }
+    }
+  }
+
+  async function pollSrtReload(srtPath, timeoutMs) {
+    const start = Date.now();
+    const poll = async () => {
+      if (Date.now() - start > timeoutMs) return;
+      try {
+        const res = await fetch(`/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(srtPath)}`);
+        if (res.ok) {
+          const entries = await parseSrtEntries(await res.text());
+          if (entries && entries.length > 0) {
+            loadSrtEntries(entries, srtPath);
+            showToast('✅ 字幕已更新', 3000);
+            return;
+          }
+        }
+      } catch (_) {}
+      setTimeout(poll, 2000);
+    };
+    poll();
+  }
+
+  async function parseSrtEntries(text) {
+    // 解析 SRT 文本为 entries 数组 [{start, end, text}, ...]
+    const blocks = text.trim().split(/\n\n+/);
+    const entries = [];
+    for (const block of blocks) {
+      const lines = block.split('\n');
+      if (lines.length < 3) continue;
+      const timing = lines[1];
+      if (!timing || !timing.includes('-->')) continue;
+      const [start, end] = timing.split('-->').map(t => t.trim());
+      const text = lines.slice(2).join('\n').trim();
+      if (!text) continue;
+      entries.push({ start: parseTimestamp(start), end: parseTimestamp(end), text });
+    }
+    return entries;
+  }
+
+  function parseTimestamp(ts) {
+    // "00:01:23,456" → 秒数
+    const m = ts.match(/(\d+):(\d+):(\d+)[,.](\d+)/);
+    if (!m) return 0;
+    return (+m[1]) * 3600 + (+m[2]) * 60 + (+m[3]) + (+m[4]) / 1000;
+  }
+
 
   let _subtitleExtractController = null;  // AbortController for cancellation
 
@@ -2298,6 +2379,9 @@
                   return;
                 } else if (data.phase === 'error') {
                   updateExtractProgress('error', 0, data.detail || '未知错误');
+                  // error 后可点击取消关闭
+                  const cancelBtn = document.getElementById('subtitleExtractCancelBtn');
+                  if (cancelBtn) cancelBtn.textContent = '取消';
                   return;
                 } else {
                   updateExtractProgress(data.phase, data.progress || 0, data.detail || '');
@@ -2493,14 +2577,28 @@
   }
 
   // ============ Subtitle Edit Mode ============
-  // snapshot of entries before edit started
   let subtitleEditSnapshot = [];
+  let _subtitleEditWasPlaying = false;  // 编辑前是否在播放
 
   function enterSubtitleEdit() {
+    _subtitleEditWasPlaying = !!(mediaEl && !mediaEl.paused);
+    if (mediaEl && !mediaEl.paused) mediaEl.pause();
     subtitleEditSnapshot = currentSrt.map(e => ({ ...e }));
     subtitleMode = 'edit';
     renderSubtitleSyncPanel();
     buildMediaToolbar();
+    // 定位到当前播放字幕行，高亮并聚焦输入框
+    if (currentSubIdx >= 0 && currentSubIdx < subtitleEntries.length) {
+      requestAnimationFrame(() => {
+        const el = document.getElementById(`sub-item-${currentSubIdx}`);
+        if (el) {
+          el.classList.add('active');
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          const input = el.querySelector('input');
+          if (input) { input.focus(); input.selectionStart = input.selectionEnd = input.value.length; }
+        }
+      });
+    }
   }
 
   function cancelSubtitleEdit() {
@@ -2509,6 +2607,7 @@
     subtitleMode = 'view';
     renderSubtitleSyncPanel();
     buildMediaToolbar();
+    if (_subtitleEditWasPlaying && mediaEl) mediaEl.play().catch(() => {});
   }
 
   async function saveSubtitleEdit() {
@@ -2528,6 +2627,7 @@
         renderSubtitleSyncPanel();
         buildMediaToolbar();
         showToast('字幕已保存', 2000);
+        if (_subtitleEditWasPlaying && mediaEl) mediaEl.play().catch(() => {});
       } else {
         const isSyntaxErr = data.error && data.error.includes('syntax_error');
         showToast('❌ ' + (data.detail || '未知错误'), isSyntaxErr ? 8000 : 3000);
@@ -2539,6 +2639,7 @@
 
   // ============ Media timeupdate — sync subtitle highlight ============
   let lastHighlightedIdx = -1;
+  let currentSubIdx = -1;  // 当前播放位置对应的字幕索引，编辑时用于定位
 
   function onMediaTimeUpdate() {
     if (!mediaEl || !currentSrt.length || subtitleMode === 'edit') return;
@@ -2546,6 +2647,7 @@
     let activeIdx = -1;
     for (let i = 0; i < currentSrt.length; i++) {
       if (t >= currentSrt[i].start && t <= currentSrt[i].end) {
+      currentSubIdx = i;
         activeIdx = i;
         break;
       }
@@ -2680,13 +2782,22 @@
       mediaPendingItems.forEach(item => body.appendChild(createFeedbackCard(item)));
     }
 
-    // Completed items
-    if (mediaCompletedItems.length > 0) {
+    // Completed items — split pending/in_progress vs done/failed
+    const pendingOrProgress = mediaCompletedItems.filter(i => i.status === 'pending' || i.status === 'in_progress');
+    const doneOrFailed = mediaCompletedItems.filter(i => i.status === 'done' || i.status === 'failed');
+    if (pendingOrProgress.length > 0) {
       const sep = document.createElement('div');
       sep.className = 'fb-section-sep';
-      sep.innerHTML = '<span>✅ 已提交</span>';
+      sep.innerHTML = '<span>⏳ 处理中</span>';
       body.appendChild(sep);
-      mediaCompletedItems.forEach(item => body.appendChild(renderCompletedFeedbackCard(item)));
+      pendingOrProgress.forEach(item => body.appendChild(renderCompletedFeedbackCard(item)));
+    }
+    if (doneOrFailed.length > 0) {
+      const sep = document.createElement('div');
+      sep.className = 'fb-section-sep';
+      sep.innerHTML = '<span>✅ 已完成</span>';
+      body.appendChild(sep);
+      doneOrFailed.forEach(item => body.appendChild(renderCompletedFeedbackCard(item)));
     }
   }
 

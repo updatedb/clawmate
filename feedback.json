@@ -1,7 +1,7 @@
 {
   "root": "webprojects",
   "project": "clawmate",
-  "updated": "2026-06-03 12:17:23",
+  "updated": "2026-06-03 21:52:17",
   "last_id": 32,
   "items": [
     {
@@ -306,13 +306,13 @@
     },
     {
       "id": "FD-CM-0032",
-      "status": "pending",
+      "status": "done",
       "file": "clawmate/research/subtitle-extraction-plan.md",
       "note": "检查该方案是否实现，没有实现的话执行该方案",
       "content": "字幕提取功能方案",
       "position": "",
-      "updated": "2026-06-03 12:17:23",
-      "result": ""
+      "updated": "2026-06-03 21:52:17",
+      "result": "已验证：字幕提取方案（faster-whisper 本地）已全部实现。subtitle.py 核心模块、SSE API、前端按钮、CLAWLIST 均已完成。"
     }
   ]
 }

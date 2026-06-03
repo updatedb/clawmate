@@ -158,6 +158,26 @@ def guess_category(path: Path) -> str:
     return "other"
 
 
+PUBLIC_BASE_URL_ENV = "CLAWMATE_PUBLIC_BASE_URL"
+
+
+def get_public_base_url(request) -> str:
+    """从环境变量读取 public_base_url，fallback 到请求信息."""
+    env_base_url = os.environ.get(PUBLIC_BASE_URL_ENV)
+    if env_base_url:
+        return env_base_url.rstrip("/")
+
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+    forwarded_host = request.headers.get("x-forwarded-host")
+    if forwarded_proto and forwarded_host:
+        proto = forwarded_proto.split(",")[0].strip()
+        host = forwarded_host.split(",")[0].strip()
+        if proto and host:
+            return f"{proto}://{host}".rstrip("/")
+
+    return str(request.base_url).rstrip("/")
+
+
 def file_info(path: Path, rel_path: str) -> Dict:
     stat = path.stat()
     mime, _ = mimetypes.guess_type(str(path))

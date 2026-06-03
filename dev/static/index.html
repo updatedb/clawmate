@@ -36,35 +36,29 @@
             <div id="currentPath" class="path breadcrumb"></div>
           </div>
           <div class="toolbar-bottom">
-            <div class="controls">
-              <div class="control">
-                <label>类型</label>
-                <select id="filterType">
-                  <option value="all">全部</option>
-                  <option value="dir">目录</option>
-                  <option value="image">图片</option>
-                  <option value="video">视频</option>
-                  <option value="audio">音频</option>
-                  <option value="text">文本</option>
-                  <option value="other">其他</option>
-                </select>
-              </div>
-              <div class="control">
-                <label>排序</label>
-                <select id="sortKey">
-                  <option value="name">名称</option>
-                  <option value="mtime">时间</option>
-                  <option value="size">大小</option>
-                </select>
-                <button id="sortDir">降序</button>
-                <button id="multiSelectToggle" title="多选">☐ 多选</button>
-              </div>
+            <div class="tb-left">
+              <label>类型</label>
+              <select id="filterType">
+                <option value="all">全部</option>
+                <option value="dir">目录</option>
+                <option value="image">图片</option>
+                <option value="video">视频</option>
+                <option value="audio">音频</option>
+                <option value="text">文本</option>
+                <option value="other">其他</option>
+              </select>
+              <label>排序</label>
+              <select id="sortKey">
+                <option value="name">名称</option>
+                <option value="mtime">时间</option>
+                <option value="size">大小</option>
+              </select>
+              <button id="sortDir">降序</button>
+              <button id="multiSelectToggle" title="多选">☐ 多选</button>
             </div>
-            <div class="toolbar-right">
-              <div class="view-toggle">
-                <button id="viewGrid" class="active">画廊</button>
-                <button id="viewList">列表</button>
-              </div>
+            <div class="tb-right">
+              <button id="viewGrid" class="active">画廊</button>
+              <button id="viewList">列表</button>
             </div>
           </div>
           <div id="status" class="status"></div>
