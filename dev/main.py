@@ -234,7 +234,7 @@ def _sync_cron_jobs():
         try:
             result = subprocess.run(
                 [cron_bin, "cron", "add", "--name", cron_name, "--agent", agent_id,
-                 "--session", "isolated", "--every", "6h",
+                 "--session", "isolated", "--every", "6h", "--no-deliver",
                  "--message", message[:40000]],
                 timeout=10, capture_output=True, text=True
             )
