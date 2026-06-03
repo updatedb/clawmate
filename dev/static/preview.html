@@ -1453,7 +1453,8 @@
         if (srcPre) _updateSourcePre(srcPre, newContent);
         exitSourceEditMode();
       } else {
-        showToast('保存失败: ' + (data.detail || '未知错误'), 3000);
+        const isSyntaxErr = data.error && data.error.includes('syntax_error');
+        showToast('❌ ' + (data.detail || '未知错误'), isSyntaxErr ? 8000 : 3000);
       }
     } catch (e) {
       showToast('保存失败: ' + e.message, 3000);
@@ -1497,7 +1498,8 @@
         loadContent();
         // loadContent already calls updatePlainTextDynamicButtons for non-edit mode
       } else {
-        showToast('保存失败: ' + (data.detail || '未知错误'), 3000);
+        const isSyntaxErr = data.error && data.error.includes('syntax_error');
+        showToast('❌ ' + (data.detail || '未知错误'), isSyntaxErr ? 8000 : 3000);
       }
     } catch (e) {
       showToast('保存失败: ' + e.message, 3000);
@@ -2365,7 +2367,8 @@
         buildMediaToolbar();
         showToast('字幕已保存', 2000);
       } else {
-        throw new Error(data.detail || '保存失败');
+        const isSyntaxErr = data.error && data.error.includes('syntax_error');
+        showToast('❌ ' + (data.detail || '未知错误'), isSyntaxErr ? 8000 : 3000);
       }
     } catch (e) {
       showToast('保存失败: ' + e.message, 3000);

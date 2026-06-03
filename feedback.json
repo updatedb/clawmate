@@ -1,8 +1,8 @@
 {
   "root": "webprojects",
   "project": "clawmate",
-  "updated": "2026-06-03 10:31:08",
-  "last_id": 29,
+  "updated": "2026-06-03 11:19:20",
+  "last_id": 30,
   "items": [
     {
       "id": "FD-CM-0002",
@@ -283,6 +283,16 @@
       "position": "",
       "updated": "2026-06-02 14:30:13",
       "result": ""
+    },
+    {
+      "id": "FD-CM-0030",
+      "status": "done",
+      "file": "clawmate/research/save-validation-plan.md",
+      "note": "文档审批通过，执行方案",
+      "content": "Save 接口格式校验方案\n状态：待评审",
+      "position": "",
+      "updated": "2026-06-03 11:19:20",
+      "result": "已实施 Save 接口格式校验方案: 新建 validators.py (JSON/CSS/HTML), routes.py 集成校验层, preview.html 三处 save 函数增加 422 语法错误展示（8s 超长 toast）"
     }
   ]
 }

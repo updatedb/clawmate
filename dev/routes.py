@@ -27,6 +27,7 @@ from service import (
     resolve_root,
     _root_map,
 )
+from validators import VALIDATORS
 
 
 router = APIRouter()
@@ -373,8 +374,9 @@ async def clawmate_rename(request: Request):
 async def clawmate_save(request: Request):
     """Save text content back to a file (atomic write).
 
-    Request body: {root, path, content}
+    Request body: {root, path, content, validate?}
     Returns: {ok: true, size: N}
+    On validation failure: 422 + {ok: false, error: "xxx_syntax_error", detail: "..."}
     """
     try:
         body = await request.json()
@@ -384,6 +386,7 @@ async def clawmate_save(request: Request):
     root_id = str(body.get("root", "")).strip()
     rel_path = str(body.get("path", "")).strip()
     content = body.get("content", "")
+    validate = body.get("validate", True)  # default: validate enabled
 
     if not root_id or not rel_path:
         raise HTTPException(status_code=422, detail="Missing root/path")
@@ -399,6 +402,22 @@ async def clawmate_save(request: Request):
 
     if not target.exists() or target.is_dir():
         raise HTTPException(status_code=404, detail="File not found")
+
+    # ── Format validation ──
+    if validate and isinstance(content, str):
+        ext = Path(rel_path).suffix.lower()
+        validator = VALIDATORS.get(ext)
+        if validator:
+            ok, error_msg = validator(content)
+            if not ok:
+                return JSONResponse(
+                    content={
+                        "ok": False,
+                        "error": f"{ext[1:]}_syntax_error",
+                        "detail": error_msg,
+                    },
+                    status_code=422,
+                )
 
     # Atomic write: temp file + rename
     import tempfile
