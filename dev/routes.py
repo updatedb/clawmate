@@ -1003,7 +1003,7 @@ async def clawmate_feedback(request: Request):
 
     ids = [i["id"] for i in new_items if i["id"]]
 
-    # Wake agent via cron run (select cron by root's agent_id)
+    # Wake agent via cron run (resolve name → UUID then trigger)
     import subprocess, shutil
     openclaw_bin = shutil.which("openclaw") or "openclaw"
     config_path = Path(os.environ.get("CLAWMATE_CONFIG", str(Path(__file__).parent / "config.json")))
@@ -1019,10 +1019,22 @@ async def clawmate_feedback(request: Request):
     except Exception:
         pass
     try:
-        subprocess.run(
-            [openclaw_bin, "cron", "run", cron_name],
-            timeout=10, capture_output=True
+        # Resolve cron name to UUID (cron run requires UUID, not name)
+        result = subprocess.run(
+            [openclaw_bin, "cron", "list"],
+            timeout=10, capture_output=True, text=True
         )
+        cron_id = None
+        if result.returncode == 0:
+            for line in result.stdout.split("\n"):
+                if cron_name in line:
+                    cron_id = line.split()[0] if line.strip() else None
+                    break
+        if cron_id:
+            subprocess.run(
+                [openclaw_bin, "cron", "run", cron_id],
+                timeout=10, capture_output=True
+            )
     except Exception:
         pass  # 静默失败，不影响 feedback 创建
     lines = ["## 📋 ClawMate 反馈"]
