@@ -125,7 +125,6 @@ ClawMate 通过 OpenClaw Cron Job 机制实现反馈的自动处理。每个 roo
 #### Slash Commands
 - `/clawmate preview` — 生成直达 preview.html 链接
 - `/clawmate list` — 查看反馈列表（支持状态/文件/日期过滤）
-- `/clawmate todo` — 查看待处理反馈
 - `/clawmate do` — 自动处理所有待处理反馈
 - `/clawmate do #FD-CM-xxxx` — 处理指定反馈
 
