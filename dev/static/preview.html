@@ -867,6 +867,20 @@
   <!-- Toast -->
   <div class="preview-toast" id="toast" style="display:none;"></div>
 
+  <!-- Subtitle extraction progress modal -->
+  <div id="subtitleExtractModal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.45);align-items:center;justify-content:center;">
+    <div style="background:var(--bg-secondary,#fff);border:1px solid var(--border-color,#ddd);border-radius:12px;padding:24px 28px;min-width:340px;max-width:480px;box-shadow:0 8px 32px rgba(0,0,0,0.2);font-family:inherit;">
+      <div id="subtitleExtractModalTitle" style="font-size:15px;font-weight:600;margin-bottom:16px;color:var(--text-primary,#1f1f1f);">🎙️ 正在提取字幕...</div>
+      <div id="subtitleExtractProgressBar" style="height:8px;background:var(--bg-tertiary,#e5e7eb);border-radius:4px;overflow:hidden;margin-bottom:10px;">
+        <div id="subtitleExtractProgressFill" style="height:100%;width:0%;background:var(--accent,#6366f1);border-radius:4px;transition:width 0.3s;"></div>
+      </div>
+      <div id="subtitleExtractProgressText" style="font-size:12px;color:var(--text-secondary,#6b7280);margin-bottom:4px;">准备中...</div>
+      <div id="subtitleExtractProgressPct" style="font-size:11px;color:var(--text-muted,#9ca3af);">0%</div>
+      <div id="subtitleExtractError" style="display:none;margin-top:12px;padding:10px;background:var(--danger-bg,#fee2e2);border:1px solid var(--danger-border,#fca5a5);border-radius:6px;font-size:12px;color:var(--danger,#dc2626);"></div>
+      <button id="subtitleExtractCancelBtn" style="margin-top:16px;width:100%;padding:8px 16px;border-radius:6px;border:1px solid var(--border-color,#d1d5db);background:var(--btn-bg,#f3f4f6);color:var(--btn-text,#374151);cursor:pointer;font-size:13px;" onclick="cancelSubtitleExtract()">取消</button>
+    </div>
+  </div>
+
   <!-- Vendor scripts -->
   <script src="./vendor/purify.min.js"></script>
   <script src="./vendor/marked.min.js"></script>
@@ -2139,9 +2153,9 @@
       extractBtn.className = 'preview-bottom-btn';
       extractBtn.id = 'btnSubtitleExtract';
       extractBtn.textContent = '🎤 提取字幕';
-      extractBtn.title = '功能待实现';
+      extractBtn.title = '提取人声生成 SRT 字幕';
       extractBtn.addEventListener('click', () => {
-        showToast('语音识别功能待实现', 2500);
+        extractSubtitle();
       });
       dyn.appendChild(extractBtn);
     } else if (subtitleMode === 'edit') {
@@ -2169,6 +2183,154 @@
       editBtn.textContent = '✏️ 编辑';
       editBtn.addEventListener('click', enterSubtitleEdit);
       dyn.appendChild(editBtn);
+    }
+  }
+
+  // ============ Subtitle Extraction (faster-whisper) ============
+
+  let _subtitleExtractController = null;  // AbortController for cancellation
+
+  function showExtractProgressModal() {
+    const modal = document.getElementById('subtitleExtractModal');
+    const fill = document.getElementById('subtitleExtractProgressFill');
+    const text = document.getElementById('subtitleExtractProgressText');
+    const pct = document.getElementById('subtitleExtractProgressPct');
+    const err = document.getElementById('subtitleExtractError');
+    if (fill) fill.style.width = '0%';
+    if (text) text.textContent = '准备中...';
+    if (pct) pct.textContent = '0%';
+    if (err) err.style.display = 'none';
+    if (modal) {
+      modal.style.display = 'flex';
+      modal.style.alignItems = 'center';
+      modal.style.justifyContent = 'center';
+    }
+  }
+
+  function hideExtractProgressModal() {
+    const modal = document.getElementById('subtitleExtractModal');
+    if (modal) modal.style.display = 'none';
+    _subtitleExtractController = null;
+  }
+
+  function updateExtractProgress(phase, progress, detail) {
+    const fill = document.getElementById('subtitleExtractProgressFill');
+    const text = document.getElementById('subtitleExtractProgressText');
+    const pct = document.getElementById('subtitleExtractProgressPct');
+    const err = document.getElementById('subtitleExtractError');
+    const title = document.getElementById('subtitleExtractModalTitle');
+    if (fill) fill.style.width = progress + '%';
+    if (pct) pct.textContent = progress + '%';
+    if (text) text.textContent = detail || '';
+    if (title) {
+      if (phase === 'done') {
+        title.textContent = '✅ 字幕提取完成';
+      } else if (phase === 'error') {
+        title.textContent = '❌ 提取失败';
+        if (err) {
+          err.textContent = detail || '未知错误';
+          err.style.display = 'block';
+        }
+      } else if (phase === 'extracting') {
+        title.textContent = '🎙️ 正在提取音频...';
+      } else if (phase === 'transcribing') {
+        title.textContent = '🎙️ 正在识别语音...';
+      }
+    }
+  }
+
+  function cancelSubtitleExtract() {
+    if (_subtitleExtractController) {
+      _subtitleExtractController.abort();
+      _subtitleExtractController = null;
+    }
+    hideExtractProgressModal();
+    showToast('已取消字幕提取', 2000);
+  }
+
+  async function extractSubtitle() {
+    if (!isMediaMode) return;
+    showExtractProgressModal();
+    _subtitleExtractController = new AbortController();
+    try {
+      const response = await fetch('/api/clawmate/subtitle/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          root: rootId,
+          path: filePath,
+          model: 'small',
+          language: 'zh',
+        }),
+        signal: _subtitleExtractController.signal,
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || `HTTP ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let done = false;
+
+      while (!done) {
+        const { value, done: streamDone } = await reader.read();
+        done = streamDone;
+        if (value) {
+          buffer += decoder.decode(value, { stream: !done });
+          // Process complete SSE messages in buffer
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';  // keep incomplete last line
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.phase === 'done') {
+                  updateExtractProgress('done', 100, data.detail || '完成');
+                  // Auto-load the generated SRT
+                  setTimeout(() => {
+                    hideExtractProgressModal();
+                    reloadSrtForCurrentMedia();
+                    showToast('✅ 字幕已生成: ' + (data.srt_path || '').split('/').pop(), 4000);
+                  }, 1200);
+                  return;
+                } else if (data.phase === 'error') {
+                  updateExtractProgress('error', 0, data.detail || '未知错误');
+                  return;
+                } else {
+                  updateExtractProgress(data.phase, data.progress || 0, data.detail || '');
+                }
+              } catch (_) {}
+            }
+          }
+        }
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        // Already handled by cancelSubtitleExtract
+        return;
+      }
+      updateExtractProgress('error', 0, err.message || String(err));
+    }
+  }
+
+  async function reloadSrtForCurrentMedia() {
+    // Re-run autoLoadSrt to pick up the newly generated .srt
+    const baseName = filePath.replace(/\.[^.]+$/, '');
+    for (const srtPath of [baseName + '.srt', baseName + '.SRT']) {
+      try {
+        const res = await fetch(`/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(srtPath)}`);
+        if (res.ok) {
+          const data = await res.json();
+          const entries = parseSrt(data.content);
+          if (entries.length > 0) {
+            loadSrtEntries(entries, srtPath);
+            return;
+          }
+        }
+      } catch (_) {}
     }
   }
 

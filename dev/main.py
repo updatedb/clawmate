@@ -178,6 +178,21 @@ async def health():
 
 
 # ── 启动时同步 cron job（根据 config.json roots 自动生成）───────
+
+def _resolve_cron_id(cron_bin, name):
+    """通过 cron list 解析名字对应的 UUID（cron rm/run 都需要 UUID）"""
+    import subprocess
+    result = subprocess.run(
+        [cron_bin, "cron", "list"],
+        timeout=10, capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        return None
+    for line in result.stdout.split("\n"):
+        if name in line:
+            return line.split()[0] if line.strip() else None
+    return None
+
 def _sync_cron_jobs():
     """读取 config.json，为每个 unique agent_id 创建/更新 cron job"""
     import subprocess
@@ -201,11 +216,14 @@ def _sync_cron_jobs():
         agent_roots_map.setdefault(aid, []).append(r["id"])
 
     # 删除旧的泛用 cron job（被 per-agent 替代）
+    # 删除旧的泛用 cron job（通过 UUID）
     for old_name in ("clawmate-feedback-inbox-check",):
-        try:
-            subprocess.run([cron_bin, "cron", "rm", old_name], timeout=5, capture_output=True)
-        except Exception:
-            pass
+        old_id = _resolve_cron_id(cron_bin, old_name)
+        if old_id:
+            try:
+                subprocess.run([cron_bin, "cron", "rm", old_id], timeout=5, capture_output=True)
+            except Exception:
+                pass
 
     # 读取 cron message 模板
     template_path = Path(__file__).parent / "cron_template.txt"
@@ -227,10 +245,15 @@ def _sync_cron_jobs():
             roots_str=roots_str,
             agent_roots=agent_roots,
         )
-        try:
-            subprocess.run([cron_bin, "cron", "rm", cron_name], timeout=5, capture_output=True)
-        except Exception:
-            pass
+        # 删除同名的所有旧 cron job（通过 UUID，防止重复累积）
+        while True:
+            old_id = _resolve_cron_id(cron_bin, cron_name)
+            if not old_id:
+                break
+            try:
+                subprocess.run([cron_bin, "cron", "rm", old_id], timeout=5, capture_output=True)
+            except Exception:
+                break
         try:
             result = subprocess.run(
                 [cron_bin, "cron", "add", "--name", cron_name, "--agent", agent_id,

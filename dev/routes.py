@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Query, HTTPException, Request
-from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse, StreamingResponse
 from urllib.parse import quote, unquote_to_bytes
 import base64
 import hashlib
@@ -1279,3 +1279,105 @@ async def auth_change_password(request: Request):
         json.dump(config, f, indent=2, ensure_ascii=False)
 
     return JSONResponse({"ok": True, "detail": "密码已更新"})
+
+
+# ── Subtitle extraction ────────────────────────────────────────────────────────
+
+@router.post("/api/clawmate/subtitle/extract")
+async def clawmate_subtitle_extract(request: Request):
+    """
+    从音频/视频文件提取语音并生成 SRT 字幕。
+    返回 SSE 事件流，逐段推送进度。
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    root_id = str(body.get("root", "")).strip()
+    file_rel_path = str(body.get("path", "")).strip()
+    model_size = str(body.get("model", "small")).strip()
+    language = body.get("language")  # None = auto
+
+    if not root_id or not file_rel_path:
+        raise HTTPException(status_code=422, detail="Missing root or path")
+
+    if model_size not in ("tiny", "small", "medium"):
+        model_size = "small"
+
+    # 安全路径解析
+    try:
+        _, target, _ = safe_path(root_id, file_rel_path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Root not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    if not target.exists() or target.is_dir():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # 只处理音视频格式
+    audio_exts = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac", ".wma"}
+    video_exts = {".mp4", ".webm", ".mov", ".avi", ".mkv", ".wmv", ".flv", ".m4v"}
+    allowed = audio_exts | video_exts
+    if target.suffix.lower() not in allowed:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported file type: {target.suffix}. Supported: {', '.join(sorted(allowed))}",
+        )
+
+    # SRT 输出到同目录同名 .srt
+    srt_path = target.with_suffix(".srt")
+
+    # SSE 事件流
+    async def event_generator():
+        async def progress(phase: str, pct: int, detail: str = ""):
+            payload = json.dumps({"phase": phase, "progress": pct, "detail": detail}, ensure_ascii=False)
+            yield f"data: {payload}\n\n"
+
+        try:
+            from subtitle import extract_subtitle
+            result = await extract_subtitle(
+                target, srt_path,
+                model_size=model_size,
+                language=language,
+                progress_callback=progress,
+            )
+            yield f"data: {json.dumps({'phase': 'done', **result}, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'phase': 'error', 'detail': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@router.get("/api/clawmate/subtitle/status")
+async def clawmate_subtitle_status(root: str = "", path: str = ""):
+    """查询指定媒体文件是否已有同目录同名 .srt 字幕。"""
+    if not root or not path:
+        raise HTTPException(status_code=422, detail="Missing root or path")
+
+    try:
+        _, target, _ = safe_path(root, path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Root not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    if not target.exists() or target.is_dir():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    srt_path = target.with_suffix(".srt")
+    exists = srt_path.exists()
+    return JSONResponse(content={
+        "has_subtitle": exists,
+        "srt_path": str(srt_path) if exists else None,
+        "srt_size": srt_path.stat().st_size if exists else None,
+    })

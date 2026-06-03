@@ -42,6 +42,8 @@ a. 标记处理中：
    Body: {{"root":"<root>","project":"<project>","id":"<item.id>","status":"in_progress"}}
 
 b. 执行处理动作：
+   切换到: root
+   打开项目: project
    根据 item.user_note（用户建议/指令），对 item.file 文件中 item.content 对应的内容执行操作：
    - **删除**：移除 item.content 指向的段落/代码/章节
    - **修改**：用 item.user_note 的要求改写对应内容

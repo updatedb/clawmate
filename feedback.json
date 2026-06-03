@@ -1,8 +1,8 @@
 {
   "root": "webprojects",
   "project": "clawmate",
-  "updated": "2026-06-03 12:06:58",
-  "last_id": 31,
+  "updated": "2026-06-03 12:17:23",
+  "last_id": 32,
   "items": [
     {
       "id": "FD-CM-0002",
@@ -303,6 +303,16 @@
       "position": "",
       "updated": "2026-06-03 12:06:58",
       "result": "字幕提取方案审批通过，状态标记为已审批，确认执行方案A（本地faster-whisper），添加审批时间记录"
+    },
+    {
+      "id": "FD-CM-0032",
+      "status": "pending",
+      "file": "clawmate/research/subtitle-extraction-plan.md",
+      "note": "检查该方案是否实现，没有实现的话执行该方案",
+      "content": "字幕提取功能方案",
+      "position": "",
+      "updated": "2026-06-03 12:17:23",
+      "result": ""
     }
   ]
 }
