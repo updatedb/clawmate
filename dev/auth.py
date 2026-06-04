@@ -11,8 +11,10 @@ Components:
 from __future__ import annotations
 
 import asyncio
+import json
 import secrets
 import time
+from pathlib import Path
 from typing import Optional
 
 import bcrypt
@@ -28,10 +30,38 @@ AUTH_CONFIG_KEY = "auth"
 # session_id -> {"user": str, "created_at": float, "last_active": float}
 _sessions: dict[str, dict] = {}
 _sessions_lock = asyncio.Lock()
+_sessions_file = Path(__file__).parent / "sessions.json"
+
+
+def _load_sessions() -> None:
+    """Load sessions from JSON file on startup. Silently ignore missing/corrupt files."""
+    global _sessions
+    try:
+        if _sessions_file.exists():
+            with open(_sessions_file, "r", encoding="utf-8") as f:
+                _sessions = json.load(f)
+        else:
+            _sessions = {}
+    except Exception as e:
+        print(f"[auth] Warning: failed to load sessions from {_sessions_file}: {e}")
+        _sessions = {}
+
+
+def _save_sessions() -> None:
+    """Write current _sessions dict to JSON file. Failures are non-fatal."""
+    try:
+        with open(_sessions_file, "w", encoding="utf-8") as f:
+            json.dump(_sessions, f)
+    except Exception as e:
+        print(f"[auth] Warning: failed to save sessions to {_sessions_file}: {e}")
+
+
+# Load persisted sessions on module import
+_load_sessions()
 
 # ── Brute-force protection ────────────────────────────────────────────────────
 # ip -> {"failures": int, "locked_until": float}
-_ip_failures: dict[str, dict] = {}
+_ip_failures: dict[str, dict] = {}  # key: f"{username}:{client_ip}"
 _MAX_FAILURES = 5
 _LOCKOUT_SECONDS = 15 * 60  # 15 minutes
 
@@ -46,6 +76,10 @@ def _session_cleanup() -> None:
     to_delete = [sid for sid, s in _sessions.items() if now - s["last_active"] > s.get("ttl", 28800)]
     for sid in to_delete:
         _sessions.pop(sid, None)
+
+
+# Startup cleanup: remove expired sessions from persisted store
+_session_cleanup()
 
 
 # ── Password hashing ──────────────────────────────────────────────────────────
@@ -68,6 +102,7 @@ async def create_session(username: str, ttl_seconds: int = 28800) -> tuple[str, 
     data = {"user": username, "created_at": now, "last_active": now, "ttl": ttl_seconds}
     async with _sessions_lock:
         _sessions[sid] = data
+    _save_sessions()
     return sid, data
 
 
@@ -87,6 +122,7 @@ async def get_session(sid: str) -> Optional[dict]:
 async def delete_session(sid: str) -> None:
     async with _sessions_lock:
         _sessions.pop(sid, None)
+    _save_sessions()
 
 
 def get_session_from_cookie(request: Request) -> Optional[str]:
@@ -94,27 +130,33 @@ def get_session_from_cookie(request: Request) -> Optional[str]:
 
 
 # ── IP-level brute-force guard ───────────────────────────────────────────────
-def check_ip_lockout(client_ip: str) -> tuple[bool, int]:
+def _failure_key(username: str, client_ip: str) -> str:
+    """Composite key for brute-force tracking: username@IP."""
+    return f"{username}:{client_ip}"
+
+
+def check_ip_lockout(username: str, client_ip: str) -> tuple[bool, int]:
     """
     Returns (locked, seconds_remaining).
     Performs lazy cleanup of old entries.
     """
     now = time.time()
-    entry = _ip_failures.get(client_ip)
+    entry = _ip_failures.get(_failure_key(username, client_ip))
     if not entry:
         return False, 0
     locked_until = entry.get("locked_until", 0)
     if now < locked_until:
         return True, int(locked_until - now)
     # expired lockout
-    _ip_failures.pop(client_ip, None)
+    _ip_failures.pop(_failure_key(username, client_ip), None)
     return False, 0
 
 
-def record_failure(client_ip: str) -> tuple[bool, int]:
-    """Record a failed attempt. Returns (is_now_locked, seconds_remaining)."""
+def record_failure(username: str, client_ip: str) -> tuple[bool, int]:
+    """Record a failed attempt for username@IP. Returns (is_now_locked, seconds_remaining)."""
     now = time.time()
-    entry = _ip_failures.setdefault(client_ip, {"failures": 0, "locked_until": 0})
+    key = _failure_key(username, client_ip)
+    entry = _ip_failures.setdefault(key, {"failures": 0, "locked_until": 0})
     entry["failures"] = entry.get("failures", 0) + 1
     if entry["failures"] >= _MAX_FAILURES:
         entry["locked_until"] = now + _LOCKOUT_SECONDS
@@ -122,8 +164,8 @@ def record_failure(client_ip: str) -> tuple[bool, int]:
     return False, 0
 
 
-def clear_failures(client_ip: str) -> None:
-    _ip_failures.pop(client_ip, None)
+def clear_failures(username: str, client_ip: str) -> None:
+    _ip_failures.pop(_failure_key(username, client_ip), None)
 
 
 # ── Auth config helpers ──────────────────────────────────────────────────────
@@ -226,9 +268,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if client_host in ("127.0.0.1", "::1", "localhost"):
             return await call_next(request)
 
-        # IP lockout check
+        # IP lockout check — pre-auth stage, username not yet known
         client_ip = self._get_client_ip(request)
-        locked, remaining = check_ip_lockout(client_ip)
+        locked, remaining = check_ip_lockout("?", client_ip)
         if locked:
             if self._is_api_route(path):
                 return JSONResponse(
