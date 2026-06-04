@@ -41,14 +41,13 @@ except (FileNotFoundError, json.JSONDecodeError):
             }
         ],
         "defaultRootId": "media",
-        "onlyoffice": {"api_js_url": "https://file.updatedb.online:18443/web-apps/apps/api/documents/api.js"},
     }
 
 # env overrides (highest priority)
 _onlyoffice_cfg = config.get("onlyoffice", {}) or {}
 ONLYOFFICE_API_JS_URL = os.environ.get(
     "CLAWMATE_ONLYOFFICE_URL",
-    _onlyoffice_cfg.get("api_js_url", "https://file.updatedb.online:18443/web-apps/apps/api/documents/api.js"),
+    _onlyoffice_cfg.get("api_js_url"),
 )
 ONLYOFFICE_JWT_SECRET = os.environ.get(
     "CLAWMATE_ONLYOFFICE_JWT_SECRET",
@@ -141,21 +140,21 @@ app = FastAPI(
     redoc_url=None,
 )
 
+
+# CORS 白名单：从 public_base_url 动态计算，保留本机调试
+_cors_allowed = []
+if PUBLIC_BASE_URL:
+    _cors_allowed.append(PUBLIC_BASE_URL.rstrip("/"))
+_cors_allowed.extend([
+    "http://localhost",
+    "http://localhost:5533",
+    "http://127.0.0.1",
+    "http://127.0.0.1:5533",
+])
 app.add_middleware(
     CORSMiddleware,
-    # 仅允许已知来源，防止跨站请求
-    # CORS 白名单：从 public_base_url 动态计算，允许本机开发调试
-    _allowed = []
-    if PUBLIC_BASE_URL:
-        _allowed.append(PUBLIC_BASE_URL.rstrip("/"))
-    # 本机开发/调试
-    _allowed.extend([
-        "http://localhost",
-        "http://localhost:5533",
-        "http://127.0.0.1",
-        "http://127.0.0.1:5533",
-    ])
-    allow_origins=_allowed,
+    # CORS 白名单已在上方构建
+    allow_origins=_cors_allowed,
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=True,
