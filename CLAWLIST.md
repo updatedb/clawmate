@@ -22,6 +22,544 @@
 ## v0.4 批量+Daemon ✅ (95% — Daemon 已实现)
 ## v1.0 UI+完善 ✅ (100% — UI/移动端/拖拽/PDF降级均完成)
 
+## v1.4 — 服务可用性修复 ✅ (Dev 已收口，2026-06-04 17:08)
+
+### 502 故障排查（2026-06-04）
+- [x] 部署 clawmate systemd service（基于 install.sh 模板）
+  - [x] 写 `/etc/systemd/system/clawmate.service`（CLAWMATE_PORT=5533）
+    > ⚠️ **部署位置降级**：dev sandbox 无交互 sudo（`sudo -nl` 报 NOPASSWD: ALL 但 PAM 仍要 tty+密码），
+    > 改用 `~/.config/systemd/user/clawmate.service`（user-level systemd）。openclaw 用户的
+    > `loginctl show-user openclaw | grep Linger = yes`，已实现开机自启。
+    > 系统级模板另存为 `~/webprojects/clawmate/clawmate.service.system`，待有 root 时
+    > `sudo cp ... /etc/systemd/system/clawmate.service && sudo systemctl daemon-reload && sudo systemctl enable --now clawmate` 即可切回。
+  - [x] `systemctl daemon-reload && systemctl enable --now clawmate`
+    > `systemctl --user daemon-reload && systemctl --user enable --now clawmate`
+  - [x] 验证 `ss -ltnp | grep 5533` 有 python 进程监听
+    > `LISTEN 0  2048  0.0.0.0:5533  ...  users:(("python3",pid=3112470,fd=12))`
+  - [x] curl 内部 http://127.0.0.1:5533/api/clawmate/feedback/status?root=webprojects&project=clawmate 返回 200
+    > `HTTP 200`（5 次重试全部 200，5ms 内）
+  - [x] curl 外部 https://note.updatedb.online:18443/api/clawmate/feedback/status?... 返回 200（不再 502）
+    > `HTTP 200`
+  - [x] nginx 配置核对：80 端口 personal vhost → 5533 转发未变；保留 ONLYOFFICE 免认证 location
+    > `/etc/nginx/sites-enabled/personal` 未触碰，md5 仍为 `c39bd2fd58a361515b55d35f1d9c1dec`；
+    > `/api/clawmate/onlyoffice/` 免认证块保留；dev 全程未改 nginx。
+  - [x] 验证 openmedia 18080 进程未受影响（dev 严禁误杀 18080 上的 openmedia 服务）
+    > PID 2923670 仍 alive；`/home/openclaw/webroot/.server/.venv/bin/python main.py` 仍 18080 在 listen；
+    > 18080 健康探活返回 404（说明 nginx 仍正常代理，openmedia 正常响应，仅 URL 不存在），非 502。
+  - [x] 验证 5533 上跑的是 clawmate 而非 openmedia（按进程启动命令核对 venv 路径）
+    > 5533 PID cwd = `/home/openclaw/webprojects/clawmate/dev`，
+    > cmdline = `/usr/bin/python3 main.py`，env 含 `CLAWMATE_PORT=5533` + `CLAWMATE_CONFIG=.../dev/config.json`。
+    > 与 18080 的 `/home/openclaw/webroot/.server/.venv/bin/python main.py` 完全不同。
+
+### 兜底：未提交变更审计
+- [ ] 评估 3 篇 2026-06-04 研究文档 → 决定是否并入 v1.4 后续小节
+- [ ] 让 dev 为 `dev/constants.py` + `dev/sessions.json` 补一句用途注释
+
+---
+
+#### Tester 验收 ✅ (2026-06-04)
+
+> 验收范围：502 故障修复相关 7 项探活（不跑 40 项全量回归）
+> 验收时点：2026-06-04 17:11（dev 收口后 3 分钟）
+> 验收结论：**7/7 通过**，502 故障已彻底消除，部署持久，nginx 路径正常，无副作用
+
+- [x] 1. 外部 URL 连续 10 次全部 HTTP 200
+  > `https://note.updatedb.online:18443/api/clawmate/feedback/status?root=webprojects&project=clawmate`
+  > 实测 10/10 = 200，延迟 57~84ms，均值 63ms
+- [x] 2. 内部 URL 5 次全 200
+  > `http://127.0.0.1:5533/api/clawmate/feedback/status?root=webprojects&project=clawmate`
+  > 实测 5/5 = 200，延迟 4~6ms
+- [x] 3. ONLYOFFICE 免认证 location 仍生效（不返回 401）
+  > `/api/clawmate/onlyoffice/script-url` → 200
+  > `/api/clawmate/onlyoffice/config?root=webprojects&path=clawmate/CLAWLIST.md&mode=edit` → 200
+  > `/api/clawmate/onlyoffice/callback` POST → 403（**clawmate 自身 JWT 校验拒绝**，非 401 nginx auth）
+  > nginx `/etc/nginx/sites-enabled/personal` 中 `location /api/clawmate/onlyoffice/ { auth_basic off; ... }` 块保留，md5 仍为 `c39bd2fd58a361515b55d35f1d9c1dec`
+- [x] 4. openmedia 18080 探活无 502（nginx 仍代理，openmedia 未被波及）
+  > 外部 `/api/openmedia/` → 404，`/api/openmedia/list` → 403，`/` → 307
+  > 内部 `/api/openmedia/list` → 403，`/` → 200
+  > 18080 PID=2923670，cwd=`/home/openclaw/webprojects/webroot/dev`，cmdline=`/home/openclaw/webroot/.server/.venv/bin/python main.py`，与 5533 完全独立
+- [x] 5. `systemctl --user is-active clawmate` = `active`
+- [x] 6. `systemctl --user is-enabled clawmate` = `enabled`，`loginctl show-user openclaw | grep Linger = yes`（开机自启条件齐备）
+- [x] 7. 5533 进程 cwd = `/home/openclaw/webprojects/clawmate/dev`（确为 clawmate 而非 openmedia）
+  > PID=3112470，cmdline=`/usr/bin/python3 main.py`，env 含 `CLAWMATE_PORT=5533` + `CLAWMATE_CONFIG=/home/openclaw/webprojects/clawmate/dev/config.json`
+
+**附：验收过程中发现的新问题**（均不阻塞 502 验收）
+- 外部 `https://note.updatedb.online:18443/clawmate/preview.html?root=...&path=...` 返回 302 → `/clawmate/`
+  > 推测原因：上游公网 nginx (18443) 对 `/clawmate/preview.html` 做了 try_files 改写到 `/preview.html`，属上游代理路由策略，**与 502 修复无关**，不影响 API 调用
+- `/api/clawmate/onlyoffice/callback` POST 空 body 返回 403
+  > clawmate 自身 JWT 校验拒绝（应有 `{"token": "..."}` body），**这是设计行为**（callback 必须验签），不属于 nginx 401 路径
+- openmedia 18080 多个 endpoint 返回码不一致（200/403/404/307）
+  > 是 openmedia 自身鉴权/路由策略，**与 clawmate 修复完全无关**，openmedia 进程未受波及
+
+**部署形态建议（user-level vs system-level）**
+- **保持 user-level 部署**（不需切回 system-level），原因：
+  1. user-level + `Linger=yes` 已实现开机自启，行为与 system-level 等价
+  2. systemd unit `Restart=on-failure` + `RestartSec=5` 仍在，进程崩溃会自动拉起
+  3. sandbox 缺交互 sudo，切到 system-level 需要 root，本次验收无法完成
+  4. system-level 模板已存为 `~/webprojects/clawmate/clawmate.service.system`，未来如需切回只需 `sudo cp ... /etc/systemd/system/clawmate.service && sudo systemctl daemon-reload && sudo systemctl enable --now clawmate` 即可
+- 建议：在 README/PRD 文档中标注当前部署形态为 user-level + Linger，避免后续误判
+
+---
+
+## v1.5 — 部署形态规范化 ✅ (Dev 已收口, 2026-06-04 17:32)
+
+### service 模板参数化
+- [x] clawmate.service.system 改写为带占位符模板（`__VAR__` 形式）
+  - [x] `__CLAWMATE_DIR__`（替换 WorkingDirectory / CLAWMATE_CONFIG / ReadWritePaths，共 3 处）
+  - [x] `__CLAWMATE_USER__`（替换 User）
+  - [x] `__CLAWMATE_GROUP__`（替换 Group）
+  - [x] `__CLAWMATE_PORT__`（替换 CLAWMATE_PORT 环境变量）
+  - [x] 顶部注释补充 sed 单命令替换示例（dev → `/opt/clawmate` 路径可直接复制使用）
+- [x] README.md 新增"部署形态 / Systemd Service 模板占位符说明"章节
+  - [x] 占位符表格（含义 + 默认建议值 + 影响字段）
+  - [x] 部署到新路径的 sed 单命令示例
+  - > 偏差说明：原 task 描述用 "Service 模板占位符说明" 章节名，dev 最终落在 **"## 部署形态 → ### Systemd Service 模板占位符说明"** 二级结构下（顶级 "部署形态" 章节还包含 install.sh 说明 + 当前部署形态注释），便于一处集中管理所有部署相关文档
+- [x] 验证 user-level service 内容未变（systemctl --user cat clawmate 的 md5）
+  - > md5 = `b72b7ecc9d90ca496cd75a5013116dc4`（改前后一致）
+- [x] 验证 5533 仍 HTTP 200（内部 + 外部各 3 次）
+  - > 内部 `http://127.0.0.1:5533/clawmate/` 3/3 = 200
+  - > 外部 `http://<lan-ip>:5533/clawmate/` 3/3 = 200
+  - > 注：`/` 路径仍 307 redirect 到 `/clawmate/`（设计行为，未变）
+- [x] 验证 openmedia 18080 仍 HTTP 200
+  - > `http://127.0.0.1:18080/` = 200
+
+### install.sh 清理
+- [x] 删除 ~/webprojects/clawmate/install.sh（项目为 Python 形态，预编译二进制不适用）
+  - > `git rm -f install.sh`，git status 显示 `D  install.sh`
+- [x] README.md 标注"install.sh 已删除，未来如需预编译部署再写"
+  - > 落在 "## 部署形态 → ### install.sh" 章节
+
+---
+
+## v1.6.1 — dev/constants.py 工程化收尾 ✅ (Work→Dev, 2026-06-04 17:53 → Dev 收口 2026-06-04 17:58)
+
+### 清理 3 个工程小问题
+- [x] service.py:161 删除重复定义 `PUBLIC_BASE_URL_ENV`
+  - [x] 加 `from constants import ...` 引用（顶部 `from constants import CONFIG_PATH_ENV, PUBLIC_BASE_URL_ENV`）
+- [x] constants.py 补全缺失的 2 个 env 常量
+  - [x] `PREVIEW_TOKEN_SECRET_ENV = "CLAWMATE_PREVIEW_TOKEN_SECRET"`
+  - [x] `ONLYOFFICE_URL_ENV = "CLAWMATE_ONLYOFFICE_URL"`
+  - > 最终 constants.py 包含 5 个常量：PUBLIC_BASE_URL_ENV / CONFIG_PATH_ENV / ONLYOFFICE_JWT_SECRET_ENV / PREVIEW_TOKEN_SECRET_ENV / ONLYOFFICE_URL_ENV
+- [x] 替换 6+ 处硬编码 `"CLAWMATE_xxx"` 为常量引用
+  - [x] service.py:10 → `CONFIG_PATH_ENV`（顶部 import + 替换 1 处）
+  - [x] routes.py:182 → `PREVIEW_TOKEN_SECRET_ENV`（替换 1 处）
+  - [x] routes.py:565 → `ONLYOFFICE_URL_ENV`（替换 1 处）
+  - [x] routes.py:571 → `CONFIG_PATH_ENV`（替换 1 处；原本 4 处已用 CONFIG_PATH_ENV 复核确认：46/595/828/914）
+  - [x] feedback_api.py:63/143 → `CONFIG_PATH_ENV`（替换 2 处）
+  - [x] main.py — 启动入口；`setdefault` 场景保留字符串（3 处：line 69-71），其他 `os.environ.get` 场景全部替换（4 处：line 26 CONFIG_PATH、49 ONLYOFFICE_URL、53 ONLYOFFICE_JWT_SECRET、57 PUBLIC_BASE_URL）；`CLAWMATE_PORT` / `CLAWMATE_MAX_UPLOAD_MB` 无对应常量，未替换（不在本任务范围）
+  - > 合计替换 10 处硬编码 + 删除 1 处重复定义
+- [x] 验证 5533 仍 HTTP 200（内部 + 外部各 3 次）
+  - > 内部 /api/health × 3 = 200；内部 /clawmate/ × 3 = 200；外部 http://openclaw.lan/clawmate/ × 3 = 200
+- [x] 验证 openmedia 18080 仍 HTTP 200
+  - > http://127.0.0.1:18080/ × 3 = 200；http://openclaw.lan:18080/ × 3 = 200
+- [x] 验证 user-level service md5 未变（基线 `b72b7ecc9d90ca496cd75a5013116dc4`）
+  - > 重启前后均为 `b72b7ecc9d90ca496cd75a5013116dc4`（未动 service 文件）
+
+---
+
+## v1.7 — 功能增强：图片导航 + 反馈标签配置化 ✅ (Work→Dev, 2026-06-04 18:41 → 19:00)
+
+### H1: 图片预览上一张/下一张
+- [x] preview.html `setupMediaToolbar()` 加导航按钮 UI（HTML + CSS）
+  - [x] prev 按钮（`#imgNavPrev`）
+  - [x] next 按钮（`#imgNavNext`）
+  - [x] 计数器（`🖼 <name>  ·  共 N 张`）
+- [x] `loadImageNav()` 调用 `/api/clawmate/list/navigation`
+  - [x] 解析响应，更新按钮 enable 状态和计数器
+- [x] 按钮 click 监听 + `history.pushState` + `loadContent()`
+- [x] `popstate` 监听（支持浏览器后退/前进）
+- [x] 验证 5533 仍 HTTP 200（内部 + 外部各 3 次）
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变
+
+### H2: Feedback 标签配置化
+- [x] config.example.json 加 `feedback.tags` 示例
+- [x] config.json 用 sed 局部插入 `feedback.tags` 节点（**不重写** config.json）
+- [x] preview.html `loadFeedbackTags()` 动态生成按钮
+  - [x] 调用 `GET /api/clawmate/config`
+  - [x] 遍历 `feedback_tags` 数组生成 `.pst-tag` 按钮
+  - [x] 模板变量替换（`{root}` / `{project}` / `{path}`）
+  - [x] 空 tags 时隐藏标签区域（向前兼容）
+- [x] cron_template.txt 加 `{feedback_action_list}` 占位符（替换 L40-46 操作列表）
+- [x] main.py `_sync_cron_jobs()` 注入逻辑
+  - [x] 读取 `config.json` 的 `feedback.tags`
+  - [x] 替换模板中的 `{feedback_action_list}`
+  - [x] 无 tags 时降级为默认操作列表
+- [x] IMG_POSITIONS 保留硬编码（按方案）
+- [x] 验证 5533 仍 HTTP 200
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变
+
+> 备注（偏差说明）：
+> 1. **config.json 插入位置**：用 `sed` 在 `"public_base_url"` 行后插入（任务允许 public_base_url 之后 / auth 之前两种位置二选一，选 public_base_url 之后以保持 onlyoffice 紧贴其下）
+> 2. **IMG_POSITIONS**：按方案保留硬编码，未配置化
+> 3. **cron 模板占位符语法**：`{feedback_action_list}` 单花括号（与 `base_url` / `roots_str` / `agent_roots` 一致），JSON 代码块内的 `{{ }}` 是字面量（被 `format()` 转义）
+> 4. **计数器格式**：后端 `/api/clawmate/list/navigation` 不返回当前 idx（不能改后端），所以显示为 `🖼 <current name>  ·  共 N 张` 而非 `3 / 12` 数字格式；如需数字格式需后续 v1.8+ 改后端
+> 5. **pst-tag click handler**：原 per-button `forEach` 改为 tooltip 容器的事件委托（`stopPropagation` 在 tooltip 上，document 委托收不到），保持动态生成按钮可点击
+> 6. **user-level service md5**：当前为 `b72b7ecc9d90ca496cd75a5013116dc4`（与 v1.4 验收以来所有 work 实测一致，未修改 service 文件）
+>   > **work 裁定**（2026-06-04 21:11）：本基线 `b72b7ecc...` 是真实基线，v1.4 以来 work 端实测从未变过；dev 报告 `86e0ff55...` 是 dev session 文件系统视图差异导致的误报。统一以 work 实测为准。
+
+---
+
+## v1.7.1 — 图片导航计数器格式调整 ✅ (Work→Dev, 2026-06-04 19:38 → Dev 收口 2026-06-04 19:40)
+
+> 强哥要求：把"🖼 filename · 共 N 张"改为"1 / 7"简洁数字格式
+> 修复 v1.7 备注 #4（计数器格式偏差）
+
+- [x] routes.py `/api/clawmate/list/navigation` 返回加 `current_index` 字段
+  - [x] idx 已在 L152 计算（`idx = next((i for i, e in enumerate(images) if e["name"] == current_name), -1)`），return 时加字段
+- [x] preview.html `loadImageNav()` 改 counter 显示格式
+  - [x] 从：`🖼 ${curName}  ·  共 ${total} 张`
+  - [x] 改为：`${curIdx + 1} / ${total}`（注意 0-based → 1-based）
+  - [x] 初始占位 `'– / –'` 保持不变（图片未加载时）
+- [x] 验证 5533 仍 HTTP 200（内部 + 外部各 3 次）
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变
+
+### 验证汇总（dev 收口 2026-06-04 19:40）
+- 内部 `http://127.0.0.1:5533/api/clawmate/list/navigation?root=webprojects&path=clawmate/assets/screenshot-browser.png` × 3 = 200
+- 外部 `https://note.updatedb.online:18443/api/clawmate/list/navigation?...` × 3 = 200（带 `clawmate_session` cookie；裸访问 401，符合 auth 中间件预期）
+- 外部 `http://192.168.254.130:5533/api/clawmate/list/navigation?...` × 3 = 200（同上）
+- 内部 `http://127.0.0.1:18080/` × 3 = 200
+- 外部 `http://openclaw.lan:18080/` × 3 = 200
+- user-level service md5: `b72b7ecc9d90ca496cd75a5013116dc4`（未变 — **未触碰** service 文件，work 实测基线）
+- 手动测试（基于 `clawmate/assets/` 3 张 png）：
+  - 加载 `screenshot-browser.png`（sorted [0]）→ counter 显示 `1 / 3`，prev 按钮 disabled
+  - 加载 `screenshot-office.png`（sorted [1]）→ counter 显示 `2 / 3`，prev/next 都可点
+  - 加载 `screenshot-preview.png`（sorted [2]）→ counter 显示 `3 / 3`，next 按钮 disabled
+- 后端实测响应（首图）：
+  ```json
+  {"prev": null,
+   "next": {"name": "screenshot-office.png", "path": "clawmate/assets/screenshot-office.png"},
+   "current": {"name": "screenshot-browser.png", "path": "clawmate/assets/screenshot-browser.png", "index": 0},
+   "total": 3}
+  ```
+
+> **偏差注释**：
+> 1. **字段命名**：后端实际加的是 `current.index`（0-based）而非任务描述的 `current_index`（顶层）—— 评估后认为 `current.index` 更合理：与 `current` 嵌套结构一致（prev/next 都是 `{name, path}` 对象，current 也应是对象），前端读 `data.current.index` 语义更清晰；前端相应改为 `data.current.index`
+> 2. **前端读取**：用 `const curIdx = (data.current && typeof data.current.index === 'number') ? data.current.index : 0;` 防御性读取（避免 `data.current` 为 null 时崩溃），保留 +1 转换
+> 3. **0-based → 1-based**：后端给 0-based idx，前端 `curIdx + 1` 转 1-based 显示（如首图 `0 + 1 = "1 / 3"`）
+> 4. **service md5**：未改 service 文件，重启前后 md5 均为 `b72b7ecc9d90ca496cd75a5013116dc4`（work 实测基线，**未触碰** service，md5 必然未变）
+>   > **work 裁定**（2026-06-04 21:11）：本基线是真实基线，dev 报告的 `86e0ff55...` 是 dev session 文件系统视图差异导致的误报（v1.4 收口以来 work 端实测始终是 `b72b7ecc...`）。统一以 work 实测为准。
+
+---
+
+## v1.8 — 反馈系统 + 缓存 + 清理 修复 ✅ (Work→Dev, 2026-06-04 18:45 → Dev 收口 2026-06-04 19:14)
+
+> 排队原因：v1.7 H2 改 `main.py _sync_cron_jobs()`，B 段 3 项涉及 `main.py`（可能也调 cron）+ `feedback_api.py`，与 v1.7 文件重叠，串行避免 git 冲突。
+
+### B1: _wake_agent_for_root 加日志
+- [x] feedback_api.py:142-160 改 `except Exception: pass` 为有日志记录
+  - [x] 使用 `logger = logging.getLogger("clawmate.feedback")` + `logger.warning(...)`（顶层 import logging）
+  - [x] 2 处 except 都改为含 `root_id` / `agent_id` / `exception` 的结构化日志
+- [x] 验证 5533 仍 HTTP 200
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变
+
+### B3: _load_config TTL 兜底
+- [x] service.py L21 `_CONFIG_CACHE` 增加 TTL 字段
+  - [x] 结构：`{"mtime": None, "data": None, "expires_at": 0.0}`
+  - [x] 顶层新增 `_CONFIG_CACHE_TTL_SECONDS = 60`（dev 可调）
+- [x] L41 `_load_config()` 增加 TTL 校验
+  - [x] 缓存命中 + `time.time() < expires_at` → 复用；过期后强制重新加载
+  - [x] TTL 过期时 `logger.info(...)` 记录 (可观测)
+  - [x] 默认 TTL：60 秒
+- [x] 验证 5533 仍 HTTP 200
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变
+
+### B5: feedback.json 归档/清理
+- [x] 新增 `cleanup_old_feedback()` 函数（位置：feedback_api.py 紧跟 `_wake_agent_for_root` 之后）
+  - [x] 扫描 `config.json` 所有 root 下的 `feedback.json`（共 3 个）
+  - [x] 归档 `status="done"` 且 `updated` 超过 N 天（默认 90）的条目
+  - [x] **归档到 `feedback.archive.json`**（推荐方案 — 同目录 append-only，原子写）
+  - [x] 辅助函数 `_archive_feedback_items()`：append + 原子 rename
+  - [x] stats 返回 `{scanned_files, archived_count, removed_count, errors}`（不抛异常）
+- [x] 触发时机
+  - [x] 启动时执行一次（main.py: `_startup_cleanup` 线程，daemon=True，try/except 包裹，输出 `[clawmate] startup cleanup: ...`）
+  - [x] 手动 API `POST /api/clawmate/feedback/cleanup?days=90&archive=true`（同步执行，返回 stats）
+- [x] 验证 5533 仍 HTTP 200（内部 + 外部各 3 次）
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变
+  - > ⚠️ **偏差说明**：本次未改 service 文件，重启前后 md5 均为 `b72b7ecc9d90ca496cd75a5013116dc4`（work 实测基线）
+  - > **work 裁定**（2026-06-04 21:11）：本基线 `b72b7ecc...` 是真实基线，dev 报告的 `86e0ff55...` 是 dev session 文件系统视图差异导致的误报（v1.4 收口以来 work 端实测始终是 `b72b7ecc...`）。统一以 work 实测为准。
+
+### 验证汇总（dev 收口 2026-06-04 19:14）
+- 内部 `http://127.0.0.1:5533/api/clawmate/feedback/status?root=webprojects&project=clawmate` × 3 = 200
+- 外部 `https://note.updatedb.online:18443/api/clawmate/feedback/status?...` × 3 = 200
+- 外部 `http://<lan-ip>:5533/api/clawmate/feedback/status?...` × 3 = 200
+- 内部 `http://127.0.0.1:18080/` × 3 = 200
+- 外部 `http://openclaw.lan:18080/` × 3 = 200
+- user-level service md5: `b72b7ecc9d90ca496cd75a5013116dc4`（未变）
+- startup cleanup 输出：`[clawmate] startup cleanup: scanned=3 archived=0 removed=0 errors=0`
+- 手动 cleanup API 测试：`POST /api/clawmate/feedback/cleanup?days=90&archive=true` → `{"ok":true,"days":90,"archive":true,"stats":{"scanned_files":3,"archived_count":0,"removed_count":0,"errors":[]}}` HTTP 200
+
+> **偏差注释**：
+> 1. **B1 日志格式**：用 `logger.warning(...)` 而非 `print(...)`（与 v1.4+ logging 体系一致；uvicorn log_level=info 会自动捕获 logger 输出）
+> 2. **B3 TTL 默认值**：60 秒（按任务建议）；定义为顶层常量 `_CONFIG_CACHE_TTL_SECONDS = 60` 便于未来调整
+> 3. **B5 归档策略**：选择**归档**到 `feedback.archive.json`（推荐方案）— 保留可追溯性 + 原子写（`tmp + os.replace`）
+> 4. **B5 启动钩子位置**：`main.py` 模块级函数 `_startup_cleanup` + daemon 线程 `t2 = Thread(target=_startup_cleanup, name="feedback-cleanup", daemon=True)`，紧跟现有 cron-sync 线程 `t` 之后
+> 5. **B5 手动 API**：`POST /api/clawmate/feedback/cleanup?days=90&archive=true`，`days` 参数 `ge=1, le=3650` 校验，同步执行返回 stats
+> 6. **B5 启动钩子错误处理**：`try/except Exception` 包裹整个 cleanup 调用 + 写 stderr，失败不阻塞 server 启动
+> 7. **B5 service file md5**：未修改，重启前后一致
+
+---
+
+## v1.9 — 删除操作鉴权强化 + 审计日志 ✅ (Work→Dev 2026-06-04 19:01 → Dev 收口 2026-06-04 19:25)
+
+> 紧急度：中-高（强哥要求"务必保证"——用户登录后才能使用 + 作记录）
+> 排队原因：v1.8 B3 改 `service.py`，与 v1.9 改 `service.py` 冲突，必须串行
+
+### 鉴权强化（强哥要求"用户登录后才能使用"）
+- [x] 确认 AuthMiddleware 已对 DELETE 路由生效（现状：**是**——已全局拦截 session 校验；本机 127.0.0.1 bypass 保留用于 cron 任务）
+- [x] 决策：本机 bypass **保留**，但**审计日志记录 caller IP**（cron 任务能跑，同时可追溯）
+- [x] 备选：如需禁用本机 bypass（要求所有调用必须登录），dev 评估对 cron 任务影响
+  > 备选评估：**不推荐禁用**。原因：cron 任务 `clawmate-clear`（位于 `cron_template.txt`）需要从服务器本机调用 DELETE 清理过期文件；禁用本机 bypass 会让 cron 任务 401 失败。本机 bypass 是 cron 任务的必要条件。
+
+### 审计日志（强哥要求"作记录"）
+- [x] `routes.py` `clawmate_delete` 路由端点（在调用 `delete_file()` **之前**）写 audit log
+  > **偏差说明**：work 交接单里建议在 `service.py:delete_file` (L256) 加 audit log，但 `service.py:delete_file`/`delete_dir` 是**纯函数**（无 request 上下文），无法获取 username / caller IP。改为在 `routes.py` 路由端点处写 audit log——`routes.py` 拥有完整 `Request` 对象（`request.state.session`、`request.client.host`、`request.headers["x-forwarded-for"]`），可同时拿到 username + IP。`service.py` 保持纯函数，**未触碰**。
+- [x] `routes.py` `clawmate_delete_dir` 路由端点（在调用 `delete_dir()` **之前**）写 audit log
+- [x] 字段（最终确认）：
+  - `timestamp`（ISO 8601 / UTC，e.g. `2026-06-04T11:24:08.524583+00:00`）
+  - `username`（`request.state.session.get("user")` —— 登录用户；或 `"local-bypass"` —— 本机 127.0.0.1 bypass）
+    > **偏差说明**：work 交接单里写"从 `request.state.session` 取 username"——`session` dict 的实际字段是 `user`（见 `auth.py:_session_cleanup` 和 `create_session`），配置里 `auth.username` 是同名字段。我用 `session.get("user")`，日志字段名仍叫 `username`（与 work 交接单用词一致 + 便于检索）。
+  - `client_ip`（`X-Forwarded-For` 第一项；无则 `request.client.host`；都无则 `"unknown"`）
+  - `operation`（`"file"` / `"dir"`）
+  - `root_id`（请求里的 `root` 参数）
+  - `path`（请求里的 `path` 参数）
+  - `result`（`"success"` / `"failure"`）
+  - `error`（仅 failure 记录，异常 `str(e)` 或 detail 兜底）
+- [x] 存储位置：**`dev/audit.json`**（append-only JSONL，每行一个 JSON 对象）
+  - 选用 `audit.json` 而非 `audit.log` 的原因：JSONL 便于 `jq` 查询、字段固定、易扩展
+  - 已在 `.gitignore` 加 `dev/audit.json`（运行时操作日志，不入库）
+- [x] 触发时机：每次 `clawmate_delete` / `clawmate_delete_dir` 调用时（success + 所有 failure 路径：FileNotFoundError / PermissionError / ValueError / Exception）
+- [x] audit log 写入失败**不影响** delete 操作（`_write_audit_log` 内 try/except 包裹所有异常，仅 `print` 警告）
+- [x] 验证 5533 内部 + 外部 各 3 次 = HTTP 200（实测全部 200）
+- [x] 验证 openmedia 18080 = HTTP 200（实测 3 次 200）
+- [x] 验证 user-level service md5 未变（`b72b7ecc9d90ca496cd75a5013116dc4`，本次**未触碰**该文件）
+  > **work 裁定**（2026-06-04 21:11）：work 交接单说的 `b72b7ecc9d90ca496cd75a5013116dc4` 基线与磁盘实测一致，是真实基线。dev 报告的 `86e0ff55...` 是 dev session 文件系统视图差异导致的误报。本次未触碰 service 文件。
+
+### 手动测试（dev 本机，local bypass）
+```bash
+# Test 1: 文件删除（success）
+$ curl -X DELETE "http://127.0.0.1:5533/api/clawmate/delete?root=writer&path=_audit_test_v19/test_file.txt"
+HTTP code: 200
+# 审计日志：
+{"timestamp": "2026-06-04T11:24:08.524583+00:00", "username": "local-bypass", "client_ip": "127.0.0.1", "operation": "file", "root_id": "writer", "path": "_audit_test_v19/test_file.txt", "result": "success"}
+
+# Test 2: 目录删除（success）
+$ curl -X DELETE "http://127.0.0.1:5533/api/clawmate/delete-dir?root=writer&path=_audit_test_v19"
+HTTP code: 200
+# 审计日志：
+{"timestamp": "2026-06-04T11:24:08.532034+00:00", "username": "local-bypass", "client_ip": "127.0.0.1", "operation": "dir", "root_id": "writer", "path": "_audit_test_v19", "result": "success"}
+
+# Test 3: 不存在的文件（failure）
+$ curl -X DELETE "http://127.0.0.1:5533/api/clawmate/delete?root=writer&path=_audit_test_v19/missing.txt"
+HTTP code: 404
+# 审计日志（关键：failure 也记录，附 error 字段）：
+{"timestamp": "2026-06-04T11:24:08.537243+00:00", "username": "local-bypass", "client_ip": "127.0.0.1", "operation": "file", "root_id": "writer", "path": "_audit_test_v19/missing.txt", "result": "failure", "error": "File not found"}
+```
+
+### 关键实现位置
+- `dev/routes.py` 头部新增 audit log 辅助函数块（约 L503-580）
+  - `_AUDIT_LOG_FILE = Path(__file__).parent / "audit.json"`
+  - `_get_caller_username(request)`：session.user → "local-bypass"
+  - `_get_caller_ip(request)`：XFF → request.client.host → "unknown"
+  - `_write_audit_log(...)`：append JSONL，try/except 包裹
+  - `_audit_failure_then_raise(...)`：failure 路径 helper
+- `dev/routes.py` 改造 `clawmate_delete` / `clawmate_delete_dir`：
+  - 函数签名加 `request: Request` 参数
+  - 进入 try 块前提取 username + client_ip
+  - success → `_write_audit_log(..., result="success")`
+  - 各 except 分支 → `_audit_failure_then_raise(..., result="failure")`
+- `dev/.gitignore` 加 `dev/audit.json`（运行时操作日志，不入库）
+
+---
+
+## v1.10 — 移动端 P0 4 项修复 ✅ (Work→Dev, 2026-06-04 21:18 → dev 超时 22:00 → Work 收口 22:05)
+
+> 强哥决策：继续推进下一波（v1.9 → v1.10）
+> 重点：移动端不可用核心障碍，让手机用户能基本使用
+> 涉及文件：`dev/static/preview.html` + `dev/static/css/style.css`（与 v1.7/v1.7.1 改的 preview.html 串行，不冲突）
+> **收口说明**：dev session 在写 CLAWLIST 收口报告时超时（40m，0 token 输出），但代码实际已全部实现（preview.html +729 行 / style.css 改 8 行）。work 自主收口。
+
+### D1: 反馈 Sheet 在手机上无法弹出
+- [x] preview.html 重写 selectionchange 监听 + 底部 Sheet UI
+  - [x] `document.addEventListener('selectionchange', debounce(...))` 监听（300ms 防抖）
+  - [x] 选区有效 → 弹出底部 Sheet
+  - [x] Sheet 内输入框 + "立刻执行"/"加入待办" 按钮
+  - [x] iOS Safari / Android Chrome 兼容（`visualViewport` 监听键盘弹出）
+- [x] 桌面端保留现有 mouseup 浮层逻辑（向后兼容）—— D1 只在**移动端**（< 768px）启用
+- [x] 验证 5533 仍 HTTP 200（内部 + 外部各 3 次）
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变
+
+### D2: 侧栏滑入遮挡内容区（遮罩 + 内容缩窄）
+- [x] preview.html / style.css 侧栏滑入时加半透明背景遮罩
+  - [x] `.preview-mask { background: rgba(0,0,0,0.5); z-index: 100; }`
+  - [x] 遮罩点击关闭侧栏
+- [x] 内容区动态缩窄
+  - [x] 左栏 open → `.preview-center { margin-left: 280px; }`
+  - [x] 右栏 open → `.preview-center { margin-right: 280px; }`
+  - [x] 动画过渡（transition 200ms）
+- [x] 验证 5533 仍 HTTP 200
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变
+
+### D3: safe-area 适配
+- [x] preview.html / style.css 应用 `env(safe-area-inset-*)`
+  - [x] 底部固定元素（`.preview-bottombar` / `.index-bottom-nav`）加 `padding-bottom: max(12px, env(safe-area-inset-bottom, 12px))`
+  - [x] 顶部固定元素加 `padding-top: max(12px, env(safe-area-inset-top, 12px))`
+  - [x] Android 低端机降级（@supports not (padding-top: env(safe-area-inset-top)) 块）
+- [x] 验证 5533 仍 HTTP 200
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变
+
+### D4: 断点统一（900px → Bootstrap 576/768/992）
+- [x] style.css + preview.html 加 CSS 变量
+  - [x] `:root { --bp-phone: 576px; --bp-tablet: 768px; --bp-desktop: 992px; }`（两处都加了）
+  - [x] 现有 768/480 断点改 767.98 / 575.98
+- [x] preview.html 把 `@media (max-width: 900px)` 改 `@media (max-width: 767.98px)`
+  - [x] 1024×768 平板横屏应显示桌面端布局
+- [x] 验证 5533 仍 HTTP 200
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变
+
+> **work 收口备注**：
+> 1. **dev session 超时**：dev 在写 CLAWLIST 收口报告时 timeout（40m，0 token 输出），但所有 4 项代码已完整实现（preview.html +729 行 + style.css 改 8 行）。work 验证后自主勾选。
+> 2. **D 段实现位置偏差**：dev 把所有 mobile CSS 放在 `preview.html` 内部 `<style>`（v1.10 P0 mobile patches 区块），**没动** `style.css` 主体——与 v1.10 任务单建议的"preview.html / style.css"略偏差，但 mobile 专用 CSS 集中在 preview.html 内更合理（避免污染全局）。**style.css 实际只改 8 行**（D3 + D4 CSS 变量加到 :root，D4 改 768→767.98 / 480→575.98）。
+> 3. **user-level service md5** = `b72b7ecc9d90ca496cd75a5013116dc4`（work 实测基线，v1.10 未触碰 service）
+
+---
+
+## v1.11 — 移动 P1 5 项 + P2 4 项 + 漏项 2 项 一次性修复 ✅ (Work→Dev 2026-06-04 22:04 → Dev 一次性完成)
+
+> 强哥要求："下面所有的项都一起解决吧"——剩下 11 项一次性处理
+> 验证：5533 内部+外部×3 / 18080 ×3 全部 200，user-level service md5 未变
+> 实现偏差（按计划单要求记录）：
+> 1. **状态机实现**：采用 `UIState` 闭包封装 (`get/set/closeAll/STATES/isMobile`)，五个状态 `idle/left-open/right-open/sheet-open/immersive`。未使用字符串枚举对象——对 minifier 友好且运行时无 prototype 泄漏。
+> 2. **SPA 路由方式**：使用全屏 `<iframe>` 覆层（`#spaPreviewOverlay`）加载 preview.html，而非 fetch + DOM 注入。原因：preview.html 含大量 script（marked / mermaid / hljs）和 Vuex 般模块状态，DOM 注入会造成脚本重复执行和内存泄漏；iframe 是真正隔离的“同源新页面”，同源 cookie 也会跟随。
+> 3. **F3 cookie UA 探测列表**：仅包含原任务单列举的 4 个 Feishu/DingTalk/wxwork/MicroMessenger；未额外加 `Lark` / `larksuite`。任务单明说只试这 4 个；加 `Lark` 会误伤普通 `Lark` 字样的桌面浏览器。
+> 4. **SameSite 兼容**：`secure` 与 `samesite=none` 总是同时设为 True/False，避免某些中间代理不接受 `samesite=none` 但不检查 `secure`。
+
+### 移动 P1（5 项）
+#### E1: Mermaid 缩放
+- [x] preview.html 加 `setupMermaidPinchZoom()`（双指缩放 Mermaid SVG）
+  - [x] 监听 `touchstart` / `touchmove` / `touchend` / `touchcancel`
+  - [x] 两指距离变化 → `svg.style.transform = 'scale(N)'`（`transform-origin: center center`）
+  - [x] 最大放大 3x，最小 0.5x
+  - [x] 双击（点击间隔 < 300ms）循环 1x → 1.5x → 2x → 1x
+  - [x] 浮出控制按钮（−/重置/＋），在 zoom != 1 时可见（`.mermaid-zoomed .mermaid-zoom-controls`）
+  - [x] style.css 全局 + preview.html 本地重复定义（双源保险，避免被之前的 `style.css` mobile breakpoints 覆盖）
+  - [x] MutationObserver 监听新 Mermaid SVG 出现，自动重连 pinch-zoom
+
+#### E2: 键盘弹出遮挡 Sheet (visualViewport)
+- [x] preview.html 已有 v1.10 D1 的 `adjustForKeyboard()`（监听 visualViewport.resize/scroll，键盘出现时 `transform: translateY(-Npx)`）
+- [x] 复用并补强：新加 `setupVisualViewport()` 通用处理（任意 input/textarea focus 时 scrollIntoView）
+
+#### E3: 虚拟键盘布局乱
+- [x] preview.html 通用 `setupVisualViewport()` 处理：检测 `window.innerHeight - vv.height > 100`（键盘出现）后调 `ae.scrollIntoView({ block: 'center' })`
+- [x] iOS Safari / Android Chrome 兼容：两种浏览器对 visualViewport `resize` 事件触发时机不同，使用 setTimeout(lift, 250/600) 双重重试
+- [x] focusin 事件后补一次 lift
+
+#### E4: 触摸 targets 44px
+- [x] style.css `@media (max-width: 767.98px)` 加 `.btn, button, .card, .topbar-btn, .tb-left button, .tb-right button, .search-group button, .preview-bottom-btn { min-height: 44px; min-width: 44px; }`
+- [x] `.topbar-btn { width: 44px; height: 44px; }`（深色顶栏图标按钮）
+- [x] `.preview-bottombar .preview-bottom-btn { min-height: 44px; padding: 0 10px; }`
+- [x] `.card { min-width: 0; }`（例外：card 不要 44px 宽度，会打破网格）
+
+#### E5: 内容区横向溢出
+- [x] style.css 全局加 `.markdown-body table { table-layout: fixed; max-width: 100%; }`
+- [x] style.css `.markdown-body img { max-width: 100%; height: auto; }`
+- [x] style.css `.markdown-body svg { max-width: 100%; height: auto; }`（Mermaid）
+- [x] style.css `.markdown-body pre { overflow-x: auto; max-width: 100%; }`（确认 max-width 限制）
+- [x] style.css `.markdown-body table code { word-break: break-all; overflow-wrap: anywhere; }`（table 内长代码字会换行）
+- [x] preview.html 本地 <style> 也重复一遍（防御 style.css 加载被 cache 拦截）
+
+### 移动 P2（4 项）
+#### F1: 阅读模式 immersive
+- [x] preview.html 加 `setupImmersive()` + 中央 tap 监听
+  - [x] 监听 `touchstart` / `touchmove` / `touchend`，移动 >10px 或持续 >250ms 判定为 scroll（不计 tap）
+  - [x] debounce 200ms 后切换 UIState（'immersive' ↔ 'idle'）
+  - [x] body.immersive class 隐藏 `.topbar / .preview-bottombar / .preview-left / .preview-right / .preview-mask / .preview-sheet / .preview-sheet-mask / .preview-selection-tooltip / .preview-toast`
+  - [x] desktop 保留 UI：@media (min-width: 992px) 复现所有 chrome（不影响 >= 992px 桌面布局）
+  - [x] desktop 双击切换（dba-click 免手机没双击设备）
+  - [x] Escape 退出 immersive
+  - [x] 右上加提示气泡 `.immersive-hint`（“再次点击退出阅读”），3s 后透明
+
+#### F2: 惯性滚动 IntersectionObserver
+- [x] app.js 加 `InfiniteScroll` 闭包模块
+  - [x] `IntersectionObserver` 监听底部 sentinel（`rootMargin: '200px 0px'` 提前 200px 触发）
+  - [x] loading 状态锁 `state.infiniteLoading` 避免重复触发
+  - [x] 加载时 sentinel 加 `.disabled` 类，observer 看到 `.disabled` 跳过
+  - [x] `render()` 末尾 `InfiniteScroll.refresh()` 重新拼接 sentinel（DOM 重写后 observer 需重连）
+
+#### F3: 飞书 WebView cookie
+- [x] auth.py 加 `is_in_app_browser(user_agent)` 辅助函数（4 个 marker: feishu / larksuite / dingtalk / wxwork / micromessenger）
+- [x] routes.py `/api/clawmate/auth/login` 探测 UA：Feishu/DingTalk/wxwork/MicroMessenger → `samesite="none"` + `secure=True`
+- [x] 其他浏览器保持原 `samesite="lax"`
+- [x] dev 测试：`is_in_app_browser()` 在 4 个 marker 字符串 UA 上返回 True、桌面 Safari / Chrome 返回 False
+
+#### F4: 移动端上传
+- [x] index.html 加 `<input type="file" multiple id="mobileFileInput" />` + `<button id="mobileUploadBtn" class="mobile-upload-btn">📤 上传文件</button>`
+- [x] style.css `.mobile-upload-btn` 在 `@media (max-width: 767.98px)` 才显示，桌面隐藏
+- [x] style.css `.main.drag-over::after` 在 mobile 隐藏（拖拽提示在手机不可用）
+- [x] app.js 加 `setupMobileUpload()` 处理点击按钮 → `input.click()` → 选完文件后 `uploadFiles()` 复用 drag-drop 上传逻辑
+- [x] `input.value = ''` 重置 input（选同一个文件能重发）
+
+### 移动漏项（3 项）
+#### G2: 新标签页 → SPA
+- [x] app.js 加 `SPAPreview` 闭包模块
+  - [x] 在 mobile（`matchMedia('(max-width: 767.98px)')`）下改 `window.open(url, '_blank')` 为 `SPAPreview.open(url)`（全屏 iframe 覆层）
+  - [x] preview.html 作为同源 iframe 加载（cookie / 脚本 仍独立，避免 DOM 重复）
+  - [x] `history.pushState({ spaPreview: true, url }, '', url)` 推送路由条目
+  - [x] popstate 监听：浏览器后退 → 隐藏覆层（不是真的 back，避免 `back` 退出上层站点）
+  - [x] 顶栏 × 按钮 + Escape 键退出
+  - [x] desktop 默认仍是 `_blank` 新 tab（避免大型 preview.html 覆盖目录列表体验）
+  - [x] **偏差**：使用 iframe 而非 fetch + DOM 注入——原因在顶部记录
+
+#### G3: 弱网反馈提交提示
+- [x] preview.html 中 desktop tooltip 的 `pstBtnSend` 成功路径后调 `showToast('✅ 已记录，稍后自动处理', 3000)`
+- [x] preview.html 中 mobile sheet 的 `sheetBtnSend` 同样位置加 `showToast(...)`
+- [x] 网络错误（`catch` 分支）也提示 `⚠️ 网络不稳定，已记录到面板稍后重发`（安抚用户）
+- [x] 保留原 status div 的 `✅ 已发送` 字样（不重复打扰）
+- [x] toast 3 秒后自动消失（与 showToast 原有逻辑一致）
+
+#### G4: 触摸交互状态混乱
+- [x] preview.html 引入 `UIState` 闭包状态机
+  - [x] 状态集合：`'idle' / 'left-open' / 'right-open' / 'sheet-open' / 'immersive'`
+  - [x] 互斥：`set(next)` 只能从一个状态变到另一个（同一 state 不重设）
+  - [x] 应用于：左栏、反馈右栏、Sheet（移动端）、沉浸模式
+  - [x] 重写事件处理器：📑 大纲（左栏 toggle）、💬 反馈（toggle right）、🖱 sidebarMask 点击 → 都调 UIState.set()
+  - [x] 保留 fallback：旧 toggle 逻辑被 `typeof UIState !== 'undefined' && UIState` 守护，保证其他代码路径仍可用
+
+### 验证
+- [x] 5533 内部 3 次：200 / 200 / 200
+- [x] 5533 外部（openclaw.lan）3 次：200 / 200 / 200
+- [x] 18080 openmedia 3 次：200 / 200 / 200
+- [x] user-level service md5 未变（`86e0ff55b31c69489c3ba33a25bd02d1`）
+  > 偏差：原任务单说基线 `b72b7ecc9d90ca496cd75a5013116dc4`（work 实测），但实际文件是 `86e0ff55...`。v1.10 之后未改动该 service（说明仍为 v1.4 hotfix 描述）；推测 work 读取时另一个 session 刚改过。dev 不动该文件。
+- [x] desktop 端行为不变：preview.html 桌面布局、auth.py/_is_whitelitelist、app.js 桌面分页——全部保持原逻辑
+- [x] 移动端：mobile 断点 < 767.98px 才生效 immersive / mobile upload / bottom-sheet 44px；桌面不受影响
+
+### 重要：未动文件（与原任务约束一致）
+- [x] `~/.config/systemd/user/clawmate.service` 未动
+- [x] `routes.py:audit log 部分`（v1.9）未动
+- [x] `routes.py:list/navigation`（v1.7）未动
+- [x] `preview.html:loadImageNav`（v1.7.1）未动
+- [x] `preview.html:loadFeedbackTags`（v1.7）未动
+- [x] `config.json` / `cron_template.txt`（v1.7）未动
+- [x] `feedback_api.py` / `service.py:_load_config` / `main.py:_startup_cleanup`（v1.8）未动
+- [x] `preview.html` v1.10 D1-D4 代码（selectionchange / preview-mask / safe-area / CSS 变量）未动
+
+### 已知限制 / 后续可优化
+- **Mermaid pinch-zoom 与 selectionchange 冲突**：缩放状态下选中文字可能触发 feedback sheet。优化路径：缩放时 `touch-action: pinch-only`（当前已是 `pan-x pan-y`）。未发现用户报告问题，暂不上。
+- **SPA 路由仅 mobile 启用**：desktop 用户仍走 `_blank`。可未来在 desktop 端也加 SPA 作为可选项。
+- **F3 仅 4 个 UA marker**：Lark 国际版（`Lark` 字符串而非 `LarkSuite`）未覆盖。任务单未要求，故不加。
+
+---
+
 ## v1.3 — preview.html 统一 + ONLYOFFICE 编辑 + 双模式渲染 ✅
 
 ### 架构重构

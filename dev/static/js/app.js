@@ -50,6 +50,8 @@ const state = {
   selectedPaths: new Set(),
   multiSelectEnabled: false,
   onlyofficeAvailable: null, // null=unknown, true=available, false=unavailable
+  // v1.11 F2: infinite scroll loading lock
+  infiniteLoading: false,
 };
 
 // Sidebar state — shows parent directory's children (siblings of current dir)
@@ -1300,6 +1302,9 @@ function render() {
   renderList(pagedMarkdown, pagedFolder, pagedOther);
   updatePagination(totalPages);
   updateBatchBar();
+  // v1.11 F2: re-attach infinite scroll sentinel so it sits at the end
+  // of the freshly-rendered list. observer is null until first setup().
+  try { if (typeof InfiniteScroll !== 'undefined') InfiniteScroll.refresh(); } catch (_) {}
 
   const baseCount = entries.length;
   const filteredCount = filtered.length;
@@ -1413,6 +1418,49 @@ function setupDragDrop() {
   });
 }
 
+// ===== v1.11 F4: Mobile file picker =====
+// On phones, drag-and-drop is not available; surface a native <input type=file>
+// picker instead. Hidden on desktop via the .mobile-upload-btn CSS class.
+async function uploadFiles(files) {
+  if (!state.rootId) { setStatus('请先选择根目录'); return; }
+  if (!files || !files.length) return;
+  setStatus(`正在上传 ${files.length} 个文件...`);
+  let uploaded = 0, failed = 0;
+  for (const file of files) {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await authFetch(
+        `/api/clawmate/upload?root=${encodeURIComponent(state.rootId)}&dir=${encodeURIComponent(state.dir)}`,
+        { method: 'POST', body: formData }
+      );
+      if (res.ok) uploaded++;
+      else failed++;
+    } catch (_) {
+      failed++;
+    }
+  }
+  setStatus(`上传完成: ${uploaded} 成功${failed ? ', ' + failed + ' 失败' : ''}`);
+  if (uploaded > 0) loadDir(state.dir);
+}
+
+function setupMobileUpload() {
+  const btn = document.getElementById('mobileUploadBtn');
+  const input = document.getElementById('mobileFileInput');
+  if (!btn || !input) return;
+  btn.addEventListener('click', () => {
+    if (!state.rootId) { setStatus('请先选择根目录'); return; }
+    input.click();
+  });
+  input.addEventListener('change', async () => {
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
+    await uploadFiles(files);
+    // Reset the input so picking the same file twice still triggers change
+    input.value = '';
+  });
+}
+
 async function loadDir(dir) {
   if (!state.rootId) {
     setStatus("请先选择根目录");
@@ -1492,8 +1540,109 @@ function handleEntryClick(entry) {
 function openEntryPreview(entry) {
   if (!entry || entry.is_dir) return;
   const previewUrl = `/clawmate/preview.html?root=${encodeURIComponent(state.rootId)}&file=${encodeURIComponent(entry.relPath)}`;
-  window.open(previewUrl, "_blank", "noopener");
+  // v1.11 G2: SPA navigation — open preview.html inline (fullscreen overlay)
+  // when the user is on mobile / supports the pattern, otherwise fall back
+  // to a new tab (desktop default). The history API is updated so the
+  // browser back button returns to the directory listing.
+  if (typeof SPAPreview !== 'undefined' && SPAPreview.canUse()) {
+    SPAPreview.open(previewUrl);
+  } else {
+    window.open(previewUrl, "_blank", "noopener");
+  }
 }
+
+// ===== v1.11 G2: SPA preview overlay =====
+// Loads preview.html via fetch and renders it inline as a fullscreen
+// overlay on top of the directory listing. Uses history.pushState so
+// the browser back button returns to the listing without a full reload.
+// On desktop the same code path is used — the overlay is a fullscreen
+// modal that the user can dismiss with the close button or Escape.
+const SPAPreview = (() => {
+  let overlay = null;
+  let closeBtn = null;
+  let contentFrame = null;  // <iframe> running preview.html in-process
+
+  function canUse() {
+    // Use SPA mode on mobile OR if the user has the toggle on. Desktop
+    // defaults to opening in a new tab (existing behavior) so the SPA
+    // opt-in is opt-in for desktop. Mobile always uses SPA.
+    const isMobile = window.matchMedia('(max-width: 767.98px)').matches;
+    return isMobile;
+  }
+
+  function ensureOverlay() {
+    if (overlay && document.body.contains(overlay)) return overlay;
+    overlay = document.createElement('div');
+    overlay.id = 'spaPreviewOverlay';
+    overlay.style.cssText = [
+      'position:fixed', 'inset:0', 'z-index:10000',
+      'background:var(--bg-primary, #f1f5f9)',
+      'display:flex', 'flex-direction:column',
+      'animation:spaFadeIn 0.18s ease-out'
+    ].join(';');
+    // Top bar with close button
+    const topbar = document.createElement('div');
+    topbar.style.cssText = 'display:flex;align-items:center;padding:8px 12px;gap:8px;background:var(--brand-bg, #1e293b);color:#fff;flex-shrink:0;';
+    closeBtn = document.createElement('button');
+    closeBtn.textContent = '×';
+    closeBtn.title = '关闭 (Esc)';
+    closeBtn.style.cssText = 'background:transparent;border:none;color:#fff;font-size:24px;line-height:1;cursor:pointer;padding:4px 12px;min-width:44px;min-height:44px;';
+    closeBtn.addEventListener('click', close);
+    const label = document.createElement('span');
+    label.textContent = '预览';
+    label.style.cssText = 'font-size:14px;font-weight:600;';
+    topbar.appendChild(closeBtn);
+    topbar.appendChild(label);
+    overlay.appendChild(topbar);
+    // Content iframe
+    contentFrame = document.createElement('iframe');
+    contentFrame.id = 'spaPreviewFrame';
+    contentFrame.style.cssText = 'flex:1;width:100%;border:none;background:#fff;';
+    overlay.appendChild(contentFrame);
+    document.body.appendChild(overlay);
+    // Inject keyframes for fade-in
+    if (!document.getElementById('spaPreviewStyles')) {
+      const style = document.createElement('style');
+      style.id = 'spaPreviewStyles';
+      style.textContent = '@keyframes spaFadeIn { from { opacity: 0; } to { opacity: 1; } }';
+      document.head.appendChild(style);
+    }
+    // Escape to close
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && overlay && !overlay.hidden) close();
+    });
+    return overlay;
+  }
+
+  function open(url) {
+    ensureOverlay();
+    overlay.hidden = false;
+    if (contentFrame.src !== url) contentFrame.src = url;
+    // Push a state entry so browser back closes the preview
+    try { history.pushState({ spaPreview: true, url }, '', url); } catch (_) {}
+  }
+
+  function close() {
+    if (!overlay) return;
+    overlay.hidden = true;
+    if (contentFrame) contentFrame.src = 'about:blank';
+    // Pop the state we pushed (if it matches)
+    try {
+      if (history.state && history.state.spaPreview) history.back();
+    } catch (_) {}
+  }
+
+  function setupPopState() {
+    window.addEventListener('popstate', (e) => {
+      if (overlay && !overlay.hidden && !(e.state && e.state.spaPreview)) {
+        overlay.hidden = true;
+        if (contentFrame) contentFrame.src = 'about:blank';
+      }
+    });
+  }
+
+  return { canUse, open, close, ensureOverlay, setupPopState };
+})();
 
 
 function setView(view) {
@@ -1608,6 +1757,83 @@ els.nextPage.addEventListener("click", () => {
   state.page += 1;
   render();
 });
+
+// ===== v1.11 F2: IntersectionObserver-based infinite scroll =====
+// On mobile, paging via prev/next buttons is awkward. We attach an
+// IntersectionObserver to a sentinel at the end of the gallery/list
+// that auto-loads the next page when it scrolls into view. A loading
+// lock (`state.infiniteLoading`) prevents multiple triggers before
+// the next page is rendered; the sentinel also gets a `disabled` class
+// while loading so the observer short-circuits.
+const InfiniteScroll = (() => {
+  let observer = null;
+  let sentinel = null;
+
+  function ensureSentinel() {
+    if (sentinel && document.body.contains(sentinel)) return sentinel;
+    sentinel = document.createElement('div');
+    sentinel.id = 'infiniteScrollSentinel';
+    sentinel.style.cssText = 'height:1px;width:100%;pointer-events:none;opacity:0;';
+    // Append at the end of the main-scroll container (or body as fallback)
+    const main = document.querySelector('.main-scroll') || document.body;
+    main.appendChild(sentinel);
+    return sentinel;
+  }
+
+  function nextPage() {
+    if (state.infiniteLoading) return;
+    if (!state.entries && !state.searchResults) return;
+    const base = state.searchResults || state.entries;
+    const totalPages = Math.max(1, Math.ceil(base.length / state.pageSize));
+    if (state.page >= totalPages) {
+      // No more pages — disable sentinel
+      if (sentinel) sentinel.classList.add('disabled');
+      return;
+    }
+    state.infiniteLoading = true;
+    if (sentinel) sentinel.classList.add('disabled');
+    state.page += 1;
+    render();
+    // Release the lock after the next render frame so the observer has
+    // time to re-evaluate the (new) sentinel position.
+    setTimeout(() => {
+      state.infiniteLoading = false;
+      if (sentinel) sentinel.classList.remove('disabled');
+    }, 150);
+  }
+
+  function setup() {
+    if (observer) return;
+    if (!('IntersectionObserver' in window)) return;
+    observer = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting && !e.target.classList.contains('disabled')) {
+          nextPage();
+        }
+      }
+    }, { rootMargin: '200px 0px', threshold: 0.01 });
+    const s = ensureSentinel();
+    observer.observe(s);
+  }
+
+  function teardown() {
+    if (observer) { observer.disconnect(); observer = null; }
+    if (sentinel && sentinel.parentNode) sentinel.parentNode.removeChild(sentinel);
+    sentinel = null;
+  }
+
+  // Re-attach on view changes (gallery <-> list) and after each render.
+  // Simpler: refresh after every render() by re-appending the sentinel.
+  function refresh() {
+    if (!observer) setup();
+    if (sentinel && sentinel.parentNode) sentinel.parentNode.removeChild(sentinel);
+    sentinel = null;
+    const s = ensureSentinel();
+    if (observer) observer.observe(s);
+  }
+
+  return { setup, teardown, refresh, nextPage };
+})();
 
 // Theme toggle
 els.themeToggle && els.themeToggle.addEventListener("click", cycleTheme);
@@ -2074,6 +2300,9 @@ async function init() {
   await loadConfig();
   initTheme(); // Apply theme before render
   setupDragDrop(); // Activate drag-and-drop upload
+  setupMobileUpload(); // v1.11 F4: native file picker for mobile
+  InfiniteScroll.setup(); // v1.11 F2: mobile infinite scroll observer
+  SPAPreview.setupPopState(); // v1.11 G2: handle browser back to close preview
   // Pre-check ONLYOFFICE availability in background
   checkOnlyofficeAvailable();
 

@@ -35,6 +35,15 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
   --radius-md: 10px;
   --radius-lg: 14px;
   --sidebar-w: 240px;
+  /* ===== Bootstrap-aligned breakpoints (v1.10 D4) ===== */
+  --bp-phone: 576px;
+  --bp-tablet: 768px;
+  --bp-desktop: 992px;
+  /* ===== Safe-area insets (v1.10 D3) =====
+     Defaults to 0 in non-supporting browsers; fixed bottom/top
+     elements use max(12px, env(...)) pattern with @supports fallback. */
+  --sai-top: env(safe-area-inset-top, 0px);
+  --sai-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 [data-theme="dark"] {
@@ -264,10 +273,10 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
 .skeleton-markdown .skeleton-text.full { width: 100%; }
 .skeleton-markdown .skeleton-text:last-child { width: 45%; animation-delay: 0.1s; }
 
-/* ===== Mobile Responsive ===== */
-@media (max-width: 768px) {
-  /* Topbar: compact with hamburger */
-  .topbar { padding: 8px 12px; gap: 8px; }
+/* ===== Mobile Responsive (v1.10 D4: use Bootstrap-aligned 767.98px) ===== */
+@media (max-width: 767.98px) {
+  /* Topbar: compact with hamburger + safe-area top (v1.10 D3) */
+  .topbar { padding: 8px 12px; gap: 8px; padding-top: max(8px, env(safe-area-inset-top, 8px)); }
   .brand { font-size: 14px; }
   #hamburgerBtn { display: flex; }
   .search-group { max-width: none; }
@@ -319,9 +328,29 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
   .batch-actions button { padding: 6px 12px; font-size: 12px; }
 
   /* Standalone */
+
+  /* ===== v1.11 E4: 44px touch targets (Apple HIG) ===== */
+  .btn,
+  button,
+  .card,
+  .topbar-btn,
+  .tb-left button,
+  .tb-right button,
+  .search-group button,
+  .preview-bottom-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  /* Card stays 1:1 ratio — keep min-width smaller so we don't break grid */
+  .card { min-width: 0; }
+  /* Topbar buttons (compact): keep small width but allow 44px tap via padding */
+  .topbar-btn { width: 44px; height: 44px; }
+  /* Bottom nav buttons stay 1:1 but inherit 44px from .preview-bottom-btn */
+  .preview-bottombar .preview-bottom-btn { min-height: 44px; padding: 0 10px; }
 }
 
-@media (max-width: 480px) {
+/* v1.10 D4: switch from 480 to Bootstrap phone breakpoint (576px) */
+@media (max-width: 575.98px) {
   .gallery { grid-template-columns: 1fr 1fr; gap: 8px; }
   .card .thumb { height: 56px; }
   .search-group input { min-width: 60px; }
@@ -338,6 +367,85 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
 .preview-body > img { max-height: 100%; width: auto; object-fit: contain; }
 .preview-body img { max-width: 100%; }
 .preview-body pre { white-space: pre-wrap; background: var(--bg-code); padding: 12px; border-radius: 8px; border: 1px solid var(--code-border); max-height: 60vh; overflow: auto; }
+
+/* ===== v1.11 F1: Immersive reading mode (mobile) ===== */
+body.immersive .topbar,
+body.immersive .preview-bottombar,
+body.immersive .preview-left,
+body.immersive .preview-right,
+body.immersive .sidebar-overlay,
+body.immersive .index-bottom-nav,
+body.immersive .batch-bar {
+  display: none !important;
+}
+/* In immersive, allow content to use full height */
+body.immersive .preview-three-col { display: block; }
+body.immersive .preview-center { height: 100vh; }
+body.immersive .preview-center-body { padding: 24px 28px; }
+/* Immersive exit hint — small badge in corner */
+.immersive-hint {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 100;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+body.immersive .immersive-hint {
+  opacity: 0.85;
+}
+/* Immersive mode is mobile-only */
+@media (min-width: 992px) {
+  body.immersive .topbar,
+  body.immersive .preview-bottombar,
+  body.immersive .preview-left,
+  body.immersive .preview-right { display: flex !important; }
+  body.immersive .preview-three-col { display: grid; }
+  body.immersive .preview-center { height: auto; }
+}
+
+/* ===== v1.11 F4: Mobile file input (only mobile shows native picker) ===== */
+.mobile-upload-btn {
+  display: none;
+  margin: 8px 0;
+  padding: 10px 16px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  justify-content: center;
+}
+.mobile-upload-btn:hover { background: var(--accent-hover); }
+.mobile-upload-btn .ico { font-size: 18px; }
+@media (max-width: 767.98px) {
+  .mobile-upload-btn { display: inline-flex; }
+  /* On mobile, suppress drag-drop visual cues (the .main.drag-over after-element is hidden too) */
+  .main.drag-over::after { display: none; }
+}
+/* Hide the actual <input type=file> */
+#mobileFileInput { display: none; }
+
+/* ===== v1.11 E5: Content horizontal-overflow guards (mobile) ===== */
+.markdown-body table { table-layout: fixed; max-width: 100%; }
+.markdown-body img { max-width: 100%; height: auto; }
+.markdown-body svg { max-width: 100%; height: auto; }
+.markdown-body pre { overflow-x: auto; max-width: 100%; }
+/* Wrap any unbreakable code inside table cells */
+.markdown-body table code { word-break: break-all; overflow-wrap: anywhere; }
 /* highlight.js colors for raw-text previews (matches github-markdown-dark) */
 .preview-body pre.raw-text .hljs-keyword { color: #ff7b72; }
 .preview-body pre.raw-text .hljs-string { color: #a5d6ff; }
@@ -548,12 +656,58 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
   overflow: auto;
   max-height: 70vh;
   min-height: 100px;
+  /* v1.11 E1: pinch-zoom transform origin */
+  touch-action: pan-x pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 .mermaid svg {
   max-width: 100%;
   height: auto;
   min-width: 200px;
   min-height: 100px;
+  /* v1.11 E1: pinch-zoom target — transform set via JS */
+  transform-origin: center center;
+  transition: transform 0.12s ease-out;
+  will-change: transform;
+}
+/* v1.11 E1: zoomed state — disallow text selection */
+.mermaid.mermaid-zoomed svg {
+  cursor: grab;
+}
+.mermaid.mermaid-zoomed svg:active {
+  cursor: grabbing;
+}
+/* v1.11 E1: zoom controls overlay (visible only when zoom != 1) */
+.mermaid-zoom-controls {
+  display: none;
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  gap: 4px;
+  z-index: 5;
+}
+.mermaid.mermaid-zoomed .mermaid-zoom-controls {
+  display: inline-flex;
+}
+.mermaid-zoom-controls button {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mermaid-zoom-controls button:hover {
+  background: var(--bg-tertiary);
 }
 .preview-body .mermaid {
   display: block;
@@ -1165,14 +1319,7 @@ pre:hover .code-copy-btn,
   cursor: not-allowed;
 }
 
-@media (max-width: 900px) {
-
-
-
-
-
-
-}
+/* v1.10 D4: empty 900px block removed (preview.html owns .preview-* mobile rules; standalone reuses the Bootstrap-aligned 767.98px / 575.98px breakpoints above). */
 
 /* Standalone back link style */
 
