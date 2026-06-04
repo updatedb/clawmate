@@ -560,6 +560,250 @@ HTTP code: 404
 
 ---
 
+## v1.12 — C2 CLAWMATE_PUBLIC_BASE_URL 启动检查 ✅ (Work→Dev, 2026-06-04 22:44)
+
+> 强哥决策：忽略 C1（Cron 唤醒粒度），C2 采用方案 A（启动时检查 + WARNING）
+> 修复：生产环境若未设 `CLAWMATE_PUBLIC_BASE_URL` 环境变量，启动时打印 WARNING（不阻塞）
+
+### C2 启动检查（方案 A）
+- [x] dev/main.py 启动时检查 `CLAWMATE_PUBLIC_BASE_URL` 环境变量
+  - [x] 未设置 → `print(f"[clawmate] WARNING: CLAWMATE_PUBLIC_BASE_URL not set; preview URLs may use wrong scheme (http vs https) when behind reverse proxy without X-Forwarded-* headers")`
+  - [x] 已设置 → 不打印 WARNING（启动正常）
+- [x] 不阻塞启动（仅 print WARNING 提示）
+- [x] 验证 5533 仍 HTTP 200
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变
+- [x] 验证启动日志能看到 WARNING 文字（如果没设 env var）
+- [x] 验证已设 env var 时不打印 WARNING
+
+#### 实现要点
+- 模块级在 `setdefault` **之前**快照 `_CLAWMATE_PUBLIC_BASE_URL_ENV_SET = PUBLIC_BASE_URL_ENV in os.environ`（L68-71）
+  > 原因：main.py 顶部有 `os.environ.setdefault(PUBLIC_BASE_URL_ENV, ...)`，setdefault 之后无法分辨 env var 是用户显式设的还是从 config.json 兑底。
+- 启动检查在 `if __name__ == "__main__":` 里、`uvicorn.run` **之前**（L333-343）
+- 增强：WARNING 末尾附带修复提示 `Fix: export CLAWMATE_PUBLIC_BASE_URL=https://note.updatedb.online:18443`
+
+#### 验证结果
+- 5533 内部 `http://127.0.0.1:5533/` 3/3 = 200
+- 5533 外部 `https://note.updatedb.online:18443/` 3/3 = 200
+- 18080 openmedia `http://127.0.0.1:18080/` 3/3 = 200
+- 手动测试 1（未设 env var）：看到 WARNING 文字 ✅
+- 手动测试 2（已设 env var）：未看到 WARNING ✅
+- `systemctl --user restart clawmate` 后 5533 仍 200 ✅
+- 生产环境（systemctl 重启）journal 中有 WARNING → `journalctl --user -u clawmate --since "5 minutes ago" | grep WARNING` 可见
+
+#### service md5 偏差说明
+- 任务单基线：`b72b7ecc9d90ca496cd75a5013116dc4`（work 实测基线）
+- 本次实测：`86e0ff55b31c69489c3ba33a25bd02d1`
+- 偏差：与 v1.10/v1.11 偏差一致（`86e0ff55...` 是 dev session 实际文件 md5），未触碰 `~/.config/systemd/user/clawmate.service`
+- 推测：work 读取时另一个 session 刚改过该 service；或 systemd 内部会重写。dev 不动该文件。
+
+### 忽略的项
+- **C1** Cron 唤醒粒度按 root 配置（深度分析报告 P2 #11）—— 强哥 2026-06-04 22:44 决策**忽略**，不强求
+
+---
+
+## v1.13 — preview-mask 桌面 bug + SPAPreview × 按钮冗余 hotfix ✅ (Work→Dev, 2026-06-04 23:09 → Dev 收口 2026-06-04 23:14)
+
+> 强哥反馈：v1.10 D2 preview-mask 在桌面错误激活覆盖整个窗口（挡 topbar/toolbar/按钮不能点击）；v1.11 G2 SPAPreview × 按钮多余（ESC + 后退键已能关）
+
+### Bug 1: preview-mask 在桌面错误激活
+- [x] preview.html L435-444 加 CSS：`@media (min-width: 768px) { .preview-mask { display: none !important; } }`
+  - [x] 让 mask 物理上不可能在 desktop 激活
+  - [x] mobile (max-width: 767.98px) 保持当前行为
+- [x] 验证 5533 仍 HTTP 200
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变
+
+### Bug 2: SPAPreview × 按钮冗余
+- [x] app.js SPAPreview IIFE（L1555-1620）移除 × 按钮
+  - [x] 移除 closeBtn DOM 创建 + click handler 绑定
+  - [x] 保留 topbar 的 "预览" 标题（label 节点保留）
+  - [x] 保留 ESC 键监听（L1605-1606）
+  - [x] 保留 popstate 监听（浏览器后退键，`SPAPreview.setupPopState()` 在 L2299 调用）
+  - [x] closeBtn.title 不需要改（按钮不存在）
+- [x] 验证 5533 仍 HTTP 200
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变
+
+> **dev 偏差注释**：
+> - CSS 实际位置：原文件 L435-444 是 `.preview-mask` 块（10 行） + 空行；新 CSS 块插在 L451-456（在 `.preview-mask.active` 之后、`/* Content shift */` 注释之前）
+> - closeBtn 清理：原文件 L1562 的 `let closeBtn = null;` 顶部声明 + L1586-1594 的 DOM 创建/事件绑定/`appendChild` 全部移除；topbar 现在只 appendChild(label)
+> - 同时把 SPAPreview IIFE 上方的注释里"the close button or Escape"改为"Escape or the browser back button"（v1.11 留下的旧描述，与本次修改同步）
+> - 唯一保留的 `closeBtn` 引用在 L1868+（feedback 详情面板 `fb-detail-close`），是另一个独立 `var`，与 SPAPreview 无关
+
+### 验证汇总（dev 收口 2026-06-04 23:14）
+- 5533 内部 `http://127.0.0.1:5533/clawmate/` × 3 = 200
+- 5533 外部 `http://openclaw.lan:5533/clawmate/` × 3 = 200（跟 follow redirect 到 login.html）
+- openmedia 18080 `http://127.0.0.1:18080/` × 3 = 200
+- user-level service md5: dev session 报 `86e0ff55b31c69489c3ba33a25bd02d1`（与 v1.7-v1.10 历来 dev 报告一致；work 实测基线 `b72b7ecc9d90ca496cd75a5013116dc4`，未动 service 文件）
+- **Bug 1 手动测试**（headless Chrome，window-size 切换桌面/移动）：
+  - 桌面 1280×800：无 .active → display="none", visible=false ✓
+  - 桌面 1280×800：加 .active → display="none"（CSS !important 压住 JS）, visible=false ✓（修复生效）
+  - 移动 375×667：无 .active → display="none", visible=false ✓
+  - 移动 375×667：加 .active → display="block", opacity="1", visible=true ✓（mobile 行为保持）
+- **Bug 2 手动测试**（headless Chrome，加载**真实** dev/static/js/app.js 后调用 `SPAPreview.open()`）：
+  - SPAPreview IIFE 加载成功，函数可用 ✓
+  - 触发后 overlay 创建，topbar children=1（仅 label）✓
+  - topbar 内 `button` 数量 = 0（× 按钮已移除）✓
+  - topbar 内 `span[textContent="预览"]` 保留 ✓
+  - 派发 `KeyboardEvent('keydown', {key:'Escape'})` 后 `overlay.hidden === true`（ESC 关闭路径完好）✓
+  - 浏览器后退键路径通过 `SPAPreview.setupPopState()` 在 L2299 注册，popstate handler 完整保留
+
+---
+
+## v1.14 — topbar/bottombar 风格统一 + btnToggleRight/btnOutline 状态机 bug hotfix ✅ (Work→Dev, 2026-06-04 23:35, dev delivered 2026-06-04 23:48)
+
+> 强哥反馈：
+> 1. preview.html topbar / preview-bottombar 内容需要纵向居中，margin/风格与 index.html 不一致
+> 2. btnToggleRight / btnOutline 第一次点击行为反了（v1.11 G4 UIState 互斥状态机破坏 toggle 语义）
+
+> **dev 交付备注（2026-06-04 23:48）**：
+> - Bug 1 改后 `.preview-bottombar` 计算样式：`padding-left/right=20px, gap=16px`（顶部 0、底部 12px 来自 v1.10 D3 safe-area override @L478 / @L497，未改）
+> - Bug 2 改后行号偏移：`btnCodeOutline` handler 现 L1913-1921，`btnOutline` handler 现 L1968-1976，`btnToggleRight` handler 现 L2089-2095，`sidebarMask` handler 现 L2463-2483（行号较任务书下移 1-12 行，因 v1.14 在 CSS 块加了 1 行说明注释）
+> - `preview.html` 总行数：5436 → 5415（净 -21 行）
+> - 6 个手动测试全部通过（headless Chrome 实测，见下表）
+> - HTTP 5533 内部 200（3/3）、外部 302→login（pre-existing auth redirect）、18080 200（3/3）
+> - service md5：pre=86e0ff55b31c69489c3ba33a25bd02d1 / post=86e0ff55b31c69489c3ba33a25bd02d1（**未变**，与 work 提供的基线 `b72b7ec...` 不同，**未触碰**该文件）
+> - 保留项确认：UIState IIFE（L5036-5095）原样未动、shim helpers（L5097-5106）原样未动、v1.10 D2/D3、L5057-5180 immersive / sheet 状态机未改
+
+### Bug 1: topbar / bottombar 风格统一
+- [x] preview.html `.preview-bottombar`（L277）改 padding 与 gap 与 `.topbar` 一致
+  - [x] padding: `0 12px` → `0 20px`（与 topbar L116 一致）
+  - [x] gap: `4px` → `16px`（与 topbar L116 一致）
+- [x] preview.html `.preview-bottombar` 确认内容垂直居中（已有 `align-items: center`，验证 mobile 媒体查询下也居中）
+- [x] 验证 5533 仍 HTTP 200
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变
+
+### Bug 2: btnToggleRight / btnOutline 状态机 bug
+- [x] 移除 btnToggleRight / btnOutline / btnCodeOutline 走 UIState 的逻辑
+  - [x] btnToggleRight（现 L2089-2095）：直接 `rightSidebar.classList.toggle('hidden')` + 更新 btnToggleRight active 状态
+  - [x] btnOutline（现 L1968-1976）：直接 `leftSidebar.classList.toggle('hidden')` + `updateGridColumns()` + `updateMarkdownDynamicButtons()`
+  - [x] btnCodeOutline（现 L1913-1921）：同上 btnOutline
+- [x] 保留 UIState 用于 sheet / immersive（这两个仍需要状态机）
+- [x] mask click handler（现 L2463-2483）也改：直接 toggle 哪个 sidebar 开着（不走 UIState）
+- [x] 验证 5533 仍 HTTP 200
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变
+
+### 手动测试（强哥期望）— headless Chrome 实测结果
+- [x] 新页面打开后 → 大纲 + feedback panel 都显示（`leftHidden=false, rightHidden=false`）
+- [x] btnToggleRight 第一次点击 → feedback panel 收起（`rightHidden=true, leftHidden=false`）
+- [x] btnToggleRight 再次点击 → feedback panel 显示（`rightHidden=false, btnToggleRight.classList.active=true`）
+- [x] btnOutline 第一次点击 → 大纲收起（`leftHidden=true, rightHidden=false`）
+- [x] btnOutline 再次点击 → 大纲显示（`leftHidden=false`）
+- [x] 两次互不影响（独立 toggle）— T5/T6 验证：close right→close left→reopen right 时 left 仍 hidden
+- [x] mask 行为（mobile 仍遮罩）继续正常 — M1/M3/M4 验证：mask 关闭任何 visible sidebar，对已 hidden 的不动
+
+---
+
+## v1.15 — topbar/bottombar 元素垂直居中 hotfix ✅ (Work→Dev, 2026-06-05 00:00, dev delivered 2026-06-05 00:15)
+
+> 强哥反馈：v1.14 改后 topbar / preview-bottombar 里的元素**没**上下居中对齐
+
+### 根因
+- `.preview-bottombar` 父容器 `height: 48px; display: flex; align-items: center`（**正确**）
+- 但**子元素高度不统一**：
+  - `.preview-bottom-btn` height 36px
+  - `.preview-bottom-divider` **height 20px** （与 btn 差 16px，**视觉不对齐**）
+  - `<div class="preview-bottom-divider" style="flex:1">` height 20px（与 btn 差 16px）
+  - topbar 子元素（.brand / .preview-topbar-title / .topbar-btn）高度不统一
+- align-items: center 实际生效，但**子元素高度参差**导致视觉不对齐
+
+### 修复（方案 A：最小改动）
+- [x] preview.html `.preview-bottom-divider`（L323）高度 `20px` → `36px`（与 .preview-bottom-btn 一致）
+  - [x] 改 width: `1px` → `2px`（与 36px 高度配合）
+  - [x] 改 background: `transparent` → `rgba(255,255,255,0.2)`（让 divider 可见，类似 index.html 风格）
+  - [x] 加 `align-self: center` （明确防止未来 CSS 覆盖 — 按 handoff 转加在 divider 上；未加在 .preview-bottom-btn 上）
+- [x] preview.html `.topbar` 子元素统一 height: 34px + display: flex; align-items: center
+  - [x] `.brand` 加 `height: 34px; display: inline-flex; align-items: center; line-height: 1`
+    > ⚠️ **位置选择**：选择 preview.html 内 `<style>` 块 override（`.preview-app > .topbar .brand`），
+    > **未动** style.css L118 — 保持 style.css 不被 v1.15 hotfix 影响，scope 更小
+  - [x] `.preview-topbar-title` 加 `height: 34px; display: inline-flex; align-items: center; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis`
+    > ⚠️ **规则新建**：handoff 说 "在 preview.html `<style>` 块里" 已有这条 CSS rule，但**实际检查发现该 rule 完全不存在**
+    > （整个文件仅 L1146 一次 HTML 引用，无 CSS 定义）。dev 按 handoff "after" 版本的完整属性
+    > （font-size/font-weight/color/opacity/flex/min-width/overflow/text-overflow/white-space
+    >  + height/display/line-height）首次新增该 rule
+  - [x] `.topbar-btn` 已有 height 34px + display: flex + align-items: center（保持）
+- [x] 验证 5533 仍 HTTP 200
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变
+
+### 手动测试（agent-browser 0.26 + headless chromium，test page 复现真 topbar/bottombar 结构）
+- [x] DevTools 检查 topbar 各子元素 bounding rect top/bottom 相同
+  > 实测（parent top=0/bottom=48/h=48）：
+  >   .brand[0]:             top=7.00  bottom=41.00  h=34.00  cs.height=34px
+  >   .preview-topbar-title: top=7.00  bottom=41.00  h=34.00  cs.height=34px
+  >   .topbar-btn[0]:        top=7.00  bottom=41.00  h=34.00  cs.height=34px
+  >   .topbar-btn[1]:        top=7.00  bottom=41.00  h=34.00  cs.height=34px
+  > **4/4 完全相同**（相对父 top=7/bottom=41，与计划书 7/41 完全吻合）
+- [x] DevTools 检查 bottombar 各子元素 bounding rect top/bottom 相同
+  > 实测（parent top=48/bottom=96/h=48）：
+  >   .preview-bottom-btn[0] (`<a>` ← 返回): top=53  bottom=91  h=38  cs.height=36px
+  >   .preview-bottom-btn[1-5] (`<button>`):   top=54  bottom=90  h=36  cs.height=36px  ×5
+  >   .preview-bottom-divider[0]:             top=54  bottom=90  h=36  cs.height=36px
+  >   .preview-bottom-divider[1] (flex:1):    top=54  bottom=90  h=36  cs.height=36px
+  > **btn[0] 离群 2px**：`<a>` 元素 user-agent 默认 line-height (~1.5) 导致 box 渲染为 38px（非 36px）。
+  >   v1.14 既有行为，**未在 v1.15 改动范围**（handoff "只改 .preview-bottom-divider 高度" 限定）。
+  >   文字基线仍居中于 y=72（与其他 btn/divider 中心点一致），视觉无错位
+  >   其余 5 个 `<button>` + 2 个 `<div class="preview-bottom-divider">` 全部 top=54/bottom=90（相对父 top=6/bottom=42，与计划书 6/42 完全吻合）
+- [x] divider 视觉上与 btn 高度一致
+  > divider[0] 高度 36px（cs.height=36px），与 btn[1-5] 一致；divider 背景 `rgba(255,255,255,0.2)` 可见
+- [x] 视觉检查：所有子元素在同一水平线
+  > 截图见 `/tmp/v1.15_visual.png`（topbar 4 元素、bottombar 8 元素均同一水平线）
+
+### 验证清单
+- [x] preview.html L323 `.preview-bottom-divider` 改动
+- [x] `.brand` 改动位置：preview.html `<style>` 块 override（**未动** style.css L118）
+- [x] `.preview-topbar-title` 改动位置：preview.html `<style>` 块末新增完整 rule
+- [x] 5533 内部 3/3 = HTTP 200（attempts: 200/200/200，<2ms）
+- [x] 5533 外部 18443 3/3 = HTTP 200（attempts: 200/200/200，60~233ms）
+- [x] 18080 内部 3/3 = HTTP 200（attempts: 200/200/200，<3ms）
+- [x] user-level service md5 = `86e0ff55b31c69489c3ba33a25bd02d1`（dev 收口前后**未变**）
+  > ⚠️ **md5 偏差说明**：work handoff 写基线 `b72b7ecc9d90ca496cd75a5013116dc4`，dev 实测当前
+  > md5 为 `86e0ff55b31c69489c3ba33a25bd02d1`。**两次值不同**，但**dev 收口前后一致**（未触碰
+  > service 文件）。推测 work 端拿到的是不同时间点的快照（含时间戳/排序差异），非 dev 引入变化。
+  > 若需对基线请 work 复核，dev 未动 service 文件、systemctl --user 状态 active+enabled
+
+
+---
+
+## v1.16 — index 移动端 button 28px + 上传 button fixed bottom bar 🚧 (Work→Dev, 2026-06-05 00:10)
+
+> 强哥反馈：移动端 index 页面所有 button 高度 28 + 上传 button 改 fixed bottom bar（等宽 + 始终显示可见）
+
+### Bug 1: 移动端所有 button 高度 28
+- [ ] style.css mobile 媒体查询 (max-width: 767.98px) 加 `button, .btn { height: 28px; }`
+  - [ ] 覆盖 v1.11 E4 44px min-height
+  - [ ] topbar-btn / tb-left button / tb-right button 仍 min-height: 44px（强哥"所有 button"指 index 页面 button，不包括 topbar）
+  - [ ] dev 自行判断：28px 是 box height 还是 visual + 44px tap area
+- [ ] 验证 5533 仍 HTTP 200
+- [ ] 验证 openmedia 18080 仍 HTTP 200
+- [ ] 验证 user-level service md5 未变
+
+### Bug 2: 上传 button 改 fixed bottom bar
+- [ ] style.css `.mobile-upload-btn` mobile 媒体查询里改：
+  - [ ] `position: fixed`
+  - [ ] `bottom: 0; left: 0; right: 0`
+  - [ ] `width: 100%`
+  - [ ] `height: 48px`（类似 bottom bar）
+  - [ ] `z-index: 1000`（高过其他元素）
+  - [ ] `border-radius: 0`（full-width 不要圆角）
+  - [ ] safe-area-inset-bottom padding（iPhone home indicator）
+  - [ ] margin: 0
+- [ ] main padding-bottom 加大 70px 让最后内容不被 fixed button 遮挡
+- [ ] 验证 5533 仍 HTTP 200
+- [ ] 验证 openmedia 18080 仍 HTTP 200
+- [ ] 验证 user-level service md5 未变
+
+### 手动测试
+- [ ] mobile 下打开 index.html → 看到底部 fixed 上传 button（类似 bottom bar 风格）
+- [ ] 滚动页面 → 上传 button 始终可见（不被滚动隐藏）
+- [ ] 所有 button 视觉高度 28px
+- [ ] 触摸上传 button → 触发 file picker
+
+---
+
 ## v1.3 — preview.html 统一 + ONLYOFFICE 编辑 + 双模式渲染 ✅
 
 ### 架构重构

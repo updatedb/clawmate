@@ -273,15 +273,15 @@
       font-size: 12px;
       padding: 30px 12px;
     }
-    /* Bottom toolbar */
+    /* Bottom toolbar (v1.14: align padding/gap with .topbar — L116 of style.css: padding 0 20px, gap 16px) */
     .preview-bottombar {
       height: 48px;
       background: var(--brand-bg);
       color: var(--brand-text);
       display: flex;
       align-items: center;
-      gap: 4px;
-      padding: 0 12px;
+      gap: 16px;
+      padding: 0 20px;
       flex-shrink: 0;
       z-index: 10;
       box-shadow: 0 -2px 12px rgba(0,0,0,0.2);
@@ -320,7 +320,7 @@
       white-space: nowrap;
       opacity: 0.85;
     }
-    .preview-bottom-divider { width: 1px; height: 20px; background: transparent; margin: 0 4px; flex-shrink: 0; }
+    .preview-bottom-divider { width: 2px; height: 36px; background: rgba(255,255,255,0.2); margin: 0 4px; flex-shrink: 0; align-self: center; }
 
     /* Toast */
     .preview-toast {
@@ -442,6 +442,16 @@
       transition: opacity 0.2s ease;
     }
     .preview-mask.active { display: block; opacity: 1; }
+
+    /* ===== v1.13: Hide .preview-mask on desktop =====
+       .preview-mask is mobile-only (it covers the page when a sidebar
+       opens on a phone). On desktop, the sidebars are always visible so
+       the mask should never appear. The JS in updateGridColumns() still
+       toggles `.active` on desktop (because !lHidden is true), but the
+       CSS below makes the element physically invisible. */
+    @media (min-width: 768px) {
+      .preview-mask { display: none !important; }
+    }
 
     /* Content shift - applied on the .preview-three-col when a sidebar is open
        so the .preview-center column auto-narrows. */
@@ -1126,6 +1136,36 @@
     }
     /* Hidden file input for subtitle picker */
     #subtitleFileInput { display: none; }
+
+    /* ===== v1.15: topbar/bottombar 子元素视觉统一 =====
+       v1.14 已把 .topbar / .preview-bottombar 父容器 height: 48px + align-items: center
+       配齐，但子元素高度不统一（.preview-bottom-divider 20px vs .preview-bottom-btn 36px，
+       .brand / .preview-topbar-title 没显式 height）导致视觉不对齐。
+       方案：所有子元素统一 height + display: flex + align-items: center + line-height: 1
+       —— 子元素自身高度统一后，align-items: center 才有视觉意义 */
+    /* Override .brand (inherited from style.css L118) — 加 height + display */
+    .preview-app > .topbar .brand {
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      line-height: 1;
+    }
+    /* .preview-topbar-title (v1.15 首次定义：之前完全没有 CSS rule) */
+    .preview-topbar-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--brand-text);
+      opacity: 0.9;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      line-height: 1;
+    }
   </style>
 </head>
 <body>
@@ -1902,14 +1942,9 @@
       outlineBtn.id = 'btnCodeOutline';
       outlineBtn.textContent = '📑 大纲';
       outlineBtn.addEventListener('click', function() {
-        // v1.11 G4: route through state machine
-        if (typeof UIState !== 'undefined' && UIState) {
-          if (UIState.get() === 'left-open') UIState.set('idle');
-          else UIState.set('left-open');
-        } else {
-          leftSidebar.classList.toggle('hidden');
-          updateGridColumns();
-        }
+        // v1.14: bypass UIState for sidebar toggles — left/right are independent, not mutually exclusive
+        leftSidebar.classList.toggle('hidden');
+        updateGridColumns();
         updatePlainTextDynamicButtons();
       });
       dyn.appendChild(outlineBtn);
@@ -1962,14 +1997,9 @@
       outlineBtn.id = 'btnOutline';
       outlineBtn.textContent = '📑 大纲';
       outlineBtn.addEventListener('click', () => {
-        // v1.11 G4: route through state machine
-        if (typeof UIState !== 'undefined' && UIState) {
-          if (UIState.get() === 'left-open') UIState.set('idle');
-          else UIState.set('left-open');
-        } else {
-          leftSidebar.classList.toggle('hidden');
-          updateGridColumns();
-        }
+        // v1.14: bypass UIState for sidebar toggles — left/right are independent, not mutually exclusive
+        leftSidebar.classList.toggle('hidden');
+        updateGridColumns();
         updateMarkdownDynamicButtons(); // Refresh active state
       });
       dyn.appendChild(outlineBtn);
@@ -2087,14 +2117,9 @@
 
   // Toggle right (feedback) panel
   document.getElementById('btnToggleRight').addEventListener('click', () => {
-    // v1.11 G4: route through state machine
-    if (typeof UIState !== 'undefined' && UIState) {
-      if (UIState.get() === 'right-open') UIState.set('idle');
-      else UIState.set('right-open');
-    } else {
-      rightSidebar.classList.toggle('hidden');
-      updateGridColumns();
-    }
+    // v1.14: bypass UIState for sidebar toggles — left/right are independent, not mutually exclusive
+    rightSidebar.classList.toggle('hidden');
+    updateGridColumns();
     document.getElementById('btnToggleRight').classList.toggle('active', !rightSidebar.classList.contains('hidden'));
   });
 
@@ -2468,29 +2493,23 @@
   // The mobile breakpoint (@media max-width 767.98px) places the sidebars
   // in fixed positioning, so the mask is meaningful only on phones.
   // On desktop the mask is hidden by CSS; this listener is a no-op there.
-  // v1.11 G4: route through UIState.set('idle') to keep the state machine
-  // consistent.
+  // v1.14: bypass UIState for sidebar toggles — left/right are independent, not mutually exclusive.
+  //        Directly toggle whichever sidebar is currently visible.
   const _sidebarMask = document.getElementById('sidebarMask');
   if (_sidebarMask) {
     _sidebarMask.addEventListener('click', () => {
-      if (typeof UIState !== 'undefined' && UIState) {
-        UIState.set('idle');
-      } else {
-        const wasLeftOpen = !leftSidebar.classList.contains('hidden');
-        const wasRightOpen = !rightSidebar.classList.contains('hidden');
-        if (wasLeftOpen) {
-          leftSidebar.classList.add('hidden');
-          document.getElementById('btnCodeOutline')?.classList.remove('active');
-          document.getElementById('btnOutline')?.classList.remove('active');
-          if (typeof updateMarkdownDynamicButtons === 'function') updateMarkdownDynamicButtons();
-          if (typeof updatePlainTextDynamicButtons === 'function') updatePlainTextDynamicButtons();
-        }
-        if (wasRightOpen) {
-          rightSidebar.classList.add('hidden');
-          document.getElementById('btnToggleRight')?.classList.remove('active');
-        }
-        updateGridColumns();
+      if (!leftSidebar.classList.contains('hidden')) {
+        leftSidebar.classList.add('hidden');
+        document.getElementById('btnCodeOutline')?.classList.remove('active');
+        document.getElementById('btnOutline')?.classList.remove('active');
       }
+      if (!rightSidebar.classList.contains('hidden')) {
+        rightSidebar.classList.add('hidden');
+        document.getElementById('btnToggleRight')?.classList.remove('active');
+      }
+      if (typeof updateMarkdownDynamicButtons === 'function') updateMarkdownDynamicButtons();
+      if (typeof updatePlainTextDynamicButtons === 'function') updatePlainTextDynamicButtons();
+      updateGridColumns();
     });
   }
 
