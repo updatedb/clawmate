@@ -1556,10 +1556,9 @@ function openEntryPreview(entry) {
 // overlay on top of the directory listing. Uses history.pushState so
 // the browser back button returns to the listing without a full reload.
 // On desktop the same code path is used — the overlay is a fullscreen
-// modal that the user can dismiss with the close button or Escape.
+// modal that the user can dismiss with Escape or the browser back button.
 const SPAPreview = (() => {
   let overlay = null;
-  let closeBtn = null;
   let contentFrame = null;  // <iframe> running preview.html in-process
 
   function canUse() {
@@ -1580,20 +1579,8 @@ const SPAPreview = (() => {
       'display:flex', 'flex-direction:column',
       'animation:spaFadeIn 0.18s ease-out'
     ].join(';');
-    // Top bar with close button
-    const topbar = document.createElement('div');
-    topbar.style.cssText = 'display:flex;align-items:center;padding:8px 12px;gap:8px;background:var(--brand-bg, #1e293b);color:#fff;flex-shrink:0;';
-    closeBtn = document.createElement('button');
-    closeBtn.textContent = '×';
-    closeBtn.title = '关闭 (Esc)';
-    closeBtn.style.cssText = 'background:transparent;border:none;color:#fff;font-size:24px;line-height:1;cursor:pointer;padding:4px 12px;min-width:44px;min-height:44px;';
-    closeBtn.addEventListener('click', close);
-    const label = document.createElement('span');
-    label.textContent = '预览';
-    label.style.cssText = 'font-size:14px;font-weight:600;';
-    topbar.appendChild(closeBtn);
-    topbar.appendChild(label);
-    overlay.appendChild(topbar);
+    // v1.17: topbar removed — overlay shows only the iframe. Close is still
+    // handled by Escape (keydown) and the browser back button (popstate).
     // Content iframe
     contentFrame = document.createElement('iframe');
     contentFrame.id = 'spaPreviewFrame';

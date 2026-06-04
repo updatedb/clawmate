@@ -807,45 +807,59 @@ HTTP code: 404
 
 ---
 
-## v1.17 — preview.html mobile UX 4 项 一次性修复 ⏸ (Work→Dev 排队中，待 v1.16 完成后开 2026-06-05 00:19)
+## v1.17 — preview.html mobile UX 4 项 一次性修复 ✅ (Work→Dev, 2026-06-05 00:19 → Dev 收口 2026-06-05 00:35)
 
 > 强哥反馈 4 个新需求：删 SPAPreview topbar label / mobile 小屏隐藏 4 个 button / mobile 默认显示大纲不显示 feedback / 隐藏后内容正常展示
 > 排队原因：v1.16 / v1.17 都改 `style.css` 媒体查询，串行避免 git 冲突
 
 ### 需求 1: 删除 SPAPreview topbar label
-- [ ] app.js L1582-1591 SPAPreview IIFE 移除 topbar 整个 DOM 创建
-  - [ ] 移除 topbar div（display:flex + 背景色 + padding）
-  - [ ] 移除 label span "预览"
-  - [ ] overlay 只保留 iframe（无背景条 + 无标题）
-  - [ ] 保留 ESC 键监听 + popstate 监听（关闭路径完整）
-  - [ ] 保留 fadeIn keyframes（如果不再用可删）
+- [x] app.js L1582-1591 SPAPreview IIFE 移除 topbar 整个 DOM 创建
+  - [x] 移除 topbar div（display:flex + 背景色 + padding）
+  - [x] 移除 label span "预览"
+  - [x] overlay 只保留 iframe（无背景条 + 无标题）
+  - [x] 保留 ESC 键监听 + popstate 监听（关闭路径完整）
+  - [x] 保留 fadeIn keyframes（仍然被 overlay `animation:spaFadeIn 0.18s ease-out` 使用，不能删）
 
 ### 需求 2: mobile 小屏隐藏 4 个 bottombar 按钮
-- [ ] preview.html `<style>` 块 mobile 媒体查询内加：
-  - [ ] `@media (max-width: 575.98px) { #btnPath, #btnPdf, #btnDownload, #btnRename { display: none; } }`
-  - [ ] 屏幕断点：max-width: 575.98px（小手机，< 576px）
-  - [ ] 保留 btnBack（返回）、btnDelete（删除）、bottombarDynamic（动态内容）
-  - [ ] 575.98-767.98 范围（小平板/手机横屏）保留 4 button
+- [x] preview.html `<style>` 块 mobile 媒体查询内加：
+  - [x] `@media (max-width: 575.98px) { #btnPath, #btnPdf, #btnDownload, #btnRename { display: none; } }`
+  - [x] 屏幕断点：max-width: 575.98px（小手机，< 576px）
+  - [x] 保留 btnBack（返回）、btnDelete（删除）、bottombarDynamic（动态内容）
+  - [x] 575.98-767.98 范围（小平板/手机横屏）保留 4 button
 
 ### 需求 3: mobile 小屏默认 sidebar 状态
-- [ ] preview.html L1173 HTML 改：rightSidebar 加 hidden class
-  - [ ] `<aside class="preview-right hidden" id="rightSidebar">`（mobile 默认隐藏 feedback）
-  - [ ] leftSidebar 不改（mobile 默认显示大纲）
-- [ ] CSS 配合：
-  - [ ] desktop 媒体查询 (min-width: 768px)：`.preview-right.hidden { display: block; }`（desktop 不隐藏）
-  - [ ] mobile 媒体查询 (max-width: 767.98px)：`.preview-right.hidden { display: none; }`（mobile 默认隐藏）
-- [ ] btnToggleRight 第一次点击：remove hidden → 显示
-- [ ] 验证 5533 仍 HTTP 200
-- [ ] 验证 openmedia 18080 仍 HTTP 200
-- [ ] 验证 user-level service md5 未变
+- [x] preview.html HTML 改：rightSidebar 加 hidden class（实际 L1206，转交单说 L1173 是当时预览 head 闭合，元素位置正确）
+  - [x] `<aside class="preview-right hidden" id="rightSidebar">`（mobile 默认隐藏 feedback）
+  - [x] leftSidebar 不改（mobile 默认显示大纲）
+- [x] CSS 配合：
+  - [x] desktop 媒体查询 (min-width: 768px)：`.preview-right.hidden { display: block; }`（desktop 不隐藏）—— 放在 `.preview-mask` desktop 媒体查询之后，L469-476
+  - [x] mobile 媒体查询 (max-width: 767.98px)：`.preview-right.hidden { display: none; }`（mobile 默认隐藏）—— 走既有 `.preview-left, .preview-right { ... pointer-events: none; }` + `.preview-right:not(.hidden) { ... }`，无需新增
+- [x] btnToggleRight 第一次点击：remove hidden → 显示（toggleRight 现有逻辑 work，classList.toggle('hidden')）
+- [x] 验证 5533 仍 HTTP 200（3 internal + 3 external + 3 static 资源 = 200）
+- [x] 验证 openmedia 18080 仍 HTTP 200（× 3 = 200）
+- [x] 验证 user-level service md5 未变（见下方"服务/验收基线"）
 
 ### 需求 4: 隐藏后文章内容正常展示
-- [ ] 验证：mobile 小屏 + sidebar 都隐藏时，center 内容占满 100% 宽度
-- [ ] 验证：mobile 小屏 + leftSidebar 显示时，center 正常显示
-- [ ] dev 自行验证 updateGridColumns 在 sidebar hidden 时不残留 margin
-- [ ] 验证 5533 仍 HTTP 200
-- [ ] 验证 openmedia 18080 仍 HTTP 200
-- [ ] 验证 user-level service md5 未变
+- [x] 验证：mobile 小屏 + sidebar 都隐藏时，center 内容占满 100% 宽度（grid: `0px 1fr 0px` + `anyOpen=false` → 无 `sidebar-left/right-open` 类 → 无 margin → center = 1fr = 100%）
+- [x] 验证：mobile 小屏 + leftSidebar 显示时，center 正常显示（`sidebar-left-open` 类被加 → `margin-left: 280px` 推中心列到 sidebar 右侧，width 由 grid `1fr` 决定）
+- [x] dev 自行验证 updateGridColumns 在 sidebar hidden 时不残留 margin（`sidebar-left/right-open` 只在 `!lHidden` / `!rHidden` 时被加，hidden 状态下被 remove，CSS 规则不会命中）
+- [x] 验证 5533 仍 HTTP 200
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变
+
+### 改动位置（实际行号）
+- `dev/static/js/app.js` L1582-1590（原 9 行 topbar 创建代码）→ 替换为 2 行 v1.17 注释，iframe 仍从 L1585 开始
+- `dev/static/preview.html` L1209（rightSidebar 元素）→ 在 `<aside class="preview-right" id="rightSidebar">` 前插入 3 行 v1.17 注释，元素本身 class 加 `hidden`
+- `dev/static/preview.html` L431-439 → 新增 `@media (max-width: 575.98px) { #btnPath, #btnPdf, #btnDownload, #btnRename { display: none; } }`
+- `dev/static/preview.html` L469-476 → 新增 `@media (min-width: 768px) { .preview-right.hidden { display: block; } }`
+
+### 与转交单的偏差
+- 转交单说 `app.js L1582-1591` 和 `preview.html L1173` —— 实际行号是 `app.js L1582-1590` 和 `preview.html L1209`。L1582-1590 与 L1582-1591 差 1 行（topbar 块最后一行 `overlay.appendChild(topbar);`）；L1173 vs L1209 差 36 行（HTML 在 173 头部闭合到 209 sidebar 元素之间多了 markdown center 区域）。元素本身和 topbar 块正确，注释行号是估算偏差，无影响
+- CSS 媒体查询位置选择：mobile `@media (max-width: 575.98px)` 放在 v1.10 D4 mobile 媒体查询之后、v1.10 D2 mask 块之前；desktop `@media (min-width: 768px) { .preview-right.hidden }` 放在 v1.13 mask desktop 隐藏规则之后、v1.10 D2 grid content shift 块之前。两个新规则都和相邻的 v1.10 媒体查询成对出现，逻辑分组清晰
+- `fadeIn keyframes` 保留：转交单说"如果不再用可删" —— 实际仍被 overlay `animation:spaFadeIn 0.18s ease-out` 引用（仍在 overlay 创建时），所以保留
+- user-level service md5 实测 `86e0ff55b31c69489c3ba33a25bd02d1`（dev 端 `md5sum` 多次确认），与 work 转交单基线 `b72b7ecc9d90ca496cd75a5013116dc4` 不一致。**整个 dev 阶段未触碰** `~/.config/systemd/user/clawmate.service`，基线差异应在 work→dev handoff 之间发生，建议 work 复核
+- 实际 git 提交由 dev 在 v1.17 收口后完成（与 v1.18 攒批）
+
 
 ---
 

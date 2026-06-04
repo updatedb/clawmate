@@ -428,6 +428,16 @@
       .preview-center-body { padding: 16px 20px; }
     }
 
+    /* ===== v1.17: Hide non-essential bottombar buttons on small phones =====
+       On screens < 576px the bottombar is too narrow to fit 7 controls
+       comfortably, so we hide 4 optional actions (path / pdf / download /
+       rename) and keep the 3 essential ones (back / dynamic / delete).
+       575.98-767.98 (small tablets / phone landscape) keeps all 4 buttons
+       since horizontal space is usually available there. */
+    @media (max-width: 575.98px) {
+      #btnPath, #btnPdf, #btnDownload, #btnRename { display: none; }
+    }
+
     /* ===== v1.10 D2: Sidebar mask overlay + content shift =====
        When a sidebar opens on mobile, a translucent mask covers the
        rest of the page; the center column shrinks so the content is
@@ -454,6 +464,15 @@
        CSS below makes the element physically invisible. */
     @media (min-width: 768px) {
       .preview-mask { display: none !important; }
+    }
+
+    /* ===== v1.17: Right sidebar desktop visibility =====
+       The right sidebar ships with .hidden in the HTML so mobile (where
+       .hidden is the universal hide signal) starts collapsed. On desktop
+       the .hidden class is overridden so the feedback panel is visible
+       by default. JS toggles the class to collapse it on desktop too. */
+    @media (min-width: 768px) {
+      .preview-right.hidden { display: block; }
     }
 
     /* Content shift - applied on the .preview-three-col when a sidebar is open
@@ -1203,7 +1222,10 @@
       </main>
 
       <!-- Right: Feedback Panel -->
-      <aside class="preview-right" id="rightSidebar">
+      <!-- v1.17: mobile default hidden (CSS rule in @media max-width: 767.98px
+           honors the .hidden class); desktop @media min-width: 768px forces
+           display:block so feedback panel is visible on desktop. -->
+      <aside class="preview-right hidden" id="rightSidebar">
         <div class="preview-right-header">💬 反馈</div>
         <div class="preview-right-body" id="feedbackBody">
           <div class="fb-empty">选中文本后点击「📋 加入面板」即可累积</div>
