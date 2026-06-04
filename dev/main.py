@@ -143,9 +143,18 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    # 仅允许已知来源，防止跨站请求
+    allow_origins=[
+        "https://note.updatedb.online:18443",
+        "https://ai.updatedb.online:18443",
+        "http://localhost",
+        "http://localhost:5533",
+        "http://127.0.0.1",
+        "http://127.0.0.1:5533",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 
 # Import auth middleware — must be after CORS, before static files
@@ -249,11 +258,13 @@ if __name__ == "__main__":
     print(f"[clawmate] ONLYOFFICE API JS: {ONLYOFFICE_API_JS_URL}")
     print(f"[clawmate] Max upload: {max_upload}MB")
 
-    # 启动时同步 cron job（根据 config.json 自动生成/更新）
-    _sync_cron_jobs()
-
     # Increase multipart upload size limit (default 1MB)
     from starlette.formparsers import MultiPartParser
     MultiPartParser.spool_max_size = max_upload * 1024 * 1024
+
+    # 启动时同步 cron job（后台运行，不阻塞服务器）
+    import threading
+    t = threading.Thread(target=_sync_cron_jobs, name="cron-sync", daemon=True)
+    t.start()
 
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
