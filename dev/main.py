@@ -144,14 +144,18 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     # 仅允许已知来源，防止跨站请求
-    allow_origins=[
-        "https://note.updatedb.online:18443",
-        "https://ai.updatedb.online:18443",
+    # CORS 白名单：从 public_base_url 动态计算，允许本机开发调试
+    _allowed = []
+    if PUBLIC_BASE_URL:
+        _allowed.append(PUBLIC_BASE_URL.rstrip("/"))
+    # 本机开发/调试
+    _allowed.extend([
         "http://localhost",
         "http://localhost:5533",
         "http://127.0.0.1",
         "http://127.0.0.1:5533",
-    ],
+    ])
+    allow_origins=_allowed,
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=True,
