@@ -434,7 +434,10 @@
        not occluded. Transitions smooth both effects in 200ms. */
     .preview-mask {
       position: fixed;
-      inset: 0;
+      top: 48px;        /* 让出 topbar (48px) */
+      bottom: 48px;     /* 让出 bottombar (48px) */
+      left: 0;
+      right: 0;
       background: rgba(0, 0, 0, 0.5);
       z-index: 49; /* below .preview-left/right (50), above content */
       display: none;

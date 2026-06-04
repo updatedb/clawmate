@@ -768,39 +768,206 @@ HTTP code: 404
 
 ---
 
-## v1.16 — index 移动端 button 28px + 上传 button fixed bottom bar 🚧 (Work→Dev, 2026-06-05 00:10)
+## v1.18 — preview-mask 遮挡 topbar/bottombar hotfix ✅ (Work→Dev, 2026-06-05 00:25 → Dev 收口 2026-06-05 00:30)
+
+> 强哥反馈：v1.10 D2 实现的 preview-mask 在 mobile 小屏幕遮挡 topbar 和 bottombar
+> 与 v1.16 不冲突（改不同文件），可并行
+
+### 根因
+- `preview-mask` `position: fixed; inset: 0; z-index: 49`（v1.10 D2）
+- topbar z-index: 10 / bottombar z-index: 10 / sidebar z-index: 50
+- mask z-index 49 > topbar/bottombar 10 → 覆盖
+- v1.13 修了 desktop（@media min-width: 768px display: none !important）但 mobile bug 仍存
+
+### 修复
+- [x] preview.html `.preview-mask`（L435-444）改 `inset: 0` → `top: 48px; bottom: 48px; left: 0; right: 0;`
+  - [x] 让出 topbar (48px) + bottombar (48px) 区域
+  - [x] z-index 49 保持（仍要遮 sidebar 之外的中心区域）
+- [x] 验证 5533 仍 HTTP 200（内部 3/3 + 外部 3/3）
+- [x] 验证 openmedia 18080 仍 HTTP 200（3/3）
+- [x] 验证 user-level service md5 未变
+  > ⚠️ **md5 不匹配 work 基线**：dev 实测 `86e0ff55b31c69489c3ba33a25bd02d1`，work 任务单基线 `b72b7ecc9d90ca496cd75a5013116dc4`。
+  > dev 严格遵守"不要动 `~/.config/systemd/user/clawmate.service`"约束，全程未触碰该文件。
+  > 此差异为 work 端快照与 dev 端实际文件不一致（预存在问题），与 v1.18 改动无关。
+  > service 内容核对：mtime 2026-06-04 17:07（v1.4 部署时点）、内容含 `CLAWMATE_PORT=5533` + `CLAWMATE_CONFIG=.../dev/config.json` + `Restart=on-failure` + `RestartSec=5`，`systemctl --user is-active=active` + `is-enabled=enabled` + `Linger=yes`，服务持续运行。
+
+### 手动测试（playwright headless chromium-1208）
+- [x] mobile 小屏打开 preview.html → 侧栏打开 → mask 不遮挡 topbar/bottombar
+  > viewport 375x667, mask getBoundingClientRect = {top:48, bottom:619, left:0, right:375, width:375, height:571, display:block, opacity:1, zIndex:49, position:fixed, active:true}
+  > 期望 top=48/bottom=619(=667-48)/left=0/right=375 → 100% 匹配
+- [x] mask 仍遮中心区域（点击 mask 关侧栏）
+  > pre-click: maskActive=true / maskDisplay=block
+  > post-click: maskActive=false / maskDisplay=none → 侧栏关闭链路完整
+- [x] mobile topbar/bottombar 不被 mask 遮挡
+  > topbar rect = {top:0, bottom:48, height:48, zIndex:10}，mask.top=48 = topbar.bottom（完美相接，不重叠）
+  > bottombar rect = {top:619, bottom:667, height:48, zIndex:10}，mask.bottom=619 = bottombar.top（完美相接，不重叠）
+  > 中心区域 48~619 (571px 高) 被 mask 覆盖，符合"遮 sidebar 之外中心区域"设计意图
+- [x] desktop 仍正常（v1.13 修复保留）
+  > viewport 1280x720，强行加 `.active` class → getComputedStyle.display = 'none'（v1.13 `@media (min-width: 768px) { .preview-mask { display: none !important; } }` 仍生效）
+
+---
+
+## v1.17 — preview.html mobile UX 4 项 一次性修复 ⏸ (Work→Dev 排队中，待 v1.16 完成后开 2026-06-05 00:19)
+
+> 强哥反馈 4 个新需求：删 SPAPreview topbar label / mobile 小屏隐藏 4 个 button / mobile 默认显示大纲不显示 feedback / 隐藏后内容正常展示
+> 排队原因：v1.16 / v1.17 都改 `style.css` 媒体查询，串行避免 git 冲突
+
+### 需求 1: 删除 SPAPreview topbar label
+- [ ] app.js L1582-1591 SPAPreview IIFE 移除 topbar 整个 DOM 创建
+  - [ ] 移除 topbar div（display:flex + 背景色 + padding）
+  - [ ] 移除 label span "预览"
+  - [ ] overlay 只保留 iframe（无背景条 + 无标题）
+  - [ ] 保留 ESC 键监听 + popstate 监听（关闭路径完整）
+  - [ ] 保留 fadeIn keyframes（如果不再用可删）
+
+### 需求 2: mobile 小屏隐藏 4 个 bottombar 按钮
+- [ ] preview.html `<style>` 块 mobile 媒体查询内加：
+  - [ ] `@media (max-width: 575.98px) { #btnPath, #btnPdf, #btnDownload, #btnRename { display: none; } }`
+  - [ ] 屏幕断点：max-width: 575.98px（小手机，< 576px）
+  - [ ] 保留 btnBack（返回）、btnDelete（删除）、bottombarDynamic（动态内容）
+  - [ ] 575.98-767.98 范围（小平板/手机横屏）保留 4 button
+
+### 需求 3: mobile 小屏默认 sidebar 状态
+- [ ] preview.html L1173 HTML 改：rightSidebar 加 hidden class
+  - [ ] `<aside class="preview-right hidden" id="rightSidebar">`（mobile 默认隐藏 feedback）
+  - [ ] leftSidebar 不改（mobile 默认显示大纲）
+- [ ] CSS 配合：
+  - [ ] desktop 媒体查询 (min-width: 768px)：`.preview-right.hidden { display: block; }`（desktop 不隐藏）
+  - [ ] mobile 媒体查询 (max-width: 767.98px)：`.preview-right.hidden { display: none; }`（mobile 默认隐藏）
+- [ ] btnToggleRight 第一次点击：remove hidden → 显示
+- [ ] 验证 5533 仍 HTTP 200
+- [ ] 验证 openmedia 18080 仍 HTTP 200
+- [ ] 验证 user-level service md5 未变
+
+### 需求 4: 隐藏后文章内容正常展示
+- [ ] 验证：mobile 小屏 + sidebar 都隐藏时，center 内容占满 100% 宽度
+- [ ] 验证：mobile 小屏 + leftSidebar 显示时，center 正常显示
+- [ ] dev 自行验证 updateGridColumns 在 sidebar hidden 时不残留 margin
+- [ ] 验证 5533 仍 HTTP 200
+- [ ] 验证 openmedia 18080 仍 HTTP 200
+- [ ] 验证 user-level service md5 未变
+
+---
+
+## v1.16 — index 移动端 button 28px + 上传 button fixed bottom bar ✅ (Work→Dev, 2026-06-05 00:10 → Dev 收口 2026-06-05 00:25)
 
 > 强哥反馈：移动端 index 页面所有 button 高度 28 + 上传 button 改 fixed bottom bar（等宽 + 始终显示可见）
 
 ### Bug 1: 移动端所有 button 高度 28
-- [ ] style.css mobile 媒体查询 (max-width: 767.98px) 加 `button, .btn { height: 28px; }`
-  - [ ] 覆盖 v1.11 E4 44px min-height
-  - [ ] topbar-btn / tb-left button / tb-right button 仍 min-height: 44px（强哥"所有 button"指 index 页面 button，不包括 topbar）
-  - [ ] dev 自行判断：28px 是 box height 还是 visual + 44px tap area
-- [ ] 验证 5533 仍 HTTP 200
-- [ ] 验证 openmedia 18080 仍 HTTP 200
-- [ ] 验证 user-level service md5 未变
+- [x] style.css mobile 媒体查询 (max-width: 767.98px) 加 `button, .btn { height: 28px; min-height: 28px; }`（L356-357）
+  - [x] 覆盖 v1.11 E4 44px min-height（E4 在 L336-348，新增规则在 E4 之后 L356 → 后写后赢，specificity 同为 0,0,1 时）
+  - [x] topbar-btn / tb-left button / tb-right button 仍 min-height: 44px（强哥"所有 button"指 index 页面 button，不包括 topbar）
+    > 实现机制：topbar-btn / .tb-left button / .tb-right button / .search-group button / .preview-bottom-btn 在 E4 块用更高 specificity 选择器（class alone / class+element）已设 min-height: 44px；新增的 `button, .btn` (0,0,1) 不覆盖这些，44px 自然保留
+  - [x] **dev 决策：28px box height**（强哥字面要求），不擅自加 44px tap area 包裹
+    > 备选方案（28px visual + 44px tap area）已被任务单列出但 dev 拒绝：强哥"所有 button 高度设置为 28"是字面 28，且"不擅自改 44px tap area"——按字面实现
+- [x] 验证 5533 仍 HTTP 200
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变
 
 ### Bug 2: 上传 button 改 fixed bottom bar
-- [ ] style.css `.mobile-upload-btn` mobile 媒体查询里改：
-  - [ ] `position: fixed`
-  - [ ] `bottom: 0; left: 0; right: 0`
-  - [ ] `width: 100%`
-  - [ ] `height: 48px`（类似 bottom bar）
-  - [ ] `z-index: 1000`（高过其他元素）
-  - [ ] `border-radius: 0`（full-width 不要圆角）
-  - [ ] safe-area-inset-bottom padding（iPhone home indicator）
-  - [ ] margin: 0
-- [ ] main padding-bottom 加大 70px 让最后内容不被 fixed button 遮挡
-- [ ] 验证 5533 仍 HTTP 200
-- [ ] 验证 openmedia 18080 仍 HTTP 200
-- [ ] 验证 user-level service md5 未变
+- [x] style.css `.mobile-upload-btn` mobile 媒体查询里改（新增 L445-462）：
+  - [x] `position: fixed`
+  - [x] `bottom: 0; left: 0; right: 0`
+  - [x] `width: 100%`
+  - [x] `height: 48px`（类似 bottom bar）
+  - [x] `z-index: 1000`（高过其他元素）
+  - [x] `border-radius: 0`（full-width 不要圆角）
+  - [x] safe-area-inset-bottom padding（`padding-bottom: max(10px, env(safe-area-inset-bottom, 10px))` iPhone home indicator 适配）
+  - [x] margin: 0
+  - [x] 保留 `padding: 10px 16px`（横向 padding，text 居中）+ `box-shadow: 0 -2px 12px rgba(0,0,0,0.2)`（顶部阴影视觉分层）
+- [x] `.main { padding-bottom: 70px; }` 写在 mobile 媒体查询内（新增 L464）—— 让 main 最后内容不被 fixed button 遮挡
+  > desktop 下保持 0 padding（mobile 媒体查询外不动）
+  > 70px = 48px button + ~22px 余量；实测 scroll-to-end 时 last content bottom 580 / fixed btn top 619，clearance 38px ✓
+- [x] 验证 5533 仍 HTTP 200
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变
 
-### 手动测试
-- [ ] mobile 下打开 index.html → 看到底部 fixed 上传 button（类似 bottom bar 风格）
-- [ ] 滚动页面 → 上传 button 始终可见（不被滚动隐藏）
-- [ ] 所有 button 视觉高度 28px
-- [ ] 触摸上传 button → 触发 file picker
+### 手动测试（headless Chrome, 375x667 mobile mode + 1280x800 desktop mode）
+- [x] mobile 下打开 index.html → 看到底部 fixed 上传 button（full-width + 紫色 + 📤 emoji + "上传文件"）
+  > 实测：`getBoundingClientRect()` → top 619, bottom 667 (viewport_h 667), width 375（full width）
+- [x] 滚动页面 → 上传 button 始终可见（不被滚动隐藏）
+  > 实测：`.main-scroll` scrollTop 1316 / scrollHeight 1733 / scrolled_to_end=true → fixed btn 仍 top 619, bottom 667 ✓
+- [x] 所有 button 视觉高度 28px（**generic 裸 button**）
+  > 实测：pagination 上一页/下一页 button = 28px ✓
+  > 实测：.topbar-btn (🌓) = 44px（保留）✓
+  > 实测：.tb-left button (☐ 多选 / 降序) = 44px（保留）✓
+  > 实测：.tb-right button (画廊 / 列表) = 44px（保留）✓
+  > 实测：.search-group button (搜索) = 44px（保留）✓
+  > 实测：.mobile-upload-btn = 48px（被自身 .mobile-upload-btn { height: 48px } override 28px）✓
+- [x] 触摸上传 button → 触发 file picker（`#mobileFileInput` 被 click）
+  > 实测：HTMLInputElement.prototype.click 被 hook → btn.dispatchEvent('click') → spy_calls_count=1, picker_triggered=true ✓
+- [x] desktop 不受影响（1280x800）
+  > `.mobile-upload-btn` display: none ✓
+  > `.main` padding-bottom: 0px ✓
+  > button heights 30-34px（不受 mobile 媒体查询影响）✓
+
+### 验证汇总（dev 收口 2026-06-05 00:25）
+- 5533 内部 `http://127.0.0.1:5533/api/health` × 3 = 200 / 200 / 200
+- 5533 内部 `http://127.0.0.1:5533/api/clawmate/feedback/status?root=webprojects&project=clawmate` × 3 = 200
+- 5533 外部 `http://openclaw.lan:5533/api/health` × 3 = 200 / 200 / 200
+- 5533 外部 `http://openclaw.lan:5533/clawmate/` × 3 = 302（auth redirect to /clawmate/login.html — pre-existing 行为，未变）
+- openmedia 18080 `http://127.0.0.1:18080/` × 3 = 200
+- openmedia 18080 `http://openclaw.lan:18080/` × 3 = 200
+- 静态资源 `http://127.0.0.1:5533/clawmate/css/style.css` × 1 = 200（v1.16 改动已 served）
+- user-level service md5 = `86e0ff55b31c69489c3ba33a25bd02d1`（与 v1.7-v1.15 历来 dev 实测一致，**未触碰** `~/.config/systemd/user/clawmate.service`；work 实测基线 `b72b7ecc9d90ca496cd75a5013116dc4`，dev session 文件系统视图差异，**未触碰**该文件）
+
+### 关键实现位置
+- `dev/static/css/style.css` L351-357 — v1.16 Bug 1 注释 + 规则
+  ```css
+  /* ===== v1.16: 强哥要求移动端 index 页面所有 button 高度 28（覆盖 v1.11 E4 44px min-height）=====
+   * 注：topbar-btn / tb-left button / tb-right button / search-group button / preview-bottom-btn
+   * 因 E4 选择器 specificity 更高（class+element / class alone > element alone），仍保留 min-height: 44px
+   * 决策：28px box height（强哥字面要求），不擅自加 44px tap area 包裹 */
+  button, .btn { height: 28px; min-height: 28px; }
+  ```
+- `dev/static/css/style.css` L445-465 — v1.16 Bug 2 注释 + 规则
+  ```css
+  /* ===== v1.16: 强哥要求移动端上传 button 改 fixed bottom bar（等宽 + 始终显示可见）=====
+   * 决策：48px height + safe-area-inset-bottom 适配 iPhone home indicator
+   * desktop 下保留原 inline 行为（mobile 媒体查询外不动）*/
+  .mobile-upload-btn {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 48px;
+    z-index: 1000;
+    border-radius: 0;
+    margin: 0;
+    padding: 10px 16px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom, 10px));
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.2);
+  }
+  /* 让 main-scroll 最后内容不被 fixed button 遮挡（70px = 48px button + ~22px 余量） */
+  .main { padding-bottom: 70px; }
+  ```
+
+### 偏差注释
+1. **Bug 1 决策：28px box height**（非 28px visual + 44px tap area）
+   - 强哥原话"所有 button 高度设置为 28"字面要求
+   - 任务单备选方案（"dev 可选：28px visual + 44px tap area 包裹"）被 dev 拒绝
+   - 原因：v1.11 E4 的精神就是 44px tap area，强哥说"不擅自改"——按字面 28px 实现
+   - 风险：28px 触屏偏小（Apple HIG 推荐 44px），但强哥明确要求，dev 不擅自加
+2. **Bug 1 覆盖范围**：.preview-bottom-btn 也保留 44px（E4 选择器 specificity 更高）
+   - 任务单说"所有 button 高度 28"指 index 页面（强哥原话上下文）
+   - .preview-bottom-btn 在 preview.html 页面（不是 index），E4 已设 44px，未动
+   - 实测确认：preview-bottom-btn 仍 44px（与 v1.11 E4 一致）
+3. **Bug 2 padding-bottom 数值**：70px（= 48px button + ~22px 余量）
+   - 任务单说"加大 70px 让最后内容不被 fixed button 遮挡"
+   - 实测：last content bottom 580 / fixed btn top 619 → clearance 38px（> 0 即不被遮挡）✓
+   - 70px 余量稍多（22px vs 实际需要的 38px clearance - 但 48px button height + 22px padding = 70px 是固定算法），iPhone home indicator 区域也吃这个余量
+4. **CSS specificity 分析**：v1.16 新规则 `button, .btn { height: 28px }` 与 v1.11 E4 的 `.btn, button, .card, ...` 中 `button` / `.btn` 选择器 specificity 相同（都是 0,0,1），后者（E4）先写 → 前者（v1.16）后写覆盖 → 裸 `button` 元素从 44px 降到 28px
+   - 关键：E4 列表中带 class 的选择器（.topbar-btn / .tb-left button / .tb-right button / .search-group button / .preview-bottom-btn）specificity ≥ 0,1,0 → v1.16 0,0,1 规则不覆盖 → 44px 保留
+   - E4 中 .card 仍是 min-height: 44px（v1.16 没单独处理 card，因为强哥说"所有 button"没说 card 也要 28——但 .card 也是 button-like 元素，E4 列表里有它）
+   - **实测发现**：.card 实测高度受其 `padding: 10px; gap: 8px;` 限制 + min-height: 44px E4 → 仍 44px（这是 v1.11 E4 行为，v1.16 未动）
+5. **service md5 偏差**：dev session 报 `86e0ff55...`（与 v1.7-v1.15 一致），work 实测基线 `b72b7ecc...`，dev session 文件系统视图差异，**未触碰** `~/.config/systemd/user/clawmate.service`
+6. **不需重启服务**：CSS 是静态文件，FastAPI StaticFiles 每次请求直接读盘，v1.16 改动立即生效（curl 验证 `/clawmate/css/style.css` 已含 v1.16 注释）
+
+### 已知限制 / 后续可优化
+- **28px 触屏可能偏小**：如果强哥后续反馈"点不准"，可考虑 padding 内部包裹方式做 28px visual + 44px tap area。当前按字面要求实现 28px box。
+- **mobile-upload-btn z-index 1000 vs .topbar z-index 未明**：实测 mobile 下 .topbar 在 fixed button 上方（topbar 自身是 flex item，z-index 上下文不冲突），但严格说 .topbar 应明确 `z-index: 1100` 以防未来覆盖层冲突。**未在 v1.16 范围**，留待后续
+- **.card 仍 44px**：强哥说"所有 button 高度 28"，未明确是否含 .card（v1.11 E4 把 .card 也算 button-like 元素）。当前 .card 维持 44px（v1.11 E4 行为）。如需降到 28px 可后续调整
 
 ---
 
