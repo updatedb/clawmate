@@ -36,9 +36,7 @@ router = APIRouter()
 # Feedback routes (extracted to feedback_api.py)
 router.include_router(feedback_router)
 
-ONLYOFFICE_SECRET_ENV = "CLAWMATE_ONLYOFFICE_JWT_SECRET"
-PUBLIC_BASE_URL_ENV = "CLAWMATE_PUBLIC_BASE_URL"
-CONFIG_PATH_ENV = "CLAWMATE_CONFIG"
+from constants import PUBLIC_BASE_URL_ENV, CONFIG_PATH_ENV, ONLYOFFICE_JWT_SECRET_ENV
 
 
 @router.get("/api/clawmate/config", response_class=JSONResponse)
@@ -51,17 +49,20 @@ async def public_config():
             data = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         data = {}
+    fb_cfg = data.get("feedback", {}) or {}
+    tags = fb_cfg.get("tags", [])
     return {
         "roots": data.get("roots", []),
         "defaultRootId": data.get("defaultRootId", ""),
+        "feedback_tags": tags,
     }
 ONLYOFFICE_TOKEN_TTL = 3600
 
 
 def _get_onlyoffice_secret() -> str:
-    secret = os.getenv(ONLYOFFICE_SECRET_ENV)
+    secret = os.getenv(ONLYOFFICE_JWT_SECRET_ENV)
     if not secret:
-        raise HTTPException(status_code=500, detail=f"{ONLYOFFICE_SECRET_ENV} is not set")
+        raise HTTPException(status_code=500, detail=f"{ONLYOFFICE_JWT_SECRET_ENV} is not set")
     return secret
 
 
@@ -114,6 +115,49 @@ async def clawmate_list(root: str = "", dir: str = ""):
         raise HTTPException(status_code=400, detail="Invalid path")
 
 
+@router.get("/api/clawmate/list/navigation", response_class=JSONResponse)
+async def clawmate_list_navigation(root: str = "", path: str = ""):
+    """Return prev/next navigation for the given image file in the same directory.
+
+    Response: {prev: {name, path}|null, next: {name, path}|null, current: {name, path}, total: int}
+    """
+    try:
+        dir_path = str(Path(path).parent) if "/" in path else ""
+        result = list_dir(root, dir_path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Directory not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    # list_dir returns {path, name, entries: [...]}
+    entries = result.get("entries", [])
+
+    # Filter to images only (category == "image")
+    images = sorted(
+        [e for e in entries if e.get("category") == "image"],
+        key=lambda e: e.get("name", ""),
+    )
+    if not images:
+        return JSONResponse(content={"prev": None, "next": None, "current": None, "total": 0})
+
+    current_name = path.split("/")[-1]
+    idx = next((i for i, e in enumerate(images) if e["name"] == current_name), -1)
+    if idx < 0:
+        idx = 0
+
+    prev_entry = images[idx - 1] if idx > 0 else None
+    next_entry = images[idx + 1] if idx < len(images) - 1 else None
+
+    return JSONResponse(content={
+        "prev": {"name": prev_entry["name"], "path": prev_entry["path"]} if prev_entry else None,
+        "next": {"name": next_entry["name"], "path": next_entry["path"]} if next_entry else None,
+        "current": {"name": images[idx]["name"], "path": images[idx]["path"]},
+        "total": len(images),
+    })
+
+
 @router.get("/api/clawmate/search", response_class=JSONResponse)
 async def clawmate_search(
     q: str,
@@ -130,6 +174,34 @@ async def clawmate_search(
         raise HTTPException(status_code=403, detail="Forbidden")
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid path")
+
+
+import hmac, hashlib, time as time_module
+
+_PREVIEW_TOKEN_TTL_SECONDS = 3600  # 1 hour
+_PREVIEW_TOKEN_SECRET = os.environ.get("CLAWMATE_PREVIEW_TOKEN_SECRET", "dev-secret-change-me")
+
+
+def generate_preview_token(root_id: str, rel_path: str) -> str:
+    """Generate a time-limited HMAC-signed preview token for root_id:rel_path."""
+    expires = int(time_module.time()) + _PREVIEW_TOKEN_TTL_SECONDS
+    msg = f"{root_id}:{rel_path}:{expires}"
+    sig = hmac.new(_PREVIEW_TOKEN_SECRET.encode(), msg.encode(), hashlib.sha256).hexdigest()
+    return f"{expires}:{sig}"
+
+
+def verify_preview_token(root_id: str, rel_path: str, token: str) -> bool:
+    """Verify a preview token. Returns True if valid and not expired."""
+    try:
+        expires_str, sig = token.split(":", 1)
+        expires = int(expires_str)
+        if time_module.time() > expires:
+            return False
+        msg = f"{root_id}:{rel_path}:{expires}"
+        expected = hmac.new(_PREVIEW_TOKEN_SECRET.encode(), msg.encode(), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(sig, expected)
+    except Exception:
+        return False
 
 
 @router.get("/api/clawmate/preview")
@@ -733,12 +805,6 @@ async def auth_login(request: Request):
     )
 
     client_ip = _get_client_ip(request)
-    locked, remaining = check_ip_lockout(client_ip)
-    if locked:
-        return JSONResponse(
-            {"error": "too_many_requests", "detail": f"登录失败次数过多，请 {remaining} 秒后重试"},
-            status_code=429,
-        )
 
     try:
         body = await request.json()
@@ -750,6 +816,14 @@ async def auth_login(request: Request):
 
     if not username or not password:
         return JSONResponse({"error": "invalid_request", "detail": "用户名和密码不能为空"}, status_code=400)
+
+    # Lockout check after we know the username
+    locked, remaining = check_ip_lockout(username, client_ip)
+    if locked:
+        return JSONResponse(
+            {"error": "too_many_requests", "detail": f"登录失败次数过多，请 {remaining} 秒后重试"},
+            status_code=429,
+        )
 
     config_path = Path(os.environ.get(CONFIG_PATH_ENV, "config.json"))
     try:
@@ -766,11 +840,11 @@ async def auth_login(request: Request):
     stored_hash = ac.get("password_hash", "")
 
     if username != expected_user or not verify_password(password, stored_hash):
-        record_failure(client_ip)
+        record_failure(username, client_ip)
         return JSONResponse({"error": "invalid_credentials", "detail": "用户名或密码错误"}, status_code=401)
 
     # Success
-    clear_failures(client_ip)
+    clear_failures(username, client_ip)
     ttl = get_session_ttl(config)
     sid, _ = await create_session(username, ttl)
 
@@ -1098,3 +1172,17 @@ async def clawmate_subtitle_correct(request: Request):
         "feedbackFile": str(fb_path),
         "message": "纠错任务已创建，agent 正在处理中",
     })
+
+
+# ── Preview token verification (for standalone preview.html) ────────────────────
+
+
+@router.get("/api/clawmate/preview/verify")
+async def verify_preview(root: str = "", path: str = "", token: str = ""):
+    """Verify a preview token and return file content if valid. Token TTL = 1 hour."""
+    if not token:
+        raise HTTPException(status_code=401, detail="缺少预览令牌")
+    if not verify_preview_token(root, path, token):
+        raise HTTPException(status_code=403, detail="预览链接已过期，请重新生成")
+    # Token valid — serve content via existing preview logic (auth required)
+    return await clawmate_preview(root=root, path=path)
