@@ -22,6 +22,14 @@ from pathlib import Path
 from urllib.parse import quote
 
 logger = logging.getLogger("clawmate.feedback")
+# v1.21: 显式设 INFO level + StreamHandler，确保 waking/wake success 日志在 journalctl 中可见
+# (uvicorn 默认 root=WARNING，clawmate.feedback 需独立 handler 才能输出 INFO)
+if not logger.handlers:
+    _h = logging.StreamHandler()
+    _h.setLevel(logging.INFO)
+    _h.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(_h)
+    logger.setLevel(logging.INFO)
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -106,7 +114,7 @@ def _filter_items(fb_path: Path, status: str, file: str, since: str) -> list:
     data = _read_feedback_json(fb_path)
     items = _parse_items(data)
 
-    if status:
+    if status and status != "all":
         items = [i for i in items if i.get("status") == status]
     if file:
         items = [i for i in items if file in i.get("file", "")]
@@ -160,8 +168,19 @@ def _wake_agent_for_root(root_id: str) -> None:
             "[feedback] wake failed: cannot resolve agent for root_id=%s (config_path=%s): %s",
             root_id, config_path, e,
         )
+
+    # v1.21: 进入唤醒流程 INFO 日志（强哥排查 FD-SRT-0007 时确认 wake 是否真触发）
+    logger.info(
+        "[feedback] waking agent: root_id=%s, agent_id=%s, cron_name=clawmate-fb-%s",
+        root_id, agent_id, agent_id,
+    )
     try:
         run_cron(None, f"clawmate-fb-{agent_id}")
+        # v1.21: 唤醒成功 INFO 日志（之前只有失败时 warning）
+        logger.info(
+            "[feedback] wake success: root_id=%s, agent_id=%s, cron_name=clawmate-fb-%s",
+            root_id, agent_id, agent_id,
+        )
     except Exception as e:
         # v1.8 B1: 静默失败改日志
         logger.warning(

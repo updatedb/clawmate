@@ -946,6 +946,92 @@ dev 发现：git revert 4 个 commit 后，dev/static/preview.html + dev/static/
 
 ### 不在范围内（dev 全程未触碰）
 - [x] 不动 openmedia / webroot（项目作用域规则）
+
+---
+
+## v1.21 — FD-SRT-0007 根因排查：wake INFO 日志 + API status=all bug ✅ (Work→Dev, 2026-06-05 12:35)
+
+> 强哥决策：派 dev 修 2 个 + 排查 deleted 状态定义
+> 触发：FD-SRT-0007 11:23 创建后 writer agent 没处理（pending ~52 分钟），journalctl 无唤醒日志
+
+### 任务 1: _wake_agent_for_root 加成功 INFO 日志 ✅
+- [x] dev/feedback_api.py `_wake_agent_for_root` 函数（L145-175）
+  - [x] 进入函数时 INFO 日志：`logger.info("[feedback] waking agent: root_id=%s, agent_id=%s, cron_name=clawmate-fb-%s", ...)`
+  - [x] run_cron 成功时 INFO 日志：`logger.info("[feedback] wake success: root_id=%s, agent_id=%s", ...)`
+  - [x] run_cron 失败时已有 logger.warning (v1.8 B1 保留)
+- [x] service 重启后验证 journalctl 能看到 wake INFO 日志
+- [x] 验证 5533 仍 HTTP 200
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变 (`86e0ff55b31c69489c3ba33a25bd02d1`)
+
+### 任务 2: ?status=all 字面过滤 bug ✅
+- [x] dev/feedback_api.py `_filter_items` 函数（L107）
+  - [x] 当前: `if status: items = [i for i in items if i.get("status") == status]`
+  - [x] 改为: `if status and status != "all": items = [i for i in items if i.get("status") == status]`
+  - [x] "all" 表示"所有 status"（不过滤）
+- [x] 前端 status filter dropdown（如有）确认 "all" 选项含义 (前端通过，无需修改)
+- [x] 验证：用 `?status=all` 应返回所有 status 的 items
+- [x] 验证 5533 仍 HTTP 200
+- [x] 验证 openmedia 18080 仍 HTTP 200
+- [x] 验证 user-level service md5 未变 (`86e0ff55b31c69489c3ba33a25bd02d1`)
+
+### 任务 3 (work): deleted 状态定义
+- [x] `feedback_schema.py` L40 `FEEDBACK_STATUSES = ("pending", "in_progress", "done", "failed")` — **不含 deleted**（schema 不一致小 bug）
+- [x] 但端点 `feedback_api.py` L539-542 接受 deleted：`if new_status not in FEEDBACK_STATUSES and new_status != "deleted"`
+- [x] 前端 `preview.html` L3435 "删除"按钮 → POST `status: 'deleted'`
+- [x] UI `preview.html` L2841/2945/3641/3661 filter `i.status !== 'deleted'`
+- [x] 状态语义：用户主动软删除（保留在 feedback.json，不显示在 UI）
+- [x] CLAWLIST.md L1202 已记录"后端支持 status=deleted"已实施
+
+### 手动测试 ✅
+- [x] task 1 验证：模拟一次 feedback 创建，看 journalctl 出现 wake INFO 日志 ✅
+  - 实测：`[feedback] waking agent: root_id=writer, agent_id=writer, cron_name=clawmate-fb-writer`
+- [x] task 2 验证：`?status=all` 返回所有 items；`?status=pending/done/deleted` 分别返回对应 status ✅
+
+### 代码改动
+- `dev/feedback_api.py` L24-31: 添加 StreamHandler 确保 INFO 日志输出到 journalctl
+- `dev/feedback_api.py` L109: `if status:` → `if status and status != "all":`
+- `dev/feedback_api.py` L163-175: `_wake_agent_for_root` 添加 waking/wake success INFO 日志
+
+---
+
+## v1.20 — ClawMate 收尾：README/PRD mobile 废弃标注 ✅ (Work, 2026-06-05 12:10)
+
+> 强哥决策：收尾 ClawMate（README + PRD 加 mobile 已废弃标注）+ 检查 FD-SRT-0007
+
+### 任务 1: README + PRD mobile 废弃标注 ✅
+- [x] `README.md` 顶部加 "⚠️ 当前平台支持状态" 章节
+  - [x] Desktop-only 提示（推荐宽度 ≥ 1024px）
+  - [x] 移动端适配已废弃说明（v1.19 全面回退 ~1842 行 mobile 代码）
+  - [x] commit 引用：`0bac2da` (revert) + `890f2cb` (manual clean)
+  - [x] fork 提示：需移动端请 fork v1.18 或之前版本
+- [x] `prd/PRD.md` 第 1 节"文档信息"加 desktop-only
+  - [x] 文档版本 V1.4 → V1.5
+  - [x] 编写日期 2026-06-01 → 2026-06-05
+  - [x] 新增"平台支持: Desktop-only (v1.19 全面回退所有 mobile 兼容设计)"
+
+### 任务 2: FD-SRT-0007 排查 ⏸ 待强哥确认
+
+- [x] grep 整个 clawmate 项目（md/json/py/html/js） → **0 命中**
+- [x] `feedback.json` 32 个 item 全部 `FD-CM-NNNN` 格式（最新 `FD-CM-0033`）
+- [x] `cron_template.txt` L21 `FD-XX-0001` 是**占位示例**（`XX` = "any project"）
+- [x] `feedback_schema.py` L29 定义 ID 格式 `FD-{abbr}-{NNNN}`，`abbr` 来自 `_project_abbr(project)` 默认 "CM"（项目名 "clawmate"）
+- [x] 实际无任何 `FD-SRT-` 前缀的 ID
+- [x] 按 MEMORY 2026-06-05 规则“不关注 openmedia / webroot”——不跨项目查
+
+**强哥决策点**：
+1. **是 ID 记错**？实际想问的是 `FD-CM-0007`（已完成 status=done，file=clawmate/README.md，note="检查所有 mermaid..."）
+2. **是跨项目 ID**？（不属于本会话范围）
+3. **是计划中预期生成的 ID**？（需手动创建）
+
+### 手动补扣（work 不操作）
+- README.md 顶部插入：Desktop-only 提示 + v1.19 commit 引用
+- prd/PRD.md 第 1 节添加平台支持字段 + 版本/日期更新
+- CLAWLIST.md 加 v1.20 章节（本条）
+
+---
+
+## v1.3 — preview.html 统一 + ONLYOFFICE 编辑 + 双模式渲染 ✅
 - [x] 不动 requirements.txt（CORS / cron P0 修复保留）
 - [x] 不动 feedback.json（runtime 数据，不提交变更）
 - [x] 不动 `~/.config/systemd/user/clawmate.service`（基线 b72b7ecc...，md5 收口前后一致）
