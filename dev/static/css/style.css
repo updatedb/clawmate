@@ -502,43 +502,26 @@ body { margin: 0; font-family: "Inter", "Noto Sans SC", sans-serif; color: var(-
   margin: 16px 0;
 }
 
-/* Light theme: override github-markdown-dark hardcoded colors */
-[data-theme="light"] .markdown-body {
-  color-scheme: light;
-  color: #1f2328;
-  background-color: #ffffff;
+/* Note: [data-theme="light"] .markdown-body overrides removed in v1.27.
+   GitHub Markdown CSS 5.7.0 from CDN handles both themes natively. */
+
+/* ===== markdown-it Container Blocks ===== */
+.markdown-body .note,
+.markdown-body .warning,
+.markdown-body .tip {
+  padding: 12px 16px;
+  margin: 16px 0;
+  border-radius: 6px;
+  border-left: 4px solid;
 }
-[data-theme="light"] .markdown-body h1,
-[data-theme="light"] .markdown-body h2,
-[data-theme="light"] .markdown-body h3,
-[data-theme="light"] .markdown-body h4,
-[data-theme="light"] .markdown-body h5,
-[data-theme="light"] .markdown-body h6,
-[data-theme="light"] .markdown-body p,
-[data-theme="light"] .markdown-body li,
-[data-theme="light"] .markdown-body td,
-[data-theme="light"] .markdown-body th { color: #1f2328; }
-[data-theme="light"] .markdown-body code,
-[data-theme="light"] .markdown-body tt {
-  background-color: rgba(175,184,193,.2);
-  color: #d73a49;
+.markdown-body .note    { background: #ddf4ff; border-color: #0969da; }
+.markdown-body .warning { background: #fff8c5; border-color: #d4a72c; }
+.markdown-body .tip     { background: #dafbe1; border-color: #1a7f37; }
+@media (prefers-color-scheme: dark) {
+  .markdown-body .note    { background: #0c2d6b; border-color: #58a6ff; }
+  .markdown-body .warning { background: #3d2e00; border-color: #d29922; }
+  .markdown-body .tip     { background: #0a3a1a; border-color: #3fb950; }
 }
-[data-theme="light"] .markdown-body pre,
-[data-theme="light"] .markdown-body pre code {
-  background-color: #f6f8fa;
-  color: #1f2328;
-}
-[data-theme="light"] .markdown-body a { color: #0969da; }
-[data-theme="light"] .markdown-body blockquote {
-  color: #656d76;
-  border-left-color: #d0d7de;
-}
-[data-theme="light"] .markdown-body table th,
-[data-theme="light"] .markdown-body table td { border-color: #d0d7de; }
-[data-theme="light"] .markdown-body table tr { background-color: #ffffff; border-top-color: #d0d7de; }
-[data-theme="light"] .markdown-body table tr:nth-child(2n) { background-color: #f6f8fa; }
-[data-theme="light"] .markdown-body table th { background-color: #f6f8fa; }
-[data-theme="light"] .markdown-body hr { background-color: #d0d7de; }
 
 /* Mermaid diagrams */
 .mermaid {

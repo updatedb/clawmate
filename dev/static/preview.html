@@ -6,7 +6,7 @@
   <link rel="icon" href="data:," />
   <title>预览 — ClawMate</title>
   <link rel="stylesheet" href="./css/style.css?v=20260531a" />
-  <link rel="stylesheet" href="./vendor/github-markdown-light.min.css" id="github-markdown-css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.7.0/github-markdown.min.css" id="github-markdown-css" />
   <link rel="stylesheet" href="./vendor/katex.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" id="highlight-theme-css" />
   <style>
@@ -913,7 +913,11 @@
 
   <!-- Vendor scripts -->
   <script src="./vendor/purify.min.js"></script>
-  <script src="./vendor/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it/dist/markdown-it.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it-container/dist/markdown-it-container.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it-emoji/dist/markdown-it-emoji.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it-footnote/dist/markdown-it-footnote.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it-task-lists/dist/markdown-it-task-lists.min.js"></script>
   <script src="./vendor/highlight.min.js"></script>
   <script src="./vendor/katex.min.js"></script>
   <script src="./vendor/auto-render.min.js"></script>
@@ -989,10 +993,10 @@
     const mdCss = document.getElementById('github-markdown-css');
     const hlCss = document.getElementById('highlight-theme-css');
     if (resolved === 'dark') {
-      mdCss.href = './vendor/github-markdown-dark.min.css';
+      mdCss.href = 'https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.7.0/github-markdown-dark.min.css';
       hlCss.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css';
     } else {
-      mdCss.href = './vendor/github-markdown-light.min.css';
+      mdCss.href = 'https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.7.0/github-markdown.min.css';
       hlCss.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css';
     }
   }
@@ -1089,13 +1093,26 @@
   function createMarkdownRenderer(entryRelPath) {
     let mermaidIdx = 0;
     const mermaidStore = [];
-    const renderer = new marked.Renderer();
 
-    renderer.image = function(token) {
-      // marked v15+ passes a single token object {href, title, text}
-      let href = token.href || '';
-      const title = token.title || '';
-      const text = token.text || '';
+    const md = window.markdownit({
+      html: true,
+      linkify: true,
+      typographer: true,
+      breaks: true,
+    })
+      .use(window.markdownitContainer, 'note')
+      .use(window.markdownitContainer, 'warning')
+      .use(window.markdownitContainer, 'tip')
+      .use(window.markdownitEmoji)
+      .use(window.markdownitFootnote)
+      .use(window.markdownitTaskLists, { enabled: true, label: true, labelAfter: true });
+
+    // Rewrite relative image paths
+    md.renderer.rules.image = function(tokens, idx, options, env, slf) {
+      const token = tokens[idx];
+      let href = token.attrGet('src') || '';
+      const title = token.attrGet('title') || '';
+      const text = token.content || '';
       if (!/^https?:\/\//i.test(href) && !href.startsWith('/')) {
         const dir = entryRelPath.split('/').slice(0, -1).join('/');
         const fullPath = dir ? dir + '/' + href : href;
@@ -1104,14 +1121,11 @@
       return `<img src="${href}" alt="${escHtml(text)}"${title ? ` title="${escHtml(title)}"` : ''}>`;
     };
 
-    renderer.code = function(codeInfo, lang) {
-      let code = codeInfo;
-      let language = lang || '';
-      if (codeInfo && typeof codeInfo === 'object') {
-        code = codeInfo.text || '';
-        language = codeInfo.lang || language;
-      }
-      const raw = typeof code === 'string' ? code : '';
+    // Handle fenced code blocks (mermaid + syntax highlighting)
+    md.renderer.rules.fence = function(tokens, idx, options, env, slf) {
+      const token = tokens[idx];
+      const language = token.info.trim();
+      const raw = token.content;
       const className = language ? `language-${language}` : '';
 
       if (language === 'mermaid') {
@@ -1120,12 +1134,11 @@
         return `<div class="mermaid" data-mermaid-id="${id}"></div>`;
       }
 
-      // Let hljs.highlightAll() handle syntax highlighting after DOM insertion;
-      // mermaid blocks are handled separately via the div wrapper above.
+      // Let hljs.highlightAll() handle syntax highlighting after DOM insertion
       return `<pre><code class="${className}">${escHtml(raw)}</code></pre>`;
     };
 
-    return { renderer, mermaidStore };
+    return { md, mermaidStore };
   }
 
   async function renderMermaid(div, mermaidStore) {
@@ -1844,7 +1857,7 @@
       }
 
       // ======== Markdown: render both views, then apply mode ========
-      if (isMarkdownMode && window.marked && window.DOMPurify) {
+      if (isMarkdownMode && window.markdownit && window.DOMPurify) {
         // Clear any previous content before building
         contentBody.innerHTML = '';
         // Create edit banner (hidden until edit mode is entered)
@@ -1886,10 +1899,9 @@
         let mermaidStore = [];
         try {
           const result = createMarkdownRenderer(filePath);
-          const renderer = result.renderer;
+          const md = result.md;
           mermaidStore = result.mermaidStore;
-          marked.use({ renderer: renderer, breaks: false, gfm: true });
-          html = marked.parse(content);
+          html = md.render(content);
           if (window.DOMPurify) {
             html = DOMPurify.sanitize(html, { ADD_ATTR: ['class', 'target', 'data-highlighted'] });
           }

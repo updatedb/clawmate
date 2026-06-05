@@ -43,7 +43,7 @@ const state = {
   searchQuery: "",
   view: "grid",
   filterType: "all",
-  sortKey: "mtime",
+  sortKey: "time",
   sortDir: "desc",
   page: 1,
   pageSize: 60,
@@ -140,6 +140,18 @@ function cycleTheme() {
 }
 
 // Initialize theme on load
+// 排序标签更新函数
+function updateSortLabel() {
+  const labels = {
+    time: { desc: "↓ 最新优先", asc: "↑ 最早优先" },
+    name: { desc: "↓ Z→A", asc: "↑ A→Z" },
+    size: { desc: "↓ 最大优先", asc: "↑ 最小优先" },
+  };
+  if (els.sortDir) {
+    els.sortDir.textContent = labels[state.sortKey][state.sortDir];
+  }
+}
+
 function initTheme() {
   applyTheme();
   // Listen for system theme changes when in auto mode
@@ -694,14 +706,26 @@ async function renderMermaid(div, mermaidStore) {
 // ===== Render Markdown =====
 function createMarkdownRenderer(entryRelPath, mermaidStore) {
   let mermaidIdx = 0;
-  const renderer = new marked.Renderer();
+
+  const md = window.markdownit({
+    html: true,
+    linkify: true,
+    typographer: true,
+    breaks: true,
+  })
+    .use(window.markdownitContainer, 'note')
+    .use(window.markdownitContainer, 'warning')
+    .use(window.markdownitContainer, 'tip')
+    .use(window.markdownitEmoji)
+    .use(window.markdownitFootnote)
+    .use(window.markdownitTaskLists, { enabled: true, label: true, labelAfter: true });
 
   // Rewrite relative image paths
-  renderer.image = function(token) {
-    // marked v15+ passes a single token object {href, title, text}
-    let href = token.href || '';
-    const title = token.title || '';
-    const text = token.text || '';
+  md.renderer.rules.image = function(tokens, idx, options, env, slf) {
+    const token = tokens[idx];
+    let href = token.attrGet('src') || '';
+    const title = token.attrGet('title') || '';
+    const text = token.content || '';
     // If href is not absolute URL or /-prefixed, treat as relative
     if (!/^https?:\/\//i.test(href) && !href.startsWith('/')) {
       const dir = entryRelPath.split('/').slice(0, -1).join('/');
@@ -711,17 +735,14 @@ function createMarkdownRenderer(entryRelPath, mermaidStore) {
     return `<img src="${href}" alt="${escHtml(text)}"${title ? ` title="${escHtml(title)}"` : ''}>`;
   };
 
-  renderer.code = function(codeInfo, lang) {
-    let code = codeInfo;
-    let language = lang || '';
-    if (codeInfo && typeof codeInfo === 'object') {
-      code = codeInfo.text || '';
-      language = codeInfo.lang || language;
-    }
-    const raw = typeof code === 'string' ? code : '';
+  // Handle fenced code blocks (mermaid + syntax highlighting)
+  md.renderer.rules.fence = function(tokens, idx, options, env, slf) {
+    const token = tokens[idx];
+    const language = token.info.trim();
+    const raw = token.content;
     const className = language ? `language-${language}` : '';
 
-    // Mermaid diagram — store code in memory array, output placeholder (avoids innerHTML newline collapse)
+    // Mermaid diagram — store code in memory array, output placeholder
     if (language === 'mermaid') {
       const id = mermaidIdx++;
       mermaidStore[id] = raw;
@@ -747,7 +768,7 @@ function createMarkdownRenderer(entryRelPath, mermaidStore) {
     return `<pre><code class="${className}">${escHtml(raw)}</code></pre>`;
   };
 
-  return renderer;
+  return md;
 }
 
 function renderBreadcrumbContainer(container) {
@@ -1528,12 +1549,13 @@ function setFilterType(value) {
 function setSortKey(value) {
   state.sortKey = value;
   state.page = 1;
+  updateSortLabel();
   render();
 }
 
 function toggleSortDir() {
   state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
-  els.sortDir.textContent = state.sortDir === "asc" ? "升序" : "降序";
+  updateSortLabel();
   state.page = 1;
   render();
 }
@@ -2075,6 +2097,9 @@ function clearActiveFeedbackPanel() {
 async function init() {
   await loadConfig();
   initTheme(); // Apply theme before render
+  // Sync sort select with state default
+  els.sortKey.value = state.sortKey;
+  updateSortLabel();
   setupDragDrop(); // Activate drag-and-drop upload
   // Pre-check ONLYOFFICE availability in background
   checkOnlyofficeAvailable();

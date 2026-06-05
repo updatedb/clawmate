@@ -10,6 +10,103 @@
 
 偏差加注释，不留烂尾。
 
+## v1.27 — 排序修复 + GitHub Markdown CSS + markdown-it 迁移 ✅ (Dev, 2026-06-06 02:01 → 02:30)
+
+> **范围**：UI 优化 P1（排序修复 + GitHub CSS）+ P2（markdown-it 迁移）
+>
+> **目标**：排序 select/button 与 state 同步；GitHub Markdown CSS 暗色/亮色动态切换；marked → markdown-it
+
+### 阶段一：排序修复 + GitHub Markdown CSS
+
+#### 1.1 排序修复
+
+| 文件 | 变更 |
+|------|------|
+| `dev/static/index.html` | sortKey select 默认值改为 time（时间），sortDir 按钮文案改为动态标签 |
+| `dev/static/js/app.js` | state.sortKey 改为 "time"；新增 updateSortLabel()；init() 中同步 els.sortKey.value；setSortKey()/toggleSortDir() 都调 updateSortLabel() |
+
+- [x] `<select id="sortKey">` 第一项改为 `<option value="time">时间</option>`（与 state.sortKey="time" 一致）
+- [x] `<button id="sortDir">` 初始文案改为 `↓ 最新优先`
+- [x] `state.sortKey: "mtime"` → `"time"`（L46）
+- [x] 新增 `updateSortLabel()` 动态更新 sortDir 按钮文案
+- [x] `init()` 中加 `els.sortKey.value = state.sortKey` + `updateSortLabel()`
+- [x] `setSortKey()` 中加 `updateSortLabel()`（select 手动切换时同步按钮）
+- [x] `toggleSortDir()` 使用 `updateSortLabel()` 替代硬编码 "升序"/"降序"
+- [x] 排序逻辑 `applyFilterSort()` 的 else 分支用 `.mtime`（sortKey="time" 走 else）
+
+> **偏差说明**：
+> - 排序字段名改为 `"time"`（原 `"mtime"`），排序比较逻辑的 else 分支保持用 `.mtime`（代码不变，因非 "name" 非 "size" 的 key 都走 else）
+> - `setSortKey()` 也调 `updateSortLabel()`（原始任务未写，但 select 切换时按钮文案也应更新）
+
+#### 1.2 GitHub Markdown CSS 暗色切换
+
+| 文件 | 变更 |
+|------|------|
+| `dev/static/preview.html` | switchThemeCSS 使用 CDN github-markdown-css 5.7.0 动态切换；初始 src 也用 CDN |
+| `dev/static/css/style.css` | 删除 `[data-theme="light"] .markdown-body` 手动颜色覆盖（由 CDN 主题接管）|
+
+- [x] preview.html switchThemeCSS：md CSS 从 vendor → CDN jsdelivr
+  - [x] `dark: 'https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.7.0/github-markdown-dark.min.css'`
+  - [x] `light: 'https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.7.0/github-markdown.min.css'`
+- [x] preview.html `<link>` 初始 src 也改为 CDN light CSS
+- [x] style.css 删除 `[data-theme="light"] .markdown-body` 全部覆盖（L505-555，~30 行）
+- [x] highlight.js 保持原有 CDN（cdnjs）不变
+
+> **偏差说明**：
+> - 采用了 CDN（jsdelivr + cdnjs），未 vendor 化——highlight.js 已用 CDN，github-markdown-css 同理更可靠
+> - 初始 HTML `<link>` 也改为 CDN（避免 vendor CSS 短暂闪过后被 CDN 覆盖）
+
+### 阶段二：markdown-it 迁移
+
+| 文件 | 变更 |
+|------|------|
+| `dev/static/preview.html` | marked CDN → markdown-it + 4 插件；渲染器改为 md.render() |
+| `dev/static/js/app.js` | createMarkdownRenderer 改为 markdown-it + 插件 |
+| `dev/static/index.html` | marked CDN → markdown-it + 4 插件 |
+| `dev/static/css/style.css` | 新增 markdown-it 容器块 CSS（note/warning/tip）|
+
+- [x] preview.html: `vendor/marked.min.js` → `markdown-it` + `markdown-it-container` + `markdown-it-emoji` + `markdown-it-footnote` + `markdown-it-task-lists`（CDN jsdelivr）
+- [x] preview.html: `createMarkdownRenderer()` 使用 `window.markdownit({...}).use(...)` 而非 `new marked.Renderer()`
+- [x] preview.html: 图像路径重写：`md.renderer.rules.image` 替代 `renderer.image`
+- [x] preview.html: 代码块渲染：`md.renderer.rules.fence` 替代 `renderer.code`
+- [x] preview.html: `marked.use(...)` + `marked.parse(content)` → `md.render(content)`
+- [x] preview.html: 条件检查 `window.marked` → `window.markdownit`
+- [x] app.js: `createMarkdownRenderer()` 相同迁移（image rule + fence rule + md.render）
+- [x] index.html: marked CDN 引用 → markdown-it 5 个 CDN 引用
+- [x] style.css: 新增 `.markdown-body .note/.warning/.tip` 容器块样式 + 暗色覆盖
+
+### 验证基线
+
+```bash
+# 5533 内部
+curl -s -o /dev/null -w "HTTP %{http_code}\n" "http://127.0.0.1:5533/api/clawmate/feedback/status?root=webprojects&project=clawmate"
+# 18443 外部
+curl -sk -o /dev/null -w "HTTP %{http_code}\n" "https://note.updatedb.online:18443/api/clawmate/feedback/status?root=webprojects&project=clawmate"
+```
+
+### 验证结果
+
+- [x] 5533 内部 → HTTP 200
+- [x] 18443 外部 → HTTP 200
+- [x] `vendor/marked.min.js` 不再被任何文件引用（grep -rn 无结果）
+- [x] `marked.parse` / `marked.use` / `new marked.Renderer` 不再存在
+- [x] `createMarkdownRenderer` 改为 `window.markdownit()` 返回 md 实例
+- [x] sort select 第一项为 "时间"（value="time"），与 state.sortKey="time" 一致
+- [x] sortDir 按钮初始文案 "↓ 最新优先"
+- [x] 切换 sortKey 时 sortDir 按钮文案同步更新
+- [x] toggleSortDir 文案动态切换（不写死 "升序"/"降序"）
+
+### 不做的事
+
+- ❌ 不改后端 API
+- ❌ 不改 feedback.json 格式
+- ❌ 不改 mobile 页面（阶段 3-4 后续转交）
+- ❌ 不改桌面版 preview 布局（大纲/反馈保持现有）
+- ❌ 不改 user-level service / nginx / openmedia / webroot
+- ❌ 不改 service 文件
+
+---
+
 ## v1.26 — config.py + store.py + cron-tick + 清理 ✅ (Dev, 2026-06-06 01:31 → 01:50)
 
 > **范围**：新增 `config.py`、`store.py`；重写 `feedback_api.py`；修改 `routes.py`、`service.py`、`auth.py`、`main.py`、`cron_template.txt`；清理 `subtitle.py` 死代码
