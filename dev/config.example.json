@@ -3,13 +3,21 @@
     {
       "id": "media",
       "label": "媒体文件",
-      "dir": "/home/user/media"
+      "dir": "/home/user/media",
+      "agent_id": "writer"
     }
   ],
   "defaultRootId": "media",
   "port": 5533,
   "public_base_url": "",
   "max_upload_mb": 100,
+  "_comment": "v1.22: fallback_cron_interval 是兜底 cron 频率（webhook 不可达时兜底扫描全量 pending）。支持单位: h(小时) d(天) w(周)。默认 24h。",
+  "fallback_cron_interval": "24h",
+  "openclaw": {
+    "gateway_url": "http://127.0.0.1:18789",
+    "hook_token": "",
+    "_comment": "OpenClaw gateway 配置。hook_token 为空时 webhook 唤醒被禁用（仅兜底 cron 生效）。copy from ~/.openclaw/openclaw.json hooks.token"
+  },
   "onlyoffice": {
     "api_js_url": "https://file.updatedb.online:18443/web-apps/apps/api/documents/api.js",
     "jwt_secret": "change-me-in-production",

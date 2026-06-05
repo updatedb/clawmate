@@ -1,0 +1,79 @@
+{
+  "roots": [
+    {
+      "id": "3gpp",
+      "label": "3GPP Meetings",
+      "dir": "/home/openclaw/helper/3gpp",
+      "agent_id": "helper"
+    },
+    {
+      "id": "webprojects",
+      "label": "Web Projects",
+      "dir": "/home/openclaw/webprojects",
+      "agent_id": "work"
+    },
+    {
+      "id": "writer",
+      "label": "Topic Writer",
+      "dir": "/home/openclaw/writer/topics/",
+      "agent_id": "writer"
+    },
+    {
+      "id": "trip",
+      "label": "Hike Plans",
+      "dir": "/home/openclaw/travel/trip/",
+      "agent_id": "travel"
+    },
+    {
+      "id": "cooker",
+      "label": "CookBook",
+      "dir": "/home/openclaw/homeservice/recipe/",
+      "agent_id": "home"
+    },
+    {
+      "id": "debate",
+      "label": "Debate Arena",
+      "dir": "/home/openclaw/.openclaw/debate-arena/archives",
+      "agent_id": "main"
+    },
+    {
+      "id": "projects",
+      "label": "Projects",
+      "dir": "/home/openclaw/work/projects",
+      "agent_id": "work"
+    },
+    {
+      "id": "OpenMedia",
+      "label": "Openclaw Media",
+      "dir": "/home/openclaw/.openclaw/media",
+      "agent_id": "main"
+    }
+  ],
+  "defaultRootId": "webprojects",
+  "port": 5533,
+  "public_base_url": "https://note.updatedb.online:18443",
+  "feedback": {
+    "tags": [
+      { "label": "🗑 删除", "prompt": "清除选中内容" },
+      { "label": "🔧 修改", "prompt": "修改选中内容，思路如下：" },
+      { "label": "📈 扩展", "prompt": "详细解释选中内容" },
+      { "label": "📉 简化", "prompt": "抽象选中内容，简单描述" },
+      { "label": "⚡ 执行", "prompt": "文档审批通过，执行方案" }
+    ]
+  },
+  "openclaw": {
+    "gateway_url": "http://127.0.0.1:18789",
+    "hook_token": "dc8a131785bc805c35a63ce382e34500ef31fa845414033a02d46aead24652e8"
+  },
+  "onlyoffice": {
+    "api_js_url": "https://file.updatedb.online:18443/web-apps/apps/api/documents/api.js",
+    "jwt_secret": "9f3c0d2e0a9b4baf8c5c7b6e4a8f1d23",
+    "mode": "edit",
+    "callback_url": "https://note.updatedb.online:18443/api/clawmate/onlyoffice/callback"
+  },
+  "auth": {
+    "username": "updatedb",
+    "password_hash": "$2b$12$0x0znq2Rn6SzCXn18q8hYu8yGAqPWlKROQ64z3xiPrt2hescCLDpC",
+    "session_ttl_minutes": 1440
+  }
+}

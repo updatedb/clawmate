@@ -1,5 +1,5 @@
 """
-ClawMate v0.1 — Standalone ClawMate service.
+ClawMate v0.1 - Standalone ClawMate service.
 Independent FastAPI server, Docker-deployable.
 
 Usage:
@@ -65,11 +65,6 @@ PUBLIC_BASE_URL = os.environ.get(
     config.get("public_base_url", ""),
 )
 
-# v1.12 C2: 启动前快照 env var 是否被显式设置（setdefault 之后无法分辨）
-# 部署者如果忘了在 systemd/环境里设 CLAWMATE_PUBLIC_BASE_URL，
-# 仅靠 config.json 兜底会让下面的 setdefault 把 env 填上，导致检查失效。
-_CLAWMATE_PUBLIC_BASE_URL_ENV_SET = PUBLIC_BASE_URL_ENV in os.environ
-
 # inject env vars for routes.py / service.py
 os.environ.setdefault("CLAWMATE_ONLYOFFICE_JWT_SECRET", ONLYOFFICE_JWT_SECRET)
 os.environ.setdefault("CLAWMATE_PUBLIC_BASE_URL", PUBLIC_BASE_URL)
@@ -106,23 +101,23 @@ def _run_set_password(force: bool = False):
     print(f"当前用户名: {current_user}")
 
     if current_hash and not force:
-        print("请输入当前密码（输入后按回车）:")
+        print("请输入当前密码(输入后按回车):")
         old = getpass.getpass("当前密码: ")
         if not verify_password(old, current_hash):
-            print("原密码错误，操作取消。")
+            print("原密码错误,操作取消。")
             sys.exit(1)
         print("原密码验证成功。")
     elif current_hash:
-        print("(force 模式，跳过原密码验证)")
+        print("(force 模式,跳过原密码验证)")
 
     while True:
-        p1 = getpass.getpass("新密码（至少4字符）: ")
+        p1 = getpass.getpass("新密码(至少4字符): ")
         if len(p1) < 4:
-            print("新密码太短，至少需要4个字符。")
+            print("新密码太短,至少需要4个字符。")
             continue
         p2 = getpass.getpass("确认新密码: ")
         if p1 != p2:
-            print("两次输入的密码不一致，请重试。")
+            print("两次输入的密码不一致,请重试。")
             continue
         break
 
@@ -140,7 +135,7 @@ def _run_set_password(force: bool = False):
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
 
-    print(f"密码已更新（用户: {current_user}）。")
+    print(f"密码已更新(用户: {current_user})。")
     print("重启 ClawMate 服务使新密码生效。")
 
 
@@ -153,7 +148,7 @@ app = FastAPI(
 )
 
 
-# CORS 白名单：从 public_base_url 动态计算，保留本机调试
+# CORS 白名单:从 public_base_url 动态计算,保留本机调试
 _cors_allowed = []
 if PUBLIC_BASE_URL:
     _cors_allowed.append(PUBLIC_BASE_URL.rstrip("/"))
@@ -172,7 +167,7 @@ app.add_middleware(
     allow_credentials=True,
 )
 
-# Import auth middleware — must be after CORS, before static files
+# Import auth middleware - must be after CORS, before static files
 from auth import AuthMiddleware  # noqa: E402
 
 app.add_middleware(AuthMiddleware, config=config)
@@ -200,13 +195,19 @@ async def health():
     return {"status": "ok", "service": "clawmate", "version": "0.1.0"}
 
 
-# ── 启动时同步 cron job（根据 config.json roots 自动生成）───────
+# ── 启动时同步 cron job(根据 config.json roots 自动生成)───────
 
-from cron_manager import add_cron, remove_all, _get_cron_bin  # noqa: E402
+import subprocess  # noqa: E402
+
+from cron_manager import add_cron, _get_cron_bin  # noqa: E402
 
 
 def _sync_cron_jobs():
-    """读取 config.json，为每个 unique agent_id 创建/更新 cron job"""
+    """读取 config.json，创建单一的兜底 cron job（v1.25）。
+
+    - webhook 是正常路径，cron 只作为安全网
+    - 如果 config.json 没有 openclaw.hook_token，cron 是唯一路径，间隔更短 (6h)
+    """
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             cfg = json.load(f)
@@ -219,16 +220,24 @@ def _sync_cron_jobs():
         return
 
     cron_bin = _get_cron_bin()
+    cron_name = "clawmate-fb-fallback"
 
-    # 按 agent_id 分组
-    agent_roots_map = {}
-    for r in roots:
-        aid = r.get("agent_id", "default")
-        agent_roots_map.setdefault(aid, []).append(r["id"])
-
-    # 删除旧的泛用 cron job（历史遗留命名）
-    for old_name in ("clawmate-feedback-inbox-check", "clawmate-feedback-inbox"):
-        remove_all(cron_bin, old_name)
+    # 先删除已存在的 clawmate-fb-fallback（幂等）
+    try:
+        list_out = subprocess.run(
+            [cron_bin, "cron", "list"],
+            timeout=10, capture_output=True, text=True,
+        ).stdout
+        for line in list_out.splitlines():
+            if cron_name in line[:28]:
+                parts = line.split()
+                if parts:
+                    subprocess.run(
+                        [cron_bin, "cron", "rm", parts[0]],
+                        timeout=10, capture_output=True,
+                    )
+    except Exception:
+        pass
 
     # 读取 cron message 模板
     template_path = Path(__file__).parent / "cron_template.txt"
@@ -239,8 +248,7 @@ def _sync_cron_jobs():
         print(f"[clawmate] WARNING: 无法读取 {template_path}，跳过 cron job 同步")
         return
 
-    # v1.7: 从 config.json 读取 feedback.tags，生成动作列表 (注入到 {feedback_action_list} 占位符)
-    # 如果没有 tags，降级为默认动作列表以保持现有 cron 任务不中断
+    # 从 config.json 读取 feedback.tags，生成动作列表
     DEFAULT_ACTION_LIST = (
         "   - **删除**：移除 item.content 指向的段落/代码/章节\n"
         "   - **修改**：用 item.note 的要求改写对应内容\n"
@@ -261,31 +269,34 @@ def _sync_cron_jobs():
             if not label and not prompt:
                 continue
             if not prompt:
-                # label-only entry
                 action_lines.append(f"   - **{label}**")
             else:
                 action_lines.append(f"   - **{label}**：{prompt}" if label else f"   - {prompt}")
         action_list_text = "\n".join(action_lines) if action_lines else DEFAULT_ACTION_LIST
     else:
-        # No tags configured → fallback to default action list (backward compat)
         action_list_text = DEFAULT_ACTION_LIST
 
     base_url = "http://localhost:5533"
+    all_root_ids = [r.get("id") for r in roots if r.get("id")]
+    all_roots = ", ".join(all_root_ids)
 
-    for agent_id, root_ids in agent_roots_map.items():
-        cron_name = f"clawmate-fb-{agent_id}"
-        roots_str = ",".join(root_ids)
-        agent_roots = ", ".join(root_ids)
-        message = template.format(
-            base_url=base_url,
-            roots_str=roots_str,
-            agent_roots=agent_roots,
-            feedback_action_list=action_list_text,
-        )
-        if add_cron(cron_bin, cron_name, agent_id, message):
-            print(f"[clawmate] cron job 已创建: {cron_name} (agent={agent_id}, roots={root_ids})")
-        else:
-            print(f"[clawmate] WARNING: 创建失败 {cron_name}")
+    # agent_id 用第一个 root 的 agent（cron 扫所有 root）
+    primary_agent = roots[0].get("agent_id", "default")
+
+    # 兜底间隔：无 webhook 时 6h，否则 24h
+    oc = cfg.get("openclaw") or {}
+    has_webhook = bool(oc.get("hook_token", ""))
+    interval = "6h" if not has_webhook else cfg.get("fallback_cron_interval", "24h")
+
+    message = template.format(
+        base_url=base_url,
+        all_roots=all_roots,
+        feedback_action_list=action_list_text,
+    )
+    if add_cron(cron_bin, cron_name, primary_agent, message, every=interval):
+        print(f"[clawmate] 兜底 cron job 已创建: {cron_name} (interval={interval}, agent={primary_agent}, roots=[{all_roots}])")
+    else:
+        print(f"[clawmate] WARNING: 兜底 cron 创建失败 {cron_name}")
 
 
 # ── entrypoint ─────────────────────────────────────────────────────
@@ -305,6 +316,16 @@ if __name__ == "__main__":
     print(f"[clawmate] ONLYOFFICE API JS: {ONLYOFFICE_API_JS_URL}")
     print(f"[clawmate] Max upload: {max_upload}MB")
 
+    # v1.25: webhook wake 状态（从 config.json 读取）
+    _oc = config.get("openclaw") or {}
+    _hook_token = _oc.get("hook_token", "")
+    _gateway_url = _oc.get("gateway_url", "http://127.0.0.1:18789")
+    if _hook_token:
+        print(f"[clawmate] Webhook wake: ENABLED  (wake -> {_gateway_url}/hooks/agent)")
+        print(f"[clawmate]   config source: config.json -> openclaw.hook_token")
+    else:
+        print(f"[clawmate] Webhook wake: DISABLED  (openclaw.hook_token empty, fallback to cron only)", file=sys.stderr)
+
     # Increase multipart upload size limit (default 1MB)
     from starlette.formparsers import MultiPartParser
     MultiPartParser.spool_max_size = max_upload * 1024 * 1024
@@ -313,32 +334,5 @@ if __name__ == "__main__":
     import threading
     t = threading.Thread(target=_sync_cron_jobs, name="cron-sync", daemon=True)
     t.start()
-
-    # v1.8 B5: 启动时执行一次 feedback 归档/清理 (后台线程, 不阻塞 server)
-    # - 默认保留 90 天, 归档到 feedback.archive.json
-    # - try/except 包裹, 失败不报错不阻塞 (清理失败不影响主流程)
-    def _startup_cleanup():
-        try:
-            from feedback_api import cleanup_old_feedback
-            stats = cleanup_old_feedback(days=90, archive=True)
-            print(f"[clawmate] startup cleanup: scanned={stats['scanned_files']} "
-                  f"archived={stats['archived_count']} removed={stats['removed_count']} "
-                  f"errors={len(stats['errors'])}")
-        except Exception as e:
-            print(f"[clawmate] WARNING: startup cleanup failed: {e}", file=sys.stderr)
-
-    t2 = threading.Thread(target=_startup_cleanup, name="feedback-cleanup", daemon=True)
-    t2.start()
-
-    # v1.12 C2: 启动时检查 CLAWMATE_PUBLIC_BASE_URL 是否被显式设置
-    # 未设置时打印 WARNING（不阻塞启动）— 强哥部署时如果忘了设 env var，
-    # 反向代理后 preview URL 可能用错 scheme (http vs https)
-    if not _CLAWMATE_PUBLIC_BASE_URL_ENV_SET:
-        print(
-            f"[clawmate] WARNING: {PUBLIC_BASE_URL_ENV} not set; "
-            "preview URLs may use wrong scheme (http vs https) when behind "
-            "reverse proxy without X-Forwarded-* headers. "
-            "Fix: export CLAWMATE_PUBLIC_BASE_URL=https://note.updatedb.online:18443"
-        )
 
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")

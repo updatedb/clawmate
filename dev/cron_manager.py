@@ -1,8 +1,9 @@
 """
-ClawMate Cron Manager — 封装 openclaw cron add/rm/run 操作。
+ClawMate Cron Manager — 封装 openclaw cron add/run 操作（v1.25 精简版）。
 
-Usage:
-    from cron_manager import add_cron, remove_all, run_cron, _get_cron_bin
+删除 resolve_cron_id / remove_all / _cron_list_stdout（不再需要）。
+保留 add_cron / run_cron / _get_cron_bin。
+add_cron 不再内部调用 remove_all（由调用者负责幂等清理）。
 """
 
 from __future__ import annotations
@@ -22,61 +23,6 @@ def _get_cron_bin() -> str:
     return bin_path
 
 
-def _cron_list_stdout(cron_bin: str | None = None) -> str:
-    """Run `openclaw cron list` and return stdout as plain text."""
-    bin_path = cron_bin or _get_cron_bin()
-    result = subprocess.run(
-        [bin_path, "cron", "list"],
-        timeout=10, capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        return ""
-    return result.stdout
-
-
-def resolve_cron_id(cron_bin: str | None, name: str) -> str | None:
-    """
-    Parse `openclaw cron list` table output and find the UUID for a cron job
-    whose name contains `name[:20]`.
-
-    Cron names are truncated to 24 chars (21 + '...') in table output,
-    so prefix matching uses the first 20 characters.
-
-    Returns the UUID string, or None if not found.
-    """
-    stdout = _cron_list_stdout(cron_bin)
-    if not stdout:
-        return None
-    prefix = name[:20]
-    for line in stdout.split("\n"):
-        if prefix in line:
-            return line.split()[0] if line.strip() else None
-    return None
-
-
-def remove_all(cron_bin: str | None, name: str) -> int:
-    """
-    Remove ALL cron jobs matching `name[:20]`.
-    Uses a while loop to catch duplicates.
-    Returns the number removed.
-    """
-    bin_path = cron_bin or _get_cron_bin()
-    count = 0
-    while True:
-        job_id = resolve_cron_id(bin_path, name)
-        if not job_id:
-            break
-        try:
-            subprocess.run(
-                [bin_path, "cron", "rm", job_id],
-                timeout=10, capture_output=True,
-            )
-            count += 1
-        except Exception:
-            break
-    return count
-
-
 def add_cron(
     cron_bin: str | None,
     name: str,
@@ -87,17 +33,12 @@ def add_cron(
     no_deliver: bool = True,
 ) -> bool:
     """
-    Add (or replace) an openclaw cron job.
-
-    If a job with the same name prefix already exists, it is removed first
-    to avoid duplicates and stale config.
+    Add an openclaw cron job. Caller is responsible for removing existing
+    jobs with the same name before calling add_cron.
 
     Returns True on success.
     """
     bin_path = cron_bin or _get_cron_bin()
-
-    # Remove existing to avoid duplicates and stale config
-    remove_all(bin_path, name)
 
     # Build args — message is passed via the last positional arg after --message
     args = [
@@ -128,15 +69,26 @@ def run_cron(cron_bin: str | None, name: str) -> bool:
     Returns True if the job was found and triggered.
     """
     bin_path = cron_bin or _get_cron_bin()
-    job_id = resolve_cron_id(bin_path, name)
-    if not job_id:
-        return False
-    try:
-        subprocess.run(
-            [bin_path, "cron", "run", job_id],
-            timeout=10, capture_output=True,
-        )
-        return True
-    except Exception:
-        return False
 
+    # List cron jobs to find matching by name prefix
+    try:
+        result = subprocess.run(
+            [bin_path, "cron", "list"],
+            timeout=10, capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            return False
+        prefix = name[:20]
+        for line in result.stdout.splitlines():
+            if prefix in line:
+                parts = line.split()
+                if parts:
+                    job_id = parts[0]
+                    subprocess.run(
+                        [bin_path, "cron", "run", job_id],
+                        timeout=10, capture_output=True,
+                    )
+                    return True
+    except Exception:
+        pass
+    return False

@@ -17,9 +17,13 @@ import json
 import logging
 import os
 import re
+import threading
+import time as time_module
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from urllib.parse import quote
+
+import httpx
 
 logger = logging.getLogger("clawmate.feedback")
 # v1.21: 显式设 INFO level + StreamHandler，确保 waking/wake success 日志在 journalctl 中可见
@@ -34,7 +38,6 @@ if not logger.handlers:
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
-from cron_manager import run_cron
 from feedback_schema import FEEDBACK_STATUSES
 from service import resolve_root, get_public_base_url
 from constants import CONFIG_PATH_ENV
@@ -95,6 +98,11 @@ def _parse_items(raw) -> list:
     return []
 
 
+def _client_ip(request: Request) -> str:
+    """v1.24-a: 提取 client IP（用于审计 user 字段）."""
+    return request.client.host if request.client else "unknown"
+
+
 def _build_feedback_json(root: str, project: str, items: list) -> str:
     ts = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
     max_id = 0
@@ -150,43 +158,154 @@ def _filter_items(fb_path: Path, status: str, file: str, since: str) -> list:
     return result
 
 
+# ── Webhook wake 工具 ───────────────────────────────────────────
+# v1.25: _wake_agent_for_root 读 config.json 直接 POST gateway（同步，后台线程）
+# 不再依赖 webhook_wake.py / clawmate-webhook-token.env
+
+_last_wake: dict[str, float] = {}
+_DEBOUNCE_SECONDS = 60
+
+
+def _load_cron_template() -> str:
+    """加载 cron_template.txt。"""
+    p = Path(__file__).parent / "cron_template.txt"
+    return p.read_text(encoding="utf-8")
+
+
+def _build_action_list(cfg: dict) -> str:
+    """从 config.json 读取 feedback.tags，生成动作列表 markdown。"""
+    DEFAULT = (
+        "   - **删除**：移除 item.content 指向的段落/代码/章节\n"
+        "   - **修改**：用 item.note 的要求改写对应内容\n"
+        "   - **扩展**：基于 item.content 扩写，如增加章节、补充细节\n"
+        "   - **简化**：精简或重构对应内容\n"
+        "   - **审批**: 文档通过人工审核\n"
+        "   - **执行**：如果 item.note 指向 research/*.md 中的方案文档，将该方案作为工作实施的内容，完成方案计划。"
+    )
+    fb_cfg = cfg.get("feedback") or {}
+    tags = fb_cfg.get("tags") if isinstance(fb_cfg, dict) else None
+    if not (isinstance(tags, list) and tags):
+        return DEFAULT
+    lines = []
+    for t in tags:
+        if not isinstance(t, dict):
+            continue
+        label = (t.get("label") or "").strip()
+        prompt = (t.get("prompt") or "").strip()
+        if not label and not prompt:
+            continue
+        if not prompt:
+            lines.append(f"   - **{label}**")
+        else:
+            lines.append(f"   - **{label}**：{prompt}" if label else f"   - {prompt}")
+    return "\n".join(lines) if lines else DEFAULT
+
+
+def _build_agent_message(cfg: dict, root_id: str, agent_id: str) -> str:
+    """构造 agent run 的 message，复用 cron_template 逻辑。"""
+    template = _load_cron_template()
+    base_url = os.environ.get("CLAWMATE_PUBLIC_BASE_URL", "http://localhost:5533")
+    action_list = _build_action_list(cfg)
+    all_roots = ", ".join(r.get("id") for r in cfg.get("roots", []) if r.get("id"))
+    return template.format(
+        base_url=base_url,
+        all_roots=all_roots or root_id,
+        feedback_action_list=action_list,
+    )
+
+
 def _wake_agent_for_root(root_id: str) -> None:
-    """读取 config.json，找到 root 对应的 agent 并用 run_cron 唤醒."""
+    """读取 config.json，直接 POST OpenClaw /hooks/agent（同步，在后台线程运行）。
+
+    v1.25: 扔掉 webhook_wake.py 中转，直接 POST gateway。
+    """
     config_path = Path(os.environ.get(CONFIG_PATH_ENV,
                         str(Path(__file__).parent / "config.json")))
-    agent_id = "default"
+
+    # 1. 读 config.json
     try:
         with open(config_path) as f:
             cfg = json.load(f)
-        for r in cfg.get("roots", []):
-            if r.get("id") == root_id:
-                agent_id = r.get("agent_id", "default")
-                break
     except Exception as e:
-        # v1.8 B1: 静默失败改日志 (wake 失败不应阻塞 feedback 创建)
-        logger.warning(
-            "[feedback] wake failed: cannot resolve agent for root_id=%s (config_path=%s): %s",
-            root_id, config_path, e,
-        )
+        logger.warning("[feedback] wake failed: cannot load config: %s", e)
+        return
 
-    # v1.21: 进入唤醒流程 INFO 日志（强哥排查 FD-SRT-0007 时确认 wake 是否真触发）
-    logger.info(
-        "[feedback] waking agent: root_id=%s, agent_id=%s, cron_name=clawmate-fb-%s",
-        root_id, agent_id, agent_id,
-    )
-    try:
-        run_cron(None, f"clawmate-fb-{agent_id}")
-        # v1.21: 唤醒成功 INFO 日志（之前只有失败时 warning）
-        logger.info(
-            "[feedback] wake success: root_id=%s, agent_id=%s, cron_name=clawmate-fb-%s",
-            root_id, agent_id, agent_id,
-        )
-    except Exception as e:
-        # v1.8 B1: 静默失败改日志
+    oc = cfg.get("openclaw") or {}
+    hook_token = oc.get("hook_token", "")
+    gateway_url = oc.get("gateway_url", "http://127.0.0.1:18789")
+
+    if not hook_token:
         logger.warning(
-            "[feedback] wake failed: run_cron('clawmate-fb-%s') for root_id=%s: %s",
-            agent_id, root_id, e,
+            "[feedback] wake skipped: openclaw.hook_token not configured in config.json"
         )
+        return
+
+    # 2. 解析 agent_id
+    agent_id = "default"
+    for r in cfg.get("roots", []):
+        if r.get("id") == root_id:
+            agent_id = r.get("agent_id", "default")
+            break
+
+    logger.info(
+        "[feedback] waking agent via webhook: root_id=%s, agent_id=%s",
+        root_id, agent_id,
+    )
+
+    # 3. 防抖检查 (60s 同 root 跳过)
+    now = time_module.time()
+    last = _last_wake.get(root_id, 0.0)
+    if now - last < _DEBOUNCE_SECONDS:
+        logger.info(
+            "[feedback] wake skipped (debounced %ds): root_id=%s",
+            int(now - last), root_id,
+        )
+        return
+    _last_wake[root_id] = now
+
+    # 4. 构造 message
+    message = _build_agent_message(cfg, root_id, agent_id)
+    trigger_hint = (
+        f"## 触发上下文\n"
+        f"本轮由 webhook 触发：root_id={root_id}, agent_id={agent_id}\n"
+        f"请优先处理该 root 的 pending feedback。\n\n"
+    )
+    message = trigger_hint + message
+    run_name = f"clawmate-fb-{root_id}"
+
+    # 5. 后台线程 POST gateway（fire-and-forget，不阻塞 feedback 创建）
+    def _do_wake_sync():
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                r = client.post(
+                    f"{gateway_url}/hooks/agent",
+                    headers={"Authorization": f"Bearer {hook_token}"},
+                    json={
+                        "message": message,
+                        "agentId": agent_id,
+                        "name": run_name,
+                        "wakeMode": "now",
+                        "deliver": False,
+                    },
+                )
+            if r.status_code == 200:
+                data = r.json()
+                logger.info(
+                    "[feedback] wake success: root_id=%s, agent_id=%s, run_name=%s, run_id=%s",
+                    root_id, agent_id, run_name, data.get("runId", ""),
+                )
+            else:
+                logger.warning(
+                    "[feedback] wake failed: root_id=%s, agent_id=%s, HTTP=%d, body=%s",
+                    root_id, agent_id, r.status_code, r.text[:200],
+                )
+        except Exception as e:
+            logger.warning(
+                "[feedback] wake HTTP error: root_id=%s, agent_id=%s: %s",
+                root_id, agent_id, e,
+            )
+
+    threading.Thread(target=_do_wake_sync, daemon=True).start()
 
 
 # v1.8 B5: 归档/清理 feedback.json 中 status="done" 且 updated 超过 N 天的条目
@@ -343,6 +462,7 @@ def cleanup_old_feedback(days: int = 90, archive: bool = True) -> dict:
 
 @router.get("/api/clawmate/feedback/list", response_class=JSONResponse)
 async def feedback_list(
+    request: Request,
     root: str = Query(..., description="逗号分隔的 root_id"),
     project: str = Query("", description="项目名，省略时自动扫描"),
     status: str = Query("", description="pending|in_progress|done|failed"),
@@ -360,6 +480,11 @@ async def feedback_list(
 
     root_ids = [r.strip() for r in root.split(",") if r.strip()]
 
+    # v1.24-a: 审计上下文（与 project 分支共享）
+    _ts = datetime.now(CST).isoformat(timespec="seconds")
+    _user = _client_ip(request)
+    _list_params = {"status": status, "file": file, "since": since, "n_roots": len(root_ids)}
+
     if project:
         results = []
         total_pending = 0
@@ -376,6 +501,15 @@ async def feedback_list(
                 "pending": sum(1 for i in items if i.get("status") == "pending"),
                 "items": items,
             })
+        for rid in root_ids:
+            _entry = {
+                "ts": _ts, "action": "list", "root": rid, "project": project,
+                "user": _user, "params": _list_params, "result": "ok",
+            }
+            logger.info(
+                "[feedback.list] %s root=%s project=%s user=%s params=%s result=%s",
+                _ts, rid, project, _user, _list_params, "ok",
+            )
         if len(results) == 1:
             return JSONResponse(content={
                 "total_pending": total_pending,
@@ -390,6 +524,7 @@ async def feedback_list(
     # 自动扫描模式
     results = []
     total_pending = 0
+    scanned_roots: set[str] = set()
     for root_id in root_ids:
         try:
             root_dir = resolve_root(root_id)
@@ -397,6 +532,7 @@ async def feedback_list(
             continue
         if not root_dir.exists() or not root_dir.is_dir():
             continue
+        scanned_roots.add(root_id)
         for entry in sorted(root_dir.iterdir()):
             if not entry.is_dir():
                 continue
@@ -413,6 +549,17 @@ async def feedback_list(
                     "items": items,
                 })
                 total_pending += pending
+
+    # v1.24-a: 审计（仅实际扫描到的 root 写 disk audit）
+    for rid in scanned_roots:
+        _entry = {
+            "ts": _ts, "action": "list", "root": rid, "project": "",
+            "user": _user, "params": _list_params, "result": "ok",
+        }
+        logger.info(
+            "[feedback.list] %s root=%s project=%s user=%s params=%s result=%s",
+            _ts, rid, "", _user, _list_params, "ok",
+        )
 
     return JSONResponse(content={
         "total_pending": total_pending,
@@ -501,6 +648,20 @@ async def feedback_create(request: Request):
         if n:
             lines.append(f"📝 {n}")
 
+    # v1.24-a: 审计（journalctl INFO + disk audit）
+    _ts = datetime.now(CST).isoformat(timespec="seconds")
+    _user = _client_ip(request)
+    _entry = {
+        "ts": _ts, "action": "create", "root": root_id, "project": project,
+        "user": _user,
+        "params": {"ids": ids, "file": file_path, "n_selections": len(selections)},
+        "result": "ok",
+    }
+    logger.info(
+        "[feedback.create] %s root=%s project=%s user=%s ids=%s file=%s result=%s",
+        _ts, root_id, project, _user, ids, file_path, "ok",
+    )
+
     return JSONResponse(content={
         "ok": True, "ids": ids,
         "feedbackFile": str(fb_path),
@@ -510,7 +671,7 @@ async def feedback_create(request: Request):
 
 
 @router.get("/api/clawmate/feedback/status", response_class=JSONResponse)
-async def feedback_status(root: str = "", project: str = ""):
+async def feedback_status(request: Request, root: str = "", project: str = ""):
     """查询 feedback.json 状态统计."""
     if not root or not project:
         raise HTTPException(status_code=422, detail="Missing root or project")
@@ -527,6 +688,20 @@ async def feedback_status(root: str = "", project: str = ""):
         s = item.get("status", "pending")
         if s in counts:
             counts[s] += 1
+
+    # v1.24-a: 审计（journalctl INFO + disk audit）
+    _ts = datetime.now(CST).isoformat(timespec="seconds")
+    _user = _client_ip(request)
+    _entry = {
+        "ts": _ts, "action": "status", "root": root, "project": project,
+        "user": _user,
+        "params": {"counts": counts, "n_items": len(items)},
+        "result": "ok",
+    }
+    logger.info(
+        "[feedback.status] %s root=%s project=%s user=%s counts=%s result=%s",
+        _ts, root, project, _user, counts, "ok",
+    )
 
     return JSONResponse(content={
         "feedbackFile": str(fb_path),
@@ -585,6 +760,21 @@ async def feedback_update(request: Request):
         raise HTTPException(status_code=404, detail=f"Item {feedback_id} not found")
 
     fb_path.write_text(_build_feedback_json(root_id, project, items), encoding="utf-8")
+
+    # v1.24-a: 审计（journalctl INFO + disk audit）
+    _ts = datetime.now(CST).isoformat(timespec="seconds")
+    _user = _client_ip(request)
+    _entry = {
+        "ts": _ts, "action": "update", "root": root_id, "project": project,
+        "user": _user,
+        "params": {"id": feedback_id, "new_status": new_status, "has_result": bool(result_text)},
+        "result": "ok",
+    }
+    logger.info(
+        "[feedback.update] %s root=%s project=%s user=%s id=%s new_status=%s result=%s",
+        _ts, root_id, project, _user, feedback_id, new_status, "ok",
+    )
+
     return JSONResponse(content={"ok": True, "id": feedback_id, "newStatus": new_status})
 
 
@@ -598,6 +788,15 @@ async def feedback_cleanup(
     archive: bool = Query(True, description="True=归档, False=删除"),
 ):
     """手动触发 feedback 归档/清理 (需登录)."""
+    # v1.24-a: 读取 body 提取 root_id（用于审计；cleanup 本身扫描所有 root）
+    _audit_root = ""
+    try:
+        _body = await request.json()
+        if isinstance(_body, dict):
+            _audit_root = str(_body.get("root", "")).strip()
+    except Exception:
+        _body = {}
+
     result_holder = {}
 
     def _run():
@@ -610,6 +809,20 @@ async def feedback_cleanup(
     _run()
     if "error" in result_holder:
         raise HTTPException(status_code=500, detail=f"cleanup failed: {result_holder['error']}")
+
+    # v1.24-a: 审计（journalctl INFO + disk audit）
+    _ts = datetime.now(CST).isoformat(timespec="seconds")
+    _user = _client_ip(request)
+    _entry = {
+        "ts": _ts, "action": "cleanup", "root": _audit_root, "project": "",
+        "user": _user,
+        "params": {"days": days, "archive": archive, "stats": result_holder["stats"]},
+        "result": "ok",
+    }
+    logger.info(
+        "[feedback.cleanup] %s root=%s user=%s days=%d archive=%s stats=%s result=%s",
+        _ts, _audit_root, _user, days, archive, result_holder["stats"], "ok",
+    )
     return JSONResponse(content={
         "ok": True,
         "days": days,

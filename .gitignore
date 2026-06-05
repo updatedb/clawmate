@@ -25,7 +25,6 @@ RESEARCH_PLAN.md
 # Large test files
 test/DeepSeek*.pdf
 
-# v1.9 delete audit log (runtime operational log, append-only JSONL)
-dev/audit.json
+# v1.25: audit.json 已删除（webhook_wake 移除, 不再需要独立审计）
 # v1.19 dev 评估: sessions.json 是运行时 session 状态 (用户+token+TTL)，非源码，加 gitignore 防止误提交
 dev/sessions.json
