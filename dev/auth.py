@@ -233,27 +233,6 @@ def _is_whitelisted(path: str) -> bool:
     return False
 
 
-# v1.11 F3: detect in-app browsers (Feishu, DingTalk, WeCom, WeChat).
-# These run inside an HTTPS WebView that rejects SameSite=Lax cookies on
-# cross-origin requests. We respond with SameSite=None; Secure so the
-# session cookie survives the navigation.
-_WEBVIEW_UA_MARKERS = (
-    "feishu",         # Lark / Feishu
-    "larksuite",      # Lark international
-    "dingtalk",       # DingTalk
-    "wxwork",         # WeCom
-    "micromessenger", # WeChat
-)
-
-
-def is_in_app_browser(user_agent: str) -> bool:
-    """True if the User-Agent string matches any known in-app WebView."""
-    if not user_agent:
-        return False
-    ua = user_agent.lower()
-    return any(marker in ua for marker in _WEBVIEW_UA_MARKERS)
-
-
 class AuthMiddleware(BaseHTTPMiddleware):
     """
     FastAPI middleware that:

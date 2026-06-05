@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import APIRouter, Query, HTTPException, Request
 from fastapi.responses import JSONResponse, FileResponse, RedirectResponse, StreamingResponse
 from urllib.parse import quote, unquote_to_bytes
@@ -38,13 +36,7 @@ router = APIRouter()
 # Feedback routes (extracted to feedback_api.py)
 router.include_router(feedback_router)
 
-from constants import (
-    PUBLIC_BASE_URL_ENV,
-    CONFIG_PATH_ENV,
-    ONLYOFFICE_JWT_SECRET_ENV,
-    PREVIEW_TOKEN_SECRET_ENV,
-    ONLYOFFICE_URL_ENV,
-)
+from constants import PUBLIC_BASE_URL_ENV, CONFIG_PATH_ENV, ONLYOFFICE_JWT_SECRET_ENV
 
 
 @router.get("/api/clawmate/config", response_class=JSONResponse)
@@ -161,7 +153,7 @@ async def clawmate_list_navigation(root: str = "", path: str = ""):
     return JSONResponse(content={
         "prev": {"name": prev_entry["name"], "path": prev_entry["path"]} if prev_entry else None,
         "next": {"name": next_entry["name"], "path": next_entry["path"]} if next_entry else None,
-        "current": {"name": images[idx]["name"], "path": images[idx]["path"], "index": idx},
+        "current": {"name": images[idx]["name"], "path": images[idx]["path"]},
         "total": len(images),
     })
 
@@ -187,7 +179,7 @@ async def clawmate_search(
 import hmac, hashlib, time as time_module
 
 _PREVIEW_TOKEN_TTL_SECONDS = 3600  # 1 hour
-_PREVIEW_TOKEN_SECRET = os.environ.get(PREVIEW_TOKEN_SECRET_ENV, "dev-secret-change-me")
+_PREVIEW_TOKEN_SECRET = os.environ.get("CLAWMATE_PREVIEW_TOKEN_SECRET", "dev-secret-change-me")
 
 
 def generate_preview_token(root_id: str, rel_path: str) -> str:
@@ -503,155 +495,34 @@ async def clawmate_save(request: Request):
     return JSONResponse(content={"ok": True, "size": len(content.encode("utf-8"))})
 
 
-# ── Delete audit log (v1.9) ───────────────────────────────────────────
-# Append-only JSONL log of every successful and failed delete invocation.
-# Storage: dev/audit.json (one JSON object per line, UTF-8, append-only).
-# Failures in audit logging MUST NOT affect the delete operation itself.
-
-_AUDIT_LOG_FILE = Path(__file__).parent / "audit.json"
-
-
-def _get_caller_username(request: Request) -> str:
-    """Return the session username set by AuthMiddleware, or 'local-bypass' for
-    127.0.0.1 / ::1 / localhost callers (auth middleware short-circuits and
-    does not attach `request.state.session` in that branch)."""
-    session = getattr(request.state, "session", None)
-    if isinstance(session, dict):
-        user = session.get("user")
-        if user:
-            return str(user)
-    return "local-bypass"
-
-
-def _get_caller_ip(request: Request) -> str:
-    """Return the caller IP, preferring X-Forwarded-For (first hop) when
-    running behind nginx. Falls back to request.client.host, then 'unknown'."""
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    if request.client and request.client.host:
-        return request.client.host
-    return "unknown"
-
-
-def _write_audit_log(
-    *,
-    username: str,
-    client_ip: str,
-    op_type: str,
-    root_id: str,
-    path: str,
-    result: str,
-    error: Optional[str] = None,
-) -> None:
-    """Append a single JSONL record to dev/audit.json. All errors are swallowed
-    so audit logging never affects the calling delete operation."""
-    try:
-        record = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "username": username,
-            "client_ip": client_ip,
-            "operation": op_type,  # "file" or "dir"
-            "root_id": root_id,
-            "path": path,
-            "result": result,  # "success" or "failure"
-        }
-        if error:
-            record["error"] = error
-        with open(_AUDIT_LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    except Exception as e:
-        # Audit log failure must never affect the main operation
-        print(f"[audit] Warning: failed to write audit log: {e}")
-
-
-def _audit_failure_then_raise(
-    request: Request,
-    *,
-    op_type: str,
-    root: str,
-    path: str,
-    exc: BaseException,
-    status_code: int,
-    detail: str,
-) -> None:
-    """Record a failed delete attempt in the audit log, then raise HTTPException."""
-    _write_audit_log(
-        username=_get_caller_username(request),
-        client_ip=_get_caller_ip(request),
-        op_type=op_type,
-        root_id=root,
-        path=path,
-        result="failure",
-        error=str(exc) or detail,
-    )
-    raise HTTPException(status_code=status_code, detail=detail)
-
-
 @router.delete("/api/clawmate/delete")
-async def clawmate_delete(request: Request, root: str = "", path: str = ""):
-    username = _get_caller_username(request)
-    client_ip = _get_caller_ip(request)
+async def clawmate_delete(root: str = "", path: str = ""):
     try:
         delete_file(root, path)
-        _write_audit_log(
-            username=username, client_ip=client_ip,
-            op_type="file", root_id=root, path=path, result="success",
-        )
         return JSONResponse(content={"success": True, "message": "File deleted"})
-    except FileNotFoundError as e:
-        _audit_failure_then_raise(
-            request, op_type="file", root=root, path=path, exc=e,
-            status_code=404, detail="File not found",
-        )
-    except PermissionError as e:
-        _audit_failure_then_raise(
-            request, op_type="file", root=root, path=path, exc=e,
-            status_code=403, detail="Forbidden",
-        )
-    except ValueError as e:
-        _audit_failure_then_raise(
-            request, op_type="file", root=root, path=path, exc=e,
-            status_code=400, detail="Cannot delete directory",
-        )
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Cannot delete directory")
     except Exception as e:
-        _audit_failure_then_raise(
-            request, op_type="file", root=root, path=path, exc=e,
-            status_code=500, detail=str(e),
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/api/clawmate/delete-dir")
-async def clawmate_delete_dir(request: Request, root: str = "", path: str = ""):
-    username = _get_caller_username(request)
-    client_ip = _get_caller_ip(request)
+async def clawmate_delete_dir(root: str = "", path: str = ""):
     try:
         delete_dir(root, path)
-        _write_audit_log(
-            username=username, client_ip=client_ip,
-            op_type="dir", root_id=root, path=path, result="success",
-        )
         return JSONResponse(content={"success": True, "message": "Directory deleted"})
-    except FileNotFoundError as e:
-        _audit_failure_then_raise(
-            request, op_type="dir", root=root, path=path, exc=e,
-            status_code=404, detail="Directory not found",
-        )
-    except PermissionError as e:
-        _audit_failure_then_raise(
-            request, op_type="dir", root=root, path=path, exc=e,
-            status_code=403, detail="Forbidden",
-        )
-    except ValueError as e:
-        _audit_failure_then_raise(
-            request, op_type="dir", root=root, path=path, exc=e,
-            status_code=400, detail="Invalid directory",
-        )
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Directory not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid directory")
     except Exception as e:
-        _audit_failure_then_raise(
-            request, op_type="dir", root=root, path=path, exc=e,
-            status_code=500, detail=str(e),
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/api/clawmate/upload")
@@ -691,13 +562,13 @@ async def clawmate_upload(
 @router.get("/api/clawmate/onlyoffice/script-url")
 async def clawmate_onlyoffice_script_url():
     """Return the ONLYOFFICE API JS URL so the frontend can load it dynamically."""
-    onlyoffice_url = os.getenv(ONLYOFFICE_URL_ENV)
+    onlyoffice_url = os.getenv("CLAWMATE_ONLYOFFICE_URL")
     if not onlyoffice_url:
         # fallback: read from config.json
         try:
             import json
             from pathlib import Path
-            config_path = Path(os.environ.get(CONFIG_PATH_ENV, str(Path(__file__).parent / "config.json")))
+            config_path = Path(os.environ.get("CLAWMATE_CONFIG", str(Path(__file__).parent / "config.json")))
             with open(config_path) as f:
                 cfg = json.load(f)
             onlyoffice_url = (cfg.get("onlyoffice") or {}).get("api_js_url", "")
@@ -978,21 +849,12 @@ async def auth_login(request: Request):
     sid, _ = await create_session(username, ttl)
 
     response = JSONResponse({"ok": True, "username": username})
-    # v1.11 F3: in-app browsers (Feishu / DingTalk / WeCom / WeChat) reject
-    # SameSite=Lax cookies on cross-origin navigation, dropping the
-    # session immediately after login. Switch to SameSite=None; Secure
-    # (requires HTTPS, which the WebView enforces).
-    user_agent = request.headers.get("user-agent", "")
-    from auth import is_in_app_browser
-    cookie_samesite = "none" if is_in_app_browser(user_agent) else "lax"
-    cookie_secure = cookie_samesite == "none"
     response.set_cookie(
         key="clawmate_session",
         value=sid,
         max_age=ttl,
         httponly=True,
-        samesite=cookie_samesite,
-        secure=cookie_secure,
+        samesite="lax",
         path="/",
     )
     return response

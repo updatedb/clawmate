@@ -5,23 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" href="data:," />
   <title>预览 — ClawMate</title>
-  <link rel="stylesheet" href="./css/style.css?v=20260604a" />
+  <link rel="stylesheet" href="./css/style.css?v=20260531a" />
   <link rel="stylesheet" href="./vendor/github-markdown-light.min.css" id="github-markdown-css" />
   <link rel="stylesheet" href="./vendor/katex.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" id="highlight-theme-css" />
   <style>
-    /* ===== v1.10 P0 mobile patches ===== */
-    :root {
-      /* Bootstrap-aligned breakpoints (D4) */
-      --bp-phone: 576px;
-      --bp-tablet: 768px;
-      --bp-desktop: 992px;
-      /* Safe-area insets (D3) - fallback to 0 in non-supporting browsers;
-         fixed bottom/top elements use max(12px, env(...)) pattern. */
-      --sai-top: env(safe-area-inset-top, 0px);
-      --sai-bottom: env(safe-area-inset-bottom, 0px);
-    }
-
     /* ===== Preview-specific overrides ===== */
 
     /* Scrollbar styling — matches modal / main site aesthetic */
@@ -273,15 +261,15 @@
       font-size: 12px;
       padding: 30px 12px;
     }
-    /* Bottom toolbar (v1.14: align padding/gap with .topbar — L116 of style.css: padding 0 20px, gap 16px) */
+    /* Bottom toolbar */
     .preview-bottombar {
       height: 48px;
       background: var(--brand-bg);
       color: var(--brand-text);
       display: flex;
       align-items: center;
-      gap: 16px;
-      padding: 0 20px;
+      gap: 4px;
+      padding: 0 12px;
       flex-shrink: 0;
       z-index: 10;
       box-shadow: 0 -2px 12px rgba(0,0,0,0.2);
@@ -307,20 +295,7 @@
     .preview-bottom-btn:hover { background: rgba(255,255,255,0.16); }
     .preview-bottom-btn.active { background: var(--accent); border-color: var(--accent); }
     .preview-bottom-btn.danger:hover { background: rgba(220,38,38,0.3); border-color: rgba(220,38,38,0.5); }
-    .preview-bottom-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .preview-bottom-btn:disabled:hover { background: rgba(255,255,255,0.08); }
-    .img-nav-counter {
-      display: inline-flex;
-      align-items: center;
-      padding: 0 8px;
-      height: 36px;
-      color: var(--brand-text, #e5e7eb);
-      font-size: 12px;
-      font-family: monospace;
-      white-space: nowrap;
-      opacity: 0.85;
-    }
-    .preview-bottom-divider { width: 2px; height: 36px; background: rgba(255,255,255,0.2); margin: 0 4px; flex-shrink: 0; align-self: center; }
+    .preview-bottom-divider { width: 1px; height: 20px; background: transparent; margin: 0 4px; flex-shrink: 0; }
 
     /* Toast */
     .preview-toast {
@@ -402,8 +377,8 @@
     }
     .pst-btn-add:hover { background: var(--border-color); }
 
-    /* ===== Responsive (v1.10 D4: 900px → Bootstrap tablet 767.98px) ===== */
-    @media (max-width: 767.98px) {
+    /* Responsive */
+    @media (max-width: 900px) {
       .preview-three-col {
         grid-template-columns: 1fr;
         position: relative;
@@ -427,354 +402,6 @@
       }
       .preview-center-body { padding: 16px 20px; }
     }
-
-    /* ===== v1.17: Hide non-essential bottombar buttons on small phones =====
-       On screens < 576px the bottombar is too narrow to fit 7 controls
-       comfortably, so we hide 4 optional actions (path / pdf / download /
-       rename) and keep the 3 essential ones (back / dynamic / delete).
-       575.98-767.98 (small tablets / phone landscape) keeps all 4 buttons
-       since horizontal space is usually available there. */
-    @media (max-width: 575.98px) {
-      #btnPath, #btnPdf, #btnDownload, #btnRename { display: none; }
-    }
-
-    /* ===== v1.10 D2: Sidebar mask overlay + content shift =====
-       When a sidebar opens on mobile, a translucent mask covers the
-       rest of the page; the center column shrinks so the content is
-       not occluded. Transitions smooth both effects in 200ms. */
-    .preview-mask {
-      position: fixed;
-      top: 48px;        /* 让出 topbar (48px) */
-      bottom: 48px;     /* 让出 bottombar (48px) */
-      left: 0;
-      right: 0;
-      background: rgba(0, 0, 0, 0.5);
-      z-index: 49; /* below .preview-left/right (50), above content */
-      display: none;
-      opacity: 0;
-      transition: opacity 0.2s ease;
-    }
-    .preview-mask.active { display: block; opacity: 1; }
-
-    /* ===== v1.13: Hide .preview-mask on desktop =====
-       .preview-mask is mobile-only (it covers the page when a sidebar
-       opens on a phone). On desktop, the sidebars are always visible so
-       the mask should never appear. The JS in updateGridColumns() still
-       toggles `.active` on desktop (because !lHidden is true), but the
-       CSS below makes the element physically invisible. */
-    @media (min-width: 768px) {
-      .preview-mask { display: none !important; }
-    }
-
-    /* ===== v1.17: Right sidebar desktop visibility =====
-       The right sidebar ships with .hidden in the HTML so mobile (where
-       .hidden is the universal hide signal) starts collapsed. On desktop
-       the .hidden class is overridden so the feedback panel is visible
-       by default. JS toggles the class to collapse it on desktop too. */
-    @media (min-width: 768px) {
-      .preview-right.hidden { display: block; }
-    }
-
-    /* Content shift - applied on the .preview-three-col when a sidebar is open
-       so the .preview-center column auto-narrows. */
-    .preview-three-col {
-      transition: margin 0.2s ease;
-    }
-    @media (min-width: 768px) {
-      /* Desktop: legacy grid behavior - center never shifts for sidebars. */
-      .preview-three-col.sidebar-left-open .preview-center { margin-left: 0; }
-      .preview-three-col.sidebar-right-open .preview-center { margin-right: 0; }
-    }
-    @media (max-width: 767.98px) {
-      .preview-three-col.sidebar-left-open .preview-center { margin-left: 280px; }
-      .preview-three-col.sidebar-right-open .preview-center { margin-right: 280px; }
-    }
-
-    /* ===== v1.10 D3: Safe-area inset handling for fixed top/bottom =====
-       Pattern: padding-bottom: max(12px, env(safe-area-inset-bottom))
-       Works on iOS (notch/home indicator) and Android (gesture nav).
-       Old 48px-tall bars get a small extra breathing room. */
-    .topbar {
-      padding-top: max(12px, env(safe-area-inset-top, 12px));
-    }
-    .preview-bottombar {
-      padding-bottom: max(12px, env(safe-area-inset-bottom, 12px));
-    }
-    /* Inherit safe-area padding for any dynamic content added to bottombar
-       (e.g. image/audio controls in #bottombarDynamic) */
-    #bottombarDynamic {
-      padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
-    }
-    /* Standalone index page bottom nav (defined in style.css; safe-area
-       re-applied here for preview.html's import context). */
-    .index-bottom-nav {
-      padding-bottom: max(12px, env(safe-area-inset-bottom, 12px));
-    }
-
-    /* v1.10 D3: Android low-end fallback - if the browser does not
-       support the env() function, ensure fixed bars get at least 12px
-       breathing room above the home indicator. */
-    @supports not (padding-top: env(safe-area-inset-top)) {
-      .topbar { padding-top: 12px; }
-      .preview-bottombar { padding-bottom: 12px; }
-      .index-bottom-nav { padding-bottom: 12px; }
-    }
-
-    /* ===== v1.10 D1: Mobile bottom-sheet feedback (selectionchange) =====
-       Replaces the floating mouseup tooltip on phones (< 768px). Slides
-       up from the bottom, includes note input + tag chips + action
-       buttons. Hidden on desktop entirely. */
-    .preview-sheet-mask {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.4);
-      z-index: 9998;
-      display: none;
-      opacity: 0;
-      transition: opacity 0.2s ease;
-    }
-    .preview-sheet-mask.active { display: block; opacity: 1; }
-    .preview-sheet {
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 9999;
-      background: var(--bg-secondary);
-      border-top: 1px solid var(--border-color);
-      border-radius: 16px 16px 0 0;
-      box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.18);
-      padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 12px));
-      display: none;
-      flex-direction: column;
-      gap: 10px;
-      max-height: 70vh;
-      overflow-y: auto;
-      transform: translateY(100%);
-      transition: transform 0.25s ease;
-    }
-    .preview-sheet.active {
-      display: flex;
-      transform: translateY(0);
-    }
-    .preview-sheet-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 13px;
-      font-weight: 700;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-    }
-    .preview-sheet-handle {
-      width: 40px;
-      height: 4px;
-      background: var(--border-color);
-      border-radius: 2px;
-      margin: -4px auto 4px;
-    }
-    .preview-sheet-preview {
-      font-size: 12px;
-      color: var(--text-secondary);
-      background: var(--bg-code);
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      padding: 6px 8px;
-      max-height: 60px;
-      overflow: hidden;
-      white-space: pre-wrap;
-      word-break: break-all;
-      font-family: monospace;
-    }
-    .preview-sheet-location {
-      font-size: 11px;
-      color: var(--text-muted);
-      font-family: monospace;
-    }
-    .preview-sheet-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-    .preview-sheet-tags .pst-tag {
-      padding: 6px 10px;
-      border-radius: 999px;
-      border: 1px solid var(--border-color);
-      background: var(--btn-bg);
-      color: var(--btn-text);
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 500;
-    }
-    .preview-sheet-tags .pst-tag:hover { background: var(--bg-tertiary); }
-    .preview-sheet textarea.pst-note {
-      width: 100%;
-      padding: 8px 10px;
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      background: var(--bg-code);
-      color: var(--text-primary);
-      font-size: 13px;
-      font-family: inherit;
-      resize: vertical;
-      min-height: 60px;
-      line-height: 1.5;
-      box-sizing: border-box;
-    }
-    .preview-sheet textarea.pst-note:focus {
-      outline: none;
-      border-color: var(--accent);
-    }
-    .preview-sheet-actions {
-      display: flex;
-      gap: 8px;
-    }
-    .preview-sheet-actions button {
-      flex: 1;
-      padding: 9px 10px;
-      border-radius: 8px;
-      border: 1px solid var(--border-color);
-      cursor: pointer;
-      font-size: 13px;
-      font-weight: 600;
-    }
-    .preview-sheet-actions .ps-btn-add {
-      background: var(--btn-bg);
-      color: var(--btn-text);
-    }
-    .preview-sheet-actions .ps-btn-send {
-      background: var(--accent);
-      color: #fff;
-      border-color: var(--accent);
-    }
-    .preview-sheet-status {
-      font-size: 11px;
-      min-height: 14px;
-      line-height: 1.3;
-      text-align: center;
-    }
-    .preview-sheet-status.ok { color: var(--success); }
-    .preview-sheet-status.error { color: var(--danger); }
-    .preview-sheet-status.loading { color: var(--text-muted); }
-    /* Sheet is mobile-only - hidden on desktop */
-    @media (min-width: 768px) {
-      .preview-sheet,
-      .preview-sheet-mask { display: none !important; }
-    }
-
-    /* ===== v1.11 E1: Mermaid pinch-zoom (preview-local) ===== */
-    .preview-center .mermaid {
-      position: relative;
-      touch-action: pan-x pan-y;
-    }
-    .preview-center .mermaid svg {
-      transform-origin: center center;
-      transition: transform 0.12s ease-out;
-      will-change: transform;
-      max-width: 100%;
-    }
-    .preview-center .mermaid-zoom-controls {
-      display: none;
-      position: absolute;
-      right: 12px;
-      bottom: 12px;
-      gap: 4px;
-      z-index: 5;
-    }
-    .preview-center .mermaid.mermaid-zoomed .mermaid-zoom-controls {
-      display: inline-flex;
-    }
-    .preview-center .mermaid-zoom-controls button {
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      border: 1px solid var(--border-color);
-      background: var(--bg-secondary);
-      color: var(--text-primary);
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 32px;
-      min-width: 32px;
-    }
-    .preview-center .mermaid-zoom-controls button:hover {
-      background: var(--bg-tertiary);
-    }
-
-    /* ===== v1.11 E2/E3: visualViewport keyboard offset (preview-sheet) ===== */
-    /* Sheet itself is positioned via inline transform: translateY(-Npx); no
-       extra rules needed here. The visualViewport handler in JS sets
-       bottom: 'auto' + transform when keyboard is open, and clears
-       transform when it closes. iOS Safari and Android Chrome both fire
-       the 'resize' event on visualViewport when the soft keyboard
-       appears (different timing/behavior, but the heuristic is the same). */
-
-    /* ===== v1.11 F1: Immersive reading mode (preview-local) ===== */
-    body.immersive .topbar,
-    body.immersive .preview-bottombar,
-    body.immersive .preview-left,
-    body.immersive .preview-right,
-    body.immersive .preview-mask,
-    body.immersive .preview-sheet,
-    body.immersive .preview-sheet-mask,
-    body.immersive .preview-selection-tooltip,
-    body.immersive .preview-toast {
-      display: none !important;
-    }
-    body.immersive .preview-three-col {
-      display: block;
-    }
-    body.immersive .preview-center {
-      height: 100vh;
-    }
-    body.immersive .preview-center-body {
-      padding: 28px 28px;
-      max-width: 720px;
-      margin: 0 auto;
-    }
-    /* Immersive exit hint */
-    .immersive-hint {
-      position: fixed;
-      top: 16px;
-      right: 16px;
-      z-index: 100;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-color);
-      border-radius: 999px;
-      padding: 6px 12px;
-      font-size: 11px;
-      color: var(--text-secondary);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-    }
-    body.immersive .immersive-hint {
-      opacity: 0.85;
-    }
-    /* Immersive mode is mobile-only (desktop layout >= 992px must not change) */
-    @media (min-width: 992px) {
-      body.immersive .topbar,
-      body.immersive .preview-bottombar,
-      body.immersive .preview-left,
-      body.immersive .preview-right { display: flex !important; }
-      body.immersive .preview-three-col { display: grid; }
-      body.immersive .preview-center { height: auto; }
-    }
-
-    /* ===== v1.11 E5: Content horizontal overflow guards (preview-local) ===== */
-    .markdown-body table { table-layout: fixed; max-width: 100%; }
-    .markdown-body img { max-width: 100%; height: auto; }
-    .markdown-body svg { max-width: 100%; height: auto; }
-    .markdown-body pre { overflow-x: auto; max-width: 100%; }
-    .markdown-body table code { word-break: break-all; overflow-wrap: anywhere; }
-    .preview-body table { table-layout: fixed; max-width: 100%; }
-    .preview-body img { max-width: 100%; height: auto; }
 
 
 
@@ -1158,36 +785,6 @@
     }
     /* Hidden file input for subtitle picker */
     #subtitleFileInput { display: none; }
-
-    /* ===== v1.15: topbar/bottombar 子元素视觉统一 =====
-       v1.14 已把 .topbar / .preview-bottombar 父容器 height: 48px + align-items: center
-       配齐，但子元素高度不统一（.preview-bottom-divider 20px vs .preview-bottom-btn 36px，
-       .brand / .preview-topbar-title 没显式 height）导致视觉不对齐。
-       方案：所有子元素统一 height + display: flex + align-items: center + line-height: 1
-       —— 子元素自身高度统一后，align-items: center 才有视觉意义 */
-    /* Override .brand (inherited from style.css L118) — 加 height + display */
-    .preview-app > .topbar .brand {
-      height: 34px;
-      display: inline-flex;
-      align-items: center;
-      line-height: 1;
-    }
-    /* .preview-topbar-title (v1.15 首次定义：之前完全没有 CSS rule) */
-    .preview-topbar-title {
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--brand-text);
-      opacity: 0.9;
-      flex: 1;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      height: 34px;
-      display: inline-flex;
-      align-items: center;
-      line-height: 1;
-    }
   </style>
 </head>
 <body>
@@ -1222,10 +819,7 @@
       </main>
 
       <!-- Right: Feedback Panel -->
-      <!-- v1.17: mobile default hidden (CSS rule in @media max-width: 767.98px
-           honors the .hidden class); desktop @media min-width: 768px forces
-           display:block so feedback panel is visible on desktop. -->
-      <aside class="preview-right hidden" id="rightSidebar">
+      <aside class="preview-right" id="rightSidebar">
         <div class="preview-right-header">💬 反馈</div>
         <div class="preview-right-body" id="feedbackBody">
           <div class="fb-empty">选中文本后点击「📋 加入面板」即可累积</div>
@@ -1270,34 +864,6 @@
     <div class="pst-status" id="pstStatus"></div>
   </div>
 
-  <!-- v1.10 D1: Mobile feedback bottom sheet (selectionchange) -->
-  <div class="preview-sheet-mask" id="sheetMask"></div>
-  <div class="preview-sheet" id="feedbackSheet" aria-hidden="true">
-    <div class="preview-sheet-handle"></div>
-    <div class="preview-sheet-header">
-      <span>💬 反馈选中内容</span>
-      <button id="sheetBtnClose" type="button" aria-label="关闭" style="background:none;border:none;font-size:20px;line-height:1;cursor:pointer;color:var(--text-secondary);">×</button>
-    </div>
-    <div class="preview-sheet-preview" id="sheetPreview"></div>
-    <div class="preview-sheet-location" id="sheetLocation">位置：-</div>
-    <div class="preview-sheet-tags" id="sheetTags">
-      <button class="pst-tag" data-tag="清除选中内容" type="button">🗑‍❌ 删除</button>
-      <button class="pst-tag" data-tag="修改选中内容，思路如下：" type="button">🔧 修改</button>
-      <button class="pst-tag" data-tag="详细解释选中内容" type="button">📈 扩展</button>
-      <button class="pst-tag" data-tag="抽象选中内容，简单描述" type="button">📉 简化</button>
-      <button class="pst-tag" data-tag="文档审批通过，执行方案" type="button">⚡ 执行</button>
-    </div>
-    <textarea class="pst-note" id="sheetNote" rows="2" placeholder="必填 · 简要说明需要的改动"></textarea>
-    <div class="preview-sheet-actions">
-      <button class="ps-btn-add" id="sheetBtnAdd" type="button">📋 加入待办</button>
-      <button class="ps-btn-send" id="sheetBtnSend" type="button">⚡ 立刻执行</button>
-    </div>
-    <div class="preview-sheet-status" id="sheetStatus"></div>
-  </div>
-
-  <!-- v1.10 D2: Sidebar mask overlay (clicking closes the sidebar) -->
-  <div class="preview-mask" id="sidebarMask"></div>
-
   <!-- Toast -->
   <div class="preview-toast" id="toast" style="display:none;"></div>
 
@@ -1330,9 +896,9 @@
   // ============ URL Params ============
   const params = new URLSearchParams(window.location.search);
   const rootId = params.get('root') || '';
-  let filePath = params.get('file') || '';
+  const filePath = params.get('file') || '';
   const sessionKey = params.get('session') || '';
-  let fileName = filePath.split('/').pop() || '未命名';
+  const fileName = filePath.split('/').pop() || '未命名';
   const ext = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '';
   // isMarkdown defined above
   const AUDIO_EXTS = ['mp3','ogg','wav','flac','m4a','aac','wma'];
@@ -1967,7 +1533,6 @@
       outlineBtn.id = 'btnCodeOutline';
       outlineBtn.textContent = '📑 大纲';
       outlineBtn.addEventListener('click', function() {
-        // v1.14: bypass UIState for sidebar toggles — left/right are independent, not mutually exclusive
         leftSidebar.classList.toggle('hidden');
         updateGridColumns();
         updatePlainTextDynamicButtons();
@@ -2022,7 +1587,6 @@
       outlineBtn.id = 'btnOutline';
       outlineBtn.textContent = '📑 大纲';
       outlineBtn.addEventListener('click', () => {
-        // v1.14: bypass UIState for sidebar toggles — left/right are independent, not mutually exclusive
         leftSidebar.classList.toggle('hidden');
         updateGridColumns();
         updateMarkdownDynamicButtons(); // Refresh active state
@@ -2142,7 +1706,6 @@
 
   // Toggle right (feedback) panel
   document.getElementById('btnToggleRight').addEventListener('click', () => {
-    // v1.14: bypass UIState for sidebar toggles — left/right are independent, not mutually exclusive
     rightSidebar.classList.toggle('hidden');
     updateGridColumns();
     document.getElementById('btnToggleRight').classList.toggle('active', !rightSidebar.classList.contains('hidden'));
@@ -2169,7 +1732,6 @@
         setupMediaToolbar();
         renderImageFeedbackPanel();
         loadCompletedFeedback();
-        loadImageNav();
         return;
       }
 
@@ -2493,49 +2055,6 @@
     const lW = lHidden ? '0px' : '240px';
     const rW = rHidden ? '0px' : '300px';
     threeCol.style.gridTemplateColumns = `${lW} 1fr ${rW}`;
-
-    // v1.10 D2: toggle the mask overlay + content shift classes when a
-    // sidebar is open. Desktop already shows all columns in the grid,
-    // so the mask is mobile-only (the CSS hides .preview-mask on >= 768px
-    // by inheriting the existing grid layout). Mask clicking closes
-    // whichever sidebar is open.
-    const mask = document.getElementById('sidebarMask');
-    if (mask) {
-      const anyOpen = !lHidden || !rHidden;
-      if (anyOpen) {
-        mask.classList.add('active');
-        threeCol.classList.toggle('sidebar-left-open', !lHidden);
-        threeCol.classList.toggle('sidebar-right-open', !rHidden);
-      } else {
-        mask.classList.remove('active');
-        threeCol.classList.remove('sidebar-left-open');
-        threeCol.classList.remove('sidebar-right-open');
-      }
-    }
-  }
-
-  // v1.10 D2: clicking the mask closes whichever sidebar is open.
-  // The mobile breakpoint (@media max-width 767.98px) places the sidebars
-  // in fixed positioning, so the mask is meaningful only on phones.
-  // On desktop the mask is hidden by CSS; this listener is a no-op there.
-  // v1.14: bypass UIState for sidebar toggles — left/right are independent, not mutually exclusive.
-  //        Directly toggle whichever sidebar is currently visible.
-  const _sidebarMask = document.getElementById('sidebarMask');
-  if (_sidebarMask) {
-    _sidebarMask.addEventListener('click', () => {
-      if (!leftSidebar.classList.contains('hidden')) {
-        leftSidebar.classList.add('hidden');
-        document.getElementById('btnCodeOutline')?.classList.remove('active');
-        document.getElementById('btnOutline')?.classList.remove('active');
-      }
-      if (!rightSidebar.classList.contains('hidden')) {
-        rightSidebar.classList.add('hidden');
-        document.getElementById('btnToggleRight')?.classList.remove('active');
-      }
-      if (typeof updateMarkdownDynamicButtons === 'function') updateMarkdownDynamicButtons();
-      if (typeof updatePlainTextDynamicButtons === 'function') updatePlainTextDynamicButtons();
-      updateGridColumns();
-    });
   }
 
   // Left sidebar: markdown shows it (via buildTOC), non-markdown hides it
@@ -2560,106 +2079,6 @@
     const sep = document.getElementById('bottombarDynamicSep');
     if (sep) sep.style.display = '';
     if (dyn) dyn.style.display = 'flex';
-    // Build image nav buttons only in image mode (audio/video have their own buildMediaToolbar)
-    if (dyn && IMAGE_EXTS.includes(ext)) {
-      buildImageNav();
-    }
-  }
-
-  // ============ Image prev/next navigation (H1 v1.7) ============
-  const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'svg', 'gif', 'webp', 'bmp'];
-
-  function buildImageNav() {
-    const dyn = document.getElementById('bottombarDynamic');
-    if (!dyn) return;
-    // Reset dynamic area for image nav
-    dyn.innerHTML = '';
-    // Prev button
-    const prevBtn = document.createElement('button');
-    prevBtn.className = 'preview-bottom-btn';
-    prevBtn.id = 'imgNavPrev';
-    prevBtn.title = '上一张图片（←）';
-    prevBtn.textContent = '◀ 上一张';
-    prevBtn.disabled = true;
-    prevBtn.addEventListener('click', () => navigateImage('prev'));
-    dyn.appendChild(prevBtn);
-    // Counter
-    const counter = document.createElement('span');
-    counter.className = 'img-nav-counter';
-    counter.id = 'imgNavCounter';
-    counter.textContent = '– / –';
-    dyn.appendChild(counter);
-    // Next button
-    const nextBtn = document.createElement('button');
-    nextBtn.className = 'preview-bottom-btn';
-    nextBtn.id = 'imgNavNext';
-    nextBtn.title = '下一张图片（→）';
-    nextBtn.textContent = '下一张 ▶';
-    nextBtn.disabled = true;
-    nextBtn.addEventListener('click', () => navigateImage('next'));
-    dyn.appendChild(nextBtn);
-  }
-
-  async function loadImageNav() {
-    // Only meaningful in image mode
-    if (!IMAGE_EXTS.includes(ext) || !rootId || !filePath) return;
-    const prevBtn = document.getElementById('imgNavPrev');
-    const nextBtn = document.getElementById('imgNavNext');
-    const counter = document.getElementById('imgNavCounter');
-    if (!prevBtn || !nextBtn || !counter) return;
-    try {
-      const res = await fetch(`/api/clawmate/list/navigation?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      const total = data.total || 0;
-      const hasPrev = !!data.prev;
-      const hasNext = !!data.next;
-      // Backend exposes current.index (0-based) + total; show "1 / N" simple numeric format
-      const curIdx = (data.current && typeof data.current.index === 'number') ? data.current.index : 0;
-      counter.textContent = `${curIdx + 1} / ${total}`;
-      prevBtn.disabled = !hasPrev;
-      nextBtn.disabled = !hasNext;
-      // Store target paths on buttons for click handler
-      prevBtn.dataset.path = hasPrev ? data.prev.path : '';
-      nextBtn.dataset.path = hasNext ? data.next.path : '';
-    } catch (e) {
-      counter.textContent = '导航加载失败';
-    }
-  }
-
-  function navigateImage(direction) {
-    const btn = document.getElementById(direction === 'prev' ? 'imgNavPrev' : 'imgNavNext');
-    if (!btn || btn.disabled) return;
-    const targetPath = btn.dataset.path;
-    if (!targetPath) return;
-    // Update URL via pushState so browser back/forward works
-    const newUrl = `?root=${encodeURIComponent(rootId)}&file=${encodeURIComponent(targetPath)}`;
-    history.pushState({ root: rootId, file: targetPath }, '', newUrl);
-    // Update module-level filePath/fileName and reload content
-    filePath = targetPath;
-    fileName = filePath.split('/').pop();
-    loadContent();
-  }
-
-  // Browser back/forward navigation support
-  window.addEventListener('popstate', (e) => {
-    if (!e.state || !e.state.file) {
-      // No state means initial load — ignore
-      return;
-    }
-    if (e.state.root !== rootId) {
-      // Different root: do a full navigation
-      window.location.href = `?root=${encodeURIComponent(e.state.root)}&file=${encodeURIComponent(e.state.file)}`;
-      return;
-    }
-    filePath = e.state.file;
-    fileName = filePath.split('/').pop();
-    loadContent();
-  });
-
-  // Replace initial state so popstate fires with our data
-  if (history.state === null) {
-    history.replaceState({ root: rootId, file: filePath }, '', window.location.href);
   }
 
   // ============ Unified Media Mode Setup (audio + video) ============
@@ -4544,20 +3963,6 @@
 
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') hideTooltip();
-    // Image prev/next keyboard shortcuts (H1 v1.7) — ignore when typing in inputs
-    if (IMAGE_EXTS.includes(ext)) {
-      const t = e.target;
-      const inField = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
-      if (!inField) {
-        if (e.key === 'ArrowLeft') {
-          const prevBtn = document.getElementById('imgNavPrev');
-          if (prevBtn && !prevBtn.disabled) { e.preventDefault(); navigateImage('prev'); return; }
-        } else if (e.key === 'ArrowRight') {
-          const nextBtn = document.getElementById('imgNavNext');
-          if (nextBtn && !nextBtn.disabled) { e.preventDefault(); navigateImage('next'); return; }
-        }
-      }
-    }
   });
 
   function highlightSelection() {
@@ -4581,7 +3986,17 @@
 
   // Add to panel
   // Quick tags: auto-fill note with descriptive prefix
-  // (Replaced by event delegation in loadFeedbackTags() init block — see below)
+  document.querySelectorAll('.pst-tag').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var tag = this.getAttribute('data-tag');
+      var noteEl = document.getElementById('pstNote');
+      // 直接替换为标签描述，不追加
+      noteEl.value = tag;
+      // Move cursor to end
+      noteEl.focus();
+      noteEl.setSelectionRange(noteEl.value.length, noteEl.value.length);
+    });
+  });
 
   document.getElementById('pstBtnAdd').addEventListener('click', function() {
     const note = document.getElementById('pstNote').value.trim();
@@ -4677,8 +4092,6 @@
         st.textContent = '✅ 已发送';
         st.className = 'pst-status pst-status-ok';
         await loadCompletedFeedback();
-        // v1.11 G3: top-level toast for weak-net confirmation
-        try { if (typeof showToast === 'function') showToast('✅ 已记录，稍后自动处理', 3000); } catch (_) {}
         setTimeout(hideTooltip, 800);
       } else {
         const err = await res.json().catch(() => ({}));
@@ -4688,8 +4101,6 @@
     } catch (e) {
       st.textContent = '❌ 网络错误';
       st.className = 'pst-status pst-status-error';
-      // v1.11 G3: surface a friendly fallback toast on network failure
-      try { if (typeof showToast === 'function') showToast('⚠️ 网络不稳定，已记录到面板稍后重发', 3000); } catch (_) {}
     }
     btn.disabled = false;
     btn.textContent = '⚡ 立刻执行';
@@ -4723,738 +4134,8 @@
     showToast('PDF.js 渲染模式（编辑模式不可用）', 3000);
   }
 
-  // ============ Feedback Tags Dynamic Loading (H2 v1.7) ============
-  async function loadFeedbackTags() {
-    const container = document.querySelector('#selectionTooltip .pst-tags');
-    if (!container) return;
-    let config;
-    try {
-      const res = await fetch('/api/clawmate/config');
-      if (!res.ok) return; // keep hardcoded fallback
-      config = await res.json();
-    } catch (_) {
-      return; // keep hardcoded fallback
-    }
-    if (!config || !Array.isArray(config.feedback_tags)) return; // older config — keep hardcoded
-    const tags = config.feedback_tags;
-    if (tags.length === 0) {
-      // Empty tags → hide the entire tag region (forward-compat)
-      container.style.display = 'none';
-      return;
-    }
-    // Replace innerHTML with dynamic buttons
-    container.innerHTML = '';
-    tags.forEach((t, i) => {
-      const btn = document.createElement('button');
-      btn.className = 'pst-tag';
-      btn.setAttribute('data-tag', t.prompt || '');
-      btn.setAttribute('data-tag-index', String(i));
-      btn.textContent = t.label || (t.prompt || `tag-${i}`);
-      container.appendChild(btn);
-    });
-  }
-
-  // Use event delegation for pst-tag clicks (attached to tooltip because
-  // tooltip's click handler calls stopPropagation — see L4077).
-  // This handler must be installed BEFORE the tooltip's stopPropagation handler
-  // runs, so we attach at the bubble phase on the tooltip itself.
-  const _pstTooltip = document.getElementById('selectionTooltip');
-  if (_pstTooltip) {
-    _pstTooltip.addEventListener('click', function(e) {
-      const target = e.target && e.target.closest && e.target.closest('.pst-tag');
-      if (!target) return;
-      const tag = target.getAttribute('data-tag') || '';
-      // Template variable replacement: {root} {project} {path}
-      const rendered = tag
-        .replace(/\{root\}/g, rootId || '')
-        .replace(/\{project\}/g, project || '')
-        .replace(/\{path\}/g, filePath || '');
-      const noteEl = document.getElementById('pstNote');
-      if (noteEl) {
-        noteEl.value = rendered;
-        try { noteEl.focus(); noteEl.setSelectionRange(noteEl.value.length, noteEl.value.length); } catch (_) {}
-      }
-    });
-  }
-
-  // ============ v1.10 D1: Mobile bottom-sheet feedback (selectionchange) ============
-  // On phones (< 768px) the desktop mouseup floating tooltip is awkward:
-  //   - iOS Safari: selectionchange fires before the LUBE bubble / system
-  //     selection menu decides its own position, so our popup is occluded.
-  //   - Android Chrome: long-press fires the system menu with its own coords;
-  //     mouseup rarely fires when the user is finishing a selection.
-  // The Sheet UI slides up from the bottom (clear of system menus and
-  // keyboard), includes a note input, tag chips, and the same
-  // "add to panel" / "send now" actions as the desktop tooltip.
-  // Backward compat: mouseup tooltip is left untouched for desktop only.
-
-  (function setupMobileSheet() {
-    const MOBILE_MAX = 767.98;       // matches CSS @media (max-width: 767.98px)
-    const isMobile = () => window.matchMedia('(max-width: ' + MOBILE_MAX + 'px)').matches;
-
-    const sheet = document.getElementById('feedbackSheet');
-    const sheetMask = document.getElementById('sheetMask');
-    const sheetPreview = document.getElementById('sheetPreview');
-    const sheetLocation = document.getElementById('sheetLocation');
-    const sheetNote = document.getElementById('sheetNote');
-    const sheetStatus = document.getElementById('sheetStatus');
-    const sheetTags = document.getElementById('sheetTags');
-    const sheetBtnAdd = document.getElementById('sheetBtnAdd');
-    const sheetBtnSend = document.getElementById('sheetBtnSend');
-    const sheetBtnClose = document.getElementById('sheetBtnClose');
-    if (!sheet || !sheetMask) return;
-
-    let sheetLastRange = null;
-    let sheetStartLine = null;
-    let sheetEndLine = null;
-    let sheetDebounceTimer = null;
-    let sheetOpening = false; // guard to avoid re-trigger during open animation
-
-    function openSheet() {
-      if (sheetOpening) return;
-      sheetOpening = true;
-      // Hide desktop tooltip (mouseup) so the two UIs do not stack
-      if (typeof hideTooltip === 'function') hideTooltip();
-      sheet.classList.add('active');
-      sheetMask.classList.add('active');
-      sheet.setAttribute('aria-hidden', 'false');
-      // Pre-fill the note input on first show
-      setTimeout(() => { try { sheetNote.focus({ preventScroll: true }); } catch (_) {} }, 250);
-      setTimeout(() => { sheetOpening = false; }, 300);
-    }
-    function closeSheet() {
-      sheet.classList.remove('active');
-      sheetMask.classList.remove('active');
-      sheet.setAttribute('aria-hidden', 'true');
-      sheetStatus.textContent = '';
-      sheetStatus.className = 'preview-sheet-status';
-    }
-
-    sheetBtnClose?.addEventListener('click', closeSheet);
-    sheetMask.addEventListener('click', closeSheet);
-
-    // iOS / Android: visualViewport changes when the keyboard opens.
-    // Lift the sheet so the note input stays visible above the keyboard.
-    function adjustForKeyboard() {
-      if (!window.visualViewport) return;
-      if (!sheet.classList.contains('active')) return;
-      const vv = window.visualViewport;
-      // Visible viewport bottom (excluding keyboard) - pull sheet to sit on it
-      const visibleBottom = vv.offsetTop + vv.height;
-      const shifted = window.innerHeight - visibleBottom;
-      if (shifted > 80) {
-        // Keyboard is open - lift the sheet
-        sheet.style.transform = 'translateY(-' + Math.min(shifted, 320) + 'px)';
-      } else {
-        sheet.style.transform = '';
-      }
-    }
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', adjustForKeyboard);
-      window.visualViewport.addEventListener('scroll', adjustForKeyboard);
-    }
-
-    // Tag chips -> fill note input (mirror of desktop tooltip)
-    sheetTags?.addEventListener('click', (e) => {
-      const t = e.target.closest && e.target.closest('.pst-tag');
-      if (!t) return;
-      const tag = t.getAttribute('data-tag') || '';
-      const rendered = tag
-        .replace(/\{root\}/g, rootId || '')
-        .replace(/\{project\}/g, project || '')
-        .replace(/\{path\}/g, filePath || '');
-      if (rendered) {
-        sheetNote.value = rendered;
-        try { sheetNote.focus(); sheetNote.setSelectionRange(sheetNote.value.length, sheetNote.value.length); } catch (_) {}
-      }
-    });
-
-    // selectionchange listener (mobile only)
-    function onSelectionChange() {
-      if (!isMobile()) return;
-      clearTimeout(sheetDebounceTimer);
-      sheetDebounceTimer = setTimeout(() => {
-        const sel = window.getSelection();
-        if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
-        // Prefer sel.toString() (user-visible text); fall back to range.toString()
-        // because sel.toString() can return "" when the selection spans hidden
-        // elements (e.g. the edit-mode-banner with display:none). Real users
-        // never select hidden text, but synthetic events in tests may target
-        // hidden nodes, so this fallback also covers that edge case.
-        const _range0 = sel.getRangeAt(0);
-        let _rawSel = sel.toString();
-        if (!_rawSel) _rawSel = _range0.toString();
-        const selText = _rawSel.trim();
-        if (!selText) return;
-        // Only trigger on text inside #contentBody
-        const container = findContentBody(sel.anchorNode);
-        if (!container || container.id !== 'contentBody') return;
-        // Skip selections whose anchor chain contains a display:none ancestor
-        // (e.g. edit-mode-banner); otherwise the sheet would pop up for
-        // hidden text the user never sees.
-        let _visNode = container;
-        let _visible = true;
-        while (_visNode && _visNode !== document.body) {
-          const _vs = getComputedStyle(_visNode);
-          if (_vs.display === 'none' || _vs.visibility === 'hidden') {
-            _visible = false;
-            break;
-          }
-          _visNode = _visNode.parentElement;
-        }
-        if (!_visible) return;
-        const range = _range0;
-        sheetLastRange = range;
-        // Compute line numbers using the same fallback strategy the
-        // mouseup tooltip uses (rawContent lookup / rendered fallback).
-        const result = computeLineRange(selText);
-        sheetStartLine = result.startLine;
-        sheetEndLine = result.endLine;
-        sheetPreview.textContent = selText.length > 200 ? selText.slice(0, 200) + '…' : selText;
-        sheetLocation.textContent = result.startLine
-          ? ('位置：L' + result.startLine + (result.endLine && result.endLine !== result.startLine ? ('-' + result.endLine) : ''))
-          : '位置：无\uff08渲染模式\uff09';
-        sheetNote.value = '';
-        sheetStatus.textContent = '';
-        sheetStatus.className = 'preview-sheet-status';
-        openSheet();
-      }, 300);
-    }
-    document.addEventListener('selectionchange', onSelectionChange);
-
-    // Reuse the existing 5-level line resolution from the mouseup tooltip.
-    // We pull the logic out of the mouseup closure to share with the sheet
-    // by wrapping the body in a helper. If unavailable, default to nulls.
-    function computeLineRange(selText) {
-      if (!rawContent) return { startLine: null, endLine: null };
-      const selLines = selText.split('\n').map(l => l.trim()).filter(l => l);
-      if (selLines.length === 0) return { startLine: null, endLine: null };
-      // Level 1: exact match
-      let idx = rawContent.indexOf(selText);
-      if (idx !== -1) {
-        const tb = rawContent.substring(0, idx);
-        const startLine = (tb.match(/\n/g) || []).length + 1;
-        const endLine = startLine + (selText.match(/\n/g) || []).length;
-        return { startLine, endLine };
-      }
-      // Level 2: per-line exact match
-      const firstMatch = rawContent.indexOf(selLines[0]);
-      if (firstMatch !== -1) {
-        const tb = rawContent.substring(0, firstMatch);
-        const startLine = (tb.match(/\n/g) || []).length + 1;
-        const lastMatch = rawContent.indexOf(selLines[selLines.length - 1]);
-        let endLine;
-        if (lastMatch !== -1) {
-          const tbl = rawContent.substring(0, lastMatch);
-          endLine = (tbl.match(/\n/g) || []).length + 1;
-        } else {
-          endLine = startLine + selLines.length - 1;
-        }
-        return { startLine, endLine };
-      }
-      // Level 3: per-line substring match
-      for (let i = 0; i < rawContent.length - selLines[0].length; i++) {
-        if (rawContent.substring(i, i + selLines[0].length) === selLines[0]) {
-          const tb = rawContent.substring(0, i);
-          const startLine = (tb.match(/\n/g) || []).length + 1;
-          const endLine = startLine + selLines.length - 1;
-          return { startLine, endLine };
-        }
-      }
-      // Level 4: rendered DOM textContent
-      const mdBody = document.querySelector('.markdown-body');
-      if (mdBody) {
-        const renderedText = mdBody.textContent;
-        const ridx = renderedText.indexOf(selLines[0]);
-        if (ridx !== -1) {
-          const rtb = renderedText.substring(0, ridx);
-          const startLine = (rtb.match(/\n/g) || []).length + 1;
-          const endLine = startLine + selLines.length - 1;
-          return { startLine, endLine };
-        }
-      }
-      return { startLine: null, endLine: null };
-    }
-
-    // "Add to panel" - mirrors pstBtnAdd behavior
-    sheetBtnAdd?.addEventListener('click', () => {
-      const note = sheetNote.value.trim();
-      if (!note) {
-        sheetStatus.textContent = '⚠️ 请填写备注';
-        sheetStatus.className = 'preview-sheet-status error';
-        try { sheetNote.focus(); } catch (_) {}
-        return;
-      }
-      const selText = sheetPreview.textContent || '';
-      if (!selText) return;
-      const item = { id: ++idCounter, text: selText, startLine: sheetStartLine || 0, endLine: sheetEndLine || 0, note, type: 'text' };
-      pendingItems.push(item);
-      sheetStatus.textContent = '✅ 已加入面板\uff08共 ' + pendingItems.length + ' 条\uff09';
-      sheetStatus.className = 'preview-sheet-status ok';
-      sheetNote.value = '';
-      // Open the right sidebar so the user can see the queued item
-      // v1.11 G4: route through state machine when available
-      if (typeof UIState !== 'undefined' && UIState) {
-        UIState.set('right-open');
-      } else if (typeof rightSidebar !== 'undefined' && rightSidebar) {
-        rightSidebar.classList.remove('hidden');
-        if (typeof updateGridColumns === 'function') updateGridColumns();
-      }
-      if (typeof renderFeedbackPanel === 'function') renderFeedbackPanel();
-      setTimeout(closeSheet, 800);
-    });
-
-    // "Send now" - mirrors pstBtnSend behavior
-    sheetBtnSend?.addEventListener('click', async () => {
-      if (sheetBtnSend.disabled) return;
-      const note = sheetNote.value.trim();
-      if (!note) {
-        sheetStatus.textContent = '⚠️ 请填写备注';
-        sheetStatus.className = 'preview-sheet-status error';
-        try { sheetNote.focus(); } catch (_) {}
-        return;
-      }
-      const selText = sheetPreview.textContent || '';
-      if (!selText) return;
-      sheetBtnSend.disabled = true;
-      const oldLabel = sheetBtnSend.textContent;
-      sheetBtnSend.textContent = '⏳ ...';
-      sheetStatus.textContent = '发递中...';
-      sheetStatus.className = 'preview-sheet-status loading';
-      sheetNote.value = '';
-      const selPayload = { text: selText, note };
-      if (sheetStartLine) {
-        selPayload.startLine = sheetStartLine;
-        selPayload.endLine = sheetEndLine;
-      }
-      try {
-        const res = await fetch('/api/clawmate/feedback', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            root: rootId,
-            project: project,
-            path: filePath,
-            selections: [selPayload],
-            sessionKey: sessionKey,
-          }),
-        });
-        if (res.ok) {
-          sheetStatus.textContent = '✅ 已发送';
-          sheetStatus.className = 'preview-sheet-status ok';
-          if (typeof loadCompletedFeedback === 'function') await loadCompletedFeedback();
-          // v1.11 G3: also show a top-level toast so users with intermittent
-          // connectivity see "已记录，稍后自动处理" without waiting for cron.
-          try { if (typeof showToast === 'function') showToast('✅ 已记录，稍后自动处理', 3000); } catch (_) {}
-          setTimeout(closeSheet, 800);
-        } else {
-          const err = await res.json().catch(() => ({}));
-          sheetStatus.textContent = '❌ ' + (err.detail || '发送失败');
-          sheetStatus.className = 'preview-sheet-status error';
-        }
-      } catch (e) {
-        sheetStatus.textContent = '❌ 网络错误';
-        sheetStatus.className = 'preview-sheet-status error';
-        // v1.11 G3: on network error, still reassure the user the request
-        // is queued (it isn't in this case, but the toast wording matches
-        // the weak-net recovery message users will see most often).
-        try { if (typeof showToast === 'function') showToast('⚠️ 网络不稳定，已记录到面板稍后重发', 3000); } catch (_) {}
-      }
-      sheetBtnSend.disabled = false;
-      sheetBtnSend.textContent = oldLabel;
-    });
-
-    // Expose close handler for the Escape key (mirror of desktop tooltip)
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && sheet.classList.contains('active')) {
-        closeSheet();
-      }
-    });
-  })();
-
-  // ============ v1.11 G4: Touch-state machine ============
-  // Replaces ad-hoc leftSidebar.classList.toggle / rightSidebar.classList.toggle
-  // calls scattered across click handlers. All UI surfaces (left/right/sheet/
-  // immersive) share a single state variable; transitions are constrained to
-  // a defined graph so quick taps cannot leave inconsistent DOM state.
-  //
-  // States:
-  //   'idle'         — no overlay, both sidebars hidden
-  //   'left-open'    — left sidebar (TOC) open
-  //   'right-open'   — right sidebar (feedback) open
-  //   'sheet-open'   — mobile feedback bottom sheet open
-  //   'immersive'    — reading mode (hides all chrome)
-  //
-  // Transitions are coordinated by setState() which is the only path that
-  // mutates sidebars. Other handlers must call setState() instead of
-  // toggling classes directly.
-  const UIState = (() => {
-    const STATES = ['idle', 'left-open', 'right-open', 'sheet-open', 'immersive'];
-    let current = 'idle';
-
-    function isMobile() {
-      return window.matchMedia('(max-width: 767.98px)').matches;
-    }
-
-    function applyChromeForState(state) {
-      // Sidebars
-      const leftSb = document.getElementById('leftSidebar');
-      const rightSb = document.getElementById('rightSidebar');
-      if (leftSb) {
-        if (state === 'left-open') leftSb.classList.remove('hidden');
-        else leftSb.classList.add('hidden');
-      }
-      if (rightSb) {
-        if (state === 'right-open') rightSb.classList.remove('hidden');
-        else rightSb.classList.add('hidden');
-      }
-      // Sheet (mobile only)
-      const sheet = document.getElementById('feedbackSheet');
-      const sheetMask = document.getElementById('sheetMask');
-      if (sheet && sheetMask) {
-        if (state === 'sheet-open' && isMobile()) {
-          sheet.classList.add('active');
-          sheetMask.classList.add('active');
-        } else if (sheet.classList.contains('active') || sheetMask.classList.contains('active')) {
-          sheet.classList.remove('active');
-          sheetMask.classList.remove('active');
-        }
-      }
-      // Immersive
-      if (state === 'immersive') {
-        document.body.classList.add('immersive');
-      } else {
-        document.body.classList.remove('immersive');
-      }
-      // Refresh grid columns + sidebar mask overlay
-      if (typeof updateGridColumns === 'function') {
-        try { updateGridColumns(); } catch (_) {}
-      }
-    }
-
-    function get() { return current; }
-
-    function set(next) {
-      if (!STATES.includes(next)) {
-        console.warn('[ClawMate] UIState.set: invalid state', next);
-        return;
-      }
-      if (next === current) return;
-      current = next;
-      applyChromeForState(current);
-    }
-
-    function closeAll() { set('idle'); }
-
-    return { get, set, closeAll, STATES, isMobile };
-  })();
-
-  // Backwards-compat helpers — keep old callers compiling but route them
-  // through the state machine. These are minimal shims, not full replacements.
-  function _openLeftSidebarViaState() { UIState.set('left-open'); }
-  function _openRightSidebarViaState() { UIState.set('right-open'); }
-  function _closeLeftSidebarViaState() {
-    if (UIState.get() === 'left-open') UIState.set('idle');
-  }
-  function _closeRightSidebarViaState() {
-    if (UIState.get() === 'right-open') UIState.set('idle');
-  }
-
-  // ============ v1.11 F1: Immersive reading mode ============
-  // On mobile, tapping the central content area toggles immersive mode
-  // (hide topbar/bottombar/sidebars). Tap vs scroll is distinguished by a
-  // 200ms debounce + a 10px movement threshold: a touch that moves more than
-  // 10px before release is treated as scroll, not tap. Immersive state
-  // is held by UIState; setState() handles the rest.
-  function setupImmersive() {
-    if (!document.getElementById('centerBody') && !document.querySelector('.preview-center-body')) return;
-    const center = document.querySelector('.preview-center-body') || document.getElementById('centerBody');
-    if (!center) return;
-
-    let touchStartX = 0;
-    let touchStartY = 0;
-    let touchStartTime = 0;
-    let moved = false;
-    let debounceTimer = null;
-
-    function onTouchStart(e) {
-      if (e.touches.length !== 1) { moved = true; return; }
-      const t = e.touches[0];
-      touchStartX = t.clientX;
-      touchStartY = t.clientY;
-      touchStartTime = Date.now();
-      moved = false;
-    }
-    function onTouchMove(e) {
-      if (e.touches.length !== 1) return;
-      const t = e.touches[0];
-      const dx = Math.abs(t.clientX - touchStartX);
-      const dy = Math.abs(t.clientY - touchStartY);
-      if (dx > 10 || dy > 10) moved = true;
-    }
-    function onTouchEnd() {
-      const dt = Date.now() - touchStartTime;
-      // Only fire on a quick tap (no significant movement, < 250ms)
-      if (moved || dt > 250) return;
-      if (UIState.get() === 'sheet-open') return; // don't interfere with sheet
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        const cur = UIState.get();
-        UIState.set(cur === 'immersive' ? 'idle' : 'immersive');
-      }, 200);
-    }
-    center.addEventListener('touchstart', onTouchStart, { passive: true });
-    center.addEventListener('touchmove', onTouchMove, { passive: true });
-    center.addEventListener('touchend', onTouchEnd, { passive: true });
-    // Desktop: double-click to toggle (developer convenience)
-    center.addEventListener('dblclick', () => {
-      if (UIState.isMobile()) return;
-      const cur = UIState.get();
-      UIState.set(cur === 'immersive' ? 'idle' : 'immersive');
-    });
-    // Exit immersive on Escape
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && UIState.get() === 'immersive') {
-        UIState.set('idle');
-      }
-    });
-
-    // Inject a one-time exit hint
-    if (!document.querySelector('.immersive-hint')) {
-      const hint = document.createElement('div');
-      hint.className = 'immersive-hint';
-      hint.textContent = '再次点击退出阅读';
-      document.body.appendChild(hint);
-    }
-  }
-
-  // ============ v1.11 E1: Mermaid pinch-zoom ============
-  // Touch-pinch-zoom on .mermaid SVG blocks. Bounded to 0.5x–3x. Double-tap
-  // resets to 1x. A floating +/-/reset control appears when zoom != 1.
-  function setupMermaidPinchZoom() {
-    const blocks = document.querySelectorAll('.markdown-body .mermaid, .preview-body .mermaid');
-    blocks.forEach((block) => attachPinchZoom(block));
-  }
-  function attachPinchZoom(block) {
-    if (block.dataset.pinchInit === '1') return;
-    block.dataset.pinchInit = '1';
-    const svg = block.querySelector('svg');
-    if (!svg) return;
-
-    // Wrap in position:relative if needed for absolute zoom controls
-    if (getComputedStyle(block).position === 'static') {
-      block.style.position = 'relative';
-    }
-
-    let scale = 1;
-    const MIN = 0.5, MAX = 3;
-
-    function applyScale() {
-      svg.style.transform = 'scale(' + scale + ')';
-      if (Math.abs(scale - 1) > 0.01) {
-        block.classList.add('mermaid-zoomed');
-      } else {
-        block.classList.remove('mermaid-zoomed');
-      }
-    }
-
-    // Inject zoom controls (hidden until zoom != 1)
-    if (!block.querySelector('.mermaid-zoom-controls')) {
-      const ctrls = document.createElement('div');
-      ctrls.className = 'mermaid-zoom-controls';
-      const minus = document.createElement('button');
-      minus.type = 'button';
-      minus.textContent = '−';
-      minus.title = '缩小';
-      minus.addEventListener('click', (e) => { e.stopPropagation(); scale = Math.max(MIN, +(scale - 0.25).toFixed(2)); applyScale(); });
-      const reset = document.createElement('button');
-      reset.type = 'button';
-      reset.textContent = '1×';
-      reset.title = '重置';
-      reset.addEventListener('click', (e) => { e.stopPropagation(); scale = 1; applyScale(); });
-      const plus = document.createElement('button');
-      plus.type = 'button';
-      plus.textContent = '+';
-      plus.title = '放大';
-      plus.addEventListener('click', (e) => { e.stopPropagation(); scale = Math.min(MAX, +(scale + 0.25).toFixed(2)); applyScale(); });
-      ctrls.appendChild(minus);
-      ctrls.appendChild(reset);
-      ctrls.appendChild(plus);
-      block.appendChild(ctrls);
-    }
-
-    // Pinch state
-    let pinchActive = false;
-    let pinchStartDist = 0;
-    let pinchStartScale = 1;
-    let lastTap = 0;
-    let touchStartX = 0, touchStartY = 0, touchMoved = false;
-
-    function dist(t1, t2) {
-      const dx = t1.clientX - t2.clientX;
-      const dy = t1.clientY - t2.clientY;
-      return Math.hypot(dx, dy);
-    }
-    function onTS(e) {
-      if (e.touches.length === 2) {
-        pinchActive = true;
-        pinchStartDist = dist(e.touches[0], e.touches[1]);
-        pinchStartScale = scale;
-      } else if (e.touches.length === 1) {
-        const t = e.touches[0];
-        touchStartX = t.clientX;
-        touchStartY = t.clientY;
-        touchMoved = false;
-        // Double-tap detection (only when not currently zoomed)
-        if (Math.abs(scale - 1) < 0.01) {
-          const now = Date.now();
-          if (now - lastTap < 300) {
-            // Double-tap: cycle to 1.5x, 2x, 1x
-            if (Math.abs(scale - 1) < 0.01) scale = 1.5;
-            else if (Math.abs(scale - 1.5) < 0.01) scale = 2;
-            else scale = 1;
-            applyScale();
-            lastTap = 0;
-            e.preventDefault();
-          } else {
-            lastTap = now;
-          }
-        } else {
-          // Currently zoomed: double-tap resets
-          const now = Date.now();
-          if (now - lastTap < 300) {
-            scale = 1;
-            applyScale();
-            lastTap = 0;
-            e.preventDefault();
-          } else {
-            lastTap = now;
-          }
-        }
-      }
-    }
-    function onTM(e) {
-      if (pinchActive && e.touches.length === 2) {
-        const d = dist(e.touches[0], e.touches[1]);
-        if (pinchStartDist > 0) {
-          const newScale = pinchStartScale * (d / pinchStartDist);
-          scale = Math.max(MIN, Math.min(MAX, +newScale.toFixed(2)));
-          applyScale();
-          e.preventDefault();
-        }
-      } else if (e.touches.length === 1) {
-        const t = e.touches[0];
-        if (Math.abs(t.clientX - touchStartX) > 8 || Math.abs(t.clientY - touchStartY) > 8) {
-          touchMoved = true;
-        }
-      }
-    }
-    function onTE() {
-      pinchActive = false;
-    }
-    // Use non-passive listener to allow preventDefault on pinch move
-    block.addEventListener('touchstart', onTS, { passive: false });
-    block.addEventListener('touchmove', onTM, { passive: false });
-    block.addEventListener('touchend', onTE, { passive: true });
-    block.addEventListener('touchcancel', onTE, { passive: true });
-  }
-
-  // Re-attach Mermaid pinch-zoom each time a markdown body is rendered.
-  // The renderMermaid() function calls mermaid.run() which populates the
-  // .mermaid divs with <svg> children. We hook into loadContent() by
-  // re-querying the DOM after each markdown render.
-  const _origLoadContent = typeof loadContent === 'function' ? loadContent : null;
-  // (We re-attach below by listening for DOM updates; the call to
-  // setupMermaidPinchZoom() is added after the markdown render in
-  // loadContent for markdown mode.)
-
-  // ============ v1.11 E2/E3: VisualViewport keyboard lift (general) ============
-  // Two consumers:
-  //   1. The mobile bottom-sheet (already wired in v1.10 D1 setupMobileSheet).
-  //   2. ANY focused input/textarea: lift the whole viewport so the field
-  //      stays visible above the soft keyboard. iOS Safari's visualViewport
-  //      fires 'resize' on keyboard show; Android Chrome fires 'resize' on
-  //      input focus AND on keyboard appearance. We handle both.
-  function setupVisualViewport() {
-    if (!window.visualViewport) return;
-    const vv = window.visualViewport;
-    function lift() {
-      // Detect keyboard: visible viewport < layout viewport (with margin)
-      const keyboardLikelyOpen = (window.innerHeight - vv.height) > 100;
-      if (!keyboardLikelyOpen) {
-        document.documentElement.style.setProperty('--keyboard-offset', '0px');
-        return;
-      }
-      // iOS Safari: vv.offsetTop scrolls when keyboard opens. Use that.
-      // Android Chrome: vv.height shrinks but offsetTop stays.
-      const offsetTop = vv.offsetTop || 0;
-      // Effective viewport bottom = vv.offsetTop + vv.height
-      // Translate the active element into that region.
-      const ae = document.activeElement;
-      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) {
-        const rect = ae.getBoundingClientRect();
-        const visibleBottom = offsetTop + vv.height;
-        // If the input is below visibleBottom, scroll the active element
-        // into the visible region.
-        if (rect.bottom > visibleBottom - 20) {
-          try {
-            ae.scrollIntoView({ block: 'center', behavior: 'smooth' });
-          } catch (_) {
-            // Fallback: scroll the container manually
-            const container = document.querySelector('.preview-center-body') || ae.parentElement;
-            if (container) {
-              const aeTop = ae.offsetTop;
-              const target = Math.max(0, aeTop - 100);
-              container.scrollTop = target;
-            }
-          }
-        }
-      }
-    }
-    vv.addEventListener('resize', lift);
-    vv.addEventListener('scroll', lift);
-    // iOS focusin fires before keyboard is fully open — recheck shortly after
-    document.addEventListener('focusin', () => {
-      setTimeout(lift, 250);
-      setTimeout(lift, 600);
-    });
-  }
-
-  // ============ v1.11 G3: Weak-network feedback toast ============
-  // Override showToast to add an "已记录，稍后自动处理" message for
-  // feedback POSTs in poor-network conditions. The default showToast is
-  // already a 3-second auto-dismiss — this just changes the message
-  // text to be explicit about background handling.
-  function showWeakNetFeedbackToast() {
-    showToast('✅ 已记录，稍后自动处理', 3000);
-  }
-
   // ============ Init ============
-  loadFeedbackTags();
   loadContent();
-  setupImmersive();
-  setupVisualViewport();
-  setupMermaidPinchZoom();
-  // Re-attach pinch-zoom after content reloads (markdown renders async)
-  // Using a MutationObserver to detect when .mermaid <svg> children appear.
-  const _mermaidObserver = new MutationObserver((muts) => {
-    for (const m of muts) {
-      for (const node of m.addedNodes) {
-        if (node.nodeType === 1 && node.tagName === 'svg' && node.closest('.mermaid')) {
-          setupMermaidPinchZoom();
-          return;
-        }
-        if (node.nodeType === 1 && node.classList && node.classList.contains('mermaid')) {
-          const svg = node.querySelector('svg');
-          if (svg) {
-            setupMermaidPinchZoom();
-            return;
-          }
-        }
-      }
-    }
-  });
-  _mermaidObserver.observe(document.body, { childList: true, subtree: true });
 
   // Warn on pending items before unload
   window.addEventListener('beforeunload', e => {
