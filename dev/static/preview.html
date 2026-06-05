@@ -261,15 +261,15 @@
       font-size: 12px;
       padding: 30px 12px;
     }
-    /* Bottom toolbar */
+    /* Bottom toolbar (v1.14: align padding/gap with .topbar — L107 of style.css: padding 0 20px, gap 16px) */
     .preview-bottombar {
       height: 48px;
       background: var(--brand-bg);
       color: var(--brand-text);
       display: flex;
       align-items: center;
-      gap: 4px;
-      padding: 0 12px;
+      gap: 16px;
+      padding: 0 20px;
       flex-shrink: 0;
       z-index: 10;
       box-shadow: 0 -2px 12px rgba(0,0,0,0.2);
@@ -785,6 +785,36 @@
     }
     /* Hidden file input for subtitle picker */
     #subtitleFileInput { display: none; }
+
+    /* ===== v1.15: topbar/bottombar 子元素视觉统一 (desktop 友好，保留) =====
+       v1.14 已把 .topbar / .preview-bottombar 父容器 height: 48px + align-items: center
+       配齐，但子元素高度不统一（.brand / .preview-topbar-title 没显式 height）导致视觉不对齐。
+       方案：topbar 子元素统一 height + display: inline-flex + align-items: center + line-height: 1
+       —— 子元素自身高度统一后，align-items: center 才有视觉意义
+       注：.preview-bottom-divider 仍为 20px（v1.10 D2 mobile hotfix 值，v1.19 不回退为 36px）*/
+    /* Override .brand (inherited from style.css L108) — 加 height + display */
+    .preview-app > .topbar .brand {
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      line-height: 1;
+    }
+    /* .preview-topbar-title (v1.15 首次定义：之前完全没有 CSS rule) */
+    .preview-topbar-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--brand-text);
+      opacity: 0.9;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      line-height: 1;
+    }
   </style>
 </head>
 <body>

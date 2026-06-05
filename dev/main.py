@@ -21,9 +21,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from constants import (
+    CONFIG_PATH_ENV,
+    PUBLIC_BASE_URL_ENV,
+    ONLYOFFICE_JWT_SECRET_ENV,
+    ONLYOFFICE_URL_ENV,
+)
+
 # ── config resolution ──────────────────────────────────────────────
 CONFIG_PATH = Path(
-    os.environ.get("CLAWMATE_CONFIG") or (Path(__file__).parent / "config.json")
+    os.environ.get(CONFIG_PATH_ENV) or (Path(__file__).parent / "config.json")
 )
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -46,17 +53,22 @@ except (FileNotFoundError, json.JSONDecodeError):
 # env overrides (highest priority)
 _onlyoffice_cfg = config.get("onlyoffice", {}) or {}
 ONLYOFFICE_API_JS_URL = os.environ.get(
-    "CLAWMATE_ONLYOFFICE_URL",
+    ONLYOFFICE_URL_ENV,
     _onlyoffice_cfg.get("api_js_url"),
 )
 ONLYOFFICE_JWT_SECRET = os.environ.get(
-    "CLAWMATE_ONLYOFFICE_JWT_SECRET",
+    ONLYOFFICE_JWT_SECRET_ENV,
     _onlyoffice_cfg.get("jwt_secret", ""),
 )
 PUBLIC_BASE_URL = os.environ.get(
-    "CLAWMATE_PUBLIC_BASE_URL",
+    PUBLIC_BASE_URL_ENV,
     config.get("public_base_url", ""),
 )
+
+# v1.12 C2: 启动前快照 env var 是否被显式设置（setdefault 之后无法分辨）
+# 部署者如果忘了在 systemd/环境里设 CLAWMATE_PUBLIC_BASE_URL，
+# 仅靠 config.json 兜底会让下面的 setdefault 把 env 填上，导致检查失效。
+_CLAWMATE_PUBLIC_BASE_URL_ENV_SET = PUBLIC_BASE_URL_ENV in os.environ
 
 # inject env vars for routes.py / service.py
 os.environ.setdefault("CLAWMATE_ONLYOFFICE_JWT_SECRET", ONLYOFFICE_JWT_SECRET)
@@ -227,6 +239,37 @@ def _sync_cron_jobs():
         print(f"[clawmate] WARNING: 无法读取 {template_path}，跳过 cron job 同步")
         return
 
+    # v1.7: 从 config.json 读取 feedback.tags，生成动作列表 (注入到 {feedback_action_list} 占位符)
+    # 如果没有 tags，降级为默认动作列表以保持现有 cron 任务不中断
+    DEFAULT_ACTION_LIST = (
+        "   - **删除**：移除 item.content 指向的段落/代码/章节\n"
+        "   - **修改**：用 item.note 的要求改写对应内容\n"
+        "   - **扩展**：基于 item.content 扩写，如增加章节、补充细节\n"
+        "   - **简化**：精简或重构对应内容\n"
+        "   - **审批**: 文档通过人工审核\n"
+        "   - **执行**：如果 item.note 指向 research/*.md 中的方案文档，将该方案作为工作实施的内容，完成方案计划。"
+    )
+    feedback_cfg = cfg.get("feedback") or {}
+    tags = feedback_cfg.get("tags") if isinstance(feedback_cfg, dict) else None
+    if isinstance(tags, list) and len(tags) > 0:
+        action_lines = []
+        for t in tags:
+            if not isinstance(t, dict):
+                continue
+            label = (t.get("label") or "").strip()
+            prompt = (t.get("prompt") or "").strip()
+            if not label and not prompt:
+                continue
+            if not prompt:
+                # label-only entry
+                action_lines.append(f"   - **{label}**")
+            else:
+                action_lines.append(f"   - **{label}**：{prompt}" if label else f"   - {prompt}")
+        action_list_text = "\n".join(action_lines) if action_lines else DEFAULT_ACTION_LIST
+    else:
+        # No tags configured → fallback to default action list (backward compat)
+        action_list_text = DEFAULT_ACTION_LIST
+
     base_url = "http://localhost:5533"
 
     for agent_id, root_ids in agent_roots_map.items():
@@ -237,6 +280,7 @@ def _sync_cron_jobs():
             base_url=base_url,
             roots_str=roots_str,
             agent_roots=agent_roots,
+            feedback_action_list=action_list_text,
         )
         if add_cron(cron_bin, cron_name, agent_id, message):
             print(f"[clawmate] cron job 已创建: {cron_name} (agent={agent_id}, roots={root_ids})")
@@ -269,5 +313,32 @@ if __name__ == "__main__":
     import threading
     t = threading.Thread(target=_sync_cron_jobs, name="cron-sync", daemon=True)
     t.start()
+
+    # v1.8 B5: 启动时执行一次 feedback 归档/清理 (后台线程, 不阻塞 server)
+    # - 默认保留 90 天, 归档到 feedback.archive.json
+    # - try/except 包裹, 失败不报错不阻塞 (清理失败不影响主流程)
+    def _startup_cleanup():
+        try:
+            from feedback_api import cleanup_old_feedback
+            stats = cleanup_old_feedback(days=90, archive=True)
+            print(f"[clawmate] startup cleanup: scanned={stats['scanned_files']} "
+                  f"archived={stats['archived_count']} removed={stats['removed_count']} "
+                  f"errors={len(stats['errors'])}")
+        except Exception as e:
+            print(f"[clawmate] WARNING: startup cleanup failed: {e}", file=sys.stderr)
+
+    t2 = threading.Thread(target=_startup_cleanup, name="feedback-cleanup", daemon=True)
+    t2.start()
+
+    # v1.12 C2: 启动时检查 CLAWMATE_PUBLIC_BASE_URL 是否被显式设置
+    # 未设置时打印 WARNING（不阻塞启动）— 强哥部署时如果忘了设 env var，
+    # 反向代理后 preview URL 可能用错 scheme (http vs https)
+    if not _CLAWMATE_PUBLIC_BASE_URL_ENV_SET:
+        print(
+            f"[clawmate] WARNING: {PUBLIC_BASE_URL_ENV} not set; "
+            "preview URLs may use wrong scheme (http vs https) when behind "
+            "reverse proxy without X-Forwarded-* headers. "
+            "Fix: export CLAWMATE_PUBLIC_BASE_URL=https://note.updatedb.online:18443"
+        )
 
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")

@@ -14,11 +14,14 @@ Routes:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from urllib.parse import quote
+
+logger = logging.getLogger("clawmate.feedback")
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -26,6 +29,7 @@ from fastapi.responses import JSONResponse
 from cron_manager import run_cron
 from feedback_schema import FEEDBACK_STATUSES
 from service import resolve_root, get_public_base_url
+from constants import CONFIG_PATH_ENV
 
 # ── 常量 ────────────────────────────────────────────────────────────
 
@@ -60,7 +64,7 @@ def _read_feedback_json(path: Path) -> dict:
 def _project_abbr(project: str) -> str:
     """生成 2 字符项目缩写."""
     try:
-        config_path = Path(os.environ.get("CLAWMATE_CONFIG", "config.json"))
+        config_path = Path(os.environ.get(CONFIG_PATH_ENV, "config.json"))
         data = json.loads(config_path.read_text())
         custom = (data.get("projects") or {}).get(project, {}).get("abbr", "")
         if len(custom) >= 2:
@@ -140,7 +144,7 @@ def _filter_items(fb_path: Path, status: str, file: str, since: str) -> list:
 
 def _wake_agent_for_root(root_id: str) -> None:
     """读取 config.json，找到 root 对应的 agent 并用 run_cron 唤醒."""
-    config_path = Path(os.environ.get("CLAWMATE_CONFIG",
+    config_path = Path(os.environ.get(CONFIG_PATH_ENV,
                         str(Path(__file__).parent / "config.json")))
     agent_id = "default"
     try:
@@ -150,12 +154,171 @@ def _wake_agent_for_root(root_id: str) -> None:
             if r.get("id") == root_id:
                 agent_id = r.get("agent_id", "default")
                 break
-    except Exception:
-        pass
+    except Exception as e:
+        # v1.8 B1: 静默失败改日志 (wake 失败不应阻塞 feedback 创建)
+        logger.warning(
+            "[feedback] wake failed: cannot resolve agent for root_id=%s (config_path=%s): %s",
+            root_id, config_path, e,
+        )
     try:
         run_cron(None, f"clawmate-fb-{agent_id}")
-    except Exception:
-        pass
+    except Exception as e:
+        # v1.8 B1: 静默失败改日志
+        logger.warning(
+            "[feedback] wake failed: run_cron('clawmate-fb-%s') for root_id=%s: %s",
+            agent_id, root_id, e,
+        )
+
+
+# v1.8 B5: 归档/清理 feedback.json 中 status="done" 且 updated 超过 N 天的条目
+# 推荐：归档到 feedback.archive.json (append-only, 保留可追溯性)
+# - days=90: 默认保留 90 天 (dev 可调)
+# - archive_to=None: 直接删除 (不推荐)
+# - 启动时调用 cleanup_old_feedback() 一次 (主线程 + 快速超时，不阻塞 server)
+# - 手动 API: POST /api/clawmate/feedback/cleanup (需登录, AuthMiddleware 拦截)
+
+
+def _archive_feedback_items(fb_path: Path, items_to_archive: list) -> bool:
+    """将待归档条目 append 到 feedback.archive.json (同目录下). 失败返回 False."""
+    try:
+        archive_path = fb_path.parent / "feedback.archive.json"
+        # 读取已有归档
+        if archive_path.exists():
+            try:
+                with open(archive_path, "r", encoding="utf-8") as f:
+                    archive_data = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                archive_data = {"items": []}
+        else:
+            archive_data = {"items": []}
+        archive_items = archive_data.get("items", [])
+        archive_items.extend(items_to_archive)
+        archive_data["items"] = archive_items
+        # 写回 (原子: 先写 .tmp 再 rename)
+        tmp_path = archive_path.with_suffix(".archive.json.tmp")
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(archive_data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_path, archive_path)
+        return True
+    except Exception as e:
+        logger.warning("[feedback] archive failed for %s: %s", fb_path, e)
+        return False
+
+
+def cleanup_old_feedback(days: int = 90, archive: bool = True) -> dict:
+    """
+    清理 feedback.json 中 status="done" 且 updated 超过 N 天的条目。
+
+    策略 (推荐):
+    - archive=True: 归档到 feedback.archive.json (同目录, append-only)
+    - archive=False: 直接删除 (不推荐, 失去可追溯性)
+
+    扫描范围: 遍历 config.json 中所有 root 下的 project 目录里的 feedback.json
+
+    Returns:
+        dict: {scanned_files, archived_count, removed_count, errors}
+        不抛异常 (用于启动时调用, 避免阻塞)
+    """
+    from service import _load_config  # 避免循环导入
+
+    stats = {"scanned_files": 0, "archived_count": 0, "removed_count": 0, "errors": []}
+
+    try:
+        cfg = _load_config()
+        roots = cfg.get("roots", []) or []
+    except Exception as e:
+        stats["errors"].append(f"load config: {e}")
+        return stats
+
+    cutoff = datetime.now(CST) - timedelta(days=days)
+
+    # 1) 收集所有 feedback.json 路径
+    fb_paths: list[Path] = []
+    for r in roots:
+        if not isinstance(r, dict):
+            continue
+        root_dir_str = str(r.get("dir", "")).strip()
+        if not root_dir_str:
+            continue
+        try:
+            root_dir = Path(root_dir_str).expanduser().resolve()
+        except Exception:
+            continue
+        if not root_dir.exists() or not root_dir.is_dir():
+            continue
+        # 遍历下一级目录 (project)
+        try:
+            for entry in root_dir.iterdir():
+                if not entry.is_dir():
+                    continue
+                fb = entry / "feedback.json"
+                if fb.exists():
+                    fb_paths.append(fb)
+        except Exception as e:
+            stats["errors"].append(f"scan {root_dir}: {e}")
+
+    # 2) 处理每个 feedback.json
+    for fb_path in fb_paths:
+        stats["scanned_files"] += 1
+        try:
+            data = _read_feedback_json(fb_path)
+            items = _parse_items(data)
+            if not items:
+                continue
+
+            to_archive = []
+            keep = []
+            for item in items:
+                if item.get("status") != "done":
+                    keep.append(item)
+                    continue
+                try:
+                    ts = datetime.strptime(
+                        item.get("updated", ""), "%Y-%m-%d %H:%M:%S"
+                    ).replace(tzinfo=CST)
+                except Exception:
+                    keep.append(item)  # 解析失败保留
+                    continue
+                if ts < cutoff:
+                    to_archive.append(item)
+                else:
+                    keep.append(item)
+
+            if not to_archive:
+                continue
+
+            if archive:
+                if _archive_feedback_items(fb_path, to_archive):
+                    stats["archived_count"] += len(to_archive)
+                    # 写回 (移除已归档的)
+                    root_id = data.get("root", "")
+                    project = data.get("project", "")
+                    fb_path.write_text(
+                        _build_feedback_json(root_id, project, keep),
+                        encoding="utf-8",
+                    )
+                else:
+                    stats["errors"].append(f"archive failed: {fb_path}")
+            else:
+                # 直接删除
+                root_id = data.get("root", "")
+                project = data.get("project", "")
+                fb_path.write_text(
+                    _build_feedback_json(root_id, project, keep),
+                    encoding="utf-8",
+                )
+                stats["removed_count"] += len(to_archive)
+        except Exception as e:
+            stats["errors"].append(f"{fb_path}: {e}")
+            logger.warning("[feedback] cleanup error for %s: %s", fb_path, e)
+
+    if stats["archived_count"] or stats["removed_count"] or stats["errors"]:
+        logger.info(
+            "[feedback] cleanup: scanned=%d archived=%d removed=%d errors=%d",
+            stats["scanned_files"], stats["archived_count"],
+            stats["removed_count"], len(stats["errors"]),
+        )
+    return stats
 
 # ── 路由 ─────────────────────────────────────────────────────────────
 
@@ -404,5 +567,35 @@ async def feedback_update(request: Request):
 
     fb_path.write_text(_build_feedback_json(root_id, project, items), encoding="utf-8")
     return JSONResponse(content={"ok": True, "id": feedback_id, "newStatus": new_status})
+
+
+# v1.8 B5: 手动 cleanup API (需登录, AuthMiddleware 自动拦截)
+# - days: 清理阈值天数 (默认 90)
+# - archive: True 归档到 feedback.archive.json / False 直接删除
+@router.post("/api/clawmate/feedback/cleanup", response_class=JSONResponse)
+async def feedback_cleanup(
+    request: Request,
+    days: int = Query(90, ge=1, le=3650, description="保留天数阈值"),
+    archive: bool = Query(True, description="True=归档, False=删除"),
+):
+    """手动触发 feedback 归档/清理 (需登录)."""
+    result_holder = {}
+
+    def _run():
+        try:
+            result_holder["stats"] = cleanup_old_feedback(days=days, archive=archive)
+        except Exception as e:
+            result_holder["error"] = str(e)
+
+    # 手动 API 同步运行 (用户期望立即看到结果)
+    _run()
+    if "error" in result_holder:
+        raise HTTPException(status_code=500, detail=f"cleanup failed: {result_holder['error']}")
+    return JSONResponse(content={
+        "ok": True,
+        "days": days,
+        "archive": archive,
+        "stats": result_holder["stats"],
+    })
 
 

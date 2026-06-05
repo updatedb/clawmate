@@ -183,6 +183,35 @@ python3 server.py &
 
 ---
 
+## 部署形态
+
+### Systemd Service 模板占位符说明
+
+仓库根目录下的 `clawmate.service.system` 是 system-level 部署的 **systemd unit 模板**，含有占位符，不能直接被 systemd 解析。部署到具体机器前必须先 `sed` 替换占位符。
+
+| 占位符 | 含义 | 默认建议值 | 影响的字段 |
+|--------|------|-----------|-----------|
+| `__CLAWMATE_DIR__` | ClawMate 安装根目录 | `/opt/clawmate` | `WorkingDirectory`、`Environment=CLAWMATE_CONFIG`、`ReadWritePaths`（共 3 处） |
+| `__CLAWMATE_USER__` | 运行用户名 | `clawmate` | `User=` |
+| `__CLAWMATE_GROUP__` | 运行用户组 | `clawmate` | `Group=` |
+| `__CLAWMATE_PORT__` | 监听端口 | `5533` | `Environment=CLAWMATE_PORT` |
+
+**部署到新路径的 sed 单命令示例**（部署到 `/opt/clawmate`，用户 `clawmate`，端口 `5533`）：
+
+```bash
+sed -e "s|__CLAWMATE_DIR__|/opt/clawmate|g" \
+    -e "s|__CLAWMATE_USER__|clawmate|g" \
+    -e "s|__CLAWMATE_GROUP__|clawmate|g" \
+    -e "s|__CLAWMATE_PORT__|5533|g" \
+    clawmate.service.system > /tmp/clawmate.service
+sudo cp /tmp/clawmate.service /etc/systemd/system/clawmate.service
+sudo systemctl daemon-reload && sudo systemctl enable --now clawmate
+```
+
+> **当前部署形态**：dev sandbox 缺交互 sudo，实际跑的是 **user-level** service（`~/.config/systemd/user/clawmate.service`，`loginctl linger openclaw` 已开启，开机自启就绪），**不是** system-level。本模板供未来切回 system-level 使用。
+
+---
+
 ## 产品状态
 
 | 维度 | 状态 |

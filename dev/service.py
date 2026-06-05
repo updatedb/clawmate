@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import mimetypes
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from constants import CONFIG_PATH_ENV, PUBLIC_BASE_URL_ENV
+
+logger = logging.getLogger("clawmate.service")
+
 # CONFIG_PATH is set via CLAWMATE_CONFIG env var by main.py before import
-CONFIG_PATH = Path(os.environ.get("CLAWMATE_CONFIG", str(Path(__file__).parent / "config.json")))
+CONFIG_PATH = Path(os.environ.get(CONFIG_PATH_ENV, str(Path(__file__).parent / "config.json")))
 PREVIEW_MAX_BYTES = 5 * 1024 * 1024  # 5MB, large enough for HTML/code files
 
 TEXT_EXTENSIONS = {
@@ -16,7 +22,10 @@ TEXT_EXTENSIONS = {
     ".ps1", ".sql", ".r", ".go", ".java", ".c", ".cpp", ".h", ".hpp", ".vue", ".srt",
 }
 
-_CONFIG_CACHE: Dict[str, Optional[object]] = {"mtime": None, "data": None}
+# v1.8 B3: TTL 兜底 — 当 config.json mtime 不变时，强制在 TTL 到期后重新加载
+# (mtime 检查仍保留：mtime 改变 → 立即失效；TTL 是兜底)
+_CONFIG_CACHE: Dict[str, Optional[object]] = {"mtime": None, "data": None, "expires_at": 0.0}
+_CONFIG_CACHE_TTL_SECONDS = 60  # dev 可调 (<5min)
 
 
 def _normalize_rel_path(rel_path: str) -> str:
@@ -47,8 +56,15 @@ def _load_config() -> Dict:
 
     mtime = stat.st_mtime
     cached = _CONFIG_CACHE.get("data")
+    # v1.8 B3: 双条件 — mtime 命中 + 未过期 (TTL 兜底)
     if cached is not None and _CONFIG_CACHE.get("mtime") == mtime:
-        return cached  # type: ignore[return-value]
+        if time.time() < float(_CONFIG_CACHE.get("expires_at") or 0.0):
+            return cached  # type: ignore[return-value]
+        # mtime 没变但 TTL 过期 → 强制重新加载 (config 可能在 mtime 不变时被外部进程重写)
+        logger.info(
+            "[service] config cache TTL expired (mtime=%.0f, age=%ds), forcing reload",
+            mtime, int(time.time() - float(_CONFIG_CACHE.get("expires_at") or time.time())),
+        )
 
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -61,6 +77,7 @@ def _load_config() -> Dict:
 
     _CONFIG_CACHE["mtime"] = mtime
     _CONFIG_CACHE["data"] = data
+    _CONFIG_CACHE["expires_at"] = time.time() + _CONFIG_CACHE_TTL_SECONDS
     return data
 
 
@@ -156,9 +173,6 @@ def guess_category(path: Path) -> str:
     except (OSError, PermissionError):
         pass
     return "other"
-
-
-PUBLIC_BASE_URL_ENV = "CLAWMATE_PUBLIC_BASE_URL"
 
 
 def get_public_base_url(request) -> str:

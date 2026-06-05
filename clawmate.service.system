@@ -1,0 +1,65 @@
+# ClawMate systemd service — system-level 部署模板（带占位符）
+#
+# ⚠️ 本文件是模板，含有占位符，不能直接被 systemd 解析。
+#    部署时必须先 sed 替换占位符，再 cp 到 /etc/systemd/system/clawmate.service。
+#
+# ===== 占位符列表（默认值见各行注释） =====
+#   __CLAWMATE_DIR__   → ClawMate 安装根目录（默认 /opt/clawmate）
+#                          替换 WorkingDirectory / CLAWMATE_CONFIG / ReadWritePaths 三处
+#   __CLAWMATE_USER__  → 运行用户名（默认 clawmate）
+#   __CLAWMATE_GROUP__ → 运行用户组（默认 clawmate）
+#   __CLAWMATE_PORT__  → 监听端口（默认 5533）
+#
+# ===== 部署示例（部署到 /opt/clawmate，用户 clawmate，端口 5533） =====
+#
+#   sed -e "s|__CLAWMATE_DIR__|/opt/clawmate|g" \
+#       -e "s|__CLAWMATE_USER__|clawmate|g" \
+#       -e "s|__CLAWMATE_GROUP__|clawmate|g" \
+#       -e "s|__CLAWMATE_PORT__|5533|g" \
+#       clawmate.service.system > /tmp/clawmate.service
+#   sudo cp /tmp/clawmate.service /etc/systemd/system/clawmate.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now clawmate
+#
+# ===== 形态说明 =====
+#   - ClawMate 是 Python 项目，ExecStart 走 /usr/bin/python3 main.py
+#   - config.json 通过 CLAWMATE_CONFIG 环境变量显式指向（WorkingDirectory 的相对路径在
+#     ProtectSystem=strict 下不保证可读）
+#   - ReadWritePaths = /var/cache/clawmate + __CLAWMATE_DIR__/dev
+#     （dev 目录要可写，clawmate 会写日志/缓存；__CLAWMATE_DIR__ 本身可保持只读）
+#   - 当前 dev sandbox 缺交互 sudo，实际跑的是 ~/.config/systemd/user/clawmate.service
+#     （user-level + Linger=yes，开机自启已就绪）
+#   - 本模板供未来切回 system-level 使用
+
+[Unit]
+Description=ClawMate File Manager
+Documentation=https://github.com/example/clawmate
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__CLAWMATE_USER__
+Group=__CLAWMATE_GROUP__
+WorkingDirectory=__CLAWMATE_DIR__/dev
+ExecStart=/usr/bin/python3 main.py
+Restart=on-failure
+RestartSec=5
+Environment=CLAWMATE_PORT=__CLAWMATE_PORT__
+Environment=CLAWMATE_CONFIG=__CLAWMATE_DIR__/dev/config.json
+Environment=PYTHONUNBUFFERED=1
+
+# 安全加固
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/cache/clawmate __CLAWMATE_DIR__/dev
+PrivateTmp=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# 日志
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=clawmate
+
+[Install]
+WantedBy=multi-user.target

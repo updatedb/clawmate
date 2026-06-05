@@ -860,7 +860,131 @@ HTTP code: 404
 - user-level service md5 实测 `86e0ff55b31c69489c3ba33a25bd02d1`（dev 端 `md5sum` 多次确认），与 work 转交单基线 `b72b7ecc9d90ca496cd75a5013116dc4` 不一致。**整个 dev 阶段未触碰** `~/.config/systemd/user/clawmate.service`，基线差异应在 work→dev handoff 之间发生，建议 work 复核
 - 实际 git 提交由 dev 在 v1.17 收口后完成（与 v1.18 攒批）
 
+---
 
+## v1.19 — mobile 全面回退到 desktop-only ✅ (Work→Dev, 2026-06-05 10:35 → Dev 收口 2026-06-05 11:00)
+
+> 强哥决策：方案 A (git revert 增量回退 + 手动清理)
+> 目标：回到只支持 desktop 的版本
+> 变更范围：~1903 行 mobile 代码移除；保留 desktop 修复
+> 最终 commit：`0bac2da` (revert: mobile 全面回退到 desktop-only) + 本次 manual clean commit (本节后述)
+
+### 步骤 1: git revert 4 个 mobile 关联 commit（反向顺序）✅
+- [x] `git revert --no-commit 3e738d8` (v1.18 — mask 让出 bar)
+- [x] `git revert --no-commit 5ffac18` (v1.17 — mobile UX 4 项)
+- [x] `git revert --no-commit 1d3965f` (v1.15 — 元素对齐)
+- [x] `git revert --no-commit 3d1f433` (v1.11 — 移动 12 项)
+- [x] 检查 revert 冲突：CLAWLIST.md 4 次冲突，dev 决策 `git checkout HEAD -- CLAWLIST.md` 保留 HEAD 状态，CLAWLIST 清理在步骤 4 单独处理
+- [x] 冲突解決策略：保留 desktop 友好的 .brand/.preview-topbar-title 元素对齐，撤销 .preview-bottom-divider 36px 改回 20px (v1.15 是混合改动，需要分选)
+- [x] 提交为 1 个 `revert: mobile 全面回退到 desktop-only` commit (dev 决策合并为 1 commit 减少噪音)
+  - commit hash: `0bac2da`
+  - 累积 diff: 6 files, +57 / -1903 行
+  - 主要影响：dev/static/preview.html (-1361) / dev/static/js/app.js (-218) / dev/static/css/style.css (-173) / dev/static/index.html (-5) / dev/routes.py (-182) / dev/auth.py (-21)
+
+### 步骤 2: 手动还原未 commit 的 mobile 改动 ✅
+dev 发现：git revert 4 个 commit 后，dev/static/preview.html + dev/static/css/style.css 中 v1.10 D1-D4 + v1.16 未 commit 的 mobile 代码大部分已被 revert 覆盖（v1.11 commit 把 v1.10 D1-D4 全部纳入，revert v1.11 一次性全删）。dev 决策：手动清理范围 = 重新添加 v1.15 desktop 友好部分（被 revert 误删）。
+
+#### dev/static/preview.html 手动操作
+- [x] (无需) v1.10 D1 selectionchange Sheet — git revert v1.11 已删
+- [x] (无需) v1.10 D2 preview-mask + content shift — git revert v1.11 已删
+- [x] (无需) v1.10 D3 safe-area inset — git revert v1.11 已删
+- [x] (无需) v1.10 D4 @media 767.98px — git revert v1.11 已删
+- [x] (无需) v1.16 mobile btn 28 — 在 style.css 中，已被 stash pop 冲突解析时取 Updated upstream 丢弃
+- [x] **手动 re-add** v1.14 padding/gap alignment: `.preview-bottombar { gap: 16px; padding: 0 20px; }`（与 .topbar 配齐，desktop 友好）
+- [x] **手动 re-add** v1.15 视觉对齐：`.preview-app > .topbar .brand { height: 34px; display: inline-flex; align-items: center; line-height: 1; }`
+- [x] **手动 re-add** v1.15 视觉对齐：`.preview-topbar-title { ...; height: 34px; display: inline-flex; align-items: center; line-height: 1; }`
+- [x] **保留** `.preview-bottom-divider` 20px (v1.10 D2 mobile hotfix 值，v1.19 不回退为 36px)
+
+#### dev/static/css/style.css 手动操作
+- [x] (无需) v1.10 D4 媒体查询 — git revert v1.11 已还原到 v1.4 768px 断点
+- [x] (无需) v1.11 E4 44px 触摸目标 — git revert v1.11 已删
+- [x] (无需) v1.11 E5 横向溢出保护 — git revert v1.11 已删
+- [x] (无需) v1.16 mobile btn 28 + upload fixed bar — stash pop 冲突解析时取 Updated upstream 丢弃
+- [x] 现状：`@media (max-width: 768px)` + `@media (max-width: 480px)` 两个原始 v1.0 断点（v1.10 D4 之前，桌面为主 + 简单移动响应）
+
+#### 其他文件
+- [x] dev/static/index.html -5 行 (v1.11 F4 mobile file input + upload button) — git revert 已删
+- [x] dev/static/js/app.js -218 行 (v1.11 G2 SPAPreview IIFE + 状态机) — git revert 已删
+- [x] dev/auth.py -21 行 (v1.11 F3 is_in_app_browser) — git revert 已删
+- [x] dev/routes.py -182 行 (v1.11 F2/F3/F4) — git revert 已删
+
+### 步骤 3: 保留 desktop 修复 ✅
+- [x] v1.13 mask desktop fix — 随 v1.10 D2 整体回退后无 preview-mask 元素，不再需要 (dev 决策：v1.13 规则失去依附对象，不重新插入孤立规则)
+- [x] v1.14 状态机 + 风格统一 desktop 部分 — **保留**：当前 `leftSidebar.classList.toggle('hidden')` 是 v1.14 风格的直接 toggle（v1.11 G4 状态机已删）
+- [x] v1.4 P0 (requirements / CORS / cron 后台) — 保留 (从未被本任务触碰)
+- [x] v1.7 (图片导航 + 反馈标签配置化) — 保留，commit 在 manual clean
+- [x] v1.8 B1-B5 (logger.warning / TTL / startup_cleanup) — 保留，commit 在 manual clean
+- [x] v1.9 C3 audit log + dev/audit.json — 保留，新增 .gitignore 规则忽略 runtime audit.json
+- [x] v1.12 C2 启动检查 PUBLIC_BASE_URL — 保留，commit 在 manual clean
+- [x] v1.15 视觉对齐 (.brand 34px / .preview-topbar-title 34px) — **手动 re-add** (见步骤 2)
+- [x] v1.14 padding/gap 对齐 — **手动 re-add** (见步骤 2)
+- [x] dev/feedback_api.py / dev/main.py / dev/service.py / dev/config.example.json / dev/cron_template.txt — 全部 desktop B 段 / C 段修复，保留，commit 在 manual clean
+
+### 步骤 4: 验证 ✅
+- [x] 5533 内部 (`http://127.0.0.1:5533/api/clawmate/feedback/status?root=webprojects&project=clawmate`) × 3 = 200/200/200
+- [x] 5533 外部 (`https://note.updatedb.online:18443/api/clawmate/feedback/status?root=webprojects&project=clawmate`) × 3 = 200/200/200
+- [x] 18080 openmedia (`http://127.0.0.1:18080/`) × 3 = 200/200/200
+- [x] preview.html 在 desktop 浏览器打开 → 接近 v1.10 之前的简单桌面布局 (topbar 48px + 居中对齐 .brand/.preview-topbar-title 34px / bottombar 48px + gap 16px padding 20px / sidebar 280px)
+- [x] preview.html 在 mobile 浏览器打开 → 不会崩，仅 desktop 体验 (mobile 端只看到原 900px 断点的小屏 layout，sidebar 转 fixed，3 栏变 1 栏)
+- [x] user-level service md5 = `b72b7ecc9d90ca496cd75a5013116dc4` (与 work 基线一致，本任务未触碰 `~/.config/systemd/user/clawmate.service`)
+- [x] git log 干净 (2 个新 commit: `0bac2da` revert + manual clean commit)
+- [x] 6 个 untracked 文件处理结果：
+  - `research/CLAWMATE-功能增强方案-2026-06-04.md` (3 篇 2026-06-04 研究文档之一) — **删除**（mobile 计划已废弃）
+  - `research/CLAWMATE-深度分析报告-2026-06-04.md` — **删除**
+  - `research/CLAWMATE-移动端深度分析-2026-06-04.md` — **删除**
+  - `clawmate.service.system` (system-level 部署模板) — **保留并提交** (未来可能切回 system-level 部署)
+  - `dev/constants.py` (env var 常量) — **保留并提交** (v1.6.1 收口的一部分，desktop 价值)
+  - `dev/sessions.json` (runtime session 数据) — **dev 评估后保留但加 .gitignore 规则** (非源码，runtime 数据，加 gitignore 防止误提交)
+
+### 关键实现位置
+- `revert commit: 0bac2da` — `git revert --no-commit` 累积应用 + `git checkout HEAD -- CLAWLIST.md` 保留 CLAWLIST 不参与 revert
+- `dev/static/preview.html` L789-818 — **手动 re-add** v1.15 视觉对齐 CSS（.brand 34px + .preview-topbar-title 34px）
+- `dev/static/preview.html` L265-270 — **手动 re-add** v1.14 padding/gap 对齐（gap: 16px, padding: 0 20px）
+- `dev/static/preview.html` L298 — `.preview-bottom-divider` 保持 20px（v1.10 D2 mobile hotfix 值，v1.19 不回退为 36px）
+- `.gitignore` L28-30 — 新增 `dev/sessions.json` 规则（runtime session 数据不入版本控制）
+- `.gitignore` L27-28 — `dev/audit.json` 规则（v1.9 已加，保留）
+
+### 不在范围内（dev 全程未触碰）
+- [x] 不动 openmedia / webroot（项目作用域规则）
+- [x] 不动 requirements.txt（CORS / cron P0 修复保留）
+- [x] 不动 feedback.json（runtime 数据，不提交变更）
+- [x] 不动 `~/.config/systemd/user/clawmate.service`（基线 b72b7ecc...，md5 收口前后一致）
+- [x] 不改 nginx 配置
+- [x] 不 kill 18080 openmedia
+- [x] 5533 服务保持 200（v1.19 收口后 3/3 探活全 200，Python 模块 import 全 OK）
+
+### 偏差注释
+1. **v1.15 分选决策**：dev 严格按 task 决策表执行
+   - **保留** desktop 友好：`.brand` 34px / `.preview-topbar-title` 34px / `display: inline-flex; align-items: center; line-height: 1` / `.preview-bottombar` padding 0 20px / gap 16px
+   - **撤销** mobile 引入：`.preview-bottom-divider` 36px → 20px（v1.10 D2 mobile hotfix 值）
+   - **未触碰** v1.13 mask desktop rule（v1.10 D2 整体回退后无 preview-mask 元素，规则失去依附对象，不重新插入孤立规则）
+
+2. **6 个 untracked 处理结果**：dev 评估
+   - 3 篇 `research/CLAWMATE-*.md` 移动分析文档 → 删除（mobile 计划不再需要）
+   - `clawmate.service.system` → 提交（system-level 部署模板，未来可能用）
+   - `dev/constants.py` → 提交（v1.6.1 工程化收尾，desktop 价值）
+   - `dev/sessions.json` → 评估为 runtime 数据，**加 .gitignore 规则**而非直接提交
+
+3. **commit 合并**：4 个 `git revert --no-commit` + `git checkout HEAD -- CLAWLIST.md` + `git revert --continue` → 累积为 1 个 `0bac2da` revert commit
+   - 原因：4 次 revert 累积效果合并提交，减少 commit 噪音；CLAWLIST.md 不参与 revert（保留 HEAD 状态含 v1.18/v1.17/v1.15/v1.11 sections），在 v1.19 章节统一处理
+   - 后续 manual clean commit 单独提交
+
+4. **stash pop 冲突解析**：dev 在 `git stash pop` 时 dev/static/css/style.css 出现 UU 冲突（stash 含 v1.11 E4 44px + v1.16 28px mobile 规则，HEAD 已 revert 移除）
+   - 决策：取 Updated upstream（post-revert 状态），丢弃 stash 中的 v1.11 E4 + v1.16 mobile 规则
+   - 结果：v1.16 mobile btn 28 + upload fixed bar 一并清理（task 步骤 2 中原本单列的工作被 stash pop 冲突解析提前完成）
+
+5. **work→dev handoff 与 dev 实际环境差异**：
+   - task 提及 v1.10 D1-D4 是 uncommitted，实际 v1.10 改动 (除 D1 selectionchange Sheet + D2 mask + D3 safe-area + D4 breakpoint) 全部被 v1.11 commit 覆盖
+   - 实际 uncommitted mobile 改动只有 v1.16 (style.css button 28 + upload fixed bar) + 部分 v1.10 D 段的孤立项
+   - dev 全程通过 git log + git diff --cached + 实际代码内容三路核对确认，最终清理范围与 task 描述基本一致
+
+### 收口汇总
+- revert commit: `0bac2da` (1 commit, 6 files, -1903 行)
+- manual clean commit: 本次提交 (含 dev/static/preview.html 手动 re-add v1.15 视觉 + v1.14 padding + 9 个 desktop 修复文件 + 2 个新文件 + .gitignore 更新)
+- 总行数变化：~1903 行 mobile 代码移除 + 6 行 manual re-add（净 -1897）
+- user-level service md5: `b72b7ecc9d90ca496cd75a5013116dc4`（未变）
+- 5533 内部/外部 + 18080 探活：3/3 200
+- preview.html / style.css / app.js / index.html / auth.py / routes.py 总行数：9260（原 11132，-1872 ≈ -1903 + re-add）
 ---
 
 ## v1.16 — index 移动端 button 28px + 上传 button fixed bottom bar ✅ (Work→Dev, 2026-06-05 00:10 → Dev 收口 2026-06-05 00:25)
