@@ -169,20 +169,26 @@ def clear_failures(username: str, client_ip: str) -> None:
 
 
 # ── Auth config helpers ──────────────────────────────────────────────────────
-def load_auth_config(config: dict) -> dict:
-    """Return auth config dict from global config, with safe defaults."""
-    return config.get(AUTH_CONFIG_KEY) or {}
+def load_auth_config(config: dict | None = None) -> dict:
+    """Return auth config dict from config.load(), with safe defaults.
+
+    v1.26: 从 config.load() 读取，不再依赖传入的 dict。
+    保留 config 参数供向后兼容。
+    """
+    from config import load as _cfg
+    return _cfg().auth.__dict__ if _cfg().auth else {}
 
 
-def is_auth_enabled(config: dict) -> bool:
+def is_auth_enabled(config: dict | None = None) -> bool:
     """Return True only when auth section exists with a non-empty password_hash."""
-    ac = load_auth_config(config)
-    return bool(ac and ac.get("password_hash", "").strip())
+    from config import load as _cfg
+    c = _cfg()
+    return bool(c.auth and c.auth.password_hash.strip())
 
 
-def get_session_ttl(config: dict) -> int:
-    ac = load_auth_config(config)
-    return int(ac.get("session_ttl_minutes", 480)) * 60
+def get_session_ttl(config: dict | None = None) -> int:
+    from config import load as _cfg
+    return _cfg().auth.session_ttl_minutes * 60
 
 
 # ── Middleware ────────────────────────────────────────────────────────────────

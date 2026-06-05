@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from constants import CONFIG_PATH_ENV, PUBLIC_BASE_URL_ENV
+from config import load as load_config
 
 logger = logging.getLogger("clawmate.service")
 
@@ -46,39 +47,33 @@ def _normalize_rel_path(rel_path: str) -> str:
 
 
 def _load_config() -> Dict:
-    try:
-        stat = CONFIG_PATH.stat()
-    except FileNotFoundError:
-        return {
-            "roots": [{"id": "media", "label": "媒体", "dir": str((Path.home() / ".openclaw" / "media").resolve())}],
-            "defaultRootId": "media",
-        }
-
-    mtime = stat.st_mtime
-    cached = _CONFIG_CACHE.get("data")
-    # v1.8 B3: 双条件 — mtime 命中 + 未过期 (TTL 兜底)
-    if cached is not None and _CONFIG_CACHE.get("mtime") == mtime:
-        if time.time() < float(_CONFIG_CACHE.get("expires_at") or 0.0):
-            return cached  # type: ignore[return-value]
-        # mtime 没变但 TTL 过期 → 强制重新加载 (config 可能在 mtime 不变时被外部进程重写)
-        logger.info(
-            "[service] config cache TTL expired (mtime=%.0f, age=%ds), forcing reload",
-            mtime, int(time.time() - float(_CONFIG_CACHE.get("expires_at") or time.time())),
-        )
-
-    try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        data = {
-            "roots": [{"id": "media", "label": "媒体", "dir": str((Path.home() / ".openclaw" / "media").resolve())}],
-            "defaultRootId": "media",
-        }
-
-    _CONFIG_CACHE["mtime"] = mtime
-    _CONFIG_CACHE["data"] = data
-    _CONFIG_CACHE["expires_at"] = time.time() + _CONFIG_CACHE_TTL_SECONDS
-    return data
+    """从 config.load() 返回 dict 格式（保持外部兼容）。"""
+    cfg = load_config()
+    return {
+        "roots": [{"id": r.id, "label": r.label, "dir": r.dir, "agent_id": r.agent_id} for r in cfg.roots],
+        "defaultRootId": cfg.default_root_id,
+        "port": cfg.port,
+        "public_base_url": cfg.public_base_url,
+        "fallback_cron_interval": cfg.fallback_cron_interval,
+        "openclaw": {
+            "gateway_url": cfg.openclaw.gateway_url,
+            "hook_token": cfg.openclaw.hook_token,
+        },
+        "feedback": {
+            "tags": [{"label": t.label, "prompt": t.prompt} for t in cfg.feedback.tags],
+        },
+        "onlyoffice": {
+            "api_js_url": cfg.onlyoffice.api_js_url,
+            "jwt_secret": cfg.onlyoffice.jwt_secret,
+            "mode": cfg.onlyoffice.mode,
+            "callback_url": cfg.onlyoffice.callback_url,
+        },
+        "auth": {
+            "username": cfg.auth.username,
+            "password_hash": cfg.auth.password_hash,
+            "session_ttl_minutes": cfg.auth.session_ttl_minutes,
+        },
+    }
 
 
 def get_roots() -> Tuple[List[Dict], str]:

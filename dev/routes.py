@@ -29,6 +29,8 @@ from service import (
 )
 from validators import VALIDATORS
 from feedback_api import router as feedback_router, _wake_agent_for_root
+from config import load as config
+from store import create_items as store_create_items, list_items as store_list_items, project_abbr as store_project_abbr
 
 
 router = APIRouter()
@@ -42,19 +44,11 @@ from constants import PUBLIC_BASE_URL_ENV, CONFIG_PATH_ENV, ONLYOFFICE_JWT_SECRE
 @router.get("/api/clawmate/config", response_class=JSONResponse)
 async def public_config():
     """返回前端安全的公开配置（不含 JWT secret 等敏感字段）。"""
-    from pathlib import Path
-    config_path = Path(os.environ.get(CONFIG_PATH_ENV, "config.json"))
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        data = {}
-    fb_cfg = data.get("feedback", {}) or {}
-    tags = fb_cfg.get("tags", [])
+    cfg = config()
     return {
-        "roots": data.get("roots", []),
-        "defaultRootId": data.get("defaultRootId", ""),
-        "feedback_tags": tags,
+        "roots": [{"id": r.id, "label": r.label, "dir": r.dir, "agent_id": r.agent_id} for r in cfg.roots],
+        "defaultRootId": cfg.default_root_id,
+        "feedback_tags": [{"label": t.label, "prompt": t.prompt} for t in cfg.feedback.tags],
     }
 ONLYOFFICE_TOKEN_TTL = 3600
 
@@ -564,14 +558,9 @@ async def clawmate_onlyoffice_script_url():
     """Return the ONLYOFFICE API JS URL so the frontend can load it dynamically."""
     onlyoffice_url = os.getenv("CLAWMATE_ONLYOFFICE_URL")
     if not onlyoffice_url:
-        # fallback: read from config.json
+        # fallback: read from config via config.load()
         try:
-            import json
-            from pathlib import Path
-            config_path = Path(os.environ.get("CLAWMATE_CONFIG", str(Path(__file__).parent / "config.json")))
-            with open(config_path) as f:
-                cfg = json.load(f)
-            onlyoffice_url = (cfg.get("onlyoffice") or {}).get("api_js_url", "")
+            onlyoffice_url = config().onlyoffice.api_js_url
         except Exception:
             onlyoffice_url = ""
     return JSONResponse(content={"url": onlyoffice_url or ""})
@@ -591,14 +580,8 @@ async def clawmate_onlyoffice_config(request: Request, root: str = "", path: str
     if not target.exists() or target.is_dir():
         raise HTTPException(status_code=404, detail="File not found")
 
-    # Load onlyoffice config from config.json
-    config_path = Path(os.environ.get(CONFIG_PATH_ENV, "config.json"))
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            cfg_data = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        cfg_data = {}
-    onlyoffice_cfg = cfg_data.get("onlyoffice", {})
+    # Load onlyoffice config from config.load()
+    onlyoffice_cfg = config().onlyoffice
 
     # Determine mode: query param > config.json > default "edit"
     if not mode:
@@ -665,8 +648,8 @@ async def clawmate_onlyoffice_config(request: Request, root: str = "", path: str
     if mode == "edit" and ext != "pdf":
         editor_mode = "edit"
 
-    # callback_url: config.json > constructed from public_base_url
-    cfg_callback = onlyoffice_cfg.get("callback_url", "") or ""
+    # callback_url: config > constructed from public_base_url
+    cfg_callback = config().onlyoffice.callback_url or ""
     if cfg_callback:
         callback_url = f"{cfg_callback.rstrip('/')}?token={quote(token)}"
     else:
@@ -1095,73 +1078,35 @@ async def clawmate_subtitle_correct(request: Request):
     # file = 媒体文件路径（与前端预览上下文一致）
     # note = AI 操作指令（含 SRT 文件路径，供 agent 读取）
     project = media_path.split("/")[0] if "/" in media_path else media_path
-    # feedback.json 放在项目根目录
-    fb_root = root_path / project
-    fb_root.mkdir(parents=True, exist_ok=True)
-    fb_path = fb_root / "feedback.json"
 
-    # 读取现有 feedback 或新建
-    import json as _json
-    if fb_path.exists():
-        try:
-            fb_data = _json.loads(fb_path.read_text(encoding="utf-8"))
-        except Exception:
-            fb_data = {"items": []}
-    else:
-        fb_data = {"items": []}
-
-    items = fb_data.get("items", [])
-    last_id = fb_data.get("last_id", 0)
-    # 避免重复纠错：同媒体文件有 pending/in_progress 任务则跳过
-    for item in items:
+    # 使用 store.create_items 写入反馈
+    # 避免重复纠错：先检查已有 pending/in_progress
+    existing, _ = store_list_items(root_id, project, status="", file=media_path)
+    for item in existing:
         if item.get("file") == media_path and item.get("status") in ("pending", "in_progress"):
             raise HTTPException(status_code=409, detail="已有相同的纠错任务在处理中")
 
-    from datetime import datetime as _dt
-    from datetime import timezone as _tz, timedelta as _td
-    CST = _tz(_td(hours=8))
-    ts = _dt.now(CST).strftime("%Y-%m-%d %H:%M:%S")
+    note_text = (
+        "【AI 字幕纠错任务】\n"
+        "请修正以下 SRT 字幕文件的文字内容，保持所有时间戳不变。\n"
+        "SRT 文件路径（写回目标）：" + safe_rel + "\n"
+        "修正规则：\n"
+        "1. 仅修正文字转录错误、添加标点符号\n"
+        "2. 不改变任何时间戳（'--> ' 行保持原样）\n"
+        "3. 不合并或拆分字幕段\n"
+        "4. 不改变原始段落编号\n"
+        "5. 输出必须是合法 SRT 格式\n"
+        "6. 用修正后的完整 SRT 内容替换写回源文件"
+    )
+    new_items = store_create_items(
+        root_id, project, media_path,
+        [{"text": srt_content.strip(), "note": note_text}],
+    )
 
-    item_id = f"FD-SRT-{last_id + 1:04d}"
-    new_item = {
-        "id": item_id,
-        "status": "pending",
-        "file": media_path,   # 媒体文件路径，前端按此匹配 feedback card
-        "note": (
-            "【AI 字幕纠错任务】\n"
-            "请修正以下 SRT 字幕文件的文字内容，保持所有时间戳不变。\n"
-            "SRT 文件路径（写回目标）：" + safe_rel + "\n"
-            "修正规则：\n"
-            "1. 仅修正文字转录错误、添加标点符号\n"
-            "2. 不改变任何时间戳（'--> ' 行保持原样）\n"
-            "3. 不合并或拆分字幕段\n"
-            "4. 不改变原始段落编号\n"
-            "5. 输出必须是合法 SRT 格式\n"
-            "6. 用修正后的完整 SRT 内容替换写回源文件\n\n"
-            "字幕内容：\n"
-            + srt_content.strip()
-        ),
-        "content": srt_content.strip(),  # 完整 SRT 内容供 agent 读取
-        "position": "",
-        "updated": ts,
-        "result": "",
-    }
-    items.append(new_item)
+    if not new_items:
+        raise HTTPException(status_code=409, detail="纠错任务已存在")
 
-    # 更新 last_id
-    max_id = last_id
-    import re as _re
-    for item in items:
-        m = _re.search(r'FD-\w+-("d+)', item.get("id", ""))
-        if m:
-            max_id = max(max_id, int(m.group(1)))
-    fb_data["items"] = items
-    fb_data["last_id"] = max_id
-    fb_data["root"] = root_id
-    fb_data["project"] = project
-    fb_data["updated"] = ts
-
-    fb_path.write_text(_json.dumps(fb_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    item_id = new_items[0]["id"]
 
     # 立即触发 agent
     _wake_agent_for_root(root_id)
@@ -1169,7 +1114,7 @@ async def clawmate_subtitle_correct(request: Request):
     return JSONResponse(content={
         "ok": True,
         "id": item_id,
-        "feedbackFile": str(fb_path),
+        "feedbackFile": str(resolve_root(root_id) / project / "feedback.json"),
         "message": "纠错任务已创建，agent 正在处理中",
     })
 

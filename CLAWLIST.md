@@ -10,7 +10,89 @@
 
 偏差加注释，不留烂尾。
 
-> ## 🔧 Service md5 谜题解答（v1.22 揭晓）
+## v1.26 — config.py + store.py + cron-tick + 清理 ✅ (Dev, 2026-06-06 01:31 → 01:50)
+
+> **范围**：新增 `config.py`、`store.py`；重写 `feedback_api.py`；修改 `routes.py`、`service.py`、`auth.py`、`main.py`、`cron_template.txt`；清理 `subtitle.py` 死代码
+>
+> **目标**：散装 config/feeadback 读写 → 类型化 ConfigLoader + FeedbackStore 纯函数；cron-tick 端点；删除死代码
+
+### 新增
+
+#### 1. `dev/config.py` — ConfigLoader
+- [x] 模块级单例，TTL 60s 缓存
+- [x] 类型化 data class: AppConfig / RootEntry / OpenClawConfig / FeedbackConfig / FeedbackTag / OnlyOfficeConfig / AuthConfig
+- [x] 便捷方法：`root_agent(root_id)` / `root_dir(root_id)`
+- [x] `set_config_path()` 由 main.py 启动时调用
+- [x] 读取失败时返回空默认值（不崩溃）
+
+#### 2. `dev/store.py` — FeedbackStore
+- [x] 纯函数集：`create_items()` / `update_item()` / `list_items()` / `status_count()` / `scan_all()` / `project_abbr()`
+- [x] 原子写（tmp + os.replace）
+- [x] 所有函数写 journalctl INFO 日志
+- [x] `scan_all()` 不抛异常（错误收集到 return.errors）
+- [x] `ScanResult` 返回 checked_roots / pending_total / pending_roots / errors
+
+### 修改
+
+#### 3. `dev/feedback_api.py` — 重写
+- [x] 散装 json.load → `config.load()`
+- [x] `_read_feedback_json` / `_build_feedback_json` / `_filter_items` / `_get_feedback_path` → `store.*`
+- [x] 删除 `_build_agent_message()` / `_load_cron_template()` / `_build_action_list()`
+- [x] `_wake_agent_for_root()` message 改为内联字符串（不加载任何模板）
+- [x] 新增 `POST /api/clawmate/feedback/cron-tick` 端点
+- [x] 内部路由使用 store.*（参数、response 不变）
+
+#### 4. `dev/routes.py` — 修改
+- [x] `/api/clawmate/config` 端点：json.load → `config.load()`
+- [x] ONLYOFFICE 相关 config 读取：`config.load().onlyoffice` / `config.load().onlyoffice.callback_url`
+- [x] ONLYOFFICE `/script-url` fallback：`config.load()`
+- [x] SRT 端点内联 feedback 读写 → `store.create_items()`
+- [x] 导入 `config` + `store.*`
+
+#### 5. `dev/service.py` — 修改
+- [x] `_load_config()` 内部改为 `config.load()` 返回 dict（保持外部兼容）
+- [x] 添加 `from config import load as load_config` 导入
+
+#### 6. `dev/auth.py` — 修改
+- [x] `load_auth_config()`：内部用 `config.load()` 读取
+- [x] `is_auth_enabled()`：内部用 `config.load()`
+- [x] `get_session_ttl()`：内部用 `config.load()`
+
+#### 7. `dev/main.py` — 修改
+- [x] 启动时：`set_config_path()` + `load_cfg()`
+- [x] banner 中 config 读取改为 `load_cfg()`
+- [x] `_sync_cron_jobs()`：使用 `load_cfg().roots` / `load_cfg().openclaw` / `load_cfg().feedback`
+- [x] AuthMiddleware 传入 `config=load_cfg()`
+- [x] `--set-password` CLI 仍直接文件读写（config.py 不提供写操作）
+
+#### 8. `dev/cron_template.txt` — 重写
+- [x] 全文改为："执行 POST {base_url}/api/clawmate/feedback/cron-tick"
+
+#### 9. `dev/subtitle.py` — 清理死代码
+- [x] 删除 `correct_srt()` / `_load_llm_config()` / `_parse_srt()` / `_build_srt()`
+- [x] 保留 `extract_subtitle()` / `_parse_whisper_segments()` / `_extract_subtitles_internal()`
+- [x] 验证：`grep` 无引用
+
+### 不做的事
+- ❌ 不改 hooks.mappings（v1.25 已删）
+- ❌ 不改 feedback.json 格式
+- ❌ 不改 openmedia/webroot
+- ❌ 不改 config.py 写操作（--set-password 仍走文件直接读写）
+- ❌ 不改 constants.py
+- ❌ 不改 feedback_schema.py
+
+### 验证结果
+- [x] 5533 内部 `feedback/status` → HTTP 200
+- [x] 5533 内部 `feedback/list` → HTTP 200
+- [x] 5533 内部 `feedback/cron-tick` → HTTP 200 (`{"ok":true}`)
+- [x] 5533 内部 `/config` → HTTP 200
+- [x] 5533 内部 `/health` → HTTP 200
+- [x] 18443 外部 `feedback/status` → HTTP 200
+- [x] 18443 外部 `feedback/cron-tick` → HTTP 200
+- [x] 死函数 grep 验证：ALL CLEAN
+- [x] Python 编译：全部 8 个 py 文件通过
+
+> 🔧 Service md5 谜题解答（v1.22 揭晓）
 > 
 > **根因**：user-level systemd unit load 时**自动规范化** service 文件（合并多行 Environment= / 重写注释 / 重排字段），导致 `systemctl --user cat clawmate.service` 输出**与磁盘 `cat ~/.config/systemd/user/clawmate.service` 不一致**。
 > 

@@ -28,41 +28,29 @@ from constants import (
     ONLYOFFICE_URL_ENV,
 )
 
+from config import set_config_path, load as load_cfg
+
 # ── config resolution ──────────────────────────────────────────────
-CONFIG_PATH = Path(
-    os.environ.get(CONFIG_PATH_ENV) or (Path(__file__).parent / "config.json")
-)
+CONFIG_PATH_STR = os.environ.get(CONFIG_PATH_ENV) or str(Path(__file__).parent / "config.json")
+CONFIG_PATH = Path(CONFIG_PATH_STR)
+set_config_path(CONFIG_PATH_STR)
 STATIC_DIR = Path(__file__).parent / "static"
 
-try:
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-        config = json.load(f)
-except (FileNotFoundError, json.JSONDecodeError):
-    print(f"[clawmate] WARNING: config.json not found or invalid at {CONFIG_PATH}, using defaults", file=sys.stderr)
-    config = {
-        "roots": [
-            {
-                "id": "media",
-                "label": "媒体",
-                "dir": str((Path.home() / ".openclaw" / "media").resolve()),
-            }
-        ],
-        "defaultRootId": "media",
-    }
+# Load config via config.py
+cfg = load_cfg()
 
 # env overrides (highest priority)
-_onlyoffice_cfg = config.get("onlyoffice", {}) or {}
 ONLYOFFICE_API_JS_URL = os.environ.get(
     ONLYOFFICE_URL_ENV,
-    _onlyoffice_cfg.get("api_js_url"),
+    cfg.onlyoffice.api_js_url,
 )
 ONLYOFFICE_JWT_SECRET = os.environ.get(
     ONLYOFFICE_JWT_SECRET_ENV,
-    _onlyoffice_cfg.get("jwt_secret", ""),
+    cfg.onlyoffice.jwt_secret,
 )
 PUBLIC_BASE_URL = os.environ.get(
     PUBLIC_BASE_URL_ENV,
-    config.get("public_base_url", ""),
+    cfg.public_base_url,
 )
 
 # inject env vars for routes.py / service.py
@@ -86,7 +74,7 @@ def _run_set_password(force: bool = False):
     import getpass
     from auth import hash_password, verify_password
 
-    # Load current config
+    # Load current config (direct file read for write operations)
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             cfg = json.load(f)
@@ -128,7 +116,6 @@ def _run_set_password(force: bool = False):
     cfg["auth"]["password_hash"] = new_hash
     cfg["auth"]["session_ttl_minutes"] = ac.get("session_ttl_minutes", 480)
 
-    # Preserve onlyoffice section exactly as-is
     onlyoffice = cfg.get("onlyoffice") or {}
     cfg["onlyoffice"] = onlyoffice
 
@@ -160,7 +147,6 @@ _cors_allowed.extend([
 ])
 app.add_middleware(
     CORSMiddleware,
-    # CORS 白名单已在上方构建
     allow_origins=_cors_allowed,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -170,7 +156,8 @@ app.add_middleware(
 # Import auth middleware - must be after CORS, before static files
 from auth import AuthMiddleware  # noqa: E402
 
-app.add_middleware(AuthMiddleware, config=config)
+# v1.26: AuthMiddleware 内部使用 config.load()，不再需要传入 config dict
+app.add_middleware(AuthMiddleware, config=load_cfg())
 
 # import routes AFTER env vars are set (they read env at import time)
 from routes import router as clawmate_router  # noqa: E402
@@ -203,19 +190,13 @@ from cron_manager import add_cron, _get_cron_bin  # noqa: E402
 
 
 def _sync_cron_jobs():
-    """读取 config.json，创建单一的兜底 cron job（v1.25）。
+    """读取 config，创建单一的兜底 cron job。
 
-    - webhook 是正常路径，cron 只作为安全网
-    - 如果 config.json 没有 openclaw.hook_token，cron 是唯一路径，间隔更短 (6h)
+    v1.26: 使用 config.load() 替代 json.load。
     """
-    try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-    except Exception:
-        print("[clawmate] WARNING: 无法加载 config.json，跳过 cron job 同步")
-        return
+    cfg = load_cfg()
 
-    roots = cfg.get("roots", [])
+    roots = cfg.roots
     if not roots:
         return
 
@@ -248,51 +229,18 @@ def _sync_cron_jobs():
         print(f"[clawmate] WARNING: 无法读取 {template_path}，跳过 cron job 同步")
         return
 
-    # 从 config.json 读取 feedback.tags，生成动作列表
-    DEFAULT_ACTION_LIST = (
-        "   - **删除**：移除 item.content 指向的段落/代码/章节\n"
-        "   - **修改**：用 item.note 的要求改写对应内容\n"
-        "   - **扩展**：基于 item.content 扩写，如增加章节、补充细节\n"
-        "   - **简化**：精简或重构对应内容\n"
-        "   - **审批**: 文档通过人工审核\n"
-        "   - **执行**：如果 item.note 指向 research/*.md 中的方案文档，将该方案作为工作实施的内容，完成方案计划。"
-    )
-    feedback_cfg = cfg.get("feedback") or {}
-    tags = feedback_cfg.get("tags") if isinstance(feedback_cfg, dict) else None
-    if isinstance(tags, list) and len(tags) > 0:
-        action_lines = []
-        for t in tags:
-            if not isinstance(t, dict):
-                continue
-            label = (t.get("label") or "").strip()
-            prompt = (t.get("prompt") or "").strip()
-            if not label and not prompt:
-                continue
-            if not prompt:
-                action_lines.append(f"   - **{label}**")
-            else:
-                action_lines.append(f"   - **{label}**：{prompt}" if label else f"   - {prompt}")
-        action_list_text = "\n".join(action_lines) if action_lines else DEFAULT_ACTION_LIST
-    else:
-        action_list_text = DEFAULT_ACTION_LIST
-
     base_url = "http://localhost:5533"
-    all_root_ids = [r.get("id") for r in roots if r.get("id")]
+    all_root_ids = [r.id for r in roots]
     all_roots = ", ".join(all_root_ids)
 
     # agent_id 用第一个 root 的 agent（cron 扫所有 root）
-    primary_agent = roots[0].get("agent_id", "default")
+    primary_agent = roots[0].agent_id
 
     # 兜底间隔：无 webhook 时 6h，否则 24h
-    oc = cfg.get("openclaw") or {}
-    has_webhook = bool(oc.get("hook_token", ""))
-    interval = "6h" if not has_webhook else cfg.get("fallback_cron_interval", "24h")
+    has_webhook = bool(cfg.openclaw.hook_token)
+    interval = "6h" if not has_webhook else cfg.fallback_cron_interval
 
-    message = template.format(
-        base_url=base_url,
-        all_roots=all_roots,
-        feedback_action_list=action_list_text,
-    )
+    message = template.format(base_url=base_url, all_roots=all_roots)
     if add_cron(cron_bin, cron_name, primary_agent, message, every=interval):
         print(f"[clawmate] 兜底 cron job 已创建: {cron_name} (interval={interval}, agent={primary_agent}, roots=[{all_roots}])")
     else:
@@ -308,20 +256,17 @@ if __name__ == "__main__":
         _run_set_password(force=force_password)
         sys.exit(0)
 
-    port = int(os.environ.get("CLAWMATE_PORT", config.get("port", 5533)))
-    max_upload = int(os.environ.get("CLAWMATE_MAX_UPLOAD_MB", config.get("max_upload_mb", 100)))
+    port = int(os.environ.get("CLAWMATE_PORT", cfg.port))
+    max_upload = int(os.environ.get("CLAWMATE_MAX_UPLOAD_MB", cfg.max_upload_mb))
     print(f"[clawmate] Starting on http://0.0.0.0:{port}")
     print(f"[clawmate] Web UI at /clawmate/")
     print(f"[clawmate] Config: {CONFIG_PATH}")
     print(f"[clawmate] ONLYOFFICE API JS: {ONLYOFFICE_API_JS_URL}")
     print(f"[clawmate] Max upload: {max_upload}MB")
 
-    # v1.25: webhook wake 状态（从 config.json 读取）
-    _oc = config.get("openclaw") or {}
-    _hook_token = _oc.get("hook_token", "")
-    _gateway_url = _oc.get("gateway_url", "http://127.0.0.1:18789")
-    if _hook_token:
-        print(f"[clawmate] Webhook wake: ENABLED  (wake -> {_gateway_url}/hooks/agent)")
+    # webhook wake 状态
+    if cfg.openclaw.hook_token:
+        print(f"[clawmate] Webhook wake: ENABLED  (wake -> {cfg.openclaw.gateway_url}/hooks/agent)")
         print(f"[clawmate]   config source: config.json -> openclaw.hook_token")
     else:
         print(f"[clawmate] Webhook wake: DISABLED  (openclaw.hook_token empty, fallback to cron only)", file=sys.stderr)
