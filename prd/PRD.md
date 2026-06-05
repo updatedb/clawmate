@@ -5,10 +5,11 @@
 | 字段 | 内容 |
 |-----|------|
 | 产品名称 | ClawMate 龙虾伴侣 |
-| 文档版本 | V1.4 |
-| 编写日期 | 2026-06-01 |
+| 文档版本 | V1.5 |
+| 编写日期 | 2026-06-05 |
 | 前置文档 | [MRD](prd/MRD.md) · [需求澄清](REQUIREMENT_CLARIFICATION.md) · [竞品分析](research/competitor-analysis.md) |
 | 项目类型 | 研发需求 |
+| **平台支持** | **Desktop-only**（v1.19 全面回退所有 mobile 兼容设计）|
 
 ## 2. 项目背景
 

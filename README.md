@@ -6,6 +6,20 @@
 
 ---
 
+> ## ⚠️ 当前平台支持状态
+> 
+> **Desktop-only**（推荐使用桌面浏览器，宽度 ≥ 1024px）
+> 
+> **移动端适配已废弃**（v1.19 已全面回退所有 mobile 兼容设计：Mermaid pinch-zoom / 44px 触摸目标 / SPA iframe / feedback selectionchange / IntersectionObserver / WebView cookie / safe-area inset / mobile upload / 移动媒体查询等）：
+> - 代码净减少 ~1842 行（11 个文件）
+> - commit `0bac2da`（revert）+ `890f2cb`（manual clean）
+> - 桌面体验保持完整（v1.13 mask desktop / v1.14 状态机 / v1.15 元素对齐等 desktop 友好修复全部保留）
+> - 移动端不再维护但页面不会崩（仅 desktop 体验）
+> 
+> 如需移动端支持，请 fork v1.18 或之前版本。
+
+---
+
 ## 📸 核心工作流
 
 ```mermaid

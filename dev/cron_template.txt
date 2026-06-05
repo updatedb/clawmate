@@ -1,10 +1,17 @@
-执行 clawmate 反馈收件箱检查。
+ClawMate 反馈收件箱兜底扫描（cron 模式）。
+
+> 本 cron 是 webhook 不可达时的兜底，正常路径下 agent 由 webhook 实时触发。
+> 触发频率：每 24h 一次（config.json: fallback_cron_interval）。
+> 覆盖范围：所有 root（无需按 agent 分组）。
 
 ## 环境
 base_url = {base_url}
+roots = [{all_roots}]
 
 ## 步骤 1：获取待处理列表
-GET {base_url}/api/clawmate/feedback/list?root={roots_str}&status=pending
+
+依次对每个 root 调：
+GET {base_url}/api/clawmate/feedback/list?root=<root_id>&status=pending
 
 响应结构：
 ```json
@@ -31,7 +38,7 @@ GET {base_url}/api/clawmate/feedback/list?root={roots_str}&status=pending
 }}
 ```
 
-**关键判断**：total_pending=0 时，<important>立即结束任务，不做任何输出。</important>
+**关键判断**：所有 root 累计 total_pending=0 时，<important>立即结束任务，不做任何输出。</important>
 
 ## 步骤 2：逐条处理（仅当 total_pending > 0）
 
@@ -47,7 +54,7 @@ b. 执行处理动作：
    根据 item.note（用户建议/指令），对 item.file 文件中 item.content 对应的内容执行操作：
 
 {feedback_action_list}
-   
+
    定位方式：item.position 存在时定位到该行/位置附近查找 item.content；否则全文搜索 item.content。
    处理完成后将 item.file 写回磁盘。
 
@@ -61,3 +68,8 @@ c. 标记完成：
 
 ## 步骤 3：输出统计
 格式：共 N 条 pending，完成 X 条，失败 Y 条。无 pending 时不输出。
+
+## 注意
+- 这是兜底机制，正常情况下 webhook 已经实时处理了 feedback
+- 跑这个 cron 时如果发现大量 pending，说明 webhook 链路异常
+- 排查方向：看 `~/.openclaw/logs/clawmate-webhook.log` 审计日志 + `openclaw gateway status`

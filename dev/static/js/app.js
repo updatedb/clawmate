@@ -819,6 +819,8 @@ async function loadSidebarParent(dir) {
 
 function renderSidebarTree() {
   els.dirList.innerHTML = "";
+  // v1.24-b 防御性：过滤 name 为空白字符的目录项（避免 CSS ellipsis 截断导致"空名"假象）
+  sidebarEntries = sidebarEntries.filter(e => !(e.is_dir && e.name.trim() === ""));
   if (!sidebarEntries.length) {
     const li = document.createElement("li");
     li.textContent = "（无子目录）";
