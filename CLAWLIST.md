@@ -10,6 +10,173 @@
 
 偏差加注释，不留烂尾。
 
+## v1.28 — 移动端独立页面 m/index.html + m/preview.html ✅ (Dev subagent, 2026-06-06 02:08+)
+
+> **范围**：UI 优化 P3+P4（移动端独立页面）
+>
+> **目标**：创建 mobile-only 页面 `m/index.html`（目录浏览）+ `m/preview.html`（阅读+反馈）
+
+### 新增文件
+
+| 文件 | 说明 |
+|------|------|
+| `dev/static/m/style.css` | 移动端全局样式（CSS 变量、safe-area、暗色模式、面板动画）|
+| `dev/static/m/index.html` | 移动端目录浏览页面 |
+| `dev/static/m/preview.html` | 移动端内容阅读 + 大纲 + 反馈页面 |
+
+### 阶段三：m/index.html — 移动端目录浏览
+
+#### 布局
+
+```
+┌─────────────────────────────┐
+│ ClawMate            ▽ 切换  │  ← 顶栏 44px
+├─────────────────────────────┤
+│ 🔍 搜索文件名...            │  ← 搜索框，输入即前端过滤
+├─────────────────────────────┤
+│ 全部 · 文档 · 代码 · 数据 · 媒体 · 其他 │  ← 横滑类型过滤标签
+├────┬────────────────────────┤
+│ 排 │ ↓ 最新  ↑ 名称 ↓ 大小 │  ← 排序行
+├────┴────────────────────────┤
+│ 📄 filename      2.3k   ›   │  ← 文件列表，每行 48px
+│ 📁 dir/            —    ›   │
+└─────────────────────────────┘
+```
+
+#### 功能
+
+- [x] **顶部栏**：显示 root 名称 + ▽ 切换按钮
+- [x] **Root 切换面板**：底部升起面板，点击 root 切换 + 重新加载目录
+- [x] **搜索框**：输入即前端 filter，不调后端；✕ 清除按钮
+- [x] **类型过滤标签**：横滑（overflow-x: auto），全部 · 文档 · 代码 · 数据 · 媒体 · 其他
+  - 映射规则同桌面版 `guess_category()` 逻辑，前端静态映射
+  - 选中高亮（底色 + 边框色变化）
+- [x] **排序行**：三个按钮（↓ 最新 / ↑ 名称 / ↓ 大小），点击切换 key+方向
+- [x] **文件列表**：emoji 图标 + 文件名 + 大小 + `›` 箭头，每行 48px
+  - 文件夹显示 `—` 代替大小，点击进下一级目录
+  - 文件点击进 `m/preview.html?root=X&file=Y`
+- [x] **API 调用**：`GET /api/clawmate/config`（roots）+ `GET /api/clawmate/list?root=X&dir=Y`（文件列表）
+- [x] **排序/过滤/搜索全前端处理**，不调后端
+
+#### 样式约定
+
+```css
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --topbar: 44px;
+  --bottombar: 48px;
+  --font: 16px;
+  --touch: 44px;
+}
+```
+
+- `html { -webkit-text-size-adjust: 100% }`
+- `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">`
+- 元素 `min-height: 44px`（触控目标）
+- 无阴影、无圆角装饰（纯色块）
+- `-webkit-overflow-scrolling: touch`
+- 暗色模式跟随系统 `@media (prefers-color-scheme: dark)`
+
+### 阶段四：m/preview.html — 移动端阅读+反馈
+
+#### 布局
+
+```
+┌─────────────────────────────┐
+│ ←     文件名.md    📑 💬   │  ← 顶栏 44px
+├─────────────────────────────┤
+│                             │
+│       Markdown 正文         │  ← 全宽（padding 12px）
+│       markdown-it 渲染      │
+│       KaTeX / Mermaid       │
+│       / highlight.js        │
+│                             │
+├─────────────────────────────┤
+│   📑 大纲 · 💬 反馈 · 📖 阅读 │  ← 底栏 48px
+└─────────────────────────────┘
+```
+
+#### 顶部栏
+
+- [x] `←` 返回（`index.html?root=X&dir=Y`）
+- [x] 中间：文件名（text-overflow: ellipsis）
+- [x] 右侧：`📑`（大纲）`💬`（反馈）按钮
+
+#### Markdown 渲染
+
+- [x] 使用 `markdown-it`（与桌面版相同配置 + container/emoji/footnote/task-lists 插件）
+- [x] 加载 vendor：`markdown-it.min.js` + 4 插件（CDN）+ `highlight.min.js` + `katex.min.js` + `auto-render.min.js` + `mermaid-v11.min.js`
+- [x] CSS：`../vendor/github-markdown-dark.min.css` + `../vendor/katex.min.css`
+- [x] 代码复制按钮（每个 pre 顶部）
+- [x] 外部链接新标签打开
+- [x] 代码高亮 + KaTeX 渲染 + Mermaid 图表
+
+#### 大纲面板（底部 60% 弹出）
+
+- [x] 从底部升起，占据 60% 屏幕高度
+- [x] 顶部：标题 + ✕ 关闭按钮
+- [x] 每一项显示 heading 文本，缩进对应层级（h1→h4）
+- [x] 点击某一项 → 滚动正文到对应锚点 → 收起面板
+- [x] 从 `h1-h4` heading 元素提取大纲（客户端渲染后扫描 DOM），不依赖后端 API
+
+#### 反馈面板（底部 50% 弹出）
+
+- [x] 从底部升起，占据 50% 屏幕高度
+- [x] 加载时调 `GET /api/clawmate/feedback/list?root=X&project=Y&file=Z`
+- [x] 显示 ID + note 摘要 + 状态图标
+- [x] pending 计数体现在标题中（如 `💬 反馈 (3)`）
+
+#### 选中文本 → 提交反馈
+
+- [x] 选择文本后浮动工具条出现在选区上方（`📝 🗑 🔧 📈 📉 ⚡`）
+- [x] 点击标签 → 底部升起输入面板，自动填入意见
+- [x] 输入面板：选中内容 + 意见文本框 + 快捷标签按钮 + 提交按钮
+- [x] 提交：`POST /api/clawmate/feedback {root, project, path, selections[...]}`
+- [x] 成功 → toast 提示 → 刷新反馈列表
+- [x] `getLineNumbersFromRange()` 从 rawContent 计算 startLine/endLine
+- [x] `selectionchange` + `touchend` 监听触发
+
+#### 阅读模式（沉浸式）
+
+- [x] 底栏 📖 阅读按钮 → 隐藏顶栏+底栏，全屏阅读
+- [x] 点击内容区域切换沉浸模式
+- [x] 顶部出现提示气泡"再次点击退出阅读模式"（2s 后渐隐）
+- [x] `body.immersive` class 控制 `.m-topbar` / `.m-bottombar` 显示/隐藏
+
+#### Mermaid 缩放
+
+- [x] 缩放控制按钮（− / ⊙ / +）
+- [x] 双指 pinch zoom（0.5x - 3x）
+- [x] 双击循环 1x → 2x → 1x
+
+### 验证结果
+
+```bash
+# 移动端页面静态资源 200
+curl -s -o /dev/null -w "HTTP %{http_code}\n" "http://127.0.0.1:5533/clawmate/m/index.html"   # → 200
+curl -s -o /dev/null -w "HTTP %{http_code}\n" "http://127.0.0.1:5533/clawmate/m/preview.html" # → 200
+curl -s -o /dev/null -w "HTTP %{http_code}\n" "http://127.0.0.1:5533/clawmate/m/style.css"    # → 200
+
+# 后端 API 仍正常
+curl -s -o /dev/null -w "HTTP %{http_code}\n" "http://127.0.0.1:5533/api/clawmate/feedback/status?root=webprojects&project=clawmate"  # → 200
+```
+
+- [x] 5533 内部 `clawmate/m/index.html` → HTTP 200
+- [x] 5533 内部 `clawmate/m/preview.html` → HTTP 200
+- [x] 5533 内部 `clawmate/m/style.css` → HTTP 200
+- [x] 5533 内部 `feedback/status` → HTTP 200
+
+### 不做的事
+
+- ❌ 不改桌面版文件（index.html / preview.html / app.js / style.css）
+- ❌ 不改后端 API
+- ❌ 不改 feedback.json 格式
+- ❌ 不新增后端路由
+- ❌ 不添加移动端桌面版响应式切换脚本（任务说明，留待后续）
+
+---
+
 ## v1.27 — 排序修复 + GitHub Markdown CSS + markdown-it 迁移 ✅ (Dev, 2026-06-06 02:01 → 02:30)
 
 > **范围**：UI 优化 P1（排序修复 + GitHub CSS）+ P2（markdown-it 迁移）

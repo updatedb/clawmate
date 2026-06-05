@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <link rel="icon" href="data:," />
+  <title>ClawMate</title>
+  <link rel="stylesheet" href="./style.css" />
+  <style>
+    /* Quick overrides for index-specific */
+    .m-file-count {
+      padding: 6px 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--bg);
+    }
+    .m-path-indicator {
+      padding: 4px 12px;
+      font-size: 11px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--bg);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="m-app" id="app">
+    <!-- Topbar -->
+    <header class="m-topbar" id="topbar">
+      <span class="m-topbar-title" id="rootTitle">ClawMate</span>
+      <div class="m-topbar-actions">
+        <button class="m-topbar-btn" id="btnSwitchRoot" title="切换根目录">▽</button>
+      </div>
+    </header>
+
+    <!-- Search -->
+    <div class="m-search">
+      <input type="search" class="m-search-input" id="searchInput" placeholder="🔍 搜索文件名..." autocomplete="off" />
+      <button class="m-search-clear" id="searchClear">✕</button>
+    </div>
+
+    <!-- Type filter tags -->
+    <div class="m-tags" id="tags">
+      <button class="m-tag active" data-type="all">全部</button>
+      <button class="m-tag" data-type="text">📄文档</button>
+      <button class="m-tag" data-type="code">📋代码</button>
+      <button class="m-tag" data-type="data">📊数据</button>
+      <button class="m-tag" data-type="media">🎬媒体</button>
+      <button class="m-tag" data-type="other">📦其他</button>
+    </div>
+
+    <!-- Sort row -->
+    <div class="m-sort" id="sortRow">
+      <span class="m-sort-label">排序</span>
+      <button class="m-sort-btn active" data-sort="time">↓ 最新</button>
+      <button class="m-sort-btn" data-sort="name">↑ 名称</button>
+      <button class="m-sort-btn" data-sort="size">↓ 大小</button>
+    </div>
+
+    <!-- Path indicator -->
+    <div class="m-path-indicator" id="pathIndicator"></div>
+
+    <!-- File count -->
+    <div class="m-file-count" id="fileCount"></div>
+
+    <!-- File list -->
+    <div class="m-file-list" id="fileList">
+      <div class="m-loading">加载中...</div>
+    </div>
+  </div>
+
+  <!-- Root switch panel -->
+  <div class="m-panel-overlay" id="rootPanelOverlay"></div>
+  <div class="m-panel" id="rootPanel">
+    <div class="m-panel-handle"></div>
+    <div class="m-panel-header">
+      <span class="m-panel-title">切换根目录</span>
+      <button class="m-panel-close" id="rootPanelClose">✕</button>
+    </div>
+    <div class="m-panel-body" id="rootPanelBody"></div>
+  </div>
+
+  <!-- Toast -->
+  <div class="m-toast" id="toast" style="display:none;"></div>
+
+<script>
+(function() {
+  'use strict';
+
+  const API_BASE = '/api/clawmate';
+
+  // ── State ──
+  const state = {
+    roots: [],
+    rootId: '',
+    rootLabel: '',
+    dir: '',
+    entries: [],
+    filterType: 'all',
+    sortKey: 'time',
+    sortDir: 'desc',
+    searchQuery: '',
+  };
+
+  const els = {
+    rootTitle: document.getElementById('rootTitle'),
+    btnSwitchRoot: document.getElementById('btnSwitchRoot'),
+    searchInput: document.getElementById('searchInput'),
+    searchClear: document.getElementById('searchClear'),
+    tags: document.getElementById('tags'),
+    sortRow: document.getElementById('sortRow'),
+    fileList: document.getElementById('fileList'),
+    fileCount: document.getElementById('fileCount'),
+    pathIndicator: document.getElementById('pathIndicator'),
+    rootPanelOverlay: document.getElementById('rootPanelOverlay'),
+    rootPanel: document.getElementById('rootPanel'),
+    rootPanelBody: document.getElementById('rootPanelBody'),
+    rootPanelClose: document.getElementById('rootPanelClose'),
+    toast: document.getElementById('toast'),
+  };
+
+  // ── Category mapping (same logic as desktop guess_category) ──
+  function guessCategory(entry) {
+    if (entry.is_dir) return 'dir';
+    if (entry.category) return entry.category;
+    const name = entry.name || '';
+    const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
+    const IMG_EXTS = ['jpg','jpeg','png','gif','webp','bmp','svg','ico'];
+    const AUDIO_EXTS = ['mp3','ogg','wav','flac','m4a','aac','wma'];
+    const VIDEO_EXTS = ['mp4','webm','mov','avi','mkv','wmv','flv','m4v'];
+    const CODE_EXTS = ['py','js','ts','jsx','tsx','css','scss','less','html','htm','java','c','cpp','h','go','rs','rb','php','sh','bash','sql','pl'];
+    const TEXT_EXTS = ['md','markdown','txt','log','json','yaml','yml','toml','ini','cfg','conf','env','csv','tsv','xml','gpx','kml','srt'];
+    const DATA_EXTS = ['json','yaml','yml','csv','tsv','xml','sql','db','sqlite'];
+    const DOC_EXTS = ['pdf','doc','docx','xls','xlsx','ppt','pptx','odt','ods','odp'];
+
+    if (IMG_EXTS.includes(ext) || AUDIO_EXTS.includes(ext) || VIDEO_EXTS.includes(ext)) return 'media';
+    if (DOC_EXTS.includes(ext)) return 'text';
+    if (CODE_EXTS.includes(ext)) return 'code';
+    if (TEXT_EXTS.includes(ext)) return 'text';
+    if (DATA_EXTS.includes(ext)) return 'data';
+    return 'other';
+  }
+
+  function getFileIcon(entry) {
+    if (entry.is_dir) return '📁';
+    const cat = guessCategory(entry);
+    const name = entry.name || '';
+    const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
+    const ICON_MAP = {
+      md: '📄', markdown: '📄', txt: '📄', log: '📄',
+      pdf: '📕',
+      py: '🐍', js: '📜', ts: '📘', html: '🌐', css: '🎨',
+      sh: '💻', bash: '💻',
+      json: '🔧', yaml: '🔧', yml: '🔧', toml: '🔧', ini: '🔧', xml: '🔧',
+      sql: '🗃️',
+      go: '🐹', rs: '🦀', java: '☕', c: '⚙️', cpp: '⚙️',
+      mp3: '🎵', wav: '🎵', flac: '🎵',
+      mp4: '🎬', mkv: '🎬', avi: '🎬', mov: '🎬',
+      jpg: '🖼️', jpeg: '🖼️', png: '🖼️', gif: '🖼️', svg: '🖼️',
+      zip: '🗜️', tar: '🗜️', rar: '🗜️', '7z': '🗜️', gz: '🗜️',
+    };
+    return ICON_MAP[ext] || (cat === 'code' ? '📋' : cat === 'data' ? '📊' : cat === 'media' ? '🎬' : cat === 'text' ? '📄' : '📦');
+  }
+
+  function formatSize(bytes) {
+    if (bytes == null || bytes === 0) return '—';
+    const units = ['B','KB','MB','GB'];
+    let i = 0;
+    let n = bytes;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+    return n.toFixed(1) + ' ' + units[i];
+  }
+
+  function showToast(msg, duration) {
+    const el = els.toast;
+    el.textContent = msg;
+    el.style.display = 'block';
+    el.style.opacity = '1';
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => {
+      el.style.opacity = '0';
+      setTimeout(() => { el.style.display = 'none'; }, 300);
+    }, duration || 2000);
+  }
+
+  // ── API calls ──
+  async function fetchConfig() {
+    const res = await fetch(API_BASE + '/config');
+    if (!res.ok) throw new Error('config fetch failed');
+    const data = await res.json();
+    state.roots = data.roots || [];
+    state.rootId = data.defaultRootId || (state.roots[0] ? state.roots[0].id : '');
+  }
+
+  async function fetchList(rootId, dir) {
+    const url = API_BASE + '/list?root=' + encodeURIComponent(rootId) + '&dir=' + encodeURIComponent(dir || '');
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('list fetch failed: ' + res.status);
+    return await res.json();
+  }
+
+  // ── Filter + Sort (frontend only) ──
+  function getFilteredSorted() {
+    let items = state.entries;
+
+    // Filter out dotfiles
+    items = items.filter(e => !e.name.startsWith('.'));
+
+    // Type filter
+    if (state.filterType !== 'all') {
+      if (state.filterType === 'dir') {
+        items = items.filter(e => e.is_dir);
+      } else if (state.filterType === 'media') {
+        items = items.filter(e => !e.is_dir && guessCategory(e) === 'media');
+      } else {
+        items = items.filter(e => !e.is_dir && guessCategory(e) === state.filterType);
+      }
+    }
+
+    // Search
+    if (state.searchQuery) {
+      const q = state.searchQuery.toLowerCase();
+      items = items.filter(e => e.name.toLowerCase().includes(q));
+    }
+
+    // Sort
+    const dir = state.sortDir === 'desc' ? -1 : 1;
+    items.sort((a, b) => {
+      // Dirs always first
+      if (a.is_dir && !b.is_dir) return -1;
+      if (!a.is_dir && b.is_dir) return 1;
+      if (state.sortKey === 'name') return dir * a.name.localeCompare(b.name);
+      if (state.sortKey === 'size') return dir * ((a.size || 0) - (b.size || 0));
+      return dir * ((a.mtime || 0) - (b.mtime || 0));
+    });
+
+    return items;
+  }
+
+  // ── Render ──
+  function render() {
+    const items = getFilteredSorted();
+    const list = els.fileList;
+
+    list.innerHTML = '';
+
+    if (items.length === 0) {
+      list.innerHTML = '<div class="m-file-empty">' +
+        (state.searchQuery ? '未找到匹配的文件' : '目录为空') +
+        '</div>';
+      updateCount(0);
+      return;
+    }
+
+    items.forEach(entry => {
+      const row = document.createElement('div');
+      row.className = 'm-file-item';
+
+      const icon = document.createElement('span');
+      icon.className = 'm-file-icon';
+      icon.textContent = getFileIcon(entry);
+
+      const name = document.createElement('span');
+      name.className = 'm-file-name';
+      name.textContent = entry.name;
+
+      const size = document.createElement('span');
+      size.className = 'm-file-size';
+      size.textContent = entry.is_dir ? '—' : formatSize(entry.size || entry.size_bytes);
+
+      const arrow = document.createElement('span');
+      arrow.className = 'm-file-arrow';
+      arrow.textContent = '›';
+
+      row.appendChild(icon);
+      row.appendChild(name);
+      row.appendChild(size);
+      row.appendChild(arrow);
+
+      row.addEventListener('click', () => {
+        if (entry.is_dir) {
+          loadDir(entry.path || entry.relPath || entry.name);
+        } else {
+          const path = encodeURIComponent(entry.path || entry.relPath || entry.name);
+          const url = 'preview.html?root=' + encodeURIComponent(state.rootId) + '&file=' + path;
+          window.location.href = url;
+        }
+      });
+
+      list.appendChild(row);
+    });
+
+    updateCount(items.length);
+  }
+
+  function updateCount(n) {
+    els.fileCount.textContent = state.searchQuery
+      ? '搜索 "' + state.searchQuery + '" · ' + n + ' 项'
+      : n + ' 项';
+  }
+
+  function updatePath() {
+    els.pathIndicator.textContent = state.dir
+      ? state.rootLabel + ' / ' + state.dir
+      : state.rootLabel;
+  }
+
+  function updateRootTitle() {
+    els.rootTitle.textContent = state.rootLabel || 'ClawMate';
+  }
+
+  // ── Load directory ──
+  async function loadDir(dir) {
+    state.dir = dir || '';
+    els.fileList.innerHTML = '<div class="m-loading">加载中...</div>';
+    try {
+      const data = await fetchList(state.rootId, state.dir);
+      state.entries = (data.entries || []).map(e => ({
+        ...e,
+        relPath: e.path || e.name || '',
+      }));
+      updatePath();
+      render();
+    } catch (e) {
+      els.fileList.innerHTML = '<div class="m-file-empty">加载失败: ' + e.message + '</div>';
+    }
+  }
+
+  // ── Root switching ──
+  function showRootPanel() {
+    els.rootPanelBody.innerHTML = '';
+    state.roots.forEach(root => {
+      const item = document.createElement('div');
+      item.className = 'm-panel-item' + (root.id === state.rootId ? ' active' : '');
+      const icon = document.createElement('span');
+      icon.className = 'm-panel-item-icon';
+      icon.textContent = root.id === state.rootId ? '📂' : '📁';
+      const text = document.createElement('span');
+      text.className = 'm-panel-item-text';
+      text.textContent = root.label || root.id;
+      item.appendChild(icon);
+      item.appendChild(text);
+      item.addEventListener('click', () => {
+        if (root.id !== state.rootId) {
+          state.rootId = root.id;
+          state.rootLabel = root.label || root.id;
+          updateRootTitle();
+          loadDir('');
+        }
+        hideRootPanel();
+      });
+      els.rootPanelBody.appendChild(item);
+    });
+    els.rootPanelOverlay.classList.add('visible');
+    els.rootPanel.classList.add('visible');
+  }
+
+  function hideRootPanel() {
+    els.rootPanelOverlay.classList.remove('visible');
+    els.rootPanel.classList.remove('visible');
+  }
+
+  // ── Init ──
+  async function init() {
+    // Load config
+    try {
+      await fetchConfig();
+      const root = state.roots.find(r => r.id === state.rootId);
+      state.rootLabel = root ? (root.label || root.id) : state.rootId;
+      updateRootTitle();
+    } catch (e) {
+      showToast('配置加载失败', 3000);
+    }
+
+    // Load directory
+    loadDir('');
+
+    // ── Events ──
+
+    // Root switch
+    els.btnSwitchRoot.addEventListener('click', showRootPanel);
+    els.rootPanelOverlay.addEventListener('click', hideRootPanel);
+    els.rootPanelClose.addEventListener('click', hideRootPanel);
+
+    // Search
+    let searchTimer;
+    els.searchInput.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        state.searchQuery = els.searchInput.value.trim();
+        els.searchClear.classList.toggle('visible', !!state.searchQuery);
+        render();
+      }, 200);
+    });
+    els.searchClear.addEventListener('click', () => {
+      state.searchQuery = '';
+      els.searchInput.value = '';
+      els.searchClear.classList.remove('visible');
+      render();
+      els.searchInput.focus();
+    });
+
+    // Type filter
+    els.tags.addEventListener('click', e => {
+      const tag = e.target.closest('.m-tag');
+      if (!tag) return;
+      els.tags.querySelectorAll('.m-tag').forEach(t => t.classList.remove('active'));
+      tag.classList.add('active');
+      state.filterType = tag.dataset.type;
+      render();
+    });
+
+    // Sort
+    els.sortRow.addEventListener('click', e => {
+      const btn = e.target.closest('.m-sort-btn');
+      if (!btn) return;
+      const key = btn.dataset.sort;
+      if (state.sortKey === key) {
+        // Toggle direction
+        state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.sortKey = key;
+        state.sortDir = key === 'name' ? 'asc' : 'desc';
+      }
+      els.sortRow.querySelectorAll('.m-sort-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      // Update label
+      const labels = {
+        time: { desc: '↓ 最新', asc: '↑ 最早' },
+        name: { desc: '↓ Z→A', asc: '↑ A→Z' },
+        size: { desc: '↓ 最大', asc: '↑ 最小' },
+      };
+      btn.textContent = labels[key][state.sortDir];
+      render();
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>
