@@ -31,3 +31,8 @@ dev/sessions.json
 
 # Runtime feedback data (regenerated from feedback_api.py)
 feedback.json
+
+# 产品文档/研究/测试目录（不提交到 GitHub）
+/prd/
+/research/
+/test/
