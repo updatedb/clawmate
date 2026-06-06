@@ -4,213 +4,161 @@
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
----
-
-> ## ⚠️ 当前平台支持状态
-> 
-> **Desktop-only**（推荐使用桌面浏览器，宽度 ≥ 1024px）
-> 
-> **移动端适配已废弃**（v1.19 已全面回退所有 mobile 兼容设计：Mermaid pinch-zoom / 44px 触摸目标 / SPA iframe / feedback selectionchange / IntersectionObserver / WebView cookie / safe-area inset / mobile upload / 移动媒体查询等）：
-> - 代码净减少 ~1842 行（11 个文件）
-> - commit `0bac2da`（revert）+ `890f2cb`（manual clean）
-> - 桌面体验保持完整（v1.13 mask desktop / v1.14 状态机 / v1.15 元素对齐等 desktop 友好修复全部保留）
-> - 移动端不再维护但页面不会崩（仅 desktop 体验）
-> 
-> 如需移动端支持，请 fork v1.18 或之前版本。
+ClawMate 是一个面向 AI Agent 工作流的**文件管理 → 预览 → 反馈闭环**工具。与传统文件浏览器不同，它关注的不是「浏览」，而是「用户在预览时发现问题 → 即时反馈 → Agent 自动修改」的完整链路。
 
 ---
 
-## 📸 核心工作流
+## 截图
+
+| 桌面端文件浏览 | 桌面端预览 + 大纲 |
+|:---:|:---:|
+| ![桌面端文件浏览](assets/cm-browser.png) | ![桌面端预览 + 大纲](assets/cm-preview.png) |
+
+| 移动端文件浏览 | 移动端预览 |
+|:---:|:---:|
+| ![移动端文件浏览](assets/cm-mobile.png) | ![移动端预览](assets/cm-mobile-preview.png) |
+
+---
+
+## 核心工作流
 
 ```mermaid
 flowchart LR
-    A[Agent 产出文件] -->|写入目录| B[用户点击预览链接]
-    B --> C[preview.html 全屏渲染<br>Mermaid / KaTeX / Office / 视频]
+    A[Agent 产出文件] -->|写入目录| B[用户打开预览链接]
+    B --> C[preview.html 全屏渲染<br>Mermaid / KaTeX / Office / 视频 / 代码]
     C --> D{发现问题?}
-    D -->|是| E[选中文本 → 浮层弹出<br>填备注 → ✅ 提交]
-    E --> F[写入 feedback.json<br>cron 触发 Agent 处理]
-    F --> G[Agent 读取反馈<br>精确定位选区 → 修改文件]
-    G --> H[更新 Feedback 状态<br>done / failed]
+    D -->|是| E[选中文本 → 填写备注 → 提交]
+    E --> F[写入 feedback.json<br>即时唤醒 Agent]
+    F --> G[Agent 读取反馈<br>精确定位 → 修改文件]
+    G --> H[更新反馈状态<br>done / failed]
     H --> B
     D -->|否| I[完成]
 ```
-
-| Step 1: 选中文本 | Step 2: 填写备注 | Step 3: 提交完成 |
-|:---:|:---:|:---:|
-| 在预览页选中任意文本<br>浮层自动弹出 | 在 textarea 中输入修改建议<br>可累积多条反馈 | 一键批量提交到 feedback.json<br>cron 即时唤醒 Agent 处理 |
-
-| 文件浏览 | Markdown 预览 |
-|:---:|:---:|
-| ![File Browser](assets/screenshot-browser.png) | ![Markdown Preview](assets/screenshot-preview.png) |
-
----
-
-## 我们解决了什么问题？
-
-在 AI Agent 工作流中，Agent 每天产出大量文件 — Markdown、Mermaid 图表、Office 文档、代码、音视频。但「看一眼结果 → 指出问题 → 让 Agent 修改」这个最自然的反馈循环，一直被截断：
-
-| 环节 | 传统方式 | ClawMate |
-|------|---------|----------|
-| 预览 | 下载 → 本地打开 | **点击即渲染**，Mermaid/KaTeX/Office 一键预览 |
-| 反馈 | 截图 → 打字描述位置 | **选中文本 → 填备注 → 提交**，3 秒完成 |
-| 修改 | Agent 盲猜用户意图 | **精准位置 + 选区内容直送 Agent**，零歧义 |
-| 循环 | 反复切换工具 | **preview → feedback → agent → 修改 → 再预览** 全在一屏 |
 
 ---
 
 ## 核心能力
 
-### 📂 文件管理
-- 多项目白名单目录，浏览器直接管理
-- 画廊/列表双视图，类型过滤、排序、搜索
-- 批量打包下载、拖拽上传、删除确认
-
 ### 🔍 预览引擎
-- **Markdown**：Mermaid 图表 + KaTeX 公式 + 代码语法高亮 + 大纲导航
-- **HTML**：独立渲染预览 + 实时编辑，与 Markdown 并列为 Agent 产出两大核心格式
-- **Office**：ONLYOFFICE 浏览/编辑双模式，编辑自动回写保存
-- **PDF**：ONLYOFFICE 优先，自动降级 pdf.js
-- **音视频**：内嵌播放器 + SRT 字幕面板，自动解析字幕文件，支持时间轴同步、字幕内容浏览与编辑改进
-- **代码/文本**：JSON/XML/GPX/KML 语法高亮 + 编辑模式
-- **图片**：全屏渲染 + 工具栏
+支持 10+ 种文件类型，点击即渲染，无需下载：
+
+| 类型 | 桌面端 | 移动端 |
+|------|:------:|:------:|
+| Markdown（Mermaid / KaTeX / 语法高亮） | ✅ | ✅ |
+| Mermaid 图表（支持 Ctrl+滚轮缩放 + 拖拽平移） | ✅ | ✅ |
+| Office 文档（ONLYOFFICE 嵌入预览） | ✅ | ✅ |
+| PDF | ✅（降级 pdf.js） | ✅（ONLYOFFICE） |
+| HTML 源码 | ✅ 渲染/源码切换 | ✅ 语法高亮 |
+| 代码文件：py/js/ts/css/go/rs 等 | ✅ 语法高亮 + 大纲 | ✅ 语法高亮 + 大纲 |
+| JSON | ✅ pretty-print | ✅ pretty-print |
+| 图片（支持 ‹ › 导航） | ✅ | ✅ |
+| 音视频（内嵌播放器） | ✅ | ✅ |
+| SRT 字幕（时间轴同步 + 编辑） | ✅ | ❌ |
+| GPX/KML 轨迹文件 | ✅ 纯文本 | ✅ 纯文本 |
 
 ### 💬 反馈闭环 🔑 核心差异化
 
-这是 ClawMate 与其他文件管理器**最根本的区别**。不只是预览文件，而是将用户的每一个反馈精确送达 Agent，形成闭环修改链路。
-
-**完整的反馈生命周期**：
+ClawMate 与其他文件管理器最根本的区别：不只是预览文件，而是将用户的每一个反馈精确送达 Agent，形成闭环修改链路。
 
 ```mermaid
 stateDiagram
     direction LR
     [*] --> 选中文本
-    选中文本 --> 浮层弹出: mouseup 事件
-    浮层弹出 --> 累计反馈: 填写备注 → 加入 panel
-    累计反馈 --> 提交: ✅ 一键批量 POST
-    提交 --> pending: 写入 feedback.json
-    pending --> in_progress: Agent 开始处理
-    in_progress --> done: 修改完成
-    in_progress --> failed: 无法处理
+    选中文本 --> 浮层弹出
+    浮层弹出 --> 累计反馈
+    累计反馈 --> 提交
+    提交 --> pending
+    pending --> in_progress
+    in_progress --> done
+    in_progress --> failed
     done --> [*]
     failed --> [*]
 ```
 
-**关键能力**：
-- **选中文本 → 3 秒反馈**：在 preview.html 中选中文本，浮层自动弹出，填备注即可提交
-- **精确选区定位**：选区内容 + 文件路径直达 Agent，零歧义，不用「第几段第几行」描述
-- **批量累积**：可连续选中多个位置，统一提交，不用反复切换
-- **feedback.json 托管**：所有反馈持久化在项目文件中，可追溯、可检索
-- **cron 即时触发**：提交后 Agent 立即被唤醒处理，不等待定时轮询
-- **四态流转**：pending → in_progress → done/failed，每步状态可查
-- **cron 定时轮询兜底**：每 6 小时自动检查，不遗漏任何反馈
+**关键流程**：
+1. 在预览页选中任意文本 → 浮动 `✏️ 反馈` 按钮出现
+2. 点击按钮 → 填写备注 → 提交（可连续选中多个位置，统一提交）
+3. 写入 `feedback.json` → 即时唤醒 Agent
+4. Agent 读取反馈 → 精确定位选区 → AI 理解备注 → 修改文件
+5. 状态流转：pending → in_progress → done / failed
 
-**feedback.json 格式**：
-```json
-{
-  "root": "webprojects",
-  "project": "clawmate",
-  "updated": "2026-06-01 12:51:37",
-  "last_id": 29,
-  "items": [
-    {
-      "id": "FD-CM-0004",
-      "status": "done",
-      "file": "clawmate/README.md",
-      "note": "突出这部分功能，这是核心",
-      "content": "💬 反馈闭环\\n选中文本...",
-      "updated": "2026-06-01 12:51:37",
-      "result": "README.md 反馈闭环章节已重写"
-    }
-  ]
-}
-```
+**四态追踪**：每步状态可查，可追溯、可检索。
 
-**Agent 处理流程**：
-```
-cron 检查 → GET /feedback/list?status=pending → pending > 0
-→ 逐条处理 → 定位文件/选区 → AI 理解备注 → 修改 → /feedback/update done
-→ 无法处理 → /feedback/update failed
-```
+### 📂 文件管理
+- 多项目白名单目录，root 切换面板
+- 类型过滤（文档/代码/数据/媒体/其他）+ 排序（时间/名称/大小）
+- 搜索（桌面端递归搜索，移动端输入即搜）
+- 批量下载、拖拽上传、重命名、删除（含鉴权+审计日志）
+- **移动端响应式**：独立 `m/` 页面，触控优化
 
 ### 🔗 OpenClaw 融合
+- 提交 feedback 后即时通过 webhook 唤醒 OpenClaw Agent
+- ClawMate Cron Job 定时兜底扫描（每 6/24h），防止遗漏
+- Slash Commands：`/clawmate preview`、`/clawmate list`、`/clawmate do`
 
-ClawMate 通过 OpenClaw Cron Job 机制实现反馈的自动处理。每个 root 配置对应一个独立的 cron job（每 6 小时执行），提交 feedback 后立即触发执行，实现近乎实时的响应。
+---
 
-#### Slash Commands
-- `/clawmate preview` — 生成直达 preview.html 链接
-- `/clawmate list` — 查看反馈列表（支持状态/文件/日期过滤）
-- `/clawmate do` — 自动处理所有待处理反馈
-- `/clawmate do #FD-CM-xxxx` — 处理指定反馈
+## 架构
 
-### 🚀 部署
-- curl 一行命令本地启动，与 OpenClaw 同主机运行
-- Systemd Daemon 安装，开机自启
-- GitHub Actions CI 自动构建发布
-
-
-
-## Docker 部署
-
-```bash
-# 1. 准备配置文件（参考 dev/config.example.json）
-cp dev/config.example.json config.json
-# 编辑 config.json：填入你的目录路径、认证信息等
-
-# 2. 使用 docker-compose 启动
-cd dev
-docker-compose up -d
+```mermaid
+flowchart TD
+    A[用户浏览器] -->|HTTP 5533| B[FastAPI Server]
+    B --> C[static/ — 前端页面]
+    B --> D[API /api/clawmate/*]
+    D --> E[文件系统: 读取/写入]
+    D --> F[feedback.json: 反馈持久化]
+    D --> G[subtitle.py: 字幕提取]
+    D --> H[store.py: 反馈存储引擎]
+    B --> I[Webhook /hooks/agent]
+    I --> J[OpenClaw Gateway]
+    J --> K[Agent 处理反馈]
+    K -->|修改文件| E
+    B -.-> L[Cron Job 兜底]
+    L -.->|每 N 小时| B
+    M[ONLYOFFICE DS] -->|iframe 嵌入| C
 ```
 
-### 环境变量
+---
+
+## 快速开始
+
+### Docker 部署
+
+```bash
+# 1. 准备配置文件
+cd dev
+cp config.example.json config.json
+# 编辑 config.json，填入你的目录路径和认证信息
+
+# 2. 启动
+docker-compose up -d
+
+# 3. 打开浏览器
+open http://localhost:5533/clawmate/
+```
+
+**环境变量**：
 
 | 变量 | 必填 | 默认值 | 说明 |
 |------|:----:|--------|------|
-| `CLAWMATE_PUBLIC_BASE_URL` | ✅ | — | 外部访问地址，如 `https://example.com:5533` |
-| `CLAWMATE_PORT` | | `5533` | 监听端口 |
-| `CLAWMATE_HOOK_TOKEN` | | — | OpenClaw webhook token，启用反馈 Agent 自动处理 |
-| `CLAWMATE_GATEWAY_URL` | | `http://host.docker.internal:18789` | OpenClaw Gateway 地址（Docker 内用 host.docker.internal 访问宿主机） |
-| `CLAWMATE_ONLYOFFICE_URL` | | — | ONLYOFFICE Document Server JS URL |
+| `CLAWMATE_PUBLIC_BASE_URL` | ✅ | — | 外部访问地址 |
+| `CLAWMATE_HOOK_TOKEN` | | — | OpenClaw webhook token |
+| `CLAWMATE_GATEWAY_URL` | | `http://host.docker.internal:18789` | OpenClaw Gateway |
+| `CLAWMATE_ONLYOFFICE_URL` | | — | ONLYOFFICE JS URL |
 | `CLAWMATE_ONLYOFFICE_JWT_SECRET` | | — | ONLYOFFICE JWT 密钥 |
-| `CLAWMATE_MAX_UPLOAD_MB` | | `100` | 上传文件大小限制 |
-| `CLAWMATE_ENABLE_SUBTITLE` | | `0` | 字幕提取功能，设为 `1` 启用（需额外安装 faster-whisper） |
+| `CLAWMATE_MAX_UPLOAD_MB` | | `100` | 上传限制 |
+| `CLAWMATE_ENABLE_SUBTITLE` | | `0` | 字幕提取（需安装 faster-whisper） |
 
-### 目录挂载
-
+**目录挂载**：
 ```yaml
 volumes:
   - ./config.json:/app/config.json:ro    # 配置文件
   - /path/to/your/data:/data:ro          # 数据目录
 ```
 
-`config.json` 中的 `roots[].dir` 需指向容器内的路径（如 `/data/media`），不是宿主机路径。
+`config.json` 中的 `roots[].dir` 需指向容器内路径（如 `/data/media`）。
 
-### 与 OpenClaw 集成
-
-ClawMate 依赖 OpenClaw 的 cron job 机制处理反馈。在同主机运行时：
-
-```yaml
-environment:
-  - CLAWMATE_HOOK_TOKEN=your-token
-  - CLAWMATE_GATEWAY_URL=http://host.docker.internal:18789
-```
-
-- `host.docker.internal` 是 Docker 容器访问宿主机的标准地址
-- `CLAWMATE_HOOK_TOKEN` 需与 OpenClaw `openclaw.json` 中的配置一致
-
-### 可选依赖：字幕提取
-
-字幕功能需要额外的 ML 模型依赖（~2GB）：
-
-```bash
-# 构建含字幕支持的镜像
-pip install faster-whisper
-docker-compose build clawmate
-
-# 启动时启用
-CLAWMATE_ENABLE_SUBTITLE=1 docker-compose up -d
-```
-
-### 本地快速启动（无 Docker）
+### 本地直接启动
 
 ```bash
 cd dev
@@ -220,70 +168,9 @@ cp config.example.json config.json
 python3 main.py
 ```
 
----
+### Systemd 部署
 
-## 与竞品的差异
-
-| | FileBrowser | Alist | **ClawMate** |
-|---|:---:|:---:|:---:|
-| Mermaid 图表渲染 | ❌ | ❌ | ✅ |
-| KaTeX 公式渲染 | ❌ | ❌ | ✅ |
-| ONLYOFFICE 编辑 | ❌ | ❌ | ✅ |
-| 音视频 + SRT | ❌ | ❌ | ✅ |
-| Agent 工作流集成 | ❌ | ❌ | ✅ |
-| 选中反馈闭环 | ❌ | ❌ | ✅ |
-| 维护状态 | 已停更 | 活跃 | 活跃开发中 |
-| 许可证 | Apache 2.0 | AGPL 3.0 | MIT |
-
----
-
-## 技术栈
-
-| 层 | 选型 |
-|----|------|
-| 后端 | FastAPI (Python)，1134 行 |
-| 前端 | Vanilla JS + CSS，14万行预览引擎 + 9.5万行业务逻辑 |
-| Markdown | marked + highlight.js + mermaid v11 + KaTeX |
-| Office | ONLYOFFICE Document Server，JWT HS256 安全集成 |
-| 部署 | curl 本地启动 + Systemd Daemon + GitHub Actions |
-
----
-
-## 快速开始
-
-```bash
-# 1. 准备配置
-cp config.example.json config.json
-# 编辑 config.json，填入你的目录路径
-
-# 2. 安装依赖并启动
-pip install -r requirements.txt
-python3 server.py &
-
-# 3. 或使用 curl 一键启动（配合 systemd daemon）
-# 详见下方部署章节
-```
-
-打开 `http://localhost:5533/clawmate/`，选择项目目录，点击文件即可预览。
-
-> > **Docker 部署**：见下方 [Docker 部署](#docker-部署) 章节。
-
----
-
-## 部署形态
-
-### Systemd Service 模板占位符说明
-
-仓库根目录下的 `clawmate.service.system` 是 system-level 部署的 **systemd unit 模板**，含有占位符，不能直接被 systemd 解析。部署到具体机器前必须先 `sed` 替换占位符。
-
-| 占位符 | 含义 | 默认建议值 | 影响的字段 |
-|--------|------|-----------|-----------|
-| `__CLAWMATE_DIR__` | ClawMate 安装根目录 | `/opt/clawmate` | `WorkingDirectory`、`Environment=CLAWMATE_CONFIG`、`ReadWritePaths`（共 3 处） |
-| `__CLAWMATE_USER__` | 运行用户名 | `clawmate` | `User=` |
-| `__CLAWMATE_GROUP__` | 运行用户组 | `clawmate` | `Group=` |
-| `__CLAWMATE_PORT__` | 监听端口 | `5533` | `Environment=CLAWMATE_PORT` |
-
-**部署到新路径的 sed 单命令示例**（部署到 `/opt/clawmate`，用户 `clawmate`，端口 `5533`）：
+项目提供了 `clawmate.service.system` 模板，部署前需要替换占位符：
 
 ```bash
 sed -e "s|__CLAWMATE_DIR__|/opt/clawmate|g" \
@@ -295,24 +182,117 @@ sudo cp /tmp/clawmate.service /etc/systemd/system/clawmate.service
 sudo systemctl daemon-reload && sudo systemctl enable --now clawmate
 ```
 
-> **当前部署形态**：dev sandbox 缺交互 sudo，实际跑的是 **user-level** service（`~/.config/systemd/user/clawmate.service`，`loginctl linger openclaw` 已开启，开机自启就绪），**不是** system-level。本模板供未来切回 system-level 使用。
+### 与 OpenClaw 集成
+
+ClawMate 依赖 OpenClaw 的 cron job 机制处理反馈。在同主机运行时：
+
+```yaml
+# docker-compose environment 或 config.json
+environment:
+  - CLAWMATE_HOOK_TOKEN=your-token
+  - CLAWMATE_GATEWAY_URL=http://host.docker.internal:18789
+```
+
+- `host.docker.internal` 是 Docker 容器访问宿主机的标准地址
+- `CLAWMATE_HOOK_TOKEN` 需与 OpenClaw 配置一致
+
+### 可选：字幕提取
+
+字幕功能需要额外的 ML 模型依赖（~2GB）：
+
+```bash
+# 安装依赖
+pip install faster-whisper
+
+# 启用
+CLAWMATE_ENABLE_SUBTITLE=1 docker-compose up -d
+```
+
+---
+
+## ClawMate Skill（OpenClaw 集成）
+
+项目中包含 OpenClaw Skill，提供以下 Slash Commands：
+
+### `/clawmate link <filename>`
+搜索文件并生成可点击的预览链接。
+
+```markdown
+[文件名]({base_url}/clawmate/preview.html?root=<root>&file=<encoded_path>)
+```
+
+### `/clawmate feed [status] [filename] [date]`
+查询 feedback 列表。
+
+```markdown
+| FD-CM-042 | pending | clawmate/README.md | 补充 Docker 截图 | 2026-06-06 |
+```
+
+### `/clawmate do [#ID]`
+处理待处理反馈（全部或指定 ID）。
+
+---
+
+## 配置参考
+
+### config.json 结构
+
+```json
+{
+  "roots": [
+    {
+      "id": "webprojects",
+      "label": "Web Projects",
+      "dir": "/home/user/webprojects",
+      "agent_id": "writer"
+    }
+  ],
+  "defaultRootId": "webprojects",
+  "port": 5533,
+  "public_base_url": "https://your-domain.com:5533",
+  "auth": {
+    "username": "admin",
+    "password_hash": "$2b$12$..."
+  },
+  "openclaw": {
+    "hook_token": "your-token",
+    "gateway_url": "http://127.0.0.1:18789"
+  },
+  "onlyoffice": {
+    "api_js_url": "https://your-office-server.com/web-apps/apps/api/documents/api.js",
+    "jwt_secret": "your-jwt-secret"
+  }
+}
+```
+
+### 认证
+
+ClawMate 支持基于 cookie session 的登录认证。设置 `auth.password_hash` 启用：
+
+```bash
+python3 main.py --set-password
+```
+
+启用后所有外部访问需要先登录，127.0.0.1 本地访问自动绕过。
 
 ---
 
 ## 产品状态
 
 | 维度 | 状态 |
-|------|:--:|
-| 核心文件管理 | ✅ v1.0 |
-| 预览引擎（Markdown/Office/音视频/代码） | ✅ v1.3 |
-| ONLYOFFICE 编辑链路 | ✅ v1.3 |
-| 反馈闭环（选中→提交→Agent处理） | ✅ v1.3 |
-| 图片预览 + 上一页/下一页导航 | ✅ v1.5 |
+|------|:----:|
+| 文件管理（目录浏览/排序/过滤/搜索） | ✅ v1.0 |
+| Markdown 预览（Mermaid/KaTeX/语法高亮） | ✅ v1.0 |
+| Mermaid 缩放（Ctrl+滚轮/按钮/拖拽） | ✅ v1.5 |
 | 代码大纲（函数/类定义导航） | ✅ v1.5 |
-| 移动端适配（首页/预览/反馈/大纲/图片导航） | ✅ v1.5 |
+| ONLYOFFICE Office/PDF 预览 | ✅ v1.3 |
+| 图片预览 + 上一页/下一页导航 | ✅ v1.5 |
+| 音视频播放 + SRT 字幕编辑 | ✅ v1.3 |
+| 反馈闭环（选中→提交→Agent 处理） | ✅ v1.3 |
+| 移动端适配（首页/预览/反馈/大纲） | ✅ v1.5 |
 | Docker 部署 | ✅ v1.5 |
-| Daemon 部署 | ✅ |
 | Slash Commands 集成 | ✅ v1.1 |
+| Daemon 部署（Systemd） | ✅ |
 
 ---
 
