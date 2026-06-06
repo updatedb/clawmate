@@ -119,7 +119,7 @@ async def extract_subtitle(
         await progress_callback("extracting", 0, "正在提取音频...")
 
     is_video = file_path.suffix.lower() in (".mp4", ".webm", ".mov", ".avi", ".mkv")
-    if is_video:
+    if is_video or file_path.suffix.lower() in (".mp3", ".wma", ".ogg", ".flac", ".aac", ".m4a"):
         audio_path = extract_audio(file_path)
         cleanup_audio = True
     else:
