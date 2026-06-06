@@ -33,6 +33,10 @@ ClawMate 的解法是：
 
 ---
 
+| 登录页面 |
+|:---:|
+| ![登录页面](assets/cm-login.jpg) |
+
 ## 核心工作流
 
 ```mermaid
