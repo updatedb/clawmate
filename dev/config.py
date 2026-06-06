@@ -148,16 +148,25 @@ def _parse_config(raw: dict) -> AppConfig:
     fb = raw.get("feedback") or {}
     oo = raw.get("onlyoffice") or {}
     ac = raw.get("auth") or {}
+    # Env var overrides (Docker / CI)
+    env_hook_token = os.getenv("CLAWMATE_HOOK_TOKEN")
+    env_gateway_url = os.getenv("CLAWMATE_GATEWAY_URL")
+    env_public_base_url = os.getenv("CLAWMATE_PUBLIC_BASE_URL")
+    env_port = os.getenv("CLAWMATE_PORT")
+    env_max_upload = os.getenv("CLAWMATE_MAX_UPLOAD_MB")
+    env_onlyoffice_js_url = os.getenv("CLAWMATE_ONLYOFFICE_URL")
+    env_onlyoffice_jwt = os.getenv("CLAWMATE_ONLYOFFICE_JWT_SECRET")
+
     return AppConfig(
         roots=roots,
         default_root_id=str(raw.get("defaultRootId", "")),
-        port=int(raw.get("port", 5533)),
-        max_upload_mb=int(raw.get("max_upload_mb", 100)),
-        public_base_url=str(raw.get("public_base_url", "")),
+        port=int(env_port or raw.get("port", 5533)),
+        max_upload_mb=int(env_max_upload or raw.get("max_upload_mb", 100)),
+        public_base_url=env_public_base_url or str(raw.get("public_base_url", "")),
         fallback_cron_interval=str(raw.get("fallback_cron_interval", "24h")),
         openclaw=OpenClawConfig(
-            gateway_url=str(oc.get("gateway_url", "http://127.0.0.1:18789")),
-            hook_token=str(oc.get("hook_token", "")),
+            gateway_url=env_gateway_url or str(oc.get("gateway_url", "http://127.0.0.1:18789")),
+            hook_token=env_hook_token or str(oc.get("hook_token", "")),
         ),
         feedback=FeedbackConfig(
             tags=[
@@ -167,8 +176,8 @@ def _parse_config(raw: dict) -> AppConfig:
             ]
         ),
         onlyoffice=OnlyOfficeConfig(
-            api_js_url=str(oo.get("api_js_url", "")),
-            jwt_secret=str(oo.get("jwt_secret", "")),
+            api_js_url=env_onlyoffice_js_url or str(oo.get("api_js_url", "")),
+            jwt_secret=env_onlyoffice_jwt or str(oo.get("jwt_secret", "")),
             mode=str(oo.get("mode", "edit")),
             callback_url=str(oo.get("callback_url", "")),
         ),

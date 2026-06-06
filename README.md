@@ -147,6 +147,79 @@ ClawMate 通过 OpenClaw Cron Job 机制实现反馈的自动处理。每个 roo
 - Systemd Daemon 安装，开机自启
 - GitHub Actions CI 自动构建发布
 
+
+
+## Docker 部署
+
+```bash
+# 1. 准备配置文件（参考 dev/config.example.json）
+cp dev/config.example.json config.json
+# 编辑 config.json：填入你的目录路径、认证信息等
+
+# 2. 使用 docker-compose 启动
+cd dev
+docker-compose up -d
+```
+
+### 环境变量
+
+| 变量 | 必填 | 默认值 | 说明 |
+|------|:----:|--------|------|
+| `CLAWMATE_PUBLIC_BASE_URL` | ✅ | — | 外部访问地址，如 `https://example.com:5533` |
+| `CLAWMATE_PORT` | | `5533` | 监听端口 |
+| `CLAWMATE_HOOK_TOKEN` | | — | OpenClaw webhook token，启用反馈 Agent 自动处理 |
+| `CLAWMATE_GATEWAY_URL` | | `http://host.docker.internal:18789` | OpenClaw Gateway 地址（Docker 内用 host.docker.internal 访问宿主机） |
+| `CLAWMATE_ONLYOFFICE_URL` | | — | ONLYOFFICE Document Server JS URL |
+| `CLAWMATE_ONLYOFFICE_JWT_SECRET` | | — | ONLYOFFICE JWT 密钥 |
+| `CLAWMATE_MAX_UPLOAD_MB` | | `100` | 上传文件大小限制 |
+| `CLAWMATE_ENABLE_SUBTITLE` | | `0` | 字幕提取功能，设为 `1` 启用（需额外安装 faster-whisper） |
+
+### 目录挂载
+
+```yaml
+volumes:
+  - ./config.json:/app/config.json:ro    # 配置文件
+  - /path/to/your/data:/data:ro          # 数据目录
+```
+
+`config.json` 中的 `roots[].dir` 需指向容器内的路径（如 `/data/media`），不是宿主机路径。
+
+### 与 OpenClaw 集成
+
+ClawMate 依赖 OpenClaw 的 cron job 机制处理反馈。在同主机运行时：
+
+```yaml
+environment:
+  - CLAWMATE_HOOK_TOKEN=your-token
+  - CLAWMATE_GATEWAY_URL=http://host.docker.internal:18789
+```
+
+- `host.docker.internal` 是 Docker 容器访问宿主机的标准地址
+- `CLAWMATE_HOOK_TOKEN` 需与 OpenClaw `openclaw.json` 中的配置一致
+
+### 可选依赖：字幕提取
+
+字幕功能需要额外的 ML 模型依赖（~2GB）：
+
+```bash
+# 构建含字幕支持的镜像
+pip install faster-whisper
+docker-compose build clawmate
+
+# 启动时启用
+CLAWMATE_ENABLE_SUBTITLE=1 docker-compose up -d
+```
+
+### 本地快速启动（无 Docker）
+
+```bash
+cd dev
+pip install -r requirements.txt
+cp config.example.json config.json
+# 编辑 config.json
+python3 main.py
+```
+
 ---
 
 ## 与竞品的差异
@@ -193,7 +266,7 @@ python3 server.py &
 
 打开 `http://localhost:5533/clawmate/`，选择项目目录，点击文件即可预览。
 
-> **注意**：ClawMate 依赖与 OpenClaw 在同一主机上运行（cron job 机制）。Docker 部署方案暂未提供，当前仅支持本地直接启动。
+> > **Docker 部署**：见下方 [Docker 部署](#docker-部署) 章节。
 
 ---
 
@@ -234,9 +307,12 @@ sudo systemctl daemon-reload && sudo systemctl enable --now clawmate
 | 预览引擎（Markdown/Office/音视频/代码） | ✅ v1.3 |
 | ONLYOFFICE 编辑链路 | ✅ v1.3 |
 | 反馈闭环（选中→提交→Agent处理） | ✅ v1.3 |
+| 图片预览 + 上一页/下一页导航 | ✅ v1.5 |
+| 代码大纲（函数/类定义导航） | ✅ v1.5 |
+| 移动端适配（首页/预览/反馈/大纲/图片导航） | ✅ v1.5 |
+| Docker 部署 | ✅ v1.5 |
 | Daemon 部署 | ✅ |
 | Slash Commands 集成 | ✅ v1.1 |
-| 移动端响应式 | ✅ v1.2 |
 
 ---
 

@@ -1,0 +1,3 @@
+# Optional: subtitle extraction (ML model ~2GB)
+# pip install -r requirements-opt.txt
+faster-whisper>=1.0.0

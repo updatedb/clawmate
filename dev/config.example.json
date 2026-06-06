@@ -19,7 +19,7 @@
     "_comment": "OpenClaw gateway 配置。hook_token 为空时 webhook 唤醒被禁用（仅兜底 cron 生效）。copy from ~/.openclaw/openclaw.json hooks.token"
   },
   "onlyoffice": {
-    "api_js_url": "https://file.updatedb.online:18443/web-apps/apps/api/documents/api.js",
+    "api_js_url": "https://your-onlyoffice-server.com/web-apps/apps/api/documents/api.js",
     "jwt_secret": "change-me-in-production",
     "mode": "edit",
     "callback_url": ""

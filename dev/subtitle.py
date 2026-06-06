@@ -24,11 +24,19 @@ def _format_time(seconds: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
+_FEATURE_SUBTITLE = os.getenv("CLAWMATE_ENABLE_SUBTITLE", "0") == "1"
+
+
 def _get_whisper_model(size: str = "small"):
     """延迟加载 faster-whisper 模型（全局单例）。"""
+    if not _FEATURE_SUBTITLE:
+        raise RuntimeError("Subtitle extraction disabled. 设置 CLAWMATE_ENABLE_SUBTITLE=1 启用")
     global _WHISPER_MODEL
     if _WHISPER_MODEL is None:
-        from faster_whisper import WhisperModel
+        try:
+            from faster_whisper import WhisperModel
+        except ImportError:
+            raise RuntimeError("faster-whisper 未安装，pip install faster-whisper 后重试")
         # CPU int8 量化，small 模型约 480MB
         _WHISPER_MODEL = WhisperModel(size, device="cpu", compute_type="int8")
     return _WHISPER_MODEL
