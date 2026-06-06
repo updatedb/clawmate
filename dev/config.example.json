@@ -26,12 +26,28 @@
   },
   "feedback": {
     "tags": [
-      { "label": "🗑 删除", "prompt": "清除选中内容" },
-      { "label": "🔧 修改", "prompt": "修改选中内容，思路如下：" },
-      { "label": "📈 扩展", "prompt": "详细解释选中内容" },
-      { "label": "📉 简化", "prompt": "抽象选中内容，简单描述" },
-      { "label": "⚡ 执行", "prompt": "文档审批通过，执行方案" }
-    ]
+      {
+        "label": "🗑 删除",
+        "prompt": "清除选中内容"
+      },
+      {
+        "label": "🔧 修改",
+        "prompt": "修改选中内容，思路如下："
+      },
+      {
+        "label": "📈 扩展",
+        "prompt": "详细解释选中内容"
+      },
+      {
+        "label": "📉 简化",
+        "prompt": "抽象选中内容，简单描述"
+      },
+      {
+        "label": "⚡ 执行",
+        "prompt": "文档审批通过，执行方案"
+      }
+    ],
+    "enable_subtitle": false
   },
   "auth": {
     "username": "admin",

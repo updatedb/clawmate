@@ -161,7 +161,7 @@ open http://localhost:5533/clawmate/
 | `CLAWMATE_ONLYOFFICE_URL` | | — | ONLYOFFICE JS URL |
 | `CLAWMATE_ONLYOFFICE_JWT_SECRET` | | — | ONLYOFFICE JWT 密钥 |
 | `CLAWMATE_MAX_UPLOAD_MB` | | `100` | 上传限制 |
-| `CLAWMATE_ENABLE_SUBTITLE` | | `0` | 字幕提取（也可在 config.json 中设置 `feedback.enable_subtitle: true`） |
+| `CLAWMATE_ENABLE_SUBTITLE` | | `0` | 字幕提取（也可用 config.json `feedback.enable_subtitle: true`） |
 
 **目录挂载**：
 ```yaml
@@ -212,14 +212,27 @@ environment:
 
 ### 可选：字幕提取
 
-字幕功能需要额外的 ML 模型依赖（~2GB）：
+字幕功能需要额外的 ML 模型依赖（~2GB）。启用方式（二选一）：
 
+**config.json**：
+```json
+{
+  "feedback": {
+    "enable_subtitle": true,
+    "tags": [...]
+  }
+}
+```
+
+**docker-compose**：
+```yaml
+environment:
+  - CLAWMATE_ENABLE_SUBTITLE=1
+```
+
+安装依赖：
 ```bash
-# 安装依赖
 pip install faster-whisper
-
-# 启用
-CLAWMATE_ENABLE_SUBTITLE=1 docker-compose up -d
 ```
 
 ---
