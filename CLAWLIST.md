@@ -177,6 +177,42 @@ curl -s -o /dev/null -w "HTTP %{http_code}\n" "http://127.0.0.1:5533/api/clawmat
 
 ---
 
+## v1.5 / v1.5.1 — 移动端大版本：搜索/排序/预览/反馈/图片导航/多类型预览 ✅ (Work→Dev+自测, 2026-06-06)
+
+> **范围**：移动端功能完善 + 桌面端图片导航 + 项目清理
+
+### 移动端首页 m/index.html
+- [x] **搜索框**：去掉递归搜索按钮，输入即搜，✕ 清除按钮可控
+- [x] **root 切换面板**：整条 topbar 可点击切换 + 选中 root 高亮 + 品牌 ClawMate
+- [x] **文件列表**：改为显示更新时间（取代文件大小），等宽数字
+- [x] **root 选择面板**：卡片式布局 + 圆角 + 字体颜色显式指定
+- [x] **间距优化**：顶部栏→搜索框↔排序行均匀分布
+- [x] **搜索框 border-bottom**: 清除
+
+### 移动端预览 m/preview.html
+- [x] **代码高亮**：CODE_EXTS（html/py/js/ts/css/go/rs 等）+ hljs 语法上色
+- [x] **JSON 格式化**：pretty-print 多行缩进
+- [x] **图片预览**：内联 `<img>` 展示 + ‹ › 导航 + (1/N) 计数
+- [x] **Office/PDF 预览**：ONLYOFFICE iframe 嵌入（移动端适配）
+- [x] **文本选中反馈**：选中→浮动的 ✏️ 按钮→调整范围→点击打开面板
+- [x] **自定义选中高亮**：CSS Highlight API → 黄底+橙色下划线
+- [x] **反馈面板**：选中内容正确传递，关闭面板清除高亮
+
+### 桌面端补充
+- [x] **图片导航**：`‹` `›` 按钮（按角色固定位置）+ (1/N) 计数显示
+
+### 后端修复
+- [x] **routes.py**: 修复 `_get_onlyoffice_secret` 增加 config.json 回退
+- [x] **routes.py**: 修复 `UnboundLocalError`（局部变量 config 遮蔽导入函数）
+- [x] **routes.py**: onlyoffice_config 改用 `oo_config` 避免命名冲突
+
+### 项目清理
+- [x] 删除 `dev/feedback_api.py.bak`（代码备份）
+- [x] 删除 `dev/static/vendor/marked.min.js`（被 markdown-it 替代，无引用）
+- [x] 删除 `dev/sessions.json`（空文件）
+- [x] 提交 v1.5 (c0e80d8) + v1.5.1 (12b0a02, 4343bb2)
+
+
 ## v1.27 — 排序修复 + GitHub Markdown CSS + markdown-it 迁移 ✅ (Dev, 2026-06-06 02:01 → 02:30)
 
 > **范围**：UI 优化 P1（排序修复 + GitHub CSS）+ P2（markdown-it 迁移）
