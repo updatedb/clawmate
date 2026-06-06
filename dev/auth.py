@@ -220,6 +220,7 @@ _WHITELIST_PREFIXES = (
 _ALWAYS_ALLOWED = frozenset([
     "/",
     "/api/health",
+    "/api/clawmate/preview",
 ])
 
 
