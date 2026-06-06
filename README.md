@@ -20,18 +20,13 @@ ClawMate 的解法是：
 
 ## 截图
 
-| 多目录文档管理 | 多种格式预览 + 反馈跟踪 |
+| 多项目、多目录管理 | 桌面手动添加反馈 |
 |:---:|:---:|
-| ![多目录文档管理](assets/cm-mobile-list-view.jpg) | ![多种格式预览 + 反馈跟踪](assets/cm-desktop-preview-feedback.jpg) |
+| ![多项目目录管理](assets/cm-desktop-file-manage.jpg) | ![添加反馈操作](assets/cm-desktop-add-feedback.jpg) |
 
-| 桌面端 Markdown 预览（含大纲+反馈面板） | 移动端文件浏览 |
+| 预览 + 反馈跟踪 | 反馈处理结果 |
 |:---:|:---:|
-| ![桌面端 Markdown 预览](assets/cm-desktop-add-feedback.jpg) | ![移动端文件浏览](assets/cm-mobile-readme-preview.jpg) |
-
-|:---:|:---:|
-| ![桌面端 - 反馈处理结果](assets/cm-desktop-review-feedback.jpg) | ![移动端 - 登录页面](assets/cm-mobile-login.jpg) |
-
----
+| ![多种格式预览](assets/cm-desktop-preview-feedback.jpg) | ![反馈处理结果](assets/cm-desktop-review-feedback.jpg) |
 
 ## 核心工作流
 
