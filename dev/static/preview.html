@@ -1767,14 +1767,90 @@
       // For binary file types, the API returns raw bytes — do NOT call res.json()
       if (isImageMode) {
         contentBody.innerHTML = '';
+        contentBody.style.cssText = 'display:flex;align-items:center;justify-content:center;position:relative;padding:12px;';
+
+        // Fetch directory listing for prev/next
+        const parentDir = filePath.split('/').slice(0, -1).join('/');
+        const nav = { prev: null, next: null, idx: 0, total: 0 };
+        (async () => {
+          try {
+            const listRes = await fetch(`/api/clawmate/list?root=${encodeURIComponent(rootId)}&dir=${encodeURIComponent(parentDir)}`);
+            const listData = await listRes.json();
+            const allEntries = listData.entries || [];
+            const images = allEntries.filter(e => ['png','jpg','jpeg','svg','webp','gif','bmp','ico'].includes((e.name.split('.').pop() || '').toLowerCase()));
+            nav.total = images.length;
+            const curIdx = images.findIndex(e => (e.path || e.relPath || e.name) === filePath);
+            if (curIdx >= 0) {
+              nav.idx = curIdx + 1;
+              if (curIdx > 0) nav.prev = images[curIdx - 1];
+              if (curIdx < images.length - 1) nav.next = images[curIdx + 1];
+            }
+          } catch (_) {}
+          renderImgNav();
+        })();
+
+        // Image and counter wrapper
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;position:relative;';
+
+        const imgWrap = document.createElement('div');
+        imgWrap.style.cssText = 'display:flex;align-items:center;justify-content:center;position:relative;width:100%;';
+
         const img = document.createElement('img');
+        img.id = 'previewImage';
         img.src = `/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`;
-        img.style.cssText = 'max-width:100%;max-height:70vh;object-fit:contain;border-radius:8px;display:block;margin:0 auto;';
-        contentBody.appendChild(img);
+        img.style.cssText = 'max-width:100%;max-height:70vh;object-fit:contain;border-radius:8px;';
+        imgWrap.appendChild(img);
+        wrap.appendChild(imgWrap);
+
+        const info = document.createElement('div');
+        info.id = 'imgNavInfo';
+        info.style.cssText = 'text-align:center;font-size:12px;color:var(--text-muted);padding:4px 0 2px;';
+        info.textContent = fileName + ' (1/1)';
+        wrap.appendChild(info);
+
+        contentBody.appendChild(wrap);
         removeLoading();
         setupMediaToolbar();
         renderImageFeedbackPanel();
         loadCompletedFeedback();
+
+        function renderImgNav() {
+          const hasPrev = nav.prev;
+          const hasNext = nav.next;
+
+          // Create prev if needed
+          if (hasPrev && !document.getElementById('imgNavPrev')) {
+            const prevBtn = document.createElement('button');
+            prevBtn.id = 'imgNavPrev';
+            prevBtn.innerHTML = '‹';
+            prevBtn.className = 'img-nav-btn';
+            prevBtn.style.left = '4px';
+            prevBtn.title = '上一张';
+            const p = nav.prev.path || nav.prev.relPath || nav.prev.name;
+            prevBtn.addEventListener('click', () => { window.location.href = 'preview.html?root=' + encodeURIComponent(rootId) + '&file=' + encodeURIComponent(p); });
+            imgWrap.appendChild(prevBtn);
+          }
+
+          // Create next if needed
+          if (hasNext && !document.getElementById('imgNavNext')) {
+            const nextBtn = document.createElement('button');
+            nextBtn.id = 'imgNavNext';
+            nextBtn.innerHTML = '›';
+            nextBtn.className = 'img-nav-btn';
+            nextBtn.style.right = '4px';
+            nextBtn.title = '下一张';
+            const n = nav.next.path || nav.next.relPath || nav.next.name;
+            nextBtn.addEventListener('click', () => { window.location.href = 'preview.html?root=' + encodeURIComponent(rootId) + '&file=' + encodeURIComponent(n); });
+            imgWrap.appendChild(nextBtn);
+          }
+
+          // Update counter
+          const infoEl = document.getElementById('imgNavInfo');
+          if (infoEl && nav.total > 0) {
+            infoEl.textContent = fileName + ' (' + nav.idx + '/' + nav.total + ')';
+          }
+        }
         return;
       }
 

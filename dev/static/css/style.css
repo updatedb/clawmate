@@ -1371,3 +1371,29 @@ pre:hover .code-copy-btn,
 .drag-handle:hover::after, .drag-handle.dragging::after {
   background: var(--accent);
 }
+
+/* ── Image navigation buttons ── */
+.img-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.3);
+  color: #fff;
+  font-size: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.15s;
+  user-select: none;
+  line-height: 1;
+}
+.img-nav-btn:hover {
+  background: rgba(0,0,0,0.5);
+}
