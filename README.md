@@ -4,7 +4,7 @@
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-ClawMate 是一个面向 AI Agent 工作流的**文件管理 → 预览 → 反馈闭环**工具。与传统文件浏览器不同，它关注的不是「浏览」，而是「用户在预览时发现问题 → 即时反馈 → Agent 自动修改」的完整链路。
+ClawMate 是一个面向 AI Agent 工作流的**文件管理 → 预览发现问题 → 即时反馈 → Agent 自动修改**工具。
 
 ## 为什么需要 ClawMate？
 
@@ -161,7 +161,7 @@ open http://localhost:5533/clawmate/
 | `CLAWMATE_ONLYOFFICE_URL` | | — | ONLYOFFICE JS URL |
 | `CLAWMATE_ONLYOFFICE_JWT_SECRET` | | — | ONLYOFFICE JWT 密钥 |
 | `CLAWMATE_MAX_UPLOAD_MB` | | `100` | 上传限制 |
-| `CLAWMATE_ENABLE_SUBTITLE` | | `0` | 字幕提取（需安装 faster-whisper） |
+| `CLAWMATE_ENABLE_SUBTITLE` | | `0` | 字幕提取（也可在 config.json 中设置 `feedback.enable_subtitle: true`） |
 
 **目录挂载**：
 ```yaml

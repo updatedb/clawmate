@@ -376,14 +376,14 @@ async def clawmate_rename(request: Request):
     Request body: {root, path, newName}
     Returns: {ok: true, newName: "xxx", newPath: "yyy/xxx"}
     """
+    # Support both JSON body and query params (desktop legacy)
     try:
         body = await request.json()
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
-
-    root_id = str(body.get("root", "")).strip()
-    rel_path = str(body.get("path", "")).strip()
-    new_name = str(body.get("newName", "")).strip()
+        body = {}
+    root_id = str(body.get("root") or request.query_params.get("root", "")).strip()
+    rel_path = str(body.get("path") or request.query_params.get("path", "")).strip()
+    new_name = str(body.get("newName") or body.get("new_name") or request.query_params.get("new_name") or request.query_params.get("newName", "")).strip()
 
     if not root_id or not rel_path or not new_name:
         raise HTTPException(status_code=422, detail="Missing root/path/newName")

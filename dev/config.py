@@ -51,6 +51,7 @@ class FeedbackTag:
 @dataclass
 class FeedbackConfig:
     tags: list[FeedbackTag] = field(default_factory=list)
+    enable_subtitle: bool = False
 
 
 @dataclass
@@ -169,6 +170,7 @@ def _parse_config(raw: dict) -> AppConfig:
             hook_token=env_hook_token or str(oc.get("hook_token", "")),
         ),
         feedback=FeedbackConfig(
+            enable_subtitle=bool(fb.get("enable_subtitle", False)),
             tags=[
                 FeedbackTag(label=t.get("label", ""), prompt=t.get("prompt", ""))
                 for t in (fb.get("tags") or [])

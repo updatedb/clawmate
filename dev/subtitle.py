@@ -24,13 +24,21 @@ def _format_time(seconds: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
-_FEATURE_SUBTITLE = os.getenv("CLAWMATE_ENABLE_SUBTITLE", "0") == "1"
+def _check_subtitle_enabled():
+    """检查字幕提取是否启用：config.json > 环境变量 > 默认关闭。"""
+    try:
+        from config import load as _cfg
+        if _cfg().feedback.enable_subtitle:
+            return True
+    except Exception:
+        pass
+    return os.getenv("CLAWMATE_ENABLE_SUBTITLE", "0") == "1"
 
 
 def _get_whisper_model(size: str = "small"):
     """延迟加载 faster-whisper 模型（全局单例）。"""
-    if not _FEATURE_SUBTITLE:
-        raise RuntimeError("Subtitle extraction disabled. 设置 CLAWMATE_ENABLE_SUBTITLE=1 启用")
+    if not _check_subtitle_enabled():
+        raise RuntimeError("Subtitle extraction disabled. 配置 feedback.enable_subtitle=true 或设置 CLAWMATE_ENABLE_SUBTITLE=1 启用")
     global _WHISPER_MODEL
     if _WHISPER_MODEL is None:
         try:
