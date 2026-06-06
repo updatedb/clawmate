@@ -1800,10 +1800,8 @@
           if (srcPre.textContent !== rawContent) _updateSourcePre(srcPre, rawContent);
         }
       } else {
-        // Switch to rendered view
-        if (mdDiv) mdDiv.style.display = '';
-        if (htmlIframe) htmlIframe.style.display = '';
-        if (srcPre) srcPre.style.display = 'none';
+        // Switch to rendered view — 重新加载内容确保渲染最新
+        loadContent();
       }
       updateMarkdownDynamicButtons();
       return;
