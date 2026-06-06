@@ -20,13 +20,17 @@ ClawMate 的解法是：
 
 ## 截图
 
-| 多项目、多目录管理 | 桌面手动添加反馈 |
-|:---:|:---:|
-| ![多项目目录管理](assets/cm-desktop-file-manage.jpg) | ![添加反馈操作](assets/cm-desktop-add-feedback.jpg) |
+| 多项目、多目录管理 | 手动添加反馈 | 创建反馈 |
+|:---:|:---:|:---:|
+| ![多项目目录管理](assets/cm-desktop-file-manage.jpg) | ![添加反馈操作](assets/cm-desktop-add-feedback.jpg) | ![创建反馈](assets/cm-desktop-create-feed.png) |
 
-| 预览 + 反馈跟踪 | 反馈处理结果 |
-|:---:|:---:|
-| ![多种格式预览](assets/cm-desktop-preview-feedback.jpg) | ![反馈处理结果](assets/cm-desktop-review-feedback.jpg) |
+| 预览 + 反馈跟踪 | 反馈处理结果 | SRT 字幕提取 |
+|:---:|:---:|:---:|
+| ![多种格式预览](assets/cm-desktop-preview-feedback.jpg) | ![反馈处理结果](assets/cm-desktop-review-feedback.jpg) | ![SRT 字幕提取](assets/cm-destkop-extract-srt.png) |
+
+| SRT 字幕纠错 |
+|:---:|
+| ![SRT 字幕纠错](assets/cm-desktop-srt-correct.png) |
 
 ## 核心工作流
 
