@@ -33,10 +33,9 @@
   <div class="m-app" id="app">
     <!-- Topbar -->
     <header class="m-topbar" id="topbar">
-      <span class="m-topbar-title" id="rootTitle">ClawMate</span>
-      <div class="m-topbar-actions">
-        <button class="m-topbar-btn" id="btnSwitchRoot" title="切换根目录">▽</button>
-      </div>
+      <span class="m-brand">ClawMate</span>
+      <span class="m-topbar-title" id="rootTitle">My Projects</span>
+
     </header>
 
     <!-- Search -->
@@ -45,15 +44,6 @@
       <button class="m-search-clear" id="searchClear">✕</button>
     </div>
 
-    <!-- Type filter tags -->
-    <div class="m-tags" id="tags">
-      <button class="m-tag active" data-type="all">全部</button>
-      <button class="m-tag" data-type="text">📄文档</button>
-      <button class="m-tag" data-type="code">📋代码</button>
-      <button class="m-tag" data-type="data">📊数据</button>
-      <button class="m-tag" data-type="media">🎬媒体</button>
-      <button class="m-tag" data-type="other">📦其他</button>
-    </div>
 
     <!-- Sort row -->
     <div class="m-sort" id="sortRow">
@@ -66,15 +56,32 @@
     <!-- Path indicator -->
     <div class="m-path-indicator" id="pathIndicator"></div>
 
-    <!-- File count -->
-    <div class="m-file-count" id="fileCount"></div>
 
     <!-- File list -->
     <div class="m-file-list" id="fileList">
-      <div class="m-loading">加载中...</div>
-    </div>
+      <div class="m-loading" id="loadingDefault">加载中...</div>
   </div>
+</div>
 
+<script>
+// ── Global timeout: show error if JS init() never runs ──
+(function() {
+  var list = document.getElementById('fileList');
+  if (list) {
+    var start = Date.now();
+    var check = setInterval(function() {
+      if (Date.now() - start > 25000) {
+        list.innerHTML = '<div class="m-file-empty">页面加载超时，请刷新重试</div>';
+        clearInterval(check);
+      }
+      // Cancel if content changed from "加载中"
+      if (list.textContent.indexOf('加载中') === -1) {
+        clearInterval(check);
+      }
+    }, 1000);
+  }
+})();
+</script>
   <!-- Root switch panel -->
   <div class="m-panel-overlay" id="rootPanelOverlay"></div>
   <div class="m-panel" id="rootPanel">
@@ -94,15 +101,29 @@
   'use strict';
 
   const API_BASE = '/api/clawmate';
+  // ── Timeout wrapper for fetch ──
+  async function fetchTimeout(url, options, ms) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ms);
+    try {
+      const res = await fetch(url, { ...options, signal: controller.signal });
+      return res;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
 
   // ── State ──
+    const params = new URLSearchParams(location.search);
+    const dirParam = params.get('dir') || '';
+
   const state = {
+    dir: dirParam,
     roots: [],
     rootId: '',
     rootLabel: '',
-    dir: '',
     entries: [],
-    filterType: 'all',
     sortKey: 'time',
     sortDir: 'desc',
     searchQuery: '',
@@ -110,10 +131,8 @@
 
   const els = {
     rootTitle: document.getElementById('rootTitle'),
-    btnSwitchRoot: document.getElementById('btnSwitchRoot'),
     searchInput: document.getElementById('searchInput'),
     searchClear: document.getElementById('searchClear'),
-    tags: document.getElementById('tags'),
     sortRow: document.getElementById('sortRow'),
     fileList: document.getElementById('fileList'),
     fileCount: document.getElementById('fileCount'),
@@ -177,6 +196,20 @@
     return n.toFixed(1) + ' ' + units[i];
   }
 
+  function formatMtime(ts) {
+    if (!ts) return '—';
+    const d = new Date(ts * 1000);
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()) {
+      return pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+    if (d.getFullYear() === now.getFullYear()) {
+      return pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    }
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+
   function showToast(msg, duration) {
     const el = els.toast;
     el.textContent = msg;
@@ -191,8 +224,13 @@
 
   // ── API calls ──
   async function fetchConfig() {
-    const res = await fetch(API_BASE + '/config');
-    if (!res.ok) throw new Error('config fetch failed');
+    let res;
+    try {
+      res = await fetchTimeout(API_BASE + '/config', {}, 10000);
+    } catch (e) {
+      throw new Error('config timeout');
+    }
+    if (!res.ok) throw new Error('config fetch failed: ' + res.status);
     const data = await res.json();
     state.roots = data.roots || [];
     state.rootId = data.defaultRootId || (state.roots[0] ? state.roots[0].id : '');
@@ -200,7 +238,12 @@
 
   async function fetchList(rootId, dir) {
     const url = API_BASE + '/list?root=' + encodeURIComponent(rootId) + '&dir=' + encodeURIComponent(dir || '');
-    const res = await fetch(url);
+    let res;
+    try {
+      res = await fetchTimeout(url, {}, 15000);
+    } catch (e) {
+      throw new Error('list timeout');
+    }
     if (!res.ok) throw new Error('list fetch failed: ' + res.status);
     return await res.json();
   }
@@ -211,17 +254,6 @@
 
     // Filter out dotfiles
     items = items.filter(e => !e.name.startsWith('.'));
-
-    // Type filter
-    if (state.filterType !== 'all') {
-      if (state.filterType === 'dir') {
-        items = items.filter(e => e.is_dir);
-      } else if (state.filterType === 'media') {
-        items = items.filter(e => !e.is_dir && guessCategory(e) === 'media');
-      } else {
-        items = items.filter(e => !e.is_dir && guessCategory(e) === state.filterType);
-      }
-    }
 
     // Search
     if (state.searchQuery) {
@@ -244,6 +276,31 @@
   }
 
   // ── Render ──
+  async function doRecursiveSearch(q) {
+    els.fileList.innerHTML = '<div class="m-loading">递归搜索中...</div>';
+    try {
+      let res;
+      try {
+        res = await fetchTimeout(API_BASE + '/search?root=' + encodeURIComponent(state.rootId) + '&q=' + encodeURIComponent(q) + '&recursive=true&limit=200', {}, 15000);
+      } catch (e) {
+        els.fileList.innerHTML = '<div class="m-file-empty">搜索超时</div>';
+        return;
+      }
+      if (!res.ok) {
+        els.fileList.innerHTML = '<div class="m-file-empty">搜索失败</div>';
+        return;
+      }
+      const data = await res.json();
+      state.entries = (data.results || []).map(e => ({
+        ...e,
+        relPath: e.path || e.name || '',
+      }));
+      render();
+    } catch (e) {
+      els.fileList.innerHTML = '<div class="m-file-empty">搜索失败: ' + e.message + '</div>';
+    }
+  }
+
   function render() {
     const items = getFilteredSorted();
     const list = els.fileList;
@@ -271,8 +328,8 @@
       name.textContent = entry.name;
 
       const size = document.createElement('span');
-      size.className = 'm-file-size';
-      size.textContent = entry.is_dir ? '—' : formatSize(entry.size || entry.size_bytes);
+      size.className = 'm-file-time';
+      size.textContent = entry.is_dir ? '—' : formatMtime(entry.mtime);
 
       const arrow = document.createElement('span');
       arrow.className = 'm-file-arrow';
@@ -299,20 +356,44 @@
     updateCount(items.length);
   }
 
-  function updateCount(n) {
+  function updateCount(n) { return; 
     els.fileCount.textContent = state.searchQuery
       ? '搜索 "' + state.searchQuery + '" · ' + n + ' 项'
       : n + ' 项';
   }
 
   function updatePath() {
-    els.pathIndicator.textContent = state.dir
-      ? state.rootLabel + ' / ' + state.dir
-      : state.rootLabel;
+    const pathEl = els.pathIndicator;
+    pathEl.innerHTML = '';
+    if (state.dir) {
+      const parts = state.dir.split('/');
+      const rootSpan = document.createElement('a');
+      rootSpan.href = '#';
+      rootSpan.textContent = state.rootLabel;
+      rootSpan.addEventListener('click', function(e) { e.preventDefault(); loadDir(''); });
+      rootSpan.style.color = 'var(--accent)';
+      rootSpan.style.textDecoration = 'none';
+      pathEl.appendChild(rootSpan);
+      let accum = '';
+      for (let i = 0; i < parts.length; i++) {
+        accum += (i > 0 ? '/' : '') + parts[i];
+        const sep = document.createTextNode(' / ');
+        pathEl.appendChild(sep);
+        const a = document.createElement('a');
+        a.href = '#';
+        a.textContent = parts[i];
+        a.addEventListener('click', (function(dir) { return function(e) { e.preventDefault(); loadDir(dir); }; })(accum));
+        a.style.color = 'var(--accent)';
+        a.style.textDecoration = 'none';
+        pathEl.appendChild(a);
+      }
+    } else {
+      pathEl.textContent = state.rootLabel;
+    }
   }
 
   function updateRootTitle() {
-    els.rootTitle.textContent = state.rootLabel || 'ClawMate';
+    els.rootTitle.innerHTML = '<span class="m-root-dot">●</span> ' + (state.rootLabel || 'ClawMate');
   }
 
   // ── Load directory ──
@@ -328,6 +409,7 @@
       updatePath();
       render();
     } catch (e) {
+      console.error('[loadDir] failed:', e.message);
       els.fileList.innerHTML = '<div class="m-file-empty">加载失败: ' + e.message + '</div>';
     }
   }
@@ -351,7 +433,9 @@
           state.rootId = root.id;
           state.rootLabel = root.label || root.id;
           updateRootTitle();
-          loadDir('');
+          state.dir = '';
+          console.log('[init] loadDir start, dir:', state.dir);
+    loadDir(state.dir);
         }
         hideRootPanel();
       });
@@ -368,23 +452,44 @@
 
   // ── Init ──
   async function init() {
+
+  // ── Fallback: force error after 20s if still loading ──
+  setTimeout(() => {
+    const list = document.getElementById('fileList');
+    if (list && list.innerHTML.includes('加载中')) {
+      list.innerHTML = '<div class="m-file-empty">加载超时，请刷新重试</div>';
+      console.log('[init] stuck in loading, forced error after 20s');
+    }
+  }, 20000);
+
     // Load config
     try {
+      console.log('[init] fetchConfig start');
       await fetchConfig();
+      console.log('[init] fetchConfig done, roots:', state.roots.length, 'rootId:', state.rootId);
+      // Override root from URL parameter if present
+      const urlParams = new URLSearchParams(location.search);
+      const rootParam = urlParams.get('root');
+      if (rootParam && state.roots.find(r => r.id === rootParam)) {
+        state.rootId = rootParam;
+        state.rootLabel = '';
+      }
       const root = state.roots.find(r => r.id === state.rootId);
       state.rootLabel = root ? (root.label || root.id) : state.rootId;
       updateRootTitle();
     } catch (e) {
+      console.error('[init] fetchConfig failed:', e.message);
       showToast('配置加载失败', 3000);
     }
 
     // Load directory
-    loadDir('');
+    console.log('[init] loadDir start, dir:', state.dir);
+    loadDir(state.dir);
 
     // ── Events ──
 
-    // Root switch
-    els.btnSwitchRoot.addEventListener('click', showRootPanel);
+    // Root switch — entire topbar is clickable
+    els.rootTitle.addEventListener('click', showRootPanel);
     els.rootPanelOverlay.addEventListener('click', hideRootPanel);
     els.rootPanelClose.addEventListener('click', hideRootPanel);
 
@@ -395,7 +500,11 @@
       searchTimer = setTimeout(() => {
         state.searchQuery = els.searchInput.value.trim();
         els.searchClear.classList.toggle('visible', !!state.searchQuery);
-        render();
+        if (state.searchQuery) {
+          doRecursiveSearch(state.searchQuery);
+        } else {
+          render();
+        }
       }, 200);
     });
     els.searchClear.addEventListener('click', () => {
@@ -406,15 +515,9 @@
       els.searchInput.focus();
     });
 
+
+
     // Type filter
-    els.tags.addEventListener('click', e => {
-      const tag = e.target.closest('.m-tag');
-      if (!tag) return;
-      els.tags.querySelectorAll('.m-tag').forEach(t => t.classList.remove('active'));
-      tag.classList.add('active');
-      state.filterType = tag.dataset.type;
-      render();
-    });
 
     // Sort
     els.sortRow.addEventListener('click', e => {

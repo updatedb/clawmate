@@ -9,6 +9,7 @@ Routes:
     GET  /api/clawmate/feedback/status — 查询状态统计
     POST /api/clawmate/feedback/update — 按 ID 更新状态
     POST /api/clawmate/feedback/cron-tick — 兜底扫描 + 唤醒
+    POST /api/clawmate/feedback/cleanup — 手动归档/清理
 """
 
 from __future__ import annotations
@@ -369,3 +370,189 @@ async def cron_tick():
     return {"ok": True}
 
 
+# v1.8 B5: 手动 cleanup API (需登录, AuthMiddleware 自动拦截)
+@router.post("/api/clawmate/feedback/cleanup", response_class=JSONResponse)
+async def feedback_cleanup(
+    request: Request,
+    days: int = Query(90, ge=1, le=3650, description="保留天数阈值"),
+    archive: bool = Query(True, description="True=归档, False=删除"),
+):
+    """手动触发 feedback 归档/清理 (需登录)。
+
+    v1.26: 内部调用 cleanup_old_feedback（原地保留）。
+    """
+    _audit_root = ""
+    try:
+        _body = await request.json()
+        if isinstance(_body, dict):
+            _audit_root = str(_body.get("root", "")).strip()
+    except Exception:
+        _body = {}
+
+    # v1.26: cleanup_old_feedback 仍保留在 feedback_api.py 结尾
+    result_holder = {}
+
+    def _run():
+        try:
+            result_holder["stats"] = cleanup_old_feedback(days=days, archive=archive)
+        except Exception as e:
+            result_holder["error"] = str(e)
+
+    _run()
+    if "error" in result_holder:
+        raise HTTPException(status_code=500, detail=f"cleanup failed: {result_holder['error']}")
+
+    _ts = datetime.now(CST).isoformat(timespec="seconds")
+    _user = request.client.host if request.client else "unknown"
+    logger.info(
+        "[feedback.cleanup] %s root=%s user=%s days=%d archive=%s stats=%s result=%s",
+        _ts, _audit_root, _user, days, archive, result_holder["stats"], "ok",
+    )
+    return JSONResponse(content={
+        "ok": True,
+        "days": days,
+        "archive": archive,
+        "stats": result_holder["stats"],
+    })
+
+
+# ── 清理工具（保留，供 cleanup 端点调用）─────────────────────────────
+# v1.8 B5: 归档/清理 feedback.json 中 status="done" 且 updated 超过 N 天的条目
+
+CST_ = timedelta(hours=8)
+
+
+def _archive_feedback_items(fb_path: Path, items_to_archive: list) -> bool:
+    """将待归档条目 append 到 feedback.archive.json。"""
+    try:
+        archive_path = fb_path.parent / "feedback.archive.json"
+        if archive_path.exists():
+            try:
+                with open(archive_path, "r", encoding="utf-8") as f:
+                    archive_data = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                archive_data = {"items": []}
+        else:
+            archive_data = {"items": []}
+        archive_items = archive_data.get("items", [])
+        archive_items.extend(items_to_archive)
+        archive_data["items"] = archive_items
+        tmp_path = archive_path.with_suffix(".archive.json.tmp")
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(archive_data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_path, archive_path)
+        return True
+    except Exception as e:
+        logger.warning("[feedback] archive failed for %s: %s", fb_path, e)
+        return False
+
+
+def cleanup_old_feedback(days: int = 90, archive: bool = True) -> dict:
+    """
+    清理 feedback.json 中 status="done" 且 updated 超过 N 天的条目。
+
+    不抛异常，返回 stats dict。
+    """
+    from service import _load_config
+
+    stats = {"scanned_files": 0, "archived_count": 0, "removed_count": 0, "errors": []}
+
+    try:
+        cfg = _load_config()
+        roots = cfg.get("roots", []) or []
+    except Exception as e:
+        stats["errors"].append(f"load config: {e}")
+        return stats
+
+    cutoff = datetime.now(timezone(CST_)) - timedelta(days=days)
+    fb_paths: list[Path] = []
+
+    for r in roots:
+        if not isinstance(r, dict):
+            continue
+        root_dir_str = str(r.get("dir", "")).strip()
+        if not root_dir_str:
+            continue
+        try:
+            root_dir = Path(root_dir_str).expanduser().resolve()
+        except Exception:
+            continue
+        if not root_dir.exists() or not root_dir.is_dir():
+            continue
+        try:
+            for entry in root_dir.iterdir():
+                if not entry.is_dir():
+                    continue
+                fb = entry / "feedback.json"
+                if fb.exists():
+                    fb_paths.append(fb)
+        except Exception as e:
+            stats["errors"].append(f"scan {root_dir}: {e}")
+
+    def _read_fb(path: Path) -> dict:
+        if not path.exists():
+            return {"items": []}
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError):
+            return {"items": []}
+
+    def _build_fb(root_id: str, project: str, items: list) -> str:
+        ts = datetime.now(timezone(CST_)).strftime("%Y-%m-%d %H:%M:%S")
+        max_id = 0
+        for item in items:
+            m = __import__("re").search(r'FD-\w+-(\d+)', item.get("id", ""))
+            if m:
+                max_id = max(max_id, int(m.group(1)))
+        data = {"root": root_id, "project": project, "updated": ts, "last_id": max_id, "items": items}
+        return json.dumps(data, indent=2, ensure_ascii=False)
+
+    for fb_path in fb_paths:
+        stats["scanned_files"] += 1
+        try:
+            data = _read_fb(fb_path)
+            items = list(data.get("items", []))
+            if not items:
+                continue
+            to_archive = []
+            keep = []
+            for item in items:
+                if item.get("status") != "done":
+                    keep.append(item)
+                    continue
+                try:
+                    ts = datetime.strptime(item.get("updated", ""), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone(CST_))
+                except Exception:
+                    keep.append(item)
+                    continue
+                if ts < cutoff:
+                    to_archive.append(item)
+                else:
+                    keep.append(item)
+            if not to_archive:
+                continue
+            if archive:
+                if _archive_feedback_items(fb_path, to_archive):
+                    stats["archived_count"] += len(to_archive)
+                    root_id = data.get("root", "")
+                    project = data.get("project", "")
+                    fb_path.write_text(_build_fb(root_id, project, keep), encoding="utf-8")
+                else:
+                    stats["errors"].append(f"archive failed: {fb_path}")
+            else:
+                root_id = data.get("root", "")
+                project = data.get("project", "")
+                fb_path.write_text(_build_fb(root_id, project, keep), encoding="utf-8")
+                stats["removed_count"] += len(to_archive)
+        except Exception as e:
+            stats["errors"].append(f"{fb_path}: {e}")
+            logger.warning("[feedback] cleanup error for %s: %s", fb_path, e)
+
+    if stats["archived_count"] or stats["removed_count"] or stats["errors"]:
+        logger.info(
+            "[feedback] cleanup: scanned=%d archived=%d removed=%d errors=%d",
+            stats["scanned_files"], stats["archived_count"],
+            stats["removed_count"], len(stats["errors"]),
+        )
+    return stats

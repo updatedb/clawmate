@@ -17,7 +17,7 @@ import os
 import sys
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -171,8 +171,13 @@ if STATIC_DIR.exists() and STATIC_DIR.is_dir():
 
 # redirect root to /clawmate/
 @app.get("/")
-async def root_redirect():
+async def root_redirect(request: Request):
     from fastapi.responses import RedirectResponse
+    ua = request.headers.get("user-agent", "").lower()
+    is_tablet = "ipad" in ua
+    mobile_keywords = ["iphone", "android", "mobile", "windows phone", "blackberry"]
+    if not is_tablet and any(k in ua for k in mobile_keywords):
+        return RedirectResponse(url="/clawmate/m/index.html")
     return RedirectResponse(url="/clawmate/")
 
 

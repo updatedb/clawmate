@@ -100,6 +100,28 @@ body {
   height: calc(var(--topbar) + var(--safe-top));
   box-sizing: content-box;
 }
+
+
+.m-root-dot {
+  color: var(--accent);
+  font-size: 10px;
+  margin-right: 2px;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+.m-brand {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--brand-text);
+  opacity: 0.9;
+  flex-shrink: 0;
+  margin-right: 6px;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+}
+
 .m-topbar-title {
   flex: 1;
   font-size: 14px;
@@ -107,9 +129,15 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  min-height: var(--touch);
+  min-height: 28px;
   display: flex;
   align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.08);
+  border-radius: 6px;
+  padding: 0 8px;
+  margin-left: 2px;
+  cursor: pointer;
 }
 .m-topbar-actions {
   display: flex;
@@ -162,10 +190,10 @@ body {
 .m-search {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
+  padding: 4px 12px;
   gap: 8px;
   background: var(--bg);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 0;
   flex-shrink: 0;
 }
 .m-search-input {
@@ -184,7 +212,7 @@ body {
   border-color: var(--accent);
 }
 .m-search-clear {
-  min-width: var(--touch);
+min-width: var(--touch);
   min-height: var(--touch);
   background: none;
   border: none;
@@ -197,7 +225,7 @@ body {
   padding: 0;
 }
 .m-search-clear.visible {
-  display: flex;
+display: flex;
 }
 
 /* ── Type filter tags ── */
@@ -262,8 +290,8 @@ body {
   flex-shrink: 0;
 }
 .m-sort-btn {
-  min-height: var(--touch);
-  padding: 0 12px;
+  min-height: 30px;
+  padding: 0 10px;
   border-radius: 8px;
   border: none;
   background: transparent;
@@ -330,6 +358,15 @@ body {
   min-width: 48px;
   text-align: right;
 }
+.m-file-time {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  min-width: 60px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .m-file-arrow {
   font-size: 16px;
   color: var(--text-muted);
@@ -486,6 +523,9 @@ body {
   cursor: pointer;
   transition: background 0.12s;
   gap: 10px;
+  background: var(--bg);
+  margin: 4px 8px;
+  border-radius: 10px;
 }
 .m-panel-item:active {
   background: var(--bg-tertiary);
@@ -507,6 +547,7 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 15px;
+  color: var(--text);
 }
 
 /* ── Outline items ── */
@@ -790,4 +831,67 @@ body.immersive .m-content {
 @keyframes tooltip-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── markdown-it container blocks ── */
+.m-content .note, .m-content .warning, .m-content .tip {
+  padding: 12px 16px;
+  margin: 16px 0;
+  border-radius: 6px;
+  border-left: 4px solid;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.m-content .note    { background: #0c2d6b; border-color: #58a6ff; }
+.m-content .warning { background: #3d2e00; border-color: #d29922; }
+.m-content .tip     { background: #0a3a1a; border-color: #3fb950; }
+@media (prefers-color-scheme: light) {
+  .m-content .note    { background: #ddf4ff; border-color: #0969da; }
+  .m-content .warning { background: #fff8c5; border-color: #d4a72c; }
+  .m-content .tip     { background: #dafbe1; border-color: #1a7f37; }
+}
+
+
+/* ── Custom selection highlight (CSS Highlight API) ── */
+::highlight(selection-highlight) {
+  background: rgba(255, 200, 50, 0.28);
+  text-decoration: underline;
+  text-decoration-color: #ff8800;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
+/* Fallback: system selection stays if CSS Highlight API not supported */
+.m-content ::selection {
+  background: var(--accent-light);
+  color: inherit;
+}
+.m-content ::-moz-selection {
+  background: var(--accent-light);
+  color: inherit;
+}
+
+/* ── Image navigation buttons ── */
+.m-img-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.35);
+  color: #fff;
+  font-size: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+.m-img-nav:active {
+  background: rgba(0,0,0,0.6);
 }

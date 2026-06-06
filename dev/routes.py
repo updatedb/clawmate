@@ -56,6 +56,11 @@ ONLYOFFICE_TOKEN_TTL = 3600
 def _get_onlyoffice_secret() -> str:
     secret = os.getenv(ONLYOFFICE_JWT_SECRET_ENV)
     if not secret:
+        try:
+            secret = config().onlyoffice.jwt_secret
+        except Exception:
+            secret = ""
+    if not secret:
         raise HTTPException(status_code=500, detail=f"{ONLYOFFICE_JWT_SECRET_ENV} is not set")
     return secret
 
@@ -655,7 +660,7 @@ async def clawmate_onlyoffice_config(request: Request, root: str = "", path: str
     else:
         callback_url = f"{public_base_url}/api/clawmate/onlyoffice/callback?token={quote(token)}"
 
-    config = {
+    oo_config = {
         "document": document,
         "documentType": doc_type,
         "editorConfig": {
@@ -666,10 +671,10 @@ async def clawmate_onlyoffice_config(request: Request, root: str = "", path: str
         },
     }
 
-    config_token = _encode_jwt(config, secret)
-    config["token"] = config_token
+    config_token = _encode_jwt(oo_config, secret)
+    oo_config["token"] = config_token
 
-    return JSONResponse(content={"config": config})
+    return JSONResponse(content={"config": oo_config})
 
 
 @router.get("/api/clawmate/onlyoffice/file")

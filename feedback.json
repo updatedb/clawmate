@@ -1,8 +1,8 @@
 {
   "root": "webprojects",
   "project": "clawmate",
-  "updated": "2026-06-03 21:52:17",
-  "last_id": 32,
+  "updated": "2026-06-06 15:07:34",
+  "last_id": 35,
   "items": [
     {
       "id": "FD-CM-0002",
@@ -313,6 +313,36 @@
       "position": "",
       "updated": "2026-06-03 21:52:17",
       "result": "已验证：字幕提取方案（faster-whisper 本地）已全部实现。subtitle.py 核心模块、SSE API、前端按钮、CLAWLIST 均已完成。"
+    },
+    {
+      "id": "FD-CM-0033",
+      "status": "done",
+      "file": "clawmate/README.md",
+      "note": "清除选中内容",
+      "content": "install.sh\ninstall.sh 已删除（项目为 Python 形态，install.sh 假设的预编译二进制 + GitHub Release 下载 URL 不适用，详见 git log -- install.sh）。未来如需提供预编译二进制部署再写。",
+      "position": "",
+      "updated": "2026-06-04 19:19:44",
+      "result": "已删除 README.md 中 ### install.sh 整个小节（含标题与解释段落），保留前后 --- 分隔符"
+    },
+    {
+      "id": "FD-CM-0034",
+      "status": "failed",
+      "file": "/tmp/v124c-20260605_151907.md",
+      "note": "test",
+      "content": "v1.24-c test webprojects",
+      "position": "L1-1",
+      "updated": "2026-06-05 15:20:25",
+      "result": "v1.24-c test feedback: target file /tmp/v124c-20260605_151907.md does not exist; note is non-actionable (literal: test)."
+    },
+    {
+      "id": "FD-CM-0035",
+      "status": "done",
+      "file": "clawmate/research/UI-MOBILE-DESIGN.md",
+      "note": "清除选中内容",
+      "content": "六、实施建议顺序\n排序 bug 修复（index.html + app.js）— 半小时，独立可发布\nGitHub Markdown CSS 替换（preview.html style/css）— 一小时，渲染效果立竿见影\n桌面 preview 面板可收起（preview.html）— 两小时，改善桌面体验\nm/index.html 移动端目录 — 四小时，全新独立页面无耦合\nm/preview.html 移动端阅读+反馈 — 六小时，核心移动端体验",
+      "position": "",
+      "updated": "2026-06-06 15:07:34",
+      "result": "已清除【六、实施建议顺序】章节内容"
     }
   ]
 }

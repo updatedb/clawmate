@@ -6,6 +6,7 @@
   <link rel="icon" href="data:," />
   <title>预览 — ClawMate</title>
   <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="highlight-theme-css" />
   <link rel="stylesheet" href="../vendor/github-markdown-dark.min.css" id="github-markdown-css" />
   <link rel="stylesheet" href="../vendor/katex.min.css" />
   <style>
@@ -81,10 +82,6 @@
     <header class="m-topbar" id="topbar">
       <a class="m-back-btn" id="btnBack">←</a>
       <span class="m-topbar-title" id="docTitle">加载中...</span>
-      <div class="m-topbar-actions">
-        <button class="m-topbar-btn" id="btnOutline" title="大纲">📑</button>
-        <button class="m-topbar-btn" id="btnFeedback" title="反馈">💬</button>
-      </div>
     </header>
 
     <!-- Content -->
@@ -96,19 +93,10 @@
     <div class="m-bottombar" id="bottombar">
       <button class="m-bottom-btn" id="btnBottomOutline">📑 大纲</button>
       <button class="m-bottom-btn" id="btnBottomFeedback">💬 反馈</button>
-      <button class="m-bottom-btn" id="btnImmersive">📖 阅读</button>
     </div>
   </div>
 
-  <!-- Selection tooltip -->
-  <div class="m-selection-tooltip" id="selectionTooltip">
-    <button class="m-sel-tag" data-tag="备注">📝</button>
-    <button class="m-sel-tag" data-tag="删除">🗑</button>
-    <button class="m-sel-tag" data-tag="修改">🔧</button>
-    <button class="m-sel-tag" data-tag="扩展">📈</button>
-    <button class="m-sel-tag" data-tag="简化">📉</button>
-    <button class="m-sel-tag" data-tag="执行">⚡</button>
-  </div>
+
 
   <!-- Outline panel -->
   <div class="m-panel-overlay" id="outlineOverlay"></div>
@@ -135,6 +123,11 @@
     <div class="m-panel-footer" style="text-align:center;font-size:12px;color:var(--text-muted);padding:8px 16px;">
       选择文本后可在选区上方添加反馈
     </div>
+  </div>
+
+  <!-- Selection tooltip (floating button above selected text) -->
+  <div class="m-selection-tooltip" id="selectionTooltip">
+    <button class="m-sel-tag" id="tooltipFeedbackBtn" title="添加反馈">✏️ 反馈</button>
   </div>
 
   <!-- Feedback input (shown inline in feedback panel when submitting) -->
@@ -193,10 +186,21 @@
   const project = filePath.includes('/') ? filePath.split('/')[0] : rootId;
 
   const MARKDOWN_EXTS = ['md', 'markdown'];
-  const PLAIN_TEXT_EXTS = ['txt', 'json', 'csv', 'yaml', 'yml', 'py', 'js', 'ts', 'tsx', 'css', 'sh', 'bash', 'sql', 'toml', 'ini', 'conf', 'cfg', 'env', 'xml', 'srt', 'log'];
+  const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'svg', 'webp', 'gif', 'bmp', 'ico'];
+  const AUDIO_EXTS = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma'];
+  const VIDEO_EXTS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'm4v'];
+  const OFFICE_EXTS = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp'];
+  const PLAIN_TEXT_EXTS = ['txt', 'csv', 'yaml', 'yml', 'py', 'js', 'ts', 'tsx', 'css', 'sh', 'bash', 'sql', 'toml', 'ini', 'conf', 'cfg', 'env', 'xml', 'gpx', 'kml', 'srt', 'log'];
   const ext = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '';
+  const CODE_EXTS = ['py', 'js', 'ts', 'tsx', 'html', 'css', 'scss', 'less', 'sh', 'bash', 'sql', 'go', 'rs', 'java', 'rb', 'php', 'c', 'cpp', 'h', 'hpp', 'swift', 'kt', 'scala', 'lua', 'r', 'pl', 'pm', 'hs'];
+  const isCode = CODE_EXTS.includes(ext);
+  const isJson = ext === 'json';
+  const isImage = IMAGE_EXTS.includes(ext);
+  const isOfficePdf = OFFICE_EXTS.includes(ext) || ext === 'pdf';
   const isMarkdown = MARKDOWN_EXTS.includes(ext);
   const isPlainText = PLAIN_TEXT_EXTS.includes(ext);
+  const isAudio = AUDIO_EXTS.includes(ext);
+  const isVideo = VIDEO_EXTS.includes(ext);
 
   let rawContent = '';
   let mermaidStore = [];
@@ -204,6 +208,10 @@
   let currentSelectionText = '';
   let currentSelectionStart = 0;
   let currentSelectionEnd = 0;
+  let pendingSelectionText = '';
+  let pendingRange = null;
+  let pendingStartLine = 0;
+  let pendingEndLine = 0;
 
   // TOC items (outline)
   let tocItems = [];
@@ -218,12 +226,8 @@
   const els = {
     contentBody: document.getElementById('contentBody'),
     btnBack: document.getElementById('btnBack'),
-    btnOutline: document.getElementById('btnOutline'),
-    btnFeedback: document.getElementById('btnFeedback'),
     btnBottomOutline: document.getElementById('btnBottomOutline'),
     btnBottomFeedback: document.getElementById('btnBottomFeedback'),
-    btnImmersive: document.getElementById('btnImmersive'),
-    selectionTooltip: document.getElementById('selectionTooltip'),
     outlineOverlay: document.getElementById('outlineOverlay'),
     outlinePanel: document.getElementById('outlinePanel'),
     outlineBody: document.getElementById('outlineBody'),
@@ -242,7 +246,28 @@
     fbInputStatus: document.getElementById('fbInputStatus'),
     immersiveHint: document.getElementById('immersiveHint'),
     toast: document.getElementById('toast'),
+    selectionTooltip: document.getElementById('selectionTooltip'),
+    tooltipFeedbackBtn: document.getElementById('tooltipFeedbackBtn'),
   };
+  // ── Theme: follow system preference ──
+  function switchMdTheme(resolved) {
+    const mdCss = document.getElementById("github-markdown-css");
+    const hlCss = document.getElementById("highlight-theme-css");
+    if (resolved === "dark") {
+      mdCss.href = "../vendor/github-markdown-dark.min.css";
+      hlCss.href = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css";
+    } else {
+      mdCss.href = "../vendor/github-markdown-light.min.css";
+      hlCss.href = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css";
+    }
+  }
+  (function initTheme() {
+    const dark = window.matchMedia("(prefers-color-scheme: dark)");
+    switchMdTheme(dark.matches ? "dark" : "light");
+    dark.addEventListener("change", function(e) {
+      switchMdTheme(e.matches ? "dark" : "light");
+    });
+  })();
 
   // ── Back button ──
   const parentDir = filePath.includes('/') ? filePath.split('/').slice(0, -1).join('/') : '';
@@ -428,10 +453,54 @@
 
     // Show input panel over the feedback panel
     els.feedbackInputPanel.style.display = 'flex';
+    // Clear page text selection so panel content isn't highlighted
   }
 
   function hideFeedbackInput() {
     els.feedbackInputPanel.style.display = 'none';
+    // Clear selection highlights
+    removeSelectionHighlight();
+    const sel = window.getSelection();
+    if (sel) sel.removeAllRanges();
+  }
+
+  function showSelectionTooltip(range) {
+    // Position tooltip above end of selection
+    const rect = range.getBoundingClientRect();
+    const tooltip = els.selectionTooltip;
+    const top = (rect.bottom || rect.top) + 8;
+    const left = Math.min(rect.right, window.innerWidth - 100);
+    tooltip.style.top = Math.max(4, top) + 'px';
+    tooltip.style.left = Math.max(4, left) + 'px';
+    tooltip.classList.add('visible');
+  }
+
+  function hideSelectionTooltip() {
+    pendingSelectionText = '';
+    pendingRange = null;
+    els.selectionTooltip.classList.remove('visible');
+  }
+
+  // ── Custom selection highlight (CSS Highlight API) ──
+  function applySelectionHighlight(range) {
+    if (!range) return;
+    try {
+      if (typeof CSS !== 'undefined' && CSS.highlights) {
+        // Remove old highlight
+        CSS.highlights.delete('selection-highlight');
+        // Apply new highlight
+        const h = new Highlight(range);
+        CSS.highlights.set('selection-highlight', h);
+      }
+    } catch (_) {}
+  }
+
+  function removeSelectionHighlight() {
+    try {
+      if (typeof CSS !== 'undefined' && CSS.highlights) {
+        CSS.highlights.delete('selection-highlight');
+      }
+    } catch (_) {}
   }
 
   async function submitFeedback() {
@@ -487,48 +556,6 @@
       els.fbInputSubmit.textContent = '提交反馈';
     }
   }
-
-  // ── Selection tooltip ──
-  function handleSelection() {
-    const sel = document.getSelection();
-    if (!sel || sel.isCollapsed || !sel.toString().trim()) {
-      els.selectionTooltip.classList.remove('visible');
-      return;
-    }
-    const text = sel.toString().trim();
-    if (!text || text.length < 2) {
-      els.selectionTooltip.classList.remove('visible');
-      return;
-    }
-
-    // Get selection range
-    const range = sel.getRangeAt(0);
-    const rect = range.getBoundingClientRect();
-
-    // Position tooltip above selection
-    const tooltip = els.selectionTooltip;
-    tooltip.style.left = Math.max(8, rect.left + rect.width / 2 - tooltip.offsetWidth / 2) + 'px';
-    tooltip.style.top = Math.max(8, rect.top - 44) + 'px';
-    tooltip.classList.add('visible');
-
-    // Get line numbers relative to raw content
-    const { startLine, endLine } = getLineNumbersFromRange(rawContent, range.startOffset, range.endOffset);
-    currentSelectionText = text;
-    currentSelectionStart = startLine;
-    currentSelectionEnd = endLine;
-  }
-
-  // Handle selection tooltip tag clicks
-  els.selectionTooltip.addEventListener('click', e => {
-    const btn = e.target.closest('.m-sel-tag');
-    if (!btn) return;
-    const tagText = btn.dataset.tag;
-    const note = (tagText === '删除' || tagText === '备注') ? tagText : tagText + ' ';
-    showFeedbackInput(currentSelectionText, currentSelectionStart, currentSelectionEnd, note);
-    els.selectionTooltip.classList.remove('visible');
-    // Show feedback input panel
-    showPanel(els.feedbackOverlay, els.feedbackInputPanel);
-  });
 
   // ── Feedback tag clicks (inside input panel) ──
   els.fbInputTags.addEventListener('click', e => {
@@ -594,33 +621,145 @@
   // ── Load content ──
   async function loadContent() {
     const body = els.contentBody;
+
+    // Image
+    if (isImage) {
+      body.innerHTML = '';
+      body.style.cssText = 'display:flex;align-items:center;justify-content:center;padding:0;position:relative;';
+      const img = document.createElement('img');
+      img.id = 'previewImage';
+      img.alt = fileName;
+      img.style.cssText = 'max-width:100%;max-height:75vh;object-fit:contain;';
+
+      // Load siblings for prev/next navigation
+      const parentDir = filePath.includes('/') ? filePath.split('/').slice(0, -1).join('/') : '';
+      const nav = { prev: null, next: null, idx: 0, total: 0 };
+      try {
+        const listRes = await fetch(API_BASE + '/list?root=' + encodeURIComponent(rootId) + '&dir=' + encodeURIComponent(parentDir));
+        const listData = await listRes.json();
+        const allEntries = listData.entries || [];
+        const images = allEntries.filter(e => IMAGE_EXTS.includes((e.name.split('.').pop() || '').toLowerCase()));
+        nav.total = images.length;
+        const currentIdx = images.findIndex(e => (e.path || e.relPath || e.name) === filePath);
+        if (currentIdx >= 0) {
+          nav.idx = currentIdx + 1;
+          if (currentIdx > 0) nav.prev = images[currentIdx - 1];
+          if (currentIdx < images.length - 1) nav.next = images[currentIdx + 1];
+        }
+      } catch (_) {}
+
+      // Set image src
+      const imgSrc = API_BASE + '/preview?root=' + encodeURIComponent(rootId) + '&path=' + encodeURIComponent(filePath);
+      img.src = imgSrc;
+
+      // Build overlay
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:relative;display:flex;flex-direction:column;align-items:center;width:100%;';
+
+      // Image wrapper for nav clicks
+      const imgWrap = document.createElement('div');
+      imgWrap.style.cssText = 'display:flex;align-items:center;width:100%;position:relative;justify-content:center;';
+
+      // Prev button
+      if (nav.prev) {
+        const prevBtn = document.createElement('button');
+        prevBtn.innerHTML = '‹';
+        prevBtn.className = 'm-img-nav';
+        prevBtn.style.cssText = 'left:4px;';
+        const prevPath = nav.prev.path || nav.prev.relPath || nav.prev.name;
+        prevBtn.addEventListener('click', function() {
+          var url = 'preview.html?root=' + encodeURIComponent(rootId) + '&file=' + encodeURIComponent(prevPath);
+          console.log('[nav] navigate to:', url);
+          window.location.href = url;
+        });
+        imgWrap.appendChild(prevBtn);
+      }
+
+      imgWrap.appendChild(img);
+
+      // Next button
+      if (nav.next) {
+        const nextBtn = document.createElement('button');
+        nextBtn.innerHTML = '›';
+        nextBtn.className = 'm-img-nav';
+        nextBtn.style.cssText = 'right:4px;';
+        const nextPath = nav.next.path || nav.next.relPath || nav.next.name;
+        nextBtn.addEventListener('click', function() {
+          var url = 'preview.html?root=' + encodeURIComponent(rootId) + '&file=' + encodeURIComponent(nextPath);
+          console.log('[nav] navigate to:', url);
+          window.location.href = url;
+        });
+        imgWrap.appendChild(nextBtn);
+      }
+
+      overlay.appendChild(imgWrap);
+
+      // Counter + filename
+      const info = document.createElement('div');
+      info.style.cssText = 'text-align:center;font-size:13px;color:var(--text-secondary);padding:4px 12px 8px;word-break:break-all;';
+      info.textContent = fileName + (nav.total > 0 ? ' (' + nav.idx + '/' + nav.total + ')' : '');
+      overlay.appendChild(info);
+
+      body.appendChild(overlay);
+      return;
+    }
+
+    // Audio/Video media
+    if (isAudio || isVideo) {
+      const mediaSrc = API_BASE + '/preview?root=' + encodeURIComponent(rootId) + '&path=' + encodeURIComponent(filePath);
+      body.innerHTML = '';
+      body.style.cssText = 'display:flex;align-items:center;justify-content:center;padding:0;';
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'width:100%;max-width:100%;padding:16px;';
+      const el = document.createElement(isVideo ? 'video' : 'audio');
+      el.src = mediaSrc;
+      el.controls = true;
+      el.autoplay = false;
+      el.preload = 'metadata';
+      el.style.cssText = isVideo ? 'width:100%;max-height:60vh;border-radius:8px;background:#000;' : 'width:100%;margin-top:16px;';
+      const title = document.createElement('div');
+      title.style.cssText = 'text-align:center;font-size:14px;color:var(--text-secondary);margin-bottom:12px;word-break:break-all;';
+      title.textContent = fileName;
+      wrapper.appendChild(title);
+      wrapper.appendChild(el);
+      body.appendChild(wrapper);
+      return;
+    }
+
+    // Office / PDF
+    if (isOfficePdf) {
+      body.innerHTML = '';
+      body.style.cssText = 'display:flex;flex-direction:column;flex:1;min-height:0;padding:0;margin:0;';
+      const iframe = document.createElement('iframe');
+      iframe.id = 'officeIframe';
+      iframe.src = '../onlyoffice.html?root=' + encodeURIComponent(rootId) + '&path=' + encodeURIComponent(filePath) + '&mode=view';
+      iframe.style.cssText = 'width:100%;height:100%;border:none;overflow:hidden;';
+      body.appendChild(iframe);
+      return;
+    }
+
     try {
       const res = await fetch(API_BASE + '/preview?root=' + encodeURIComponent(rootId) + '&path=' + encodeURIComponent(filePath));
       if (!res.ok) {
-        body.innerHTML = '<div class="m-loading">无法加载文件 (' + res.status + ')</div>';
+        body.innerHTML = '<div class="m-loading">\u65e0\u6cd5\u52a0\u8f7d\u6587\u4ef6 (' + res.status + ')</div>';
         return;
       }
 
-      const ct = res.headers.get('content-type') || '';
-      if (ct.includes('text/') || ct.includes('application/json') || ct.includes('application/javascript') || ct.includes('application/xml') || ct.includes('application/yaml')) {
-        rawContent = await res.text();
-      } else if (isMarkdown || isPlainText) {
-        rawContent = await res.text();
-      } else {
-        // Binary file — show download link
-        body.innerHTML = '<div class="m-file-empty">无法预览的二进制文件<br><a href="' + API_BASE + '/download?root=' + encodeURIComponent(rootId) + '&path=' + encodeURIComponent(filePath) + '" style="color:var(--accent);font-size:14px;">⬇ 下载文件</a></div>';
-        return;
-      }
+      // API returns JSON: {meta: ..., content: "..."}
+      const data = await res.json();
+      rawContent = data.content || '';
 
       if (isMarkdown) {
         renderMarkdown(rawContent);
-      } else if (isPlainText) {
-        renderPlainText(rawContent);
+      } else if (isJson) {
+        renderJsonText(rawContent);
+      } else if (isCode) {
+        renderCodeText(rawContent, ext);
       } else {
         renderPlainText(rawContent);
       }
     } catch (e) {
-      body.innerHTML = '<div class="m-loading">加载失败: ' + e.message + '</div>';
+      body.innerHTML = '<div class="m-loading">\u52a0\u8f7d\u5931\u8d25: ' + e.message + '</div>';
     }
   }
 
@@ -629,6 +768,38 @@
     body.innerHTML = '';
     const pre = document.createElement('pre');
     pre.style.cssText = 'background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:12px;overflow-x:auto;font-size:13px;line-height:1.6;margin:0;white-space:pre-wrap;word-break:break-word;';
+    const code = document.createElement('code');
+    code.textContent = text;
+    pre.appendChild(code);
+    body.appendChild(pre);
+  }
+
+  function renderCodeText(text, lang) {
+    const body = els.contentBody;
+    body.innerHTML = '';
+    const pre = document.createElement('pre');
+    pre.style.cssText = 'background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:12px;overflow-x:auto;font-size:13px;line-height:1.6;margin:0;';
+    const code = document.createElement('code');
+    try {
+      const result = hljs.highlight(text, { language: lang || 'plaintext', ignoreIllegals: true });
+      code.innerHTML = result.value;
+    } catch (_) {
+      code.textContent = text;
+    }
+    code.className = 'hljs';
+    pre.appendChild(code);
+    body.appendChild(pre);
+  }
+
+  function renderJsonText(text) {
+    try {
+      const obj = JSON.parse(text);
+      text = JSON.stringify(obj, null, 2);
+    } catch (_) {}
+    const body = els.contentBody;
+    body.innerHTML = '';
+    const pre = document.createElement('pre');
+    pre.style.cssText = 'background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:12px;overflow-x:auto;font-size:13px;line-height:1.6;margin:0;';
     const code = document.createElement('code');
     code.textContent = text;
     pre.appendChild(code);
@@ -795,8 +966,7 @@
     }
   }
 
-  els.btnImmersive.addEventListener('click', toggleImmersive);
-
+  
   // Content area tap for immersive
   els.contentBody.addEventListener('touchstart', e => {
     if (e.touches.length !== 1) return;
@@ -824,8 +994,7 @@
     renderOutlinePanel();
     showPanel(els.outlineOverlay, els.outlinePanel);
   }
-  els.btnOutline.addEventListener('click', showOutline);
-  els.btnBottomOutline.addEventListener('click', showOutline);
+    els.btnBottomOutline.addEventListener('click', showOutline);
   els.outlineOverlay.addEventListener('click', () => hidePanel(els.outlineOverlay, els.outlinePanel));
   els.outlineClose.addEventListener('click', () => hidePanel(els.outlineOverlay, els.outlinePanel));
 
@@ -834,7 +1003,6 @@
     loadFeedbackList();
     showPanel(els.feedbackOverlay, els.feedbackPanel);
   }
-  els.btnFeedback.addEventListener('click', showFeedback);
   els.btnBottomFeedback.addEventListener('click', showFeedback);
   els.feedbackOverlay.addEventListener('click', () => {
     hidePanel(els.feedbackOverlay, els.feedbackPanel);
@@ -845,24 +1013,74 @@
     hideFeedbackInput();
   });
 
-  // ── Selection monitoring ──
-  document.addEventListener('selectionchange', () => {
-    // Don't show selection tooltip when in input/textarea
+
+
+  // ── Selection handler: directly show input panel ──
+  let selTimer;
+  document.addEventListener('selectionchange', function() {
+    if (selTimer) clearTimeout(selTimer);
+    selTimer = setTimeout(function() {
     const active = document.activeElement;
     if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) return;
-    handleSelection();
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.toString().trim()) return;
+    const text = sel.toString().trim();
+    if (text.length < 2) return;
+    const sel2 = window.getSelection();
+    if (!sel2 || sel2.isCollapsed || sel2.toString().trim() !== text) return;
+    // Store selection data for later use
+    pendingSelectionText = text;
+    pendingRange = sel.getRangeAt(0);
+    const lines = getLineNumbersFromRange(rawContent, pendingRange.startOffset, pendingRange.endOffset);
+    pendingStartLine = lines.startLine;
+    pendingEndLine = lines.endLine;
+    // Show floating tooltip instead of panel
+    showSelectionTooltip(pendingRange);
+    }, 400);
   });
 
-  // Also handle touchend for mobile
-  document.addEventListener('touchend', () => {
-    setTimeout(handleSelection, 100);
+  // touchend: selection is final when finger lifts
+  document.addEventListener('touchend', function() {
+    if (selTimer) clearTimeout(selTimer);
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return;
+    const text = sel.toString().trim();
+    if (text.length < 2) return;
+    pendingSelectionText = text;
+    pendingRange = sel.getRangeAt(0);
+    const lines = getLineNumbersFromRange(rawContent, pendingRange.startOffset, pendingRange.endOffset);
+    pendingStartLine = lines.startLine;
+    pendingEndLine = lines.endLine;
+    showSelectionTooltip(pendingRange);
+  }, { passive: true });
+
+  // Tooltip button: open feedback panel with stored selection
+  els.tooltipFeedbackBtn.addEventListener('click', function() {
+    if (!pendingSelectionText) return;
+    var text = pendingSelectionText;
+    var sl = pendingStartLine;
+    var el = pendingEndLine;
+    var range = pendingRange;
+    // Apply custom highlight before clearing native selection
+    if (range) {
+      applySelectionHighlight(range);
+      // Clear native selection so panel content isn't highlighted
+      var sel = window.getSelection();
+      if (sel) sel.removeAllRanges();
+    }
+    hideSelectionTooltip();
+    showFeedbackInput(text, sl, el, '');
   });
 
-  // Hide tooltip on scroll
-  els.contentBody.addEventListener('scroll', () => {
-    els.selectionTooltip.classList.remove('visible');
-  });
-
+  // Hide tooltip on scroll or tap outside
+  document.addEventListener('scroll', hideSelectionTooltip, { passive: true });
+  document.addEventListener('touchstart', function(e) {
+    const tooltip = els.selectionTooltip;
+    if (!tooltip.classList.contains('visible')) return;
+    if (!tooltip.contains(e.target)) {
+      hideSelectionTooltip();
+    }
+  }, { passive: true });
   // ── Init ──
   async function init() {
     // Load content
@@ -874,7 +1092,7 @@
         const data = await res.json();
         const pending = (data.items || []).filter(i => (i.status || '').toLowerCase() === 'pending').length;
         if (pending > 0) {
-          document.getElementById('btnFeedback').textContent = '💬 (' + pending + ')';
+          els.feedbackPanelTitle.textContent = '💬 反馈 (' + pending + ')';
         }
       }
     } catch (_) {}
