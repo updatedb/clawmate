@@ -6,17 +6,26 @@
 
 ClawMate 是一个面向 AI Agent 工作流的**文件管理 → 预览 → 反馈闭环**工具。与传统文件浏览器不同，它关注的不是「浏览」，而是「用户在预览时发现问题 → 即时反馈 → Agent 自动修改」的完整链路。
 
----
+## 为什么需要 ClawMate？
+
+在使用 OpenClaw 等 AI Agent 的过程中，会产生大量待发布的文稿、待实施的方案、以及大量的代码文件。Agent 以摘要方式传递内容，但传统模式下你需要：拷贝 → 粘贴 → 总结 → 再让 Agent 做计划——冗长且容易失真。
+
+ClawMate 的解法是：
+
+- **在线管理 Agent 产出的项目文件**，Agent 生成文件时直接返回可点击的预览链接
+- **即时交互反馈**：预览时发现问题 → 直接选中文本 → 填写备注 → 提交 → Agent 自动修改，无需跳出工作流
+- **统一完成评审、修订、方案执行的闭环**，而不是在多个窗口间来回切换
+- **Webhook 拓展**：不仅支持代码和文档，也支持 Office 文档、音乐、视频等内容的评审与建议反馈
 
 ## 截图
 
-| 桌面端文件浏览 | 桌面端代码预览 + 反馈面板 |
+| 多目录文档管理 | 多种格式预览 + 反馈跟踪 |
 |:---:|:---:|
-| ![桌面端文件浏览](assets/cm-desktop-browser.jpg) | ![桌面端代码预览 + 反馈](assets/cm-desktop-preview-feedback.jpg) |
+| ![多目录文档管理](assets/cm-desktop-browser.jpg) | ![多种格式预览 + 反馈跟踪](assets/cm-desktop-preview-feedback.jpg) |
 
-| 桌面端 Markdown 预览 | 移动端文件浏览 |
+| 桌面端 Markdown 预览（含大纲+反馈面板） | 移动端文件浏览 |
 |:---:|:---:|
-| ![桌面端 Markdown 预览](assets/cm-desktop-preview.jpg) | ![移动端文件浏览](assets/cm-mobile-browser.jpg) |
+| ![桌面端 Markdown 预览](assets/cm-readme-preview.jpg) | ![移动端文件浏览](assets/cm-mobile-browser.jpg) |
 
 | 移动端预览 |
 |:---:|
