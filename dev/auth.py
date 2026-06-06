@@ -221,6 +221,7 @@ _ALWAYS_ALLOWED = frozenset([
     "/",
     "/api/health",
     "/api/clawmate/preview",
+    "/api/clawmate/download",
 ])
 
 
