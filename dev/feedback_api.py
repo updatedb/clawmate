@@ -54,10 +54,11 @@ _last_wake: dict[str, float] = {}
 _DEBOUNCE_SECONDS = 60
 
 
-def _wake_agent_for_root(root_id: str) -> None:
+def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> None:
     """读取 config，直接 POST OpenClaw /hooks/agent（后台线程 fire-and-forget）。
 
     内联 message（不加载模板），防抖 60s 同 root 跳过。
+    可传 project + file 缩小 agent 查询范围。
     """
     cfg = config()
     oc = cfg.openclaw
@@ -83,10 +84,18 @@ def _wake_agent_for_root(root_id: str) -> None:
 
     # 内联 message
     base_url = cfg.public_base_url or "http://localhost:5533"
+    scope = f"root={root_id}"
+    if project:
+        scope += f"&project={project}"
+    if file:
+        scope += f"&file={file}"
     message = (
-        f"ClawMate 反馈通知：root_id={root_id} 有待处理反馈。\n"
-        f"请自行 GET {base_url}/api/clawmate/feedback/list?root={root_id}&status=pending\n"
-        f"获取待处理列表并逐条处理。"
+        f"ClawMate 反馈通知：{scope} 有待处理反馈。\n"
+        f"处理步骤：\n"
+        f"1. GET {base_url}/api/clawmate/feedback/list?{scope}&status=pending 获取待处理列表\n"
+        f"2. 加载 {root_id}/{project if project else '?'} 项目上下文，逐条读取 note/content 理解改进需求\n"
+        f"3. 综合考虑后执行改动\n"
+        f"4. 完成后检查是否有不恰当的项，并更新反馈状态"
     )
     run_name = f"clawmate-fb-{root_id}"
 
@@ -252,7 +261,7 @@ async def feedback_create(request: Request):
 
     # 实时唤醒 agent
     if ids:
-        _wake_agent_for_root(root_id)
+        _wake_agent_for_root(root_id, project=project, file=file_path)
 
     # 预览文本
     lines = ["## 📋 ClawMate 反馈"]

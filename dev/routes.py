@@ -1113,8 +1113,9 @@ async def clawmate_subtitle_correct(request: Request):
 
     item_id = new_items[0]["id"]
 
-    # 立即触发 agent
-    _wake_agent_for_root(root_id)
+    # 立即触发 agent，带 project + file 缩小查询范围
+    project = media_path.split("/")[0] if "/" in media_path else ""
+    _wake_agent_for_root(root_id, project=project, file=media_path)
 
     return JSONResponse(content={
         "ok": True,

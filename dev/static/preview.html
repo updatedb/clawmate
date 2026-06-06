@@ -296,6 +296,7 @@
     .preview-bottom-btn.active { background: var(--accent); border-color: var(--accent); }
     .preview-bottom-btn.danger:hover { background: rgba(220,38,38,0.3); border-color: rgba(220,38,38,0.5); }
     .preview-bottom-divider { width: 1px; height: 20px; background: transparent; margin: 0 4px; flex-shrink: 0; }
+    .preview-btn-group { display: flex; align-items: center; gap: 4px; }
 
     /* Toast */
     .preview-toast {
@@ -860,14 +861,10 @@
     <!-- Bottom toolbar -->
     <div class="preview-bottombar">
       <a class="preview-bottom-btn" id="btnBack" title="返回目录">← 返回</a>
-      <div class="preview-bottom-divider"></div>
-      <button class="preview-bottom-btn" id="btnPath" title="复制绝对路径">📁 路径</button>
-      <button class="preview-bottom-btn" id="btnPdf" title="导出">📥 导出</button>
-      <button class="preview-bottom-btn" id="btnDownload" title="下载文件">⬇ 下载</button>
-      <button class="preview-bottom-btn" id="btnRename" title="重命名">✏️ 重命名</button>
-      <div class="preview-bottom-divider" id="bottombarDynamicSep" style="display:none"></div>
+      <div class="preview-btn-group"><button class="preview-bottom-btn" id="btnPath" title="复制绝对路径">📁 路径</button><button class="preview-bottom-btn" id="btnPdf" title="导出">📥 导出</button><button class="preview-bottom-btn" id="btnDownload" title="下载文件">⬇ 下载</button><button class="preview-bottom-btn" id="btnRename" title="重命名">✏️ 重命名</button></div>
       <!-- Dynamic zone: image/audio/video modules populate this -->
       <div id="bottombarDynamic" style="display:flex;align-items:center;gap:4px;"></div>
+      <div class="preview-btn-group" id="bottombarEditGroup"></div>
       <div class="preview-bottom-divider" style="flex:1"></div>
       <button class="preview-bottom-btn danger" id="btnDelete" title="删除文件">🗑 删除</button>
     </div>
@@ -1186,6 +1183,13 @@
       await window.mermaid.run({ querySelector: '.' + scopeClass + ' .mermaid' });
       console.log('[ClawMate] mermaid.run() completed successfully');
 
+      // Setup zoom for each rendered SVG
+      await new Promise(r => setTimeout(r, 100));
+      for (var i = 0; i < blocks.length; i++) {
+        var svg = blocks[i].querySelector('svg');
+        if (svg) setupMermaidZoomDesktop(svg);
+      }
+
       // Fix quadrantChart NaN% colors (Mermaid v11 bug)
       for (var i = 0; i < blocks.length; i++) {
         blocks[i].querySelectorAll('[fill*="NaN%"], [stroke*="NaN%"]').forEach(function(el) {
@@ -1205,6 +1209,87 @@
     } finally {
       div.classList.remove(scopeClass);
     }
+  }
+
+  // ── Mermaid zoom (desktop: mouse wheel + buttons) ──
+  function setupMermaidZoomDesktop(svg) {
+    var container = svg.parentElement;
+    if (!container || container._mermaidZoom) return;
+    container._mermaidZoom = true;
+    var scale = 1;
+    var originX = 0, originY = 0;
+    var isPanning = false, panStartX = 0, panStartY = 0;
+
+    container.style.overflow = 'hidden';
+    container.style.position = 'relative';
+    container.style.cursor = 'grab';
+
+    // Zoom controls
+    var controls = document.createElement('div');
+    controls.className = 'mermaid-zoom-controls';
+    controls.innerHTML = '<button class="mermaid-zoom-btn" data-zoom="out">−</button><button class="mermaid-zoom-btn" data-zoom="reset">⊙</button><button class="mermaid-zoom-btn" data-zoom="in">+</button>';
+    container.appendChild(controls);
+
+    function applyZoom() {
+      svg.style.transformOrigin = '0 0';
+      svg.style.transform = 'translate(' + originX + 'px, ' + originY + 'px) scale(' + scale + ')';
+      container.classList.toggle('mermaid-zoomed', scale !== 1);
+    }
+
+    // Button zoom
+    controls.addEventListener('click', function(e) {
+      var btn = e.target.closest('.mermaid-zoom-btn');
+      if (!btn) return;
+      if (btn.dataset.zoom === 'in') { scale = Math.min(5, scale + 0.5); }
+      else if (btn.dataset.zoom === 'out') { scale = Math.max(0.3, scale - 0.5); }
+      else { scale = 1; originX = 0; originY = 0; }
+      applyZoom();
+    });
+
+    // Mouse wheel
+    container.addEventListener('wheel', function(e) {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        var delta = e.deltaY > 0 ? -0.2 : 0.2;
+        var oldScale = scale;
+        scale = Math.max(0.3, Math.min(5, scale + delta));
+        var rect = container.getBoundingClientRect();
+        var mx = e.clientX - rect.left;
+        var my = e.clientY - rect.top;
+        originX = mx - (mx - originX) * scale / oldScale;
+        originY = my - (my - originY) * scale / oldScale;
+        applyZoom();
+      }
+    }, { passive: false });
+
+    // Pan (drag)
+    container.addEventListener('mousedown', function(e) {
+      if (e.button !== 0 || e.ctrlKey || e.metaKey) return;
+      isPanning = true;
+      panStartX = e.clientX - originX;
+      panStartY = e.clientY - originY;
+      container.style.cursor = 'grabbing';
+    });
+
+    document.addEventListener('mousemove', function(e) {
+      if (!isPanning) return;
+      originX = e.clientX - panStartX;
+      originY = e.clientY - panStartY;
+      applyZoom();
+    });
+
+    document.addEventListener('mouseup', function() {
+      if (isPanning) {
+        isPanning = false;
+        container.style.cursor = 'grab';
+      }
+    });
+
+    // Double-click to fit
+    container.addEventListener('dblclick', function() {
+      scale = 1; originX = 0; originY = 0;
+      applyZoom();
+    });
   }
 
   function buildTOC(div) {
@@ -1566,8 +1651,6 @@
   function updatePlainTextDynamicButtons() {
     var dyn = document.getElementById('bottombarDynamic');
     dyn.innerHTML = '';
-    var sep = document.getElementById('bottombarDynamicSep');
-    if (sep) sep.style.display = '';
 
     // Outline toggle — always present for code files with symbols (same as markdown)
     if (codeOutlineItems.length >= 2) {
@@ -1581,12 +1664,12 @@
         updatePlainTextDynamicButtons();
       });
       dyn.appendChild(outlineBtn);
-      // Use existing preview-bottom-divider as separator (same as markdown)
-      var divider = document.createElement('div');
-      divider.className = 'preview-bottom-divider';
-      dyn.appendChild(divider);
     }
 
+    var pg = document.getElementById('bottombarEditGroup');
+    var sep = document.getElementById('bottombarEditSep');
+    pg.innerHTML = '';
+    if (sep) sep.style.display = 'flex';
     if (isPlainTextEditMode) {
       if (sourceDirty) {
         var saveBtn = document.createElement('button');
@@ -1594,7 +1677,7 @@
         saveBtn.id = 'btnPlainTextSave';
         saveBtn.textContent = '💾 保存';
         saveBtn.addEventListener('click', savePlainTextContent);
-        dyn.appendChild(saveBtn);
+        pg.appendChild(saveBtn);
       }
       var cancelBtn = document.createElement('button');
       cancelBtn.className = 'preview-bottom-btn active';
@@ -1605,14 +1688,14 @@
         sourceDirty = false;
         loadContent();
       });
-      dyn.appendChild(cancelBtn);
+      pg.appendChild(cancelBtn);
     } else {
       var editBtn = document.createElement('button');
       editBtn.className = 'preview-bottom-btn';
       editBtn.id = 'btnPlainTextEdit';
       editBtn.textContent = '✏️ 编辑';
       editBtn.addEventListener('click', enterPlainTextEditMode);
-      dyn.appendChild(editBtn);
+      pg.appendChild(editBtn);
     }
   }
 
@@ -1620,8 +1703,6 @@
   function updateMarkdownDynamicButtons() {
     const dyn = document.getElementById('bottombarDynamic');
     dyn.innerHTML = '';
-    const sep = document.getElementById('bottombarDynamicSep');
-    if (sep) sep.style.display = '';
 
     // Outline toggle — always present for markdown (not affected by raw/render mode)
     if (isMarkdownMode) {
@@ -1645,8 +1726,13 @@
     srcBtn.addEventListener('click', toggleRawMode);
     dyn.appendChild(srcBtn);
 
-    // Edit/Save (only in raw/source mode for Markdown/HTML)
+    // Edit/Save (only in raw/source mode for Markdown/HTML) — appended to separate group
+    var editGroup = document.getElementById('bottombarEditGroup');
+    var editSep = document.getElementById('bottombarEditSep');
+    editGroup.innerHTML = '';
+    if (editSep) editSep.style.display = 'none';
     if ((isRawMode && isMarkdownMode) || (isRawMode && isHtmlMode)) {
+      if (editSep) editSep.style.display = 'flex';
       if (isPlainTextEditMode) {
         // Save button: only visible when content is dirty
         if (sourceDirty) {
@@ -1655,7 +1741,7 @@
           saveBtn.id = 'btnSrcSave';
           saveBtn.textContent = '💾 保存';
           saveBtn.addEventListener('click', saveSourceEdit);
-          dyn.appendChild(saveBtn);
+          editGroup.appendChild(saveBtn);
         }
         // Edit toggle button (active while editing, click to cancel)
         const cancelBtn = document.createElement('button');
@@ -1663,7 +1749,7 @@
         cancelBtn.id = 'btnSrcEdit';
         cancelBtn.textContent = '❌ 取消';
         cancelBtn.addEventListener('click', exitSourceEditMode);
-        dyn.appendChild(cancelBtn);
+        editGroup.appendChild(cancelBtn);
       } else {
         // Edit button (not editing): enter edit mode
         const editBtn = document.createElement('button');
@@ -1671,7 +1757,7 @@
         editBtn.id = 'btnSrcEdit';
         editBtn.textContent = '✏️ 编辑';
         editBtn.addEventListener('click', enterSourceEditMode);
-        dyn.appendChild(editBtn);
+        editGroup.appendChild(editBtn);
       }
     }
   }
@@ -2194,8 +2280,6 @@
     updateGridColumns();
 
     const dyn = document.getElementById('bottombarDynamic');
-    const sep = document.getElementById('bottombarDynamicSep');
-    if (sep) sep.style.display = '';
     if (dyn) dyn.style.display = 'flex';
   }
 
@@ -2938,8 +3022,6 @@
   function setupOfficePdfToolbar() {
     officePdfCurrentMode = onlyofficeMode;
     const dyn = document.getElementById('bottombarDynamic');
-    const sep = document.getElementById('bottombarDynamicSep');
-    if (sep) sep.style.display = '';
     dyn.innerHTML = '';
     // Office docs open in edit mode by default; no manual toggle needed
   }

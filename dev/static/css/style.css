@@ -1397,3 +1397,51 @@ pre:hover .code-copy-btn,
 .img-nav-btn:hover {
   background: rgba(0,0,0,0.5);
 }
+
+/* ── Mermaid zoom controls (desktop) ── */
+.mermaid-zoom-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: none;
+  gap: 2px;
+  z-index: 10;
+  background: rgba(0,0,0,0.06);
+  border-radius: 8px;
+  padding: 2px;
+  backdrop-filter: blur(4px);
+}
+.mermaid:hover .mermaid-zoom-controls,
+.mermaid-zoomed .mermaid-zoom-controls {
+  display: flex;
+}
+.mermaid-zoom-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s;
+  user-select: none;
+}
+.mermaid-zoom-btn:hover {
+  background: rgba(0,0,0,0.1);
+}
+.mermaid-zoomed {
+  overflow: auto !important;
+}
+.mermaid-zoomed svg {
+  transition: transform 0.05s;
+}
+[data-theme="dark"] .mermaid-zoom-controls {
+  background: rgba(255,255,255,0.08);
+}
+[data-theme="dark"] .mermaid-zoom-btn:hover {
+  background: rgba(255,255,255,0.15);
+}

@@ -208,22 +208,23 @@ def _sync_cron_jobs():
     cron_bin = _get_cron_bin()
     cron_name = "clawmate-fb-fallback"
 
-    # 先删除已存在的 clawmate-fb-fallback（幂等）
+    # 先删除已存在的 clawmate-fb-fallback（幂等），用 --json 精准匹配
     try:
         list_out = subprocess.run(
-            [cron_bin, "cron", "list"],
-            timeout=10, capture_output=True, text=True,
+            [cron_bin, "cron", "list", "--json"],
+            timeout=15, capture_output=True, text=True,
         ).stdout
-        for line in list_out.splitlines():
-            if cron_name in line[:28]:
-                parts = line.split()
-                if parts:
-                    subprocess.run(
-                        [cron_bin, "cron", "rm", parts[0]],
-                        timeout=10, capture_output=True,
-                    )
-    except Exception:
-        pass
+        cron_data = json.loads(list_out)
+        cron_jobs = cron_data if isinstance(cron_data, list) else cron_data.get("jobs", cron_data.get("items", []))
+        for job in cron_jobs:
+            if job.get("name") == cron_name:
+                subprocess.run(
+                    [cron_bin, "cron", "rm", job["id"]],
+                    timeout=10, capture_output=True,
+                )
+                print(f"[clawmate] 已删除旧的 {cron_name} ({job['id']})")
+    except Exception as e:
+        print(f"[clawmate] 删除旧 {cron_name} 时出错: {e}")
 
     # 读取 cron message 模板
     template_path = Path(__file__).parent / "cron_template.txt"

@@ -344,6 +344,7 @@
 
       if (language === 'mermaid') {
         const id = mermaidIdx++;
+        mermaidStore[id] = raw;
         return '<div class="mermaid" data-mermaid-id="' + id + '"></div>';
       }
 
@@ -375,6 +376,71 @@
     });
   }
 
+  // ── Code outline: parse function/class definitions ──
+  function buildCodeOutline(rawContent, ext) {
+    var lines = rawContent.split('\n');
+    var items = [];
+    var patterns = {
+      py: [
+        [/^\s*def\s+(\w+)\s*\(/, function(m) { return 'def ' + m[1] + '(...)'; }],
+        [/^\s*class\s+(\w+)/, function(m) { return 'class ' + m[1]; }],
+        [/^\s*async\s+def\s+(\w+)\s*\(/, function(m) { return 'async def ' + m[1] + '(...)'; }],
+      ],
+      js: [
+        [/^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)/, function(m) { return 'function ' + m[1] + '()'; }],
+        [/^\s*(?:export\s+)?class\s+(\w+)/, function(m) { return 'class ' + m[1]; }],
+        [/^\s*(?:static\s+)?(?:async\s+)?(\w+)\s*\([^)]*\)\s*\{/, function(m) { return m[1] + '()'; }, true],
+      ],
+      ts: [
+        [/^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)/, function(m) { return 'function ' + m[1] + '()'; }],
+        [/^\s*(?:export\s+)?(?:abstract\s+)?class\s+(\w+)/, function(m) { return 'class ' + m[1]; }],
+        [/^\s*(?:export\s+)?interface\s+(\w+)/, function(m) { return 'interface ' + m[1]; }],
+      ],
+      html: [
+        [/^\s*<h([1-6])\b[^>]*>(.*?)<\/h\1>/, function(m) { return m[2].replace(/<[^>]*>/g,''); }, 'skip'],
+      ],
+      go: [
+        [/^\s*func\s+(\(\w+\s+\*?\w+\)\s+)?(\w+)\s*\(/, function(m) { return 'func ' + (m[1]||'') + ' ' + m[2] + '(...)'; }],
+        [/^\s*type\s+(\w+)\s+(?:struct|interface)/, function(m) { return 'type ' + m[1]; }],
+      ],
+      rs: [
+        [/^\s*(?:pub\s+)?fn\s+(\w+)/, function(m) { return 'fn ' + m[1] + '()'; }],
+        [/^\s*(?:pub\s+)?struct\s+(\w+)/, function(m) { return 'struct ' + m[1]; }],
+        [/^\s*(?:pub\s+)?impl\s+(\w+)/, function(m) { return 'impl ' + m[1]; }],
+      ],
+    };
+    var JS_KEYWORDS = {
+      'if':1,'else':1,'for':1,'while':1,'switch':1,'case':1,'break':1,'continue':1,'return':1,
+      'throw':1,'try':1,'catch':1,'finally':1,'do':1,'with':1,'new':1,'delete':1,'typeof':1,
+      'instanceof':1,'void':1,'in':1,'of':1,'await':1,'debugger':1,'export':1,'import':1,
+      'yield':1,'super':1,'this':1,'async':1,'true':1,'false':1,'null':1,'undefined':1
+    };
+    var lang = patterns[ext] || [];
+    if (!lang.length) { tocItems = []; return; }
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      for (var j = 0; j < lang.length; j++) {
+        var rule = lang[j];
+        var m = line.match(rule[0]);
+        if (m) {
+          if (rule[2] && JS_KEYWORDS[m[1]]) break;
+          items.push({ text: rule[1](m).trim(), line: i + 1 });
+          break;
+        }
+      }
+    }
+    tocItems = items;
+  }
+
+  // ── Scroll to code line ──
+  function scrollToCodeLine(lineNum) {
+    var pre = els.contentBody.querySelector('pre');
+    if (!pre) return;
+    var lineHeight = parseFloat(getComputedStyle(pre).lineHeight) || 22;
+    var scrollTarget = Math.max(0, (lineNum - 4) * lineHeight);
+    pre.parentElement.scrollTop = scrollTarget;
+  }
+
   function renderOutlinePanel() {
     const body = els.outlineBody;
     body.innerHTML = '';
@@ -384,12 +450,16 @@
     }
     tocItems.forEach(item => {
       const a = document.createElement('a');
-      a.className = 'm-outline-item level-' + item.level;
-      a.textContent = item.text;
+      a.className = 'm-outline-item' + (item.level ? ' level-' + item.level : '');
+      a.textContent = item.line ? item.line + '  ' + item.text : item.text;
       a.addEventListener('click', e => {
         e.preventDefault();
         hidePanel(els.outlineOverlay, els.outlinePanel);
-        item.element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (item.line) {
+          scrollToCodeLine(item.line);
+        } else if (item.element) {
+          item.element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
       });
       body.appendChild(a);
     });
@@ -755,8 +825,10 @@
         renderJsonText(rawContent);
       } else if (isCode) {
         renderCodeText(rawContent, ext);
+        buildCodeOutline(rawContent, ext);
       } else {
         renderPlainText(rawContent);
+        buildCodeOutline(rawContent, ext);
       }
     } catch (e) {
       body.innerHTML = '<div class="m-loading">\u52a0\u8f7d\u5931\u8d25: ' + e.message + '</div>';
