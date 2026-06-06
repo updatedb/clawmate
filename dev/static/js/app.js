@@ -1163,7 +1163,7 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
           if (newName && newName !== entry.name) {
             authFetch(`/api/clawmate/rename?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}&new_name=${encodeURIComponent(newName)}`, { method: 'POST' })
               .then(r => r.json())
-              .then(data => { if (data.ok) { refresh(); } else { alert('重命名失败：' + (data.detail || data.error || '未知错误')); } })
+              .then(data => { if (data.ok) { state.page = 1; state.searchResults = null; if (state.rootId) loadDir(state.dir); else loadConfig(); } else { alert('重命名失败：' + (data.detail || data.error || '未知错误')); } })
               .catch(() => alert('重命名失败'));
           }
         });
@@ -1204,7 +1204,7 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
           if (newName && newName !== entry.name) {
             authFetch(`/api/clawmate/rename?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}&new_name=${encodeURIComponent(newName)}`, { method: 'POST' })
               .then(r => r.json())
-              .then(data => { if (data.ok) { refresh(); } else { alert('重命名失败：' + (data.detail || data.error || '未知错误')); } })
+              .then(data => { if (data.ok) { state.page = 1; state.searchResults = null; if (state.rootId) loadDir(state.dir); else loadConfig(); } else { alert('重命名失败：' + (data.detail || data.error || '未知错误')); } })
               .catch(() => alert('重命名失败'));
           }
         });
