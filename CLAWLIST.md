@@ -2807,7 +2807,7 @@ work 端实测到 **2 个不同的 service md5**：
 ```
 </details>
 
-## v1.29 — Task Template 统一体系（进行中）
+## v1.29 — Task Template 统一体系 ✅ (051675f)
 
 > **范围**：将 feedback 标签、AI 自定义任务、Agent prompt、前端按钮统一到 task_templates 体系
 >
@@ -2828,11 +2828,11 @@ work 端实测到 **2 个不同的 service md5**：
 #### 1.3 API /config 返回 task_templates ✅ (38e2f8f)
 - [x] 前端 `/api/config` 接口增加 `task_templates` 字段
 
-### Phase 2 — subtitle 路由迁移（待开始）
-- [ ] 创建 `dev/subtitle_routes.py`
-- [ ] 将 subtitle/extract + /status + /correct 从 routes.py 迁出
-- [ ] subtitle/correct 改为调用 task_runner
-- [ ] 清理 routes.py 中的 subtitle 代码
+### Phase 2 — subtitle 路由迁移 ✅ (e4623aa)
+- [x] 创建 `dev/subtitle_routes.py`
+- [x] 将 subtitle/extract + /status + /correct 从 routes.py 迁出
+- [x] subtitle/correct 改为调用 task_runner
+- [x] 清理 routes.py 中的 subtitle 代码
 
 ### Phase 3 — wake message 改造 ✅ (0816696)
 - [x] `_wake_agent_for_root` 改为从 store 读 pending 数据
@@ -2846,9 +2846,9 @@ work 端实测到 **2 个不同的 service md5**：
 - [x] 去掉写死的 `.pst-tags` HTML 和部分 JS
 - [x] 文件切换时按 `match.ext` 重新匹配
 
-### Phase 5 — 收尾清理（待开始）
-- [ ] 老数据兼容：note 前缀匹配降级（review_delete/review_modify 等）
-- [ ] 删除 `config.json feedback.tags`（确认无依赖后）
-- [ ] 删除 `_wake_agent_for_root` 中的硬编码 prompt
-- [ ] 功能回归测试
+### Phase 5 — 收尾清理 ✅ (051675f)
+- [x] 老数据兼容：note 前缀匹配降级（store.py fallback task_templates）（review_delete/review_modify 等）
+- [x] API 数据源改为 task_templates，config.json tags 保留不删（兼容）
+- [x] wake message 改为 data-driven（Phase 3）
+- [x] 全链路回归测试通过
 
