@@ -230,6 +230,7 @@ def create_items(
             start_line = sel.get("startLine")
             end_line = sel.get("endLine")
             if start_line and end_line:
+                prefix = _detect_position_prefix(file_path)
                 position = f"{prefix} {start_line}-{end_line}"
 
         new_id_num = last_id + idx + 1
