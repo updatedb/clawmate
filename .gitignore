@@ -18,6 +18,13 @@ build/
 # Sensitive: contains local paths and secrets
 config.json
 
+# Project documents — not part of public codebase
+CLAWLIST.md
+CHANGELOG.md
+RESEARCH_PLAN.md
+PROJECT_NOTE.md
+REQUIREMENT_CLARIFICATION.md
+
 # Internal docs (not for public)
 PROJECT_NOTE.md
 RESEARCH_PLAN.md
