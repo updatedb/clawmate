@@ -20,7 +20,6 @@ import threading
 import time as time_module
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from urllib.parse import quote
 
 import httpx
 
@@ -38,7 +37,7 @@ from fastapi.responses import JSONResponse
 from feedback_schema import FEEDBACK_STATUSES
 from config import load as config
 from store import create_items, update_item, list_items, status_count, scan_all, project_abbr, batch_update_items
-from service import resolve_root, get_public_base_url
+from service import resolve_root
 
 # ── 常量 ────────────────────────────────────────────────────────────
 
@@ -254,16 +253,10 @@ async def feedback_create(request: Request):
     project = str(body.get("project", "")).strip()
     file_path = str(body.get("path", "")).strip()
     selections = body.get("selections", [])
-    preview_url = str(body.get("previewUrl", "")).strip()
-
     if not root_id or not project or not file_path:
         raise HTTPException(status_code=422, detail="Missing root/project/path")
     if not selections or not isinstance(selections, list):
         raise HTTPException(status_code=422, detail="Missing selections")
-
-    if not preview_url:
-        public_base = get_public_base_url(request)
-        preview_url = f"{public_base}/clawmate/preview.html?root={quote(root_id)}&file={quote(file_path)}"
 
     new_items = create_items(root_id, project, file_path, selections)
 
@@ -273,19 +266,6 @@ async def feedback_create(request: Request):
     if ids:
         _wake_agent_for_root(root_id, project=project, file=file_path)
 
-    # 预览文本
-    lines = ["## 📋 ClawMate 反馈"]
-    lines.append(f"**项目**: `{project}`")
-    lines.append(f"**文件**: `{file_path}` | **ID**: {', '.join(ids)}")
-    lines.append(f"**预览**: {preview_url}")
-    for sel in selections:
-        t = str(sel.get("text", "")).strip()
-        n = str(sel.get("note", "")).strip()
-        if t:
-            lines.append(f"> {t[:300]}")
-        if n:
-            lines.append(f"📝 {n}")
-
     _ts = datetime.now(CST).isoformat(timespec="seconds")
     _user = request.client.host if request.client else "unknown"
     logger.info(
@@ -293,12 +273,8 @@ async def feedback_create(request: Request):
         _ts, root_id, project, _user, ids, file_path, "ok",
     )
 
-    fb_path = resolve_root(root_id) / project / "feedback.json"
     return JSONResponse(content={
         "ok": True, "ids": ids,
-        "feedbackFile": str(fb_path),
-        "feedbackText": "\n".join(lines),
-        "previewUrl": preview_url,
     })
 
 
