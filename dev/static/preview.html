@@ -4235,7 +4235,7 @@
     if (rawFormats.includes(e)) return 'Line {start}-{end}';
     if (['md','rmd','mdx'].includes(e)) return 'Line {start}-{end}';  // source mode
     if (['docx','doc','pptx','ppt','pdf','odt','odp'].includes(e)) return 'Page {start}-{end}';
-    if (['xlsx','xls','csv','tsv'].includes(e)) return 'Range {col}{row}-{col}{row}';
+    if (['xlsx','xls','csv','tsv'].includes(e)) return 'Range {col}{row}';
     if (['mp3','mp4','wav','webm','ogg','flac','aac','m4a','mov','avi','mkv','wmv','flv'].includes(e)) return 'Time {HH:MM:SS}';
     if (['png','jpg','jpeg','gif','bmp','webp','svg','ico'].includes(e)) return 'Area [x,y]xR';
     return 'Line {start}-{end}';
