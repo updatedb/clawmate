@@ -3280,11 +3280,24 @@
     const posInput = document.createElement('input');
     posInput.type = 'text';
     posInput.className = 'fb-card-position-edit';
-    if (itemType === 'text' || itemType === 'markdown') {
-      posInput.value = item.startLine > 0 ? `Line ${item.startLine}-${item.endLine}` : '';
+    if (itemType === 'text') {
+      posInput.value = item.startLine > 0 ? `Line ${item.startLine}-${item.endLine}` : (item.position || '');
       posInput.placeholder = 'Line {start}-{end} — 手动填写位置';
       posInput.title = '位置（可编辑）';
       posInput.addEventListener('input', () => {
+        item.position = posInput.value;
+        const m = posInput.value.match(/(\d+)(?:-(\d+))?/);
+        if (m) {
+          item.startLine = parseInt(m[1], 10);
+          item.endLine = m[2] ? parseInt(m[2], 10) : item.startLine;
+        }
+      });
+    } else if (itemType === 'markdown') {
+      posInput.value = item.startLine > 0 ? `Line ${item.startLine}-${item.endLine}` : (item.position || '');
+      posInput.placeholder = 'Section {heading} / Line {start}-{end}';
+      posInput.title = '位置（可编辑）';
+      posInput.addEventListener('input', () => {
+        item.position = posInput.value;
         const m = posInput.value.match(/(\d+)(?:-(\d+))?/);
         if (m) {
           item.startLine = parseInt(m[1], 10);
@@ -3848,6 +3861,9 @@
           selPayload.startLine = item.startLine;
           selPayload.endLine = item.endLine || item.startLine;
         }
+        if (item.position) {
+          selPayload.position = item.position;
+        }
       } else if (item.position) {
         selPayload.position = item.position;
       }
@@ -4026,9 +4042,47 @@
         return;
       }
 
-      // In rendered markdown mode: no position reference
       const selText = sel.toString().trim();
-      if (isMarkdownMode && !isRawMode && !isPlainTextEditMode) {
+      if (!selText) { hideTooltip(); return; }
+
+      // ── Rendered Markdown mode: detect section heading ──
+      if ((isMarkdownMode) && !isRawMode && !isPlainTextEditMode) {
+        currentStartLine = null;
+        currentEndLine = null;
+        currentSelText = selText;
+        const range = sel.getRangeAt(0);
+        try { savedRange = range.cloneRange(); highlightSelection(); } catch (_) {}
+
+        const heading = detectSectionFromDOM(range);
+        const posValue = heading ? 'Section ' + heading : '';
+        const posEl = document.getElementById('pstLocationInput');
+        posEl.classList.remove('hidden');
+        posEl.placeholder = 'Section {heading} — 自动检测章节';
+        posEl.value = posValue;
+        document.getElementById('pstNote').value = '';
+        document.getElementById('pstStatus').textContent = '';
+        document.getElementById('pstStatus').className = 'pst-status';
+
+        const rect = range.getBoundingClientRect();
+        let top = rect.bottom + 8;
+        let left = rect.left + rect.width / 2;
+        tooltip.style.maxWidth = Math.min(400, window.innerWidth - 20) + 'px';
+        tooltip.style.display = 'flex';
+        requestAnimationFrame(() => {
+          const h = tooltip.offsetHeight;
+          const w = tooltip.offsetWidth;
+          if (top + h > window.innerHeight - 10) top = rect.top - h - 8;
+          if (top < 10) top = 10;
+          left = Math.max(10 + w / 2, Math.min(window.innerWidth - 10 - w / 2, left));
+          tooltip.style.top = top + 'px';
+          tooltip.style.left = left + 'px';
+          tooltip.style.transform = 'translateX(-50%)';
+        });
+        return;
+      }
+
+      // ── HTML rendered mode (iframe): no auto position ──
+      if (isHtmlMode && !isRawMode) {
         currentStartLine = null;
         currentEndLine = null;
         currentSelText = selText;
@@ -4176,10 +4230,12 @@
   function getPosPlaceholder(ext) {
     if (!ext) return 'Line {start}-{end}';
     var e = ext.toLowerCase();
-    if (['md','rmd','mdx'].includes(e)) return 'Section {id} / Section {heading}';
+    // raw/source mode: markdown also uses Line format
+    var rawFormats = ['txt','py','js','ts','jsx','tsx','html','css','scss','less','json','xml','yaml','yml','toml','ini','cfg','conf','sh','bash','zsh','fish','bat','ps1','c','cpp','h','hpp','java','go','rs','rb','php','sql','r','lua','pl','swift','kt','dart','scala','vue','svelte','astro','ejs','hbs','srt','vtt','ass','ssa','sub'];
+    if (rawFormats.includes(e)) return 'Line {start}-{end}';
+    if (['md','rmd','mdx'].includes(e)) return 'Line {start}-{end}';  // source mode
     if (['docx','doc','pptx','ppt','pdf','odt','odp'].includes(e)) return 'Page {start}-{end}';
     if (['xlsx','xls','csv','tsv'].includes(e)) return 'Range {col}{row}-{col}{row}';
-    if (['srt','vtt','ass','ssa','sub'].includes(e)) return 'Time {HH:MM:SS}';
     if (['mp3','mp4','wav','webm','ogg','flac','aac','m4a','mov','avi','mkv','wmv','flv'].includes(e)) return 'Time {HH:MM:SS}';
     if (['png','jpg','jpeg','gif','bmp','webp','svg','ico'].includes(e)) return 'Area [x,y]xR';
     return 'Line {start}-{end}';
@@ -4187,10 +4243,53 @@
   function getPosValue(ext, startLine, endLine) {
     if (!startLine) return '';
     var e = ext ? ext.toLowerCase() : '';
-    if (['md','rmd','mdx'].includes(e)) return 'Section ' + startLine;
+    var rawFormats = ['txt','py','js','ts','jsx','tsx','html','css','scss','less','json','xml','yaml','yml','toml','ini','cfg','conf','sh','bash','zsh','fish','bat','ps1','c','cpp','h','hpp','java','go','rs','rb','php','sql','r','lua','pl','swift','kt','dart','scala','vue','svelte','astro','ejs','hbs','srt','vtt','ass','ssa','sub'];
+    if (rawFormats.includes(e)) return 'Line ' + startLine + '-' + endLine;
+    if (['md','rmd','mdx'].includes(e)) return 'Section ' + startLine;  // for raw/source mode
     if (['docx','doc','pptx','ppt','pdf','odt','odp'].includes(e)) return 'Page ' + startLine + '-' + endLine;
     if (['xlsx','xls','csv','tsv'].includes(e)) return 'Range A' + startLine;
     return 'Line ' + startLine + '-' + endLine;
+  }
+
+  /**
+   * Detect the nearest section heading above a selection range.
+   * Walks up from the selected node, then backward through siblings
+   * to find the nearest <h1>-<h6> element.
+   */
+  function detectSectionFromDOM(range) {
+    var node = range.startContainer;
+    var mdBody = document.querySelector('.markdown-body');
+    if (!mdBody || !node) return '';
+
+    // Walk up to find a heading in the ancestor chain
+    for (var n = node; n && n !== mdBody; n = n.parentNode) {
+      if (/^H[1-6]$/i.test(n.tagName)) {
+        return n.textContent.trim().replace(/\s+/g, ' ').slice(0, 80);
+      }
+    }
+
+    // Walk backward through siblings to find nearest heading
+    var prev = node;
+    while (prev) {
+      if (prev.previousSibling) {
+        prev = prev.previousSibling;
+        if (prev.querySelectorAll) {
+          var headings = prev.querySelectorAll('h1,h2,h3,h4,h5,h6');
+          if (headings.length > 0) {
+            var h = headings[headings.length - 1];
+            return h.textContent.trim().replace(/\s+/g, ' ').slice(0, 80);
+          }
+        }
+        if (/^H[1-6]$/i.test(prev.tagName)) {
+          return prev.textContent.trim().replace(/\s+/g, ' ').slice(0, 80);
+        }
+      } else {
+        prev = prev.parentNode;
+      }
+      if (prev === mdBody) break;
+    }
+
+    return '';
   }
 
   function highlightSelection() {
