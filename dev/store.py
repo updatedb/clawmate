@@ -182,8 +182,10 @@ def create_items(
     - note (str, 可选) → item.note
     - startLine/endLine (int, 可选) → 拼成 "L{startLine}-{endLine}"
     - position (str, 可选) → 直接作为 item.position
+    - action (str, 可选) → item.action（由前端根据标签确定）
+    - scope (str, 可选) → item.scope（由前端根据标签确定）
 
-    内部去重（同 content + file 跳过），自增 ID，原子写。
+    内部去重（同 content + file + note + action 跳过），自增 ID，原子写。
     """
     path = _get_feedback_path(root_id, project)
     data = _read_feedback(path)
@@ -192,9 +194,9 @@ def create_items(
     ts = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
     abbr = project_abbr(project)
 
-    # 去重时排除已删除项（允许重新提交相同内容）
+    # 去重：content + file + note + action 都相同才算重复
     existing_keys = {
-        (item.get("content", ""), item.get("file", ""))
+        (item.get("content", ""), item.get("file", ""), item.get("note", ""), item.get("action", ""))
         for item in items
         if item.get("status") != "deleted"
     }
@@ -204,9 +206,12 @@ def create_items(
         text = str(sel.get("text", "")).strip()
         if not text:
             continue
-        if (text, file_path) in existing_keys:
-            continue
         note = str(sel.get("note", "")).strip()
+        _action_from_sel = str(sel.get("action", "")).strip()
+        _scope_from_sel = str(sel.get("scope", "")).strip()
+        dedup_key = (text, file_path, note, _action_from_sel)
+        if dedup_key in existing_keys:
+            continue
         position = str(sel.get("position", "") or "").strip()
         if not position:
             start_line = sel.get("startLine")
@@ -217,18 +222,23 @@ def create_items(
         new_id_num = last_id + idx + 1
         item_id = f"FD-{abbr}-{new_id_num:04d}"
 
-        # 从 note 匹配 config 标签获取 action + scope
-        _action, _scope = "other", "document"
-        if note:
-            try:
-                _cfg = load_config()
-                for tag in _cfg.feedback.tags:
-                    if note.strip().startswith(tag.prompt):
-                        _action = tag.action
-                        _scope = tag.scope
-                        break
-            except Exception:
-                pass
+        # action/scope：优先使用前端传入值，降级到从 note 匹配标签
+        _action, _scope = _action_from_sel, _scope_from_sel
+        if not _action or not _scope:
+            if note:
+                try:
+                    _cfg = load_config()
+                    for tag in _cfg.feedback.tags:
+                        if note.strip().startswith(tag.prompt):
+                            _action = _action or tag.action
+                            _scope = _scope or tag.scope
+                            break
+                except Exception:
+                    pass
+            if not _action:
+                _action = "other"
+            if not _scope:
+                _scope = "document"
 
         new_items.append({
             "id": item_id,
@@ -242,7 +252,7 @@ def create_items(
             "updated": ts,
             "result": "",
         })
-        existing_keys.add((text, file_path))
+        existing_keys.add(dedup_key)
 
     if not new_items:
         return []
