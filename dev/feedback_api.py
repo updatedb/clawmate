@@ -112,6 +112,8 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
     items, _ = list_items(root_id, project, status="pending", file=file)
     
     if items:
+        # 开始执行前标记为 in_progress
+        batch_update_items(root_id, project, [{"id": it["id"], "status": "in_progress"} for it in items])
         lines = [f"ClawMate 反馈通知：root={root_id}  project={project}  有以下 {len(items)} 条待处理 feedback 需要你执行：", ""]
         for idx, item in enumerate(items):
             item_id = item.get("id", "?")
