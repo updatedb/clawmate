@@ -4335,7 +4335,9 @@
         _lastPstTag = tag;
         document.querySelectorAll('.pst-tag').forEach(function(b) { b.classList.remove('active'); });
         this.classList.add('active');
-        document.getElementById('pstNote').focus();
+        var noteEl = document.getElementById('pstNote');
+        noteEl.placeholder = '例如：' + tag;
+        noteEl.focus();
       });
       container.appendChild(btn);
     });
