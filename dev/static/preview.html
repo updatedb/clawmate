@@ -3368,41 +3368,30 @@
     const posInput = document.createElement('input');
     posInput.type = 'text';
     posInput.className = 'fb-card-position-edit';
+    // 优先用 item.position，回退到 startLine 组合
+    var _posVal = item.position || '';
+    if (!_posVal && item.startLine > 0) {
+      _posVal = 'Line ' + item.startLine + '-' + item.endLine;
+    }
+    posInput.value = _posVal;
     if (itemType === 'text') {
-      posInput.value = item.startLine > 0 ? `Line ${item.startLine}-${item.endLine}` : (item.position || '');
       posInput.placeholder = 'Line {start}-{end} — 手动填写位置';
-      posInput.title = '位置（可编辑）';
-      posInput.addEventListener('input', () => {
-        item.position = posInput.value;
-        const m = posInput.value.match(/(\d+)(?:-(\d+))?/);
-        if (m) {
-          item.startLine = parseInt(m[1], 10);
-          item.endLine = m[2] ? parseInt(m[2], 10) : item.startLine;
-        }
-      });
     } else if (itemType === 'markdown') {
-      posInput.value = item.startLine > 0 ? `Line ${item.startLine}-${item.endLine}` : (item.position || '');
       posInput.placeholder = 'Section {heading} / Line {start}-{end}';
-      posInput.title = '位置（可编辑）';
-      posInput.addEventListener('input', () => {
-        item.position = posInput.value;
-        const m = posInput.value.match(/(\d+)(?:-(\d+))?/);
-        if (m) {
-          item.startLine = parseInt(m[1], 10);
-          item.endLine = m[2] ? parseInt(m[2], 10) : item.startLine;
-        }
-      });
     } else {
-      // Media, Office, Image — raw string (标准化格式)
-      posInput.value = item.position || '';
       posInput.placeholder = itemType === 'media' ? 'Time {HH:MM:SS} — 时间戳' :
                              itemType === 'office' ? 'Page {start}-{end} / Range {col}{row}-{col}{row}' :
                              itemType === 'image' ? 'Area [x,y]xR — 区域' : '位置';
-      posInput.title = '位置（可编辑）';
-      posInput.addEventListener('input', () => {
-        item.position = posInput.value;
-      });
     }
+    posInput.title = '位置（可编辑）';
+    posInput.addEventListener('input', () => {
+      item.position = posInput.value;
+      var m = posInput.value.match(/(\d+)(?:-(\d+))?/);
+      if (m) {
+        item.startLine = parseInt(m[1], 10);
+        item.endLine = m[2] ? parseInt(m[2], 10) : item.startLine;
+      }
+    });
     posInput.addEventListener('click', e => e.stopPropagation());
     card.appendChild(posInput);
 
