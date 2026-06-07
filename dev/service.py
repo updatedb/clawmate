@@ -60,7 +60,7 @@ def _load_config() -> Dict:
             "hook_token": cfg.openclaw.hook_token,
         },
         "feedback": {
-            "tags": [{"label": t.label, "prompt": t.prompt} for t in cfg.feedback.tags],
+            "tags": [{"label": t.label, "prompt": t.agent_prompt} for t in load_task_templates() if t.frontend.get("tooltip") or t.frontend.get("panel")],
         },
         "onlyoffice": {
             "api_js_url": cfg.onlyoffice.api_js_url,

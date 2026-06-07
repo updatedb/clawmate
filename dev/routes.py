@@ -57,7 +57,7 @@ async def public_config():
     return {
         "roots": [{"id": r.id, "label": r.label, "dir": r.dir, "agent_id": r.agent_id} for r in cfg.roots],
         "defaultRootId": cfg.default_root_id,
-        "feedback_tags": [{"label": t.label, "prompt": t.prompt} for t in cfg.feedback.tags],
+        "feedback_tags": [{"label": t.label, "prompt": t.agent_prompt} for t in load_task_templates() if t.frontend.get("tooltip") or t.frontend.get("panel")],
         "task_templates": templates,
     }
 ONLYOFFICE_TOKEN_TTL = 3600

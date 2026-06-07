@@ -213,11 +213,11 @@ def create_items(
         if not _action or not _scope:
             if note:
                 try:
-                    _cfg = load_config()
-                    for tag in _cfg.feedback.tags:
-                        if note.strip().startswith(tag.prompt):
-                            _action = _action or tag.action
-                            _scope = _scope or tag.scope
+                    from config import load_task_templates
+                    for tt in load_task_templates():
+                        if note.strip().startswith(tt.agent_prompt):
+                            _action = _action or tt.action
+                            _scope = _scope or tt.scope
                             break
                 except Exception:
                     pass
