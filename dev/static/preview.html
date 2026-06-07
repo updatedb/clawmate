@@ -4369,13 +4369,15 @@
     const posInput = document.getElementById('pstLocationInput');
     const hasPos = !posInput.classList.contains('hidden');
     let startLine = 0, endLine = 0;
+    let rawPosition = '';
     if (hasPos) {
       const posVal = posInput.value.trim();
-      const m = posVal.match(/L?(\d+)(?:-L?(\d+))?/);
+      const m = posVal.match(/(\d+)(?:-(\d+))?/);
       if (m) {
         startLine = parseInt(m[1], 10);
         endLine = m[2] ? parseInt(m[2], 10) : startLine;
       }
+      rawPosition = posVal;
     }
 
     var _itemAction = 'other', _itemScope = 'document';
@@ -4389,7 +4391,9 @@
     if (_itemAction === 'execute' && filePath) {
       _itemText = '读取文件' + filePath;
     }
-    const item = { id: ++idCounter, text: _itemText, startLine, endLine, note, action: _itemAction, scope: _itemScope, type: 'text' };
+    var _itemType = 'text';
+    if (isMarkdownMode && !isRawMode && !isPlainTextEditMode) _itemType = 'markdown';
+    const item = { id: ++idCounter, text: _itemText, startLine, endLine, position: rawPosition, note, action: _itemAction, scope: _itemScope, type: _itemType };
     pendingItems.push(item);
 
     const st = document.getElementById('pstStatus');
@@ -4429,19 +4433,25 @@
     const posInput = document.getElementById('pstLocationInput');
     const hasPos = !posInput.classList.contains('hidden');
     let startLine = null, endLine = null;
+    let rawPosition = '';
     if (hasPos) {
       const posVal = posInput.value.trim();
-      const m = posVal.match(/L?(\d+)(?:-L?(\d+))?/);
+      const m = posVal.match(/(\d+)(?:-(\d+))?/);
       if (m) {
         startLine = parseInt(m[1], 10);
         endLine = m[2] ? parseInt(m[2], 10) : startLine;
       }
+      rawPosition = posVal;
     }
 
     const selPayload = { text: currentSelText, note };
     if (hasPos && startLine !== null) {
       selPayload.startLine = startLine;
       selPayload.endLine = endLine;
+    }
+    if (rawPosition && !rawPosition.match(/^\d+(-\d+)?$/)) {
+      // 非纯数字位置（如 Section xxx, Page 1-2 等）直接透传
+      selPayload.position = rawPosition;
     }
 
     try {
