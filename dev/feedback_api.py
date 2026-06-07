@@ -93,11 +93,18 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
         f"ClawMate 反馈通知：{scope} 有待处理反馈。\n"
         f"处理步骤：\n"
         f"1. GET {base_url}/api/clawmate/feedback/list?{scope}&status=pending 获取待处理列表\n"
-        f"2. 如果同一文件有 ≥2 条 pending，调用 POST {base_url}/api/clawmate/feedback/batch-process\n"
-        f"   传入 {scope}，获取合并后的 operations + conflicts + current_content\n"
-        f"3. 处理 conflicts（合并/决策），标记异常的 item 为 failed\n"
-        f"4. 一次性执行所有剩余操作（只读一次文件、只写一次）\n"
-        f"5. 批量 POST {base_url}/api/clawmate/feedback/batch-update 逐项更新状态"
+        f"2. 调用 POST {base_url}/api/clawmate/feedback/batch-process 传入 {scope}\n"
+        f"   返回结果包含：operations（文档级操作）、project_actions（项目级操作）、conflicts、current_content\n"
+        f"3. 先处理 conflicts（合并/决策），无法处理的标记 item 为 failed\n"
+        f"4. 执行 operations（scope=document）：\n"
+        f"   - delete/replace/explain/modify 等：在 current_content 中定位 content 匹配的文本段，执行对应操作\n"
+        f"   - 只读一次文件内容，所有文档操作一次性执行，只写一次文件\n"
+        f"5. 批量 POST {base_url}/api/clawmate/feedback/batch-update 更新 operations 对应的 item 状态\n"
+        f"6. 处理 project_actions（scope=project / action=execute）：\n"
+        f"   - 这些 item 的 note 标注了要执行的方案（如「文档审批通过，执行方案」）\n"
+        f"   - 加载 {root_id}/{project if project else '?'} 项目上下文\n"
+        f"   - 执行对应计划/方案，作用于 project 下的代码/配置文件\n"
+        f"   - 执行完成后更新对应 item 状态"
     )
     run_name = f"clawmate-fb-{root_id}"
 
@@ -430,43 +437,56 @@ async def feedback_batch_process(request: Request):
         seen_content.add(key)
         deduped.append(item)
 
-    # 4. 标准化 action
-    def _classify_action(note: str) -> str:
-        note_lower = (note or "").lower()
-        if "清除" in note_lower or "删除" in note_lower or "删掉" in note_lower:
-            return "delete"
-        if "替换" in note_lower or "修改" in note_lower or "改为" in note_lower:
-            return "replace"
-        if "解释" in note_lower or "详细" in note_lower or "说明" in note_lower:
-            return "explain"
-        if "简化" in note_lower or "抽象" in note_lower or "摘要" in note_lower:
-            return "simplify"
-        if "执行" in note_lower or "实施" in note_lower or "审批" in note_lower:
-            return "execute"
-        return "other"
+    # 4. 从 config.json 读取标签 → action + scope 映射
+    from config import load as load_config
+    cfg = load_config()
+    tag_mapping = []
+    for tag in cfg.feedback.tags:
+        tag_mapping.append({
+            "prompt": tag.prompt,
+            "action": tag.action,
+            "scope": tag.scope,
+        })
 
-    operations = []
+    def _resolve_action_scope(note: str) -> tuple:
+        """根据 note 匹配标签 prompt 获取 action + scope。"""
+        if not note:
+            return ("other", "document")
+        note_stripped = note.strip()
+        for mapping in tag_mapping:
+            prompt = mapping["prompt"]
+            if note_stripped.startswith(prompt):
+                return (mapping["action"], mapping["scope"])
+        return ("other", "document")
+
+    # 5. 区分文档操作和项目操作
+    doc_operations = []  # scope=document → 批处理
+    proj_operations = []  # scope=project → 暂不处理
     for item in deduped:
-        operations.append({
+        action, scope = _resolve_action_scope(item.get("note", ""))
+        op = {
             "id": item.get("id", ""),
             "note": item.get("note", ""),
             "content": item.get("content", ""),
-            "action": _classify_action(item.get("note", "")),
-        })
+            "action": action,
+            "scope": scope,
+        }
+        if scope == "project":
+            proj_operations.append(op)
+        else:
+            doc_operations.append(op)
 
-    # 5. 冲突检测（内容重叠的 delete/replace/explain）
+    # 6. 冲突检测（仅作用于 scope=document 的 operations）
     conflicts = []
-    for i, a in enumerate(operations):
-        for b in operations[i + 1:]:
+    for i, a in enumerate(doc_operations):
+        for b in doc_operations[i + 1:]:
             a_content = (a.get("content", "") or "").strip()
             b_content = (b.get("content", "") or "").strip()
             if not a_content or not b_content:
                 continue
-            # 内容重叠：一个 content 是另一个的子串
             overlap = a_content in b_content or b_content in a_content
             if not overlap:
                 continue
-            # 同类合并
             if a["action"] == b["action"] == "delete":
                 conflicts.append({
                     "ids": [a["id"], b["id"]],
@@ -484,7 +504,8 @@ async def feedback_batch_process(request: Request):
         "ok": True,
         "file": file_path,
         "current_content": current_content,
-        "operations": operations,
+        "operations": doc_operations,
+        "project_actions": proj_operations,
         "conflicts": conflicts,
         "dedup_count": dedup_count,
         "conflict_count": len(conflicts),

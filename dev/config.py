@@ -46,6 +46,8 @@ class OpenClawConfig:
 class FeedbackTag:
     label: str = ""
     prompt: str = ""
+    action: str = "other"
+    scope: str = "document"
 
 
 @dataclass
