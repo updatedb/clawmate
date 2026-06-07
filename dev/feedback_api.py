@@ -131,6 +131,7 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
             lines.append(f"   操作：{action_desc}")
             lines.append("")
         lines.append(f"执行完成后，批量 POST {base_url}/api/clawmate/feedback/batch-update 更新状态。")
+        lines.append(f"请求 body: {{\"root\": \"{root_id}\", \"project\": \"{project}\", \"items\": [{{id, status, result}}]}}")
         message = "\n".join(lines)
     else:
         message = f"ClawMate 反馈通知：{scope} 目前无待处理 feedback。"
@@ -490,7 +491,10 @@ async def feedback_batch_update(request: Request):
     if not updates or not isinstance(updates, list):
         raise HTTPException(status_code=422, detail="Missing items")
 
-    result = batch_update_items(root_id, project, updates)
+    try:
+        result = batch_update_items(root_id, project, updates)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     return {"ok": True, "updated": len(result), "items": [{"id": it["id"], "status": it["status"]} for it in result]}
 
 
