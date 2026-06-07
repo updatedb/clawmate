@@ -72,13 +72,18 @@ async def task_run(request: Request):
     if not project:
         project = file_path.split("/")[0]
 
-    # 渲染 agent_prompt
-    note = _render_prompt(template, {
+    # 渲染 agent_prompt — 所有 body 字段均可作为模板变量
+    _vars = {
         "file": file_path,
         "content": str(body.get("content", "")),
         "note": str(body.get("note", "")),
         "position": str(body.get("position", "")),
-    })
+    }
+    # body 中的额外参数（如 srt_path, user_prompt 等）也加入变量池
+    for k, v in body.items():
+        if k not in ("root", "project", "task_id", "file", "content", "note", "position"):
+            _vars[k] = str(v)
+    note = _render_prompt(template, _vars)
 
     # 创建 feedback card
     from store import create_items
