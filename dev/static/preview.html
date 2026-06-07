@@ -3357,20 +3357,20 @@
     _TAG_MAP.forEach(t => {
       const btn = document.createElement('button');
       btn.textContent = t.label;
-      btn.style.cssText = 'font-size:11px;padding:2px 6px;border-radius:4px;border:1px solid var(--border-color);background:var(--btn-bg);color:var(--text-muted);cursor:pointer;';
-      if (item.action === t.action) {
-        btn.style.borderColor = 'var(--accent)';
-        btn.style.color = 'var(--accent)';
-      }
+      const isActive = item.action === t.action;
+      btn.style.cssText = `font-size:11px;padding:2px 6px;border-radius:4px;border:1px solid ${isActive ? 'var(--accent)' : 'var(--border-color)'};background:${isActive ? 'var(--accent)' : 'var(--btn-bg)'};color:${isActive ? '#fff' : 'var(--text-muted)'};cursor:pointer;transition:all 0.15s;font-weight:${isActive ? '600' : '400'};`;
       btn.addEventListener('click', e => {
         e.stopPropagation();
-        // Toggle: if same tag clicked, clear it
         if (item.action === t.action) {
+          // 点击已选中的标签 → 清除
           delete item.action;
           delete item.scope;
+          // 不改变 note
         } else {
           item.action = t.action;
           item.scope = t.scope;
+          // 将标签的 prompt 填入 note
+          item.note = t.prompt;
         }
         renderFeedbackPanel();
       });
