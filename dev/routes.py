@@ -1104,7 +1104,7 @@ async def clawmate_subtitle_correct(request: Request):
 
     new_items = create_items(
         root_id, project, media_path,
-        [{"text": srt_content.strip(), "note": note_text, "action": "modify", "scope": "file"}],
+        [{"text": srt_content.strip(), "note": note_text, "action": "modify", "scope": "document"}],
     )
 
     if not new_items:
