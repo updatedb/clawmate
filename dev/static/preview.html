@@ -887,12 +887,7 @@
       <input type="text" id="pstLocationInput" class="pst-location" placeholder="位置：L{start}-{end}" style="flex:1;" />
     </div>
     <textarea class="pst-note" id="pstNote" placeholder="必填 · 简要说明需要的改动" rows="3"></textarea>
-    <div class="pst-tags">
-      <button class="pst-tag" data-tag="清除选中内容">🗑 删除</button>
-      <button class="pst-tag" data-tag="修改选中内容，思路如下：">🔧 修改</button>
-      <button class="pst-tag" data-tag="详细解释选中内容">📈 扩展</button>
-      <button class="pst-tag" data-tag="抽象选中内容，简单描述">📉 简化</button>
-      <button class="pst-tag" data-tag="文档审批通过，执行方案">⚡ 执行</button>
+    <div class="pst-tags" id="pstTags"></div>
     </div>
     <div class="pst-actions">
       <button class="pst-btn-add" id="pstBtnAdd">📋 加入待办</button>
@@ -3149,6 +3144,7 @@
       if (res.ok) {
         const data = await res.json();
         _cachedRootsConfig = data;
+        if (data.task_templates) { _taskTemplates = data.task_templates; initPstTags(); }
         sessionStorage.setItem('clawmate-roots-config', JSON.stringify(data));
         return data;
       }
@@ -4249,28 +4245,48 @@
   }
 
   // Add to panel
-  // Quick tags: auto-fill note with descriptive prefix
+  // Quick tags: 从 /api/config 动态加载 task_templates，按文件扩展名过滤
   var _lastPstTag = '';
-  var _PST_ACTION_MAP = {
-    '清除选中内容': { action: 'delete', scope: 'document' },
-    '修改选中内容，思路如下：': { action: 'modify', scope: 'document' },
-    '详细解释选中内容': { action: 'explain', scope: 'document' },
-    '抽象选中内容，简单描述': { action: 'simplify', scope: 'document' },
-    '文档审批通过，执行方案': { action: 'execute', scope: 'project' },
-  };
+  var _taskTemplates = [];
 
-  document.querySelectorAll('.pst-tag').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      var tag = this.getAttribute('data-tag');
-      var noteEl = document.getElementById('pstNote');
-      noteEl.value = tag;
-      _lastPstTag = tag;
-      document.querySelectorAll('.pst-tag').forEach(function(b) { b.classList.remove('active'); });
-      this.classList.add('active');
-      noteEl.focus();
-      noteEl.setSelectionRange(noteEl.value.length, noteEl.value.length);
+  function initPstTags() {
+    var ext = (filePath || '').split('.').pop().toLowerCase();
+    var container = document.getElementById('pstTags');
+    if (!container) return;
+    container.innerHTML = '';
+    var filtered = _taskTemplates.filter(function(t) {
+      return t.source === 'selection' && (t.match_ext.indexOf('*') >= 0 || t.match_ext.indexOf(ext) >= 0);
     });
-  });
+    if (!filtered.length) return;
+    filtered.forEach(function(t) {
+      var btn = document.createElement('button');
+      btn.className = 'pst-tag';
+      btn.textContent = t.label;
+      btn.setAttribute('data-tag', t.agent_prompt);
+      btn.setAttribute('data-action', t.action);
+      btn.setAttribute('data-scope', t.scope);
+      btn.addEventListener('click', function() {
+        var tag = this.getAttribute('data-tag');
+        var noteEl = document.getElementById('pstNote');
+        noteEl.value = tag;
+        _lastPstTag = tag;
+        document.querySelectorAll('.pst-tag').forEach(function(b) { b.classList.remove('active'); });
+        this.classList.add('active');
+        noteEl.focus();
+        noteEl.setSelectionRange(noteEl.value.length, noteEl.value.length);
+      });
+      container.appendChild(btn);
+    });
+  }
+
+  // 更新 "加入待办" 的 action 解析 — 从按钮的 data属性 读取
+  function _resolvePstAction(note) {
+    for (var i = 0; i < _taskTemplates.length; i++) {
+      var t = _taskTemplates[i];
+      if (note && note.indexOf(t.agent_prompt) === 0) return { action: t.action, scope: t.scope };
+    }
+    return null;
+  }
 
   document.getElementById('pstBtnAdd').addEventListener('click', function() {
     const note = document.getElementById('pstNote').value.trim();
@@ -4296,7 +4312,7 @@
     }
 
     var _itemAction = 'other', _itemScope = 'document';
-    var _mapEntry = _PST_ACTION_MAP[_lastPstTag] || _PST_ACTION_MAP[note];
+    var _mapEntry = _resolvePstAction(_lastPstTag) || _resolvePstAction(note);
     if (_mapEntry) {
       _itemAction = _mapEntry.action;
       _itemScope = _mapEntry.scope;
@@ -4421,6 +4437,10 @@
 
   // ============ Init ============
   loadContent();
+  // 加载 task_templates 到 _taskTemplates 并初始化标签按钮
+  getRootsConfig().then(function(cfg) {
+    if (cfg && cfg.task_templates) { _taskTemplates = cfg.task_templates; initPstTags(); }
+  }).catch(function() {});
 
   // Warn on pending items before unload
   window.addEventListener('beforeunload', e => {
