@@ -32,12 +32,11 @@ def _get_template(task_id: str) -> TaskTemplate | None:
     return None
 
 
-def _render_prompt(template: TaskTemplate, variables: dict) -> str:
-    """渲染 agent_prompt，替换 {var} 占位符。"""
-    prompt = template.agent_prompt
+def _render_prompt_text(text: str, variables: dict) -> str:
+    """替换文本中的 {var} 占位符。"""
     for key, value in variables.items():
-        prompt = prompt.replace("{" + key + "}", str(value))
-    return prompt
+        text = text.replace("{" + key + "}", str(value))
+    return text
 
 
 @router.post("/api/clawmate/task/run", response_class=JSONResponse)
@@ -72,18 +71,23 @@ async def task_run(request: Request):
     if not project:
         project = file_path.split("/")[0]
 
-    # 渲染 agent_prompt — 所有 body 字段均可作为模板变量
+    # 渲染 note — 用户编辑过的 note 优先，系统任务（无用户输入）用模板渲染
     _vars = {
         "file": file_path,
         "content": str(body.get("content", "")),
-        "note": str(body.get("note", "")),
         "position": str(body.get("position", "")),
     }
-    # body 中的额外参数（如 srt_path, user_prompt 等）也加入变量池
     for k, v in body.items():
         if k not in ("root", "project", "task_id", "file", "content", "note", "position"):
             _vars[k] = str(v)
-    note = _render_prompt(template, _vars)
+
+    user_note = str(body.get("note", "")).strip()
+    if user_note:
+        # 用户编辑过的 note → 替换其中 {file} {srt_path} 等变量后直接使用
+        note = _render_prompt_text(user_note, _vars)
+    else:
+        # 系统任务 → 从模板 agent_prompt 渲染
+        note = _render_prompt_text(template.agent_prompt, _vars)
 
     # 创建 feedback card
     from store import create_items
