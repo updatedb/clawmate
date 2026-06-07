@@ -2806,3 +2806,49 @@ work 端实测到 **2 个不同的 service md5**：
 结论：API 响应（feedback_api.py _format_feedback_item）确实使用 note 和 position 字段，模板正确
 ```
 </details>
+
+## v1.29 — Task Template 统一体系（进行中）
+
+> **范围**：将 feedback 标签、AI 自定义任务、Agent prompt、前端按钮统一到 task_templates 体系
+>
+> **目标**：零额外 API 调用，Agent wake message 即完整 prompt
+
+### Phase 1 — task_templates.json + 后端解析（当前阶段）
+#### 1.1 创建 task_templates.json ✅ (38e2f8f)
+- [x] 创建 `dev/task_templates.json`，包含首批发货的 6 个模板
+- [x] `config.py` 新增 `TaskTemplate` dataclass（id/label/action/scope/source/match/agent_prompt/frontend）
+- [x] `config.py` 新增 `task_templates.json` 加载逻辑（TTL 60s 缓存，同 config.json）
+
+#### 1.2 创建 task_runner.py ✅ (38e2f8f)
+- [x] 创建 `dev/task_runner.py`，定义独立 APIRouter
+- [x] 实现 `POST /api/clawmate/task/run`：校验 → 渲染 agent_prompt → 创建 feedback card → wake agent
+- [ ] `store.py` create_items 增加 `task_id` 可选字段 <!-- 暂不增，action/scope 已记录 -->
+- [x] `main.py` 注册 task_router
+
+#### 1.3 API /config 返回 task_templates ✅ (38e2f8f)
+- [x] 前端 `/api/config` 接口增加 `task_templates` 字段
+
+### Phase 2 — subtitle 路由迁移（待开始）
+- [ ] 创建 `dev/subtitle_routes.py`
+- [ ] 将 subtitle/extract + /status + /correct 从 routes.py 迁出
+- [ ] subtitle/correct 改为调用 task_runner
+- [ ] 清理 routes.py 中的 subtitle 代码
+
+### Phase 3 — wake message 改造（待开始）
+- [ ] `_wake_agent_for_root` 改为从 store 读 pending 数据
+- [ ] 拼装完整 message（含所有 operation 详情），不再让 agent 调 API
+- [ ] 去掉 prompt 中的 "GET /list"、"POST /batch-process" 指令
+- [ ] 只留 "做完后 POST /batch-update"
+
+### Phase 4 — 前端动态按钮（待开始）
+- [ ] preview.html 标签区改为从 `/api/config` 动态渲染
+- [ ] 按 `source` 分组（tooltip / panel / media_bar / image_bar）
+- [ ] 去掉写死的 `.pst-tags` HTML 和部分 JS
+- [ ] 文件切换时按 `match.ext` 重新匹配
+
+### Phase 5 — 收尾清理（待开始）
+- [ ] 老数据兼容：note 前缀匹配降级（review_delete/review_modify 等）
+- [ ] 删除 `config.json feedback.tags`（确认无依赖后）
+- [ ] 删除 `_wake_agent_for_root` 中的硬编码 prompt
+- [ ] 功能回归测试
+

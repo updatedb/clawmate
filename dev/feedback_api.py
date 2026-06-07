@@ -52,6 +52,24 @@ _last_wake: dict[str, float] = {}
 _DEBOUNCE_SECONDS = 60
 
 
+def _action_desc(action: str, scope: str) -> str:
+    """将 action + scope 翻译为自然语言操作描述。"""
+    desc_map = {
+        "delete": "从文件中找到 content 匹配的文本段 → 删除",
+        "modify": "在文件中找到 content 匹配的文本段 → 按 note 思路修改",
+        "explain": "在 content 匹配段下方插入补充说明",
+        "simplify": "将 content 匹配段改写为简洁描述",
+        "translate": "将 content 匹配段翻译",
+        "add": "在文件中追加新内容",
+        "execute": "读取 file 全文方案 → 在 project 范围内实施",
+        "other": "根据 note 描述处理",
+    }
+    desc = desc_map.get(action, desc_map["other"])
+    if scope == "project":
+        desc += "（作用域：project）"
+    return desc
+
+
 def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> None:
     """读取 config，直接 POST OpenClaw /hooks/agent（后台线程 fire-and-forget）。
 
@@ -80,31 +98,40 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
         return
     _last_wake[root_id] = now
 
-    # 内联 message
+    # 内联 message — 从 store 读取所有 pending items 拼入 prompt
     base_url = cfg.public_base_url or "http://localhost:5533"
     scope = f"root={root_id}"
     if project:
         scope += f"&project={project}"
     if file:
         scope += f"&file={file}"
-    message = (
-        f"ClawMate 反馈通知：{scope} 有待处理反馈。\n"
-        f"处理步骤：\n"
-        f"1. GET {base_url}/api/clawmate/feedback/list?{scope}&status=pending 获取待处理列表\n"
-        f"2. 调用 POST {base_url}/api/clawmate/feedback/batch-process 传入 {scope}\n"
-        f"   返回结果包含：operations（文档级操作）、project_actions（项目级操作）、conflicts、current_content\n"
-        f"3. 先处理 conflicts（合并/决策），无法处理的标记 item 为 failed\n"
-        f"4. 执行 operations（scope=document）：\n"
-        f"   - delete/replace/explain/modify 等：在 current_content 中定位 content 匹配的文本段，执行对应操作\n"
-        f"   - 只读一次文件内容，所有文档操作一次性执行，只写一次文件\n"
-        f"5. 批量 POST {base_url}/api/clawmate/feedback/batch-update 更新 operations 对应的 item 状态\n"
-        f"6. 处理 project_actions（scope=project / action=execute）：\n"
-        f"   - item.file 是方案文档路径（如 research/*.md），item.note = 执行方案\n"
-        f"   - 读取 item.file 获取完整方案内容（agent 自行读取，content 字段只存了选中片段提示）\n"
-        f"   - 加载 {root_id}/{project if project else '?'} 项目上下文\n"
-        f"   - 按方案文档中的计划执行改动，作用于 project 下的代码/配置文件\n"
-        f"   - 执行完成后更新对应 item 状态"
-    )
+
+    # 读取所有 pending items
+    items, _ = list_items(root_id, project, status="pending", file=file)
+    
+    if items:
+        lines = [f"ClawMate 反馈通知，有以下 {len(items)} 条待处理 feedback 需要你执行：", ""]
+        for idx, item in enumerate(items):
+            item_id = item.get("id", "?")
+            task_id = item.get("action", "other")
+            scope_val = item.get("scope", "document")
+            item_file = item.get("file", file or "?")
+            content_val = (item.get("content", "") or "")[:200]
+            note_val = (item.get("note", "") or "")[:300]
+            position_val = item.get("position", "") or "无"
+            
+            action_desc = _action_desc(item.get("action", "other"), scope_val)
+            lines.append(f"{idx+1}. [{item_id}] action={item.get('action','?')} scope={scope_val}")
+            lines.append(f"   file: {item_file}")
+            lines.append(f"   position: {position_val}")
+            lines.append(f"   content: {content_val}")
+            lines.append(f"   note: {note_val}")
+            lines.append(f"   操作：{action_desc}")
+            lines.append("")
+        lines.append(f"执行完成后，批量 POST {base_url}/api/clawmate/feedback/batch-update 更新状态。")
+        message = "\n".join(lines)
+    else:
+        message = f"ClawMate 反馈通知：{scope} 目前无待处理 feedback。"
     run_name = f"clawmate-fb-{root_id}"
 
     def _do_wake_sync():
