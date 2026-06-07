@@ -3932,6 +3932,7 @@
       const selPayload = { text: item.text, note: item.note || '' };
       if (item.action) selPayload.action = item.action;
       if (item.scope) selPayload.scope = item.scope;
+      if (item.task_id) selPayload.task_id = item.task_id;
       if (item.type === 'text' || item.type === 'markdown') {
         if (item.startLine > 0) {
           selPayload.startLine = item.startLine;
@@ -4424,7 +4425,7 @@
   function _resolvePstAction(note) {
     for (var i = 0; i < _taskTemplates.length; i++) {
       var t = _taskTemplates[i];
-      if (note && note.indexOf(t.agent_prompt) === 0) return { action: t.action, scope: t.scope };
+      if (note && note.indexOf(t.agent_prompt) === 0) return { action: t.action, scope: t.scope, task_id: t.id };
     }
     return null;
   }
@@ -4466,7 +4467,8 @@
     }
     var _itemType = 'text';
     if (isMarkdownMode && !isRawMode && !isPlainTextEditMode) _itemType = 'markdown';
-    const item = { id: ++idCounter, text: _itemText, startLine, endLine, position: rawPosition, note, action: _itemAction, scope: _itemScope, type: _itemType };
+    var _itemTaskId = _mapEntry ? (_mapEntry.task_id || '') : '';
+    const item = { id: ++idCounter, text: _itemText, startLine, endLine, position: rawPosition, note, action: _itemAction, scope: _itemScope, task_id: _itemTaskId, type: _itemType };
     pendingItems.push(item);
 
     st.textContent = `✅ 已加入面板（共 ${pendingItems.length} 条）`;
@@ -4517,7 +4519,8 @@
     var _sendAction = 'other', _sendScope = 'document';
     var _sendEntry = _resolvePstAction(_lastPstTag);
     if (_sendEntry) { _sendAction = _sendEntry.action; _sendScope = _sendEntry.scope; }
-    const selPayload = { text: currentSelText, note, action: _sendAction, scope: _sendScope };
+    var _sendTaskId = _sendEntry ? (_sendEntry.task_id || '') : '';
+    const selPayload = { text: currentSelText, note, action: _sendAction, scope: _sendScope, task_id: _sendTaskId };
     if (hasPos && startLine !== null) {
       selPayload.startLine = startLine;
       selPayload.endLine = endLine;

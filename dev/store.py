@@ -155,6 +155,22 @@ def project_abbr(project: str) -> str:
     return (project[0] + project[n // 2]).upper()
 
 
+_ACTION_TO_TASK_ID = {
+    "delete": "review_delete",
+    "modify": "review_modify",
+    "explain": "review_explain",
+    "simplify": "review_simplify",
+    "translate": "review_translate",
+    "add": "review_add",
+    "execute": "project_execute",
+}
+
+
+def _resolve_task_id(action: str) -> str:
+    """从 action 映射回 task_id（前端未传时用）。"""
+    return _ACTION_TO_TASK_ID.get(action, "")
+
+
 def _detect_position_prefix(file_path: str) -> str:
     """根据文件扩展名返回 position 格式前缀。"""
     ext = file_path.rsplit('.', 1)[-1].lower() if '.' in file_path else ''
@@ -258,12 +274,12 @@ def create_items(
             "id": item_id,
             "status": "pending",
             "file": file_path,
-            "note": note or text[:80],
+            "note": note,
             "content": text,
             "position": position,
             "action": _action,
             "scope": _scope,
-            "task_id": str(sel.get("task_id", "")).strip(),
+            "task_id": str(sel.get("task_id", "")).strip() or _resolve_task_id(_action),
             "updated": ts,
             "result": "",
         })
