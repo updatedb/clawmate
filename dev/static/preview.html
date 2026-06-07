@@ -4398,7 +4398,6 @@
     const item = { id: ++idCounter, text: _itemText, startLine, endLine, position: rawPosition, note, action: _itemAction, scope: _itemScope, type: _itemType };
     pendingItems.push(item);
 
-    const st = document.getElementById('pstStatus');
     st.textContent = `✅ 已加入面板（共 ${pendingItems.length} 条）`;
     st.className = 'pst-status pst-status-ok';
     document.getElementById('pstNote').value = '';
