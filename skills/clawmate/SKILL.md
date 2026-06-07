@@ -6,8 +6,8 @@ license: MIT
 
 # ClawMate Skill
 
-> {base_url} 由 ClawMate 服务端 config.json 的 public_base_url 决定。
-> 内部 API 调用（cron job / agent 处理）使用 http://localhost:5533 绕过 nginx basic auth。
+> ⚠️ {base_url} 需要由你根据 ClawMate 服务端的实际访问地址指定，由服务端 config.json 的 public_base_url 配置决定。
+> 内部 API 调用（cron job / agent 处理）使用 http://localhost:5533 绕过 nginx basic auth（此地址不受 {base_url} 影响）。
 
 ---
 
@@ -24,10 +24,10 @@ license: MIT
 
 ## 1. clawmate link
 
-搜索文件并生成 Markdown 可点击预览链接。
+OpenClaw 编写文件并保存后，使用 `/clawmate link {filename}` 搜索文件并生成 Markdown 可点击预览链接。
 
 **步骤**：
-1. `GET http://localhost:5533/api/clawmate/search?q={filename}&root={root}`
+1. `GET {base_url}/api/clawmate/search?q={filename}&root={root}`
 2. 匹配到文件后，构造 `{base_url}/clawmate/preview.html?root={root}&file={encoded_path}`
 3. 输出 Markdown 可点击链接 `[filename](url)`
 
@@ -56,7 +56,7 @@ https://example.com/clawmate/preview.html?root=webprojects&file=clawmate/CLAWLIS
 - `date`: `today` 或 `YYYY-MM-DD`（默认 `today`）
 
 **步骤**：
-1. `GET http://localhost:5533/api/clawmate/feedback/list?root={root}&project={project}&status={status}&file={filename}&since={date}`
+1. `GET {base_url}/api/clawmate/feedback/list?root={root}&project={project}&status={status}&file={filename}&since={date}`
 2. 格式化输出：
 
 ```
@@ -83,13 +83,8 @@ clawmate do FD-CM-042
 ```
 
 **处理步骤**：
-1. `GET /api/clawmate/feedback/list?root={root}&project={project}&status=pending`
-2. 逐条处理：
-   a. `POST /feedback/update` → status=in_progress
-   b. 读取 `item.content`（选区原文）+ `item.note`（用户备注）→ AI 理解 → 定位文件 → 修改
-   c. `POST /feedback/update` → status=done，带 result 摘要
-3. 异常 → status=failed
-4. 输出统计：成功 N 条，失败 M 条
+使用 `/api/clawmate/feedback/cron-tick` 接口来执行所有未处理的 feedback 操作。
+该接口内部依次处理：查询 → 标记 in_progress → 执行变更 → 标记 done/failed。
 
 **硬约束**：
 - ⚠️ 禁止直接 read feedback.json，必须通过 API 获取结构化数据
@@ -126,28 +121,3 @@ clawmate do FD-CM-042
 - 3 个问题均为预期行为
 ```
 
----
-
-## 5. API 参考
-
-| 端点 | 方法 | 用途 |
-|------|------|------|
-| `/api/clawmate/config` | GET | 获取 roots、默认 root 等配置 |
-| `/api/clawmate/list?root=&dir=` | GET | 列出目录内容 |
-| `/api/clawmate/search?q=&root=&dir=` | GET | 递归搜索文件 |
-| `/api/clawmate/feedback/list` | GET | 查询 feedback 列表 |
-| `/api/clawmate/feedback/update` | POST | 更新 feedback 状态 |
-| `/api/clawmate/preview` | GET | 获取文件内容（二进制/JSON） |
-| `/api/clawmate/rename` | POST | 重命名文件 |
-| `/api/clawmate/delete` | POST | 删除文件 |
-
----
-
-## 6. 常见错误
-
-| 错误 | 原因 | 修复 |
-|------|------|------|
-| 401 Unauthorized | 未登录/ session 过期 | 先登录 clawmate |
-| 404 File not found | 路径错误或 root 不存在 | 确认文件在正确 root 下 |
-| 409 Conflict | 重命名目标已存在 | 换一个文件名 |
-| 500 Internal Error | 服务端异常 | 检查 clawmate 日志 |
