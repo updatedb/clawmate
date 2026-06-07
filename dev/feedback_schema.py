@@ -31,7 +31,7 @@ FEEDBACK_ITEM_FIELDS = (
     "file",     # 相对路径
     "note",     # 用户备注/指令
     "content",  # 选中原文
-    "position", # 定位信息（L20-30 / 时间戳）
+    "position", # 定位信息（Line {start}-{end} / Time {HH:MM:SS} 等标准化格式）
     "updated",  # 更新时间 YYYY-MM-DD HH:MM:SS
     "result",   # 处理结果摘要
 )

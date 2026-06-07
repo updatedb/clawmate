@@ -884,7 +884,7 @@
   <div class="preview-selection-tooltip" id="selectionTooltip">
     <div class="pst-header">💬 反馈选中内容</div>
     <div class="pst-location-row">
-      <input type="text" id="pstLocationInput" class="pst-location" placeholder="位置：L{start}-{end}" style="flex:1;" />
+      <input type="text" id="pstLocationInput" class="pst-location" placeholder="位置：Line {start}-{end} / Page {start}-{end}" style="flex:1;" />
     </div>
     <textarea class="pst-note" id="pstNote" placeholder="必填 · 简要说明需要的改动" rows="3"></textarea>
     <div class="pst-tags" id="pstTags"></div>
@@ -3281,22 +3281,22 @@
     posInput.type = 'text';
     posInput.className = 'fb-card-position-edit';
     if (itemType === 'text' || itemType === 'markdown') {
-      posInput.value = item.startLine > 0 ? `L${item.startLine}-${item.endLine}` : '';
-      posInput.placeholder = 'L{start}-{end} — 手动填写位置';
+      posInput.value = item.startLine > 0 ? `Line ${item.startLine}-${item.endLine}` : '';
+      posInput.placeholder = 'Line {start}-{end} — 手动填写位置';
       posInput.title = '位置（可编辑）';
       posInput.addEventListener('input', () => {
-        const m = posInput.value.match(/L?(\d+)(?:-L?(\d+))?/);
+        const m = posInput.value.match(/(\d+)(?:-(\d+))?/);
         if (m) {
           item.startLine = parseInt(m[1], 10);
           item.endLine = m[2] ? parseInt(m[2], 10) : item.startLine;
         }
       });
     } else {
-      // Media (timestamp), Office (page/cell), Image (dropdown value) — raw string
+      // Media, Office, Image — raw string (标准化格式)
       posInput.value = item.position || '';
-      posInput.placeholder = itemType === 'media' ? '00:00:00 — 时间戳' :
-                             itemType === 'office' ? 'A1 / Page 1 — 位置' :
-                             itemType === 'image' ? '左上 / 右下 / 中心…' : '位置';
+      posInput.placeholder = itemType === 'media' ? 'Time {HH:MM:SS} — 时间戳' :
+                             itemType === 'office' ? 'Page {start}-{end} / Range {col}{row}' :
+                             itemType === 'image' ? 'Area [x,y]xR — 区域' : '位置';
       posInput.title = '位置（可编辑）';
       posInput.addEventListener('input', () => {
         item.position = posInput.value;
@@ -3304,24 +3304,6 @@
     }
     posInput.addEventListener('click', e => e.stopPropagation());
     card.appendChild(posInput);
-
-    // For image type: render a dropdown select instead of free-text input
-    if (itemType === 'image') {
-      const posSelect = document.createElement('select');
-      posSelect.className = 'fb-card-position-edit';
-      posSelect.style.cssText = posInput.style.cssText;
-      posSelect.appendChild(new Option('选择位置…', ''));
-      IMG_POSITIONS.forEach(p => {
-        posSelect.appendChild(new Option(p.label, p.value));
-      });
-      if (item.position) posSelect.value = item.position;
-      posSelect.addEventListener('change', () => {
-        item.position = posSelect.value;
-        posInput.value = posSelect.value;
-      });
-      // Replace the text input with the select in the card
-      card.replaceChild(posSelect, posInput);
-    }
 
     // Selected content preview (editable textarea) — not shown for image
     if (itemType !== 'image') {
@@ -3509,10 +3491,9 @@
   function showFeedbackInputCard(body, opts) {
     opts = opts || {};
     const {
-      type = 'text',        // 'image' | 'media' | 'office' | 'text'
+      type = 'text',
       defaultPosition = '',
       positionPlaceholder = '',
-      positionOptions = null, // array of {value, label} for image dropdown
       extraSelectionText = '',
       onSubmit = null,
     } = opts;
@@ -3525,19 +3506,8 @@
     card.id = 'fbInputCard';
     card.className = 'fb-input-card';
 
-    let positionHTML = '';
-    if (type === 'image' && positionOptions) {
-      // Image: dropdown select
-      positionHTML = `
-        <select id="fbPosSelect" class="fb-input-select" style="width:100%;padding:7px 10px;border:1px solid var(--border-color);border-radius:6px;background:var(--bg-code);color:var(--text-primary);font-size:12px;box-sizing:border-box;">
-          <option value="">选择位置...</option>
-          ${positionOptions.map(p => `<option value="${escHtml(p.value)}">${escHtml(p.label)}</option>`).join('')}
-        </select>
-      `;
-    } else {
-      // Text / media / office: editable input
-      positionHTML = `<input type="text" id="fbPosInput" class="fb-input-field position" value="${escHtml(defaultPosition)}" placeholder="${escHtml(positionPlaceholder)}" />`;
-    }
+    // All types use free-text input with type-specific placeholder
+    positionHTML = `<input type="text" id="fbPosInput" class="fb-input-field position" value="${escHtml(defaultPosition)}" placeholder="${escHtml(positionPlaceholder)}" />`;
 
     card.innerHTML = `
       <div class="fb-input-card-header">📍 反馈位置</div>
@@ -3559,21 +3529,11 @@
 
     document.getElementById('fbCancelBtn').addEventListener('click', () => card.remove());
     document.getElementById('fbSubmitBtn').addEventListener('click', async () => {
-      let position = '';
-      if (type === 'image' && positionOptions) {
-        position = document.getElementById('fbPosSelect').value;
-      } else {
-        position = document.getElementById('fbPosInput').value.trim();
-      }
+      let position = document.getElementById('fbPosInput').value.trim();
       const note = document.getElementById('fbNoteInput').value.trim();
       const selection = document.getElementById('fbSelInput').value.trim();
       const statusEl = document.getElementById('fbStatusText');
 
-      if (type === 'image' && !position) {
-        statusEl.textContent = '⚠️ 请选择位置';
-        statusEl.className = 'fb-input-status error';
-        return;
-      }
       if (!note) {
         statusEl.textContent = '⚠️ 请填写备注';
         statusEl.className = 'fb-input-status error';
@@ -3770,18 +3730,6 @@
 
     document.body.appendChild(overlay);
   }
-
-  // ============ Image Feedback Panel ============
-  const IMG_POSITIONS = [
-    { value: '左上', label: '左上' },
-    { value: '右上', label: '右上' },
-    { value: '左下', label: '左下' },
-    { value: '右下', label: '右下' },
-    { value: '中心区域', label: '中心区域' },
-    { value: '背景', label: '背景' },
-    { value: '前景', label: '前景' },
-    { value: '主体', label: '主体' },
-  ];
 
   let imageCompletedItems = [];
 
@@ -4184,8 +4132,8 @@
 
       const posEl = document.getElementById('pstLocationInput');
       posEl.classList.remove('hidden');
-      posEl.placeholder = 'L{start}-{end}';
-      posEl.value = startLine ? `L${startLine}-${endLine}` : '';
+      posEl.placeholder = getPosPlaceholder(ext);
+      posEl.value = startLine ? getPosValue(ext, startLine, endLine) : '';
       document.getElementById('pstNote').value = '';
       document.getElementById('pstStatus').textContent = '';
       document.getElementById('pstStatus').className = 'pst-status';
@@ -4223,6 +4171,27 @@
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') hideTooltip();
   });
+
+  // ── Position 标准化格式：根据文件扩展名返回前缀/值 ──
+  function getPosPlaceholder(ext) {
+    if (!ext) return 'Line {start}-{end}';
+    var e = ext.toLowerCase();
+    if (['md','rmd','mdx'].includes(e)) return 'Section {id} / Section {heading}';
+    if (['docx','doc','pptx','ppt','pdf','odt','odp'].includes(e)) return 'Page {start}-{end}';
+    if (['xlsx','xls','csv','tsv'].includes(e)) return 'Range {col}{row}-{col}{row}';
+    if (['srt','vtt','ass','ssa','sub'].includes(e)) return 'Time {HH:MM:SS}';
+    if (['mp3','mp4','wav','webm','ogg','flac','aac','m4a','mov','avi','mkv','wmv','flv'].includes(e)) return 'Time {HH:MM:SS}';
+    if (['png','jpg','jpeg','gif','bmp','webp','svg','ico'].includes(e)) return 'Area [x,y]xR';
+    return 'Line {start}-{end}';
+  }
+  function getPosValue(ext, startLine, endLine) {
+    if (!startLine) return '';
+    var e = ext ? ext.toLowerCase() : '';
+    if (['md','rmd','mdx'].includes(e)) return 'Section ' + startLine;
+    if (['docx','doc','pptx','ppt','pdf','odt','odp'].includes(e)) return 'Page ' + startLine + '-' + endLine;
+    if (['xlsx','xls','csv','tsv'].includes(e)) return 'Range A' + startLine;
+    return 'Line ' + startLine + '-' + endLine;
+  }
 
   function highlightSelection() {
     if (!savedRange) return;
