@@ -415,7 +415,7 @@ async def feedback_batch_process(request: Request):
     rcfg = resolve_root(root_id)
     if not rcfg:
         raise HTTPException(status_code=404, detail=f"Root not found: {root_id}")
-    full_path = rcfg.dir / file_path
+    full_path = rcfg / file_path
     current_content = ""
     try:
         current_content = full_path.read_text(encoding="utf-8")
@@ -437,38 +437,16 @@ async def feedback_batch_process(request: Request):
         seen_content.add(key)
         deduped.append(item)
 
-    # 4. 从 config.json 读取标签 → action + scope 映射
-    from config import load as load_config
-    cfg = load_config()
-    tag_mapping = []
-    for tag in cfg.feedback.tags:
-        tag_mapping.append({
-            "prompt": tag.prompt,
-            "action": tag.action,
-            "scope": tag.scope,
-        })
-
-    def _resolve_action_scope(note: str) -> tuple:
-        """根据 note 匹配标签 prompt 获取 action + scope。"""
-        if not note:
-            return ("other", "document")
-        note_stripped = note.strip()
-        for mapping in tag_mapping:
-            prompt = mapping["prompt"]
-            if note_stripped.startswith(prompt):
-                return (mapping["action"], mapping["scope"])
-        return ("other", "document")
-
-    # 5. 区分文档操作和项目操作
-    doc_operations = []  # scope=document → 批处理
-    proj_operations = []  # scope=project → 暂不处理
+    # 4. 直接从 item 读取 action + scope（创建时已写入）
+    doc_operations = []
+    proj_operations = []
     for item in deduped:
-        action, scope = _resolve_action_scope(item.get("note", ""))
+        scope = item.get("scope", "document")
         op = {
             "id": item.get("id", ""),
             "note": item.get("note", ""),
             "content": item.get("content", ""),
-            "action": action,
+            "action": item.get("action", "other"),
             "scope": scope,
         }
         if scope == "project":

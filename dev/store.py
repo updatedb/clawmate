@@ -216,6 +216,20 @@ def create_items(
 
         new_id_num = last_id + idx + 1
         item_id = f"FD-{abbr}-{new_id_num:04d}"
+
+        # 从 note 匹配 config 标签获取 action + scope
+        _action, _scope = "other", "document"
+        if note:
+            try:
+                _cfg = load_config()
+                for tag in _cfg.feedback.tags:
+                    if note.strip().startswith(tag.prompt):
+                        _action = tag.action
+                        _scope = tag.scope
+                        break
+            except Exception:
+                pass
+
         new_items.append({
             "id": item_id,
             "status": "pending",
@@ -223,6 +237,8 @@ def create_items(
             "note": note or text[:80],
             "content": text,
             "position": position,
+            "action": _action,
+            "scope": _scope,
             "updated": ts,
             "result": "",
         })

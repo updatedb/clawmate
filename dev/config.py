@@ -174,7 +174,12 @@ def _parse_config(raw: dict) -> AppConfig:
         feedback=FeedbackConfig(
             enable_subtitle=bool(fb.get("enable_subtitle", False)),
             tags=[
-                FeedbackTag(label=t.get("label", ""), prompt=t.get("prompt", ""))
+                FeedbackTag(
+                    label=t.get("label", ""),
+                    prompt=t.get("prompt", ""),
+                    action=t.get("action", "other"),
+                    scope=t.get("scope", "document"),
+                )
                 for t in (fb.get("tags") or [])
                 if isinstance(t, dict)
             ]
