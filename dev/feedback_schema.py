@@ -32,6 +32,9 @@ FEEDBACK_ITEM_FIELDS = (
     "note",     # 用户备注/指令
     "content",  # 选中原文
     "position", # 定位信息（Line {start}-{end} / Time {HH:MM:SS} 等标准化格式）
+    "action",   # delete | modify | explain | simplify | execute | other
+    "scope",    # document | project
+    "task_id",  # 任务模板标识（如 subtitle_correct, review_delete）
     "updated",  # 更新时间 YYYY-MM-DD HH:MM:SS
     "result",   # 处理结果摘要
 )
@@ -55,5 +58,8 @@ class FeedbackItem(TypedDict, total=False):
     note: str
     content: str
     position: str
+    action: str
+    scope: str
+    task_id: str
     updated: str
     result: str
