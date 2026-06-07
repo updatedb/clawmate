@@ -98,19 +98,6 @@ def list_items(
     return items, pending
 
 
-def status_count(root_id: str, project: str) -> dict[str, int]:
-    """返回该 project 的各状态计数。"""
-    path = _get_feedback_path(root_id, project)
-    data = _read_feedback(path)
-    items = data.get("items", [])
-    counts = {"pending": 0, "in_progress": 0, "done": 0, "failed": 0}
-    for item in items:
-        s = item.get("status", "pending")
-        if s in counts:
-            counts[s] += 1
-    return counts
-
-
 # ── 写 ─────────────────────────────────────────────────────────
 
 def batch_update_items(root_id: str, project: str, updates: list[dict]) -> list[dict]:

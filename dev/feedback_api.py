@@ -6,7 +6,6 @@ v1.26: 内部改用 store.* + config.load()，删除全部散装工具函数。
 Routes:
     GET  /api/clawmate/feedback/list   — 列出条目（支持过滤）
     POST /api/clawmate/feedback        — 创建反馈
-    GET  /api/clawmate/feedback/status — 查询状态统计
     POST /api/clawmate/feedback/update — 按 ID 更新状态
     POST /api/clawmate/feedback/cron-tick — 兜底扫描 + 唤醒
 """
@@ -36,7 +35,7 @@ from fastapi.responses import JSONResponse
 
 from feedback_schema import FEEDBACK_STATUSES
 from config import load as config
-from store import create_items, update_item, list_items, status_count, scan_all, project_abbr, batch_update_items
+from store import create_items, update_item, list_items, scan_all, project_abbr, batch_update_items
 from service import resolve_root
 
 # ── 常量 ────────────────────────────────────────────────────────────
@@ -277,35 +276,6 @@ async def feedback_create(request: Request):
         "ok": True, "ids": ids,
     })
 
-
-@router.get("/api/clawmate/feedback/status", response_class=JSONResponse)
-async def feedback_status(request: Request, root: str = "", project: str = ""):
-    """查询 feedback.json 状态统计。"""
-    if not root or not project:
-        raise HTTPException(status_code=422, detail="Missing root or project")
-
-    counts = status_count(root, project)
-
-    # 同时获取 items 概要
-    items, _ = list_items(root, project)
-
-    _ts = datetime.now(CST).isoformat(timespec="seconds")
-    _user = request.client.host if request.client else "unknown"
-    logger.info(
-        "[feedback.status] %s root=%s project=%s user=%s counts=%s result=%s",
-        _ts, root, project, _user, counts, "ok",
-    )
-
-    fb_path = resolve_root(root) / project / "feedback.json"
-    return JSONResponse(content={
-        "feedbackFile": str(fb_path),
-        "exists": fb_path.exists(),
-        "counts": counts,
-        "items": [{
-            "id": i["id"], "note": i["note"], "status": i["status"],
-            "file": i["file"], "result": i.get("result", ""),
-        } for i in items],
-    })
 
 
 @router.post("/api/clawmate/feedback/update", response_class=JSONResponse)
