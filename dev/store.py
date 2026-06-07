@@ -155,22 +155,6 @@ def project_abbr(project: str) -> str:
     return (project[0] + project[n // 2]).upper()
 
 
-_ACTION_TO_TASK_ID = {
-    "delete": "review_delete",
-    "modify": "review_modify",
-    "explain": "review_explain",
-    "simplify": "review_simplify",
-    "translate": "review_translate",
-    "add": "review_add",
-    "execute": "project_execute",
-}
-
-
-def _resolve_task_id(action: str) -> str:
-    """从 action 映射回 task_id（前端未传时用）。"""
-    return _ACTION_TO_TASK_ID.get(action, "")
-
-
 def create_items(
     root_id: str,
     project: str,
@@ -246,7 +230,7 @@ def create_items(
             "position": position,
             "action": _action,
             "scope": _scope,
-            "task_id": str(sel.get("task_id", "")).strip() or _resolve_task_id(_action),
+            "task_id": str(sel.get("task_id", "")).strip(),
             "updated": ts,
             "result": "",
         })
