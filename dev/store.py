@@ -120,6 +120,8 @@ def batch_update_items(root_id: str, project: str, updates: list[dict]) -> list[
             continue
         item = id_map[item_id]
         new_status = upd.get("status", "")
+        if not new_status and "result" in upd and upd["result"]:
+            new_status = "done"
         if new_status and new_status in FEEDBACK_STATUSES:
             item["status"] = new_status
         if "result" in upd:
