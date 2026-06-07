@@ -3083,7 +3083,7 @@
 
     // Pending items
     if (mediaPendingItems.length > 0) {
-      mediaPendingItems.forEach(item => body.appendChild(createFeedbackCard(item)));
+      [...mediaPendingItems].reverse().forEach(item => body.appendChild(createFeedbackCard(item)));
     }
 
     // Completed items — split pending/in_progress vs done/failed
@@ -3193,7 +3193,7 @@
 
     // Pending items
     if (officePdfPendingItems.length > 0) {
-      officePdfPendingItems.forEach(item => body.appendChild(createFeedbackCard(item)));
+      [...officePdfPendingItems].reverse().forEach(item => body.appendChild(createFeedbackCard(item)));
     }
 
 
@@ -3557,7 +3557,7 @@
 
     // Pending section
     if (pendingItems.length > 0) {
-      pendingItems.forEach(item => {
+      [...pendingItems].reverse().forEach(item => {
         body.appendChild(createFeedbackCard(item));
       });
     }
@@ -3878,7 +3878,7 @@
 
     // Pending items
     if (imagePendingItems.length > 0) {
-      imagePendingItems.forEach(item => body.appendChild(createFeedbackCard(item)));
+      [...imagePendingItems].reverse().forEach(item => body.appendChild(createFeedbackCard(item)));
     }
 
     // Completed items
