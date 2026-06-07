@@ -105,7 +105,7 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
         f"   - 读取 item.file 获取完整方案内容（agent 自行读取，content 字段只存了选中片段提示）\n"
         f"   - 加载 {root_id}/{project if project else '?'} 项目上下文\n"
         f"   - 按方案文档中的计划执行改动，作用于 project 下的代码/配置文件\n"
-        f"   - 执行完成后更新对应 item 状态"}]}
+        f"   - 执行完成后更新对应 item 状态"
     )
     run_name = f"clawmate-fb-{root_id}"
 
