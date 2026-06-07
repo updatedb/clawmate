@@ -30,19 +30,19 @@ ClawMate 的解法是：
 ### 🔍 预览引擎
 支持 10+ 种文件类型，点击即渲染，无需下载：
 
-| 类型 | 桌面端 | 移动端 |
-|------|:------:|:------:|
-| Markdown（Mermaid / KaTeX / 语法高亮） | ✅ | ✅ |
-| Mermaid 图表（支持 Ctrl+滚轮缩放 + 拖拽平移） | ✅ | ✅ |
-| Office 文档（ONLYOFFICE 嵌入预览） | ✅ | ✅ |
-| PDF | ✅（降级 pdf.js） | ✅（ONLYOFFICE） |
-| HTML 源码 | ✅ 渲染/源码切换 | ✅ 语法高亮 |
-| 代码文件：py/js/ts/css/go/rs 等 | ✅ 语法高亮 + 大纲 | ✅ 语法高亮 + 大纲 |
-| JSON | ✅ pretty-print | ✅ pretty-print |
-| 图片（支持 ‹ › 导航） | ✅ | ✅ |
-| 音视频（内嵌播放器） | ✅ | ✅ |
-| SRT 字幕（时间轴同步 + 编辑） | ✅ | ❌ |
-| GPX/KML 轨迹文件 | ✅ 纯文本 | ✅ 纯文本 |
+| 类型 | 说明 |
+|------|:----:|
+| Markdown（Mermaid / KaTeX / 语法高亮） | ✅ |
+| Mermaid 图表（支持 Ctrl+滚轮缩放 + 拖拽平移） | ✅ |
+| Office 文档（ONLYOFFICE 嵌入预览） | ✅ |
+| PDF | ✅（降级 pdf.js） |
+| HTML 源码 | ✅ 渲染/源码切换 |
+| 代码文件：py/js/ts/css/go/rs 等 | ✅ 语法高亮 + 大纲 |
+| JSON | ✅ pretty-print |
+| 图片（支持 ‹ › 导航） | ✅ |
+| 音视频（内嵌播放器） | ✅ |
+| SRT 字幕（时间轴同步 + 编辑） | ✅ |
+| GPX/KML 轨迹文件 | ✅ 纯文本 |
 
 ### 💬 反馈闭环 🔑 核心差异化
 
@@ -77,7 +77,7 @@ stateDiagram
 - 类型过滤（文档/代码/数据/媒体/其他）+ 排序（时间/名称/大小）
 - 搜索（桌面端递归搜索，移动端输入即搜）
 - 批量下载、拖拽上传、重命名、删除（含鉴权+审计日志）
-- **移动端响应式**：独立 `m/` 页面，触控优化
+- **移动端**：独立 `m/` 页面，触控优化
 
 ### 🔗 OpenClaw 融合
 - 提交 feedback 后即时通过 webhook 唤醒 OpenClaw Agent
@@ -223,49 +223,32 @@ pip install faster-whisper
 
 ## ClawMate Skill（OpenClaw 集成）
 
-## 安装到 OpenClaw
-
 Skill 目录位于 `skills/clawmate/`，包含 `SKILL.md`（命令定义）、`_meta.json`（元数据）、`LICENSE.txt`。
 
-### 方法一：复制到 OpenClaw 技能目录（推荐）
+### 安装
 
 ```bash
-# 将 clawmate skill 链接到 OpenClaw 技能目录
 ln -sf $PWD/skills/clawmate ~/.openclaw/skills/clawmate
-# 重启 OpenClaw 使其生效
 openclaw gateway restart
 ```
 
-### 验证安装
-
-安装后，在 OpenClaw 会话中执行以下命令测试：
+### 验证
 
 ```
 /clawmate link README.md
 ```
 
-若返回可点击预览链接，则安装成功。也可通过 `/clawmate list` 确认 skill 已加载。
+若返回可点击预览链接，则安装成功。
 
----
+### Slash Commands
 
-项目中包含 OpenClaw Skill，提供以下 Slash Commands：
+| 命令 | 用途 |
+|------|------|
+| `/clawmate link <filename>` | 搜索文件并生成可点击预览链接 |
+| `/clawmate feed [status] [filename] [date]` | 查询 feedback 列表 |
+| `/clawmate do [#ID]` | 通过 `/cron-tick` 处理待处理反馈 |
 
-### `/clawmate link <filename>`
-搜索文件并生成可点击的预览链接。
-
-```markdown
-[文件名]({base_url}/clawmate/preview.html?root=<root>&file=<encoded_path>)
-```
-
-### `/clawmate feed [status] [filename] [date]`
-查询 feedback 列表。
-
-```markdown
-| FD-CM-042 | pending | clawmate/README.md | 补充 Docker 截图 | 2026-06-06 |
-```
-
-### `/clawmate do [#ID]`
-处理待处理反馈（全部或指定 ID）。
+> 各命令的详细参数和示例见 `skills/clawmate/SKILL.md`。
 
 ---
 
