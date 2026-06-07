@@ -112,8 +112,6 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
     items, _ = list_items(root_id, project, status="pending", file=file)
     
     if items:
-        # 开始执行前标记为 in_progress
-        batch_update_items(root_id, project, [{"id": it["id"], "status": "in_progress"} for it in items])
         lines = [f"ClawMate 反馈通知：root={root_id}  project={project}  有以下 {len(items)} 条待处理 feedback 需要你执行：", ""]
         for idx, item in enumerate(items):
             item_id = item.get("id", "?")
@@ -132,9 +130,11 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
             lines.append(f"   note: {note_val}")
             lines.append(f"   操作：{action_desc}")
             lines.append("")
-        lines.append(f"规则：执行成功 → status=done，执行失败或冲突 → status=failed，处理中 → status=in_progress")
-        lines.append(f"执行完成后，批量 POST {base_url}/api/clawmate/feedback/batch-update 更新状态。")
-        lines.append(f"请求体 JSON: root={root_id}, project={project}, items=[{{id, status, result}}]")
+        lines.append(f"步骤：")
+        lines.append(f"1. 开始执行前，POST {base_url}/api/clawmate/feedback/batch-update 将所有 items 的 status 设为 in_progress，result 留空")
+        lines.append(f"2. 逐个执行 item，冲突或重复项标记 status=failed")
+        lines.append(f"3. 执行完成后，再次 POST batch-update 更新最终 status（done/failed）和 result")
+        lines.append(f"请求体格式: root={root_id}, project={project}, items=[{{id, status, result}}]")
         message = "\n".join(lines)
     else:
         message = f"ClawMate 反馈通知：{scope} 目前无待处理 feedback。"
@@ -368,110 +368,6 @@ async def cron_tick():
         result.checked_roots, result.pending_total, len(result.pending_roots), len(result.errors),
     )
     return {"ok": True}
-
-
-@router.post("/api/clawmate/feedback/batch-process", response_class=JSONResponse)
-async def feedback_batch_process(request: Request):
-    """
-    批处理入口：收集同一文件的所有 pending item，
-    去重 + 冲突检测后返回操作列表给 agent。
-    """
-    try:
-        body = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
-
-    root_id = str(body.get("root", "")).strip()
-    project = str(body.get("project", "")).strip()
-    file_path = str(body.get("file", "")).strip()
-
-    if not root_id or not project or not file_path:
-        raise HTTPException(status_code=422, detail="Missing root/project/file")
-
-    # 1. 收集所有 pending item
-    items, _ = list_items(root_id, project, status="pending", file=file_path)
-    if not items:
-        return {"ok": True, "file": file_path, "current_content": "", "operations": [], "conflicts": [], "dedup_count": 0, "conflict_count": 0, "total": 0}
-
-    # 2. 读取文件内容
-    from service import resolve_root
-    rcfg = resolve_root(root_id)
-    if not rcfg:
-        raise HTTPException(status_code=404, detail=f"Root not found: {root_id}")
-    full_path = rcfg / file_path
-    current_content = ""
-    try:
-        current_content = full_path.read_text(encoding="utf-8")
-    except (FileNotFoundError, PermissionError, OSError):
-        pass
-
-    # 3. 去重（同 content 只保留一条）
-    seen_content = set()
-    dedup_count = 0
-    deduped = []
-    for item in items:
-        content = (item.get("content", "") or "").strip()
-        if not content:
-            continue
-        key = content
-        if key in seen_content:
-            dedup_count += 1
-            continue
-        seen_content.add(key)
-        deduped.append(item)
-
-    # 4. 直接从 item 读取 action + scope（创建时已写入）
-    doc_operations = []
-    proj_operations = []
-    for item in deduped:
-        scope = item.get("scope", "document")
-        op = {
-            "id": item.get("id", ""),
-            "note": item.get("note", ""),
-            "content": item.get("content", ""),
-            "action": item.get("action", "other"),
-            "scope": scope,
-        }
-        if scope == "project":
-            proj_operations.append(op)
-        else:
-            doc_operations.append(op)
-
-    # 6. 冲突检测（仅作用于 scope=document 的 operations）
-    conflicts = []
-    for i, a in enumerate(doc_operations):
-        for b in doc_operations[i + 1:]:
-            a_content = (a.get("content", "") or "").strip()
-            b_content = (b.get("content", "") or "").strip()
-            if not a_content or not b_content:
-                continue
-            overlap = a_content in b_content or b_content in a_content
-            if not overlap:
-                continue
-            if a["action"] == b["action"] == "delete":
-                conflicts.append({
-                    "ids": [a["id"], b["id"]],
-                    "type": "mergeable_delete",
-                    "detail": f"两个 delete 内容重叠「{a_content[:20]}」vs「{b_content[:20]}」，自动合并为一条删除",
-                })
-            elif set([a["action"], b["action"]]) <= {"delete", "replace"}:
-                conflicts.append({
-                    "ids": [a["id"], b["id"]],
-                    "type": "conflict_delete_replace",
-                    "detail": f"delete 与 {b['action']} 作用于同一段文本，需 agent 决策 which operation wins",
-                })
-
-    return {
-        "ok": True,
-        "file": file_path,
-        "current_content": current_content,
-        "operations": doc_operations,
-        "project_actions": proj_operations,
-        "conflicts": conflicts,
-        "dedup_count": dedup_count,
-        "conflict_count": len(conflicts),
-        "total": len(items),
-    }
 
 
 @router.post("/api/clawmate/feedback/batch-update", response_class=JSONResponse)
