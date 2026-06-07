@@ -213,6 +213,18 @@ def verify_preview_token(root_id: str, rel_path: str, token: str) -> bool:
         return False
 
 
+_NO_CACHE = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
+
+
+def _nocache_json(content: dict, status: int = 200) -> JSONResponse:
+    return JSONResponse(content=content, status_code=status, headers=_NO_CACHE)
+
+
+def _nocache_file(path: Path, **kw) -> FileResponse:
+    headers = {**_NO_CACHE, **(kw.pop("headers", {}) or {})}
+    return FileResponse(path, headers=headers, **kw)
+
+
 @router.get("/api/clawmate/preview")
 async def clawmate_preview(root: str = "", path: str = ""):
     if not root or not root.strip():
@@ -231,18 +243,18 @@ async def clawmate_preview(root: str = "", path: str = ""):
 
     category = guess_category(target)
     if category in ("image", "audio", "video"):
-        return FileResponse(target)
+        return _nocache_file(target)
 
     meta = file_info(target, safe_rel)
     if category == "text":
         content, truncated = preview_text(target)
-        return JSONResponse(content={
+        return _nocache_json({
             "meta": meta,
             "content": content,
             "truncated": truncated,
         })
 
-    return JSONResponse(content={
+    return _nocache_json({
         "meta": meta,
         "download_url": f"/api/clawmate/download?root={quote(root)}&path={quote(meta['path'])}",
     })
@@ -262,7 +274,7 @@ async def clawmate_download(root: str = "", path: str = ""):
     if not target.exists() or target.is_dir():
         raise HTTPException(status_code=404, detail="File not found")
 
-    return FileResponse(target, filename=target.name)
+    return _nocache_file(target, filename=target.name)
 
 
 @router.get("/api/clawmate/raw")
@@ -285,7 +297,7 @@ async def clawmate_raw(root: str = "", path: str = ""):
     # Explicitly set PDF media type for pdf.js compatibility
     if target.suffix.lower() == '.pdf':
         media_type = 'application/pdf'
-    return FileResponse(target, media_type=media_type or "application/octet-stream")
+    return _nocache_file(target, media_type=media_type or "application/octet-stream")
 
 
 @router.get("/api/clawmate/batch-download")
@@ -341,6 +353,7 @@ async def clawmate_batch_download(request: Request, root: str = "", path: str = 
             tmp_path,
             filename=zip_name,
             media_type="application/zip",
+            headers=_NO_CACHE,
             background=BackgroundTask(lambda: os.remove(tmp_path) if os.path.exists(tmp_path) else None),
         )
 
