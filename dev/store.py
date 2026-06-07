@@ -172,7 +172,6 @@ def create_items(
     project: str,
     file_path: str,
     selections: list[dict],
-    preview_url: str = "",
 ) -> list[dict]:
     """
     写入新反馈条目。

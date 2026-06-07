@@ -265,7 +265,7 @@ async def feedback_create(request: Request):
         public_base = get_public_base_url(request)
         preview_url = f"{public_base}/clawmate/preview.html?root={quote(root_id)}&file={quote(file_path)}"
 
-    new_items = create_items(root_id, project, file_path, selections, preview_url=preview_url)
+    new_items = create_items(root_id, project, file_path, selections)
 
     ids = [i["id"] for i in new_items if i.get("id")]
 
