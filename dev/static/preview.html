@@ -377,6 +377,15 @@
       transition: background 0.15s;
     }
     .pst-btn-add:hover { background: var(--border-color); }
+    .pst-tag {
+      font-size: 11px; padding: 2px 6px; border-radius: 4px;
+      border: 1px solid var(--border-color); background: var(--btn-bg);
+      color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+    }
+    .pst-tag.active {
+      border-color: var(--accent); background: var(--accent);
+      color: #fff; font-weight: 600;
+    }
 
     /* Responsive */
     @media (max-width: 900px) {
@@ -3371,6 +3380,10 @@
           item.scope = t.scope;
           // 将标签的 prompt 填入 note
           item.note = t.prompt;
+          // execute 时 content 记录文件引用
+          if (t.action === 'execute' && typeof filePath !== 'undefined') {
+            item.text = '读取文件' + filePath;
+          }
         }
         renderFeedbackPanel();
       });
@@ -4248,6 +4261,8 @@
       var noteEl = document.getElementById('pstNote');
       noteEl.value = tag;
       _lastPstTag = tag;
+      document.querySelectorAll('.pst-tag').forEach(function(b) { b.classList.remove('active'); });
+      this.classList.add('active');
       noteEl.focus();
       noteEl.setSelectionRange(noteEl.value.length, noteEl.value.length);
     });
@@ -4282,8 +4297,11 @@
       _itemAction = _mapEntry.action;
       _itemScope = _mapEntry.scope;
     }
-    // execute 作用域为 project，agent 自行读取完整文件，content 只需记录选中片段作为提示
+    // execute 作用域为 project，content 记录文件引用
     var _itemText = currentSelText;
+    if (_itemAction === 'execute' && filePath) {
+      _itemText = '读取文件' + filePath;
+    }
     const item = { id: ++idCounter, text: _itemText, startLine, endLine, note, action: _itemAction, scope: _itemScope, type: 'text' };
     pendingItems.push(item);
 
