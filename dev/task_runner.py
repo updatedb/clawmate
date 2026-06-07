@@ -83,7 +83,7 @@ async def task_run(request: Request):
 
     user_note = str(body.get("note", "")).strip()
     if user_note:
-        # 用户编辑过的 note → 替换其中 {file} {srt_path} 等变量后直接使用
+        # 用户写了具体要求 → note 只存用户实际输入（不含模板 prompt）
         note = _render_prompt_text(user_note, _vars)
     else:
         # 系统任务 → 从模板 agent_prompt 渲染

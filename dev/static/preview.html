@@ -3369,8 +3369,7 @@
         } else {
           item.action = t.action;
           item.scope = t.scope;
-          // 将标签的 prompt 填入 note
-          item.note = t.prompt;
+          // 不改变 note（note 只保留用户写的实际要求，prompt 由 task_runner 拼接）
           // execute 时 content 记录文件引用
           if (t.action === 'execute' && typeof filePath !== 'undefined') {
             item.text = '读取文件' + filePath;
@@ -4333,13 +4332,10 @@
       btn.setAttribute('data-scope', t.scope);
       btn.addEventListener('click', function() {
         var tag = this.getAttribute('data-tag');
-        var noteEl = document.getElementById('pstNote');
-        noteEl.value = tag;
         _lastPstTag = tag;
         document.querySelectorAll('.pst-tag').forEach(function(b) { b.classList.remove('active'); });
         this.classList.add('active');
-        noteEl.focus();
-        noteEl.setSelectionRange(noteEl.value.length, noteEl.value.length);
+        document.getElementById('pstNote').focus();
       });
       container.appendChild(btn);
     });
