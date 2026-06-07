@@ -2951,7 +2951,7 @@
     addBtn.textContent = '+ 添加反馈';
     addBtn.addEventListener('click', () => {
       const currentTime = mediaEl ? formatTimestamp(mediaEl.currentTime) : '00:00:00';
-      const item = { id: ++idCounter, text: '', startLine: 0, endLine: 0, note: '', type: 'media', position: currentTime };
+      const item = { id: ++idCounter, text: '', startLine: 0, endLine: 0, note: '', type: 'media', position: 'Time ' + currentTime };
       mediaPendingItems.push(item);
       renderMediaFeedbackPanel();
       // Scroll to the newly added card
@@ -3061,7 +3061,7 @@
     addBtn.addEventListener('click', () => {
       const EXCEL_EXTS = ['xlsx', 'xls'];
       const isExcelMode = EXCEL_EXTS.includes(ext);
-      const defaultPos = isPdfMode ? 'Page 1' : (isExcelMode ? 'A1' : 'Page 1');
+      const defaultPos = isPdfMode ? 'Page 1' : (isExcelMode ? 'Range A1' : 'Page 1');
       const item = { id: ++idCounter, text: '', startLine: 0, endLine: 0, note: '', type: 'office', position: defaultPos };
       officePdfPendingItems.push(item);
       renderOfficePdfFeedbackPanel();
