@@ -235,6 +235,7 @@ def create_items(
             "position": position,
             "action": _action,
             "scope": _scope,
+            "task_id": str(sel.get("task_id", "")).strip(),
             "updated": ts,
             "result": "",
         })

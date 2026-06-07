@@ -96,6 +96,7 @@ async def task_run(request: Request):
         "note": note,
         "action": template.action,
         "scope": template.scope,
+        "task_id": task_id,
     }]
 
     new_items = create_items(root_id, project, file_path, selections)

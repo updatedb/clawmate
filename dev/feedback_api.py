@@ -113,7 +113,7 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
         lines = [f"ClawMate 反馈通知，有以下 {len(items)} 条待处理 feedback 需要你执行：", ""]
         for idx, item in enumerate(items):
             item_id = item.get("id", "?")
-            task_id = item.get("action", "other")
+            task_id = item.get("task_id", "") or item.get("action", "other")
             scope_val = item.get("scope", "document")
             item_file = item.get("file", file or "?")
             content_val = (item.get("content", "") or "")[:200]
@@ -121,7 +121,7 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
             position_val = item.get("position", "") or "无"
             
             action_desc = _action_desc(item.get("action", "other"), scope_val)
-            lines.append(f"{idx+1}. [{item_id}] action={item.get('action','?')} scope={scope_val}")
+            lines.append(f"{idx+1}. [{item_id}] task_id={task_id} action={item.get('action','?')} scope={scope_val}")
             lines.append(f"   file: {item_file}")
             lines.append(f"   position: {position_val}")
             lines.append(f"   content: {content_val}")
