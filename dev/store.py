@@ -171,32 +171,6 @@ def _resolve_task_id(action: str) -> str:
     return _ACTION_TO_TASK_ID.get(action, "")
 
 
-def _detect_position_prefix(file_path: str) -> str:
-    """根据文件扩展名返回 position 格式前缀。"""
-    ext = file_path.rsplit('.', 1)[-1].lower() if '.' in file_path else ''
-    if ext in ('txt', 'py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'scss', 'less',
-               'json', 'xml', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf',
-               'sh', 'bash', 'zsh', 'fish', 'bat', 'ps1',
-               'c', 'cpp', 'h', 'hpp', 'java', 'go', 'rs', 'rb', 'php',
-               'sql', 'r', 'lua', 'pl', 'swift', 'kt', 'dart', 'scala',
-               'vue', 'svelte', 'astro', 'ejs', 'hbs', 'mdx'):
-        return 'Line'
-    if ext in ('md', 'rmd'):
-        return 'Section'
-    if ext in ('docx', 'doc', 'pptx', 'ppt', 'pdf', 'odt', 'odp'):
-        return 'Page'
-    if ext in ('xlsx', 'xls', 'csv', 'tsv'):
-        return 'Range'
-    if ext in ('srt', 'vtt', 'ass', 'ssa', 'sub'):
-        return 'Time'
-    if ext in ('mp3', 'mp4', 'wav', 'webm', 'ogg', 'flac', 'aac',
-               'm4a', 'mov', 'avi', 'mkv', 'wmv', 'flv'):
-        return 'Time'
-    if ext in ('png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico'):
-        return 'Area'
-    return 'Line'
-
-
 def create_items(
     root_id: str,
     project: str,
@@ -209,7 +183,6 @@ def create_items(
     selections 每项字段：
     - text (str, 必填) → item.content
     - note (str, 可选) → item.note
-    - startLine/endLine (int, 可选) → 根据文件类型拼成标准化 position
     - position (str, 可选) → 直接作为 item.position
     - action (str, 可选) → item.action（由前端根据标签确定）
     - scope (str, 可选) → item.scope（由前端根据标签确定）
@@ -242,12 +215,6 @@ def create_items(
         if dedup_key in existing_keys:
             continue
         position = str(sel.get("position", "") or "").strip()
-        if not position:
-            start_line = sel.get("startLine")
-            end_line = sel.get("endLine")
-            if start_line and end_line:
-                prefix = _detect_position_prefix(file_path)
-                position = f"{prefix} {start_line}-{end_line}"
 
         new_id_num = last_id + idx + 1
         item_id = f"FD-{abbr}-{new_id_num:04d}"
