@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from constants import CONFIG_PATH_ENV, PUBLIC_BASE_URL_ENV
-from config import load as load_config
+from config import load as load_config, load_task_templates
 
 logger = logging.getLogger("clawmate.service")
 
