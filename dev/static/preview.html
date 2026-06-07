@@ -4054,6 +4054,9 @@
     tooltip.style.display = 'none';
     savedRange = null;
     clearHL();
+    document.querySelectorAll('.pst-tag').forEach(function(b) { b.classList.remove('active'); });
+    document.getElementById('pstNote').value = '';
+    _lastPstTag = '';
     if (window.getSelection) window.getSelection().removeAllRanges();
   }
 
