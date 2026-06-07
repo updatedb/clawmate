@@ -3345,13 +3345,6 @@
     card.appendChild(noteInput);
 
     // Tag / action 选择按钮组
-    // 当选中 execute 时：content 使用完整文件（方案），不是选中片段
-    function _ensureExecuteText(item) {
-      if (item.action === 'execute' && typeof rawContent !== 'undefined') {
-        item.text = rawContent;
-      }
-    }
-    if (item.action === 'execute') _ensureExecuteText(item);
     const tagRow = document.createElement('div');
     tagRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;';
     const _TAG_MAP = [
@@ -3378,10 +3371,6 @@
         } else {
           item.action = t.action;
           item.scope = t.scope;
-          // execute 时 content 使用完整文件
-          if (t.action === 'execute' && typeof rawContent !== 'undefined') {
-            item.text = rawContent;
-          }
         }
         renderFeedbackPanel();
       });
@@ -4293,11 +4282,8 @@
       _itemAction = _mapEntry.action;
       _itemScope = _mapEntry.scope;
     }
-    // execute 作用域为 project，content 应是完整文件（含方案），不是选中片段
+    // execute 作用域为 project，agent 自行读取完整文件，content 只需记录选中片段作为提示
     var _itemText = currentSelText;
-    if (_itemAction === 'execute' && typeof rawContent !== 'undefined') {
-      _itemText = rawContent;
-    }
     const item = { id: ++idCounter, text: _itemText, startLine, endLine, note, action: _itemAction, scope: _itemScope, type: 'text' };
     pendingItems.push(item);
 

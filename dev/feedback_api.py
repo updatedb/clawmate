@@ -101,10 +101,11 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
         f"   - 只读一次文件内容，所有文档操作一次性执行，只写一次文件\n"
         f"5. 批量 POST {base_url}/api/clawmate/feedback/batch-update 更新 operations 对应的 item 状态\n"
         f"6. 处理 project_actions（scope=project / action=execute）：\n"
-        f"   - 这些 item 的 note 标注了要执行的方案（如「文档审批通过，执行方案」）\n"
+        f"   - item.file 是方案文档路径（如 research/*.md），item.note = 执行方案\n"
+        f"   - 读取 item.file 获取完整方案内容（agent 自行读取，content 字段只存了选中片段提示）\n"
         f"   - 加载 {root_id}/{project if project else '?'} 项目上下文\n"
-        f"   - 执行对应计划/方案，作用于 project 下的代码/配置文件\n"
-        f"   - 执行完成后更新对应 item 状态"
+        f"   - 按方案文档中的计划执行改动，作用于 project 下的代码/配置文件\n"
+        f"   - 执行完成后更新对应 item 状态"}]}
     )
     run_name = f"clawmate-fb-{root_id}"
 
