@@ -111,6 +111,49 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
     # 读取所有 pending items
     items, _ = list_items(root_id, project, status="pending", file=file)
     
+    # ── 去重 + 冲突检测（agent 看到之前预标记）──
+    if items:
+        # 去重（同 content 只保留一条），重复项标记 failed
+        seen_dedup = set()
+        deduped = []
+        pre_updates = []
+        for item in items:
+            c = (item.get("content", "") or "").strip()
+            if not c:
+                continue
+            if c in seen_dedup:
+                pre_updates.append({"id": item["id"], "status": "failed", "result": "去重：与另一条内容重复"})
+                continue
+            seen_dedup.add(c)
+            deduped.append(item)
+        # 冲突检测：不同 action 同内容
+        for i, a in enumerate(deduped):
+            for b in deduped[i + 1:]:
+                ac = (a.get("content", "") or "").strip()
+                bc = (b.get("content", "") or "").strip()
+                if not ac or not bc:
+                    continue
+                overlap = ac in bc or bc in ac
+                if not overlap:
+                    continue
+                aa = a.get("action", "") or ""
+                bb = b.get("action", "") or ""
+                if aa == bb == "delete":
+                    pre_updates.append({"id": a["id"], "status": "failed", "result": "冲突：重复 delete，需人工处理"})
+                    pre_updates.append({"id": b["id"], "status": "failed", "result": "冲突：重复 delete，需人工处理"})
+                elif set([aa, bb]) <= {"delete", "replace"}:
+                    pre_updates.append({"id": a["id"], "status": "failed", "result": f"冲突：与 {b['id']} 作用重叠"})
+                    pre_updates.append({"id": b["id"], "status": "failed", "result": f"冲突：与 {a['id']} 作用重叠"})
+        # 将冲突项从 deduped 中移除
+        conflict_ids = {u["id"] for u in pre_updates}
+        deduped = [d for d in deduped if d["id"] not in conflict_ids]
+        # 标记：冲突项→failed，正常项→in_progress
+        if pre_updates:
+            batch_update_items(root_id, project, pre_updates)
+        if deduped:
+            batch_update_items(root_id, project, [{"id": d["id"], "status": "in_progress"} for d in deduped])
+        items = deduped  # 只传有效项给 agent
+    
     if items:
         lines = [f"ClawMate 反馈通知：root={root_id}  project={project}  有以下 {len(items)} 条待处理 feedback 需要你执行：", ""]
         for idx, item in enumerate(items):
@@ -402,11 +445,10 @@ async def feedback_batch_process(request: Request):
     except (FileNotFoundError, PermissionError, OSError):
         pass
 
-    # 3. 去重（同 content 只保留一条），重复项标记 failed
+    # 3. 去重（同 content 只保留一条）
     seen_content = set()
     dedup_count = 0
     deduped = []
-    failed_dedup = []
     for item in items:
         content = (item.get("content", "") or "").strip()
         if not content:
@@ -414,7 +456,6 @@ async def feedback_batch_process(request: Request):
         key = content
         if key in seen_content:
             dedup_count += 1
-            failed_dedup.append({"id": item["id"], "status": "failed", "result": "去重：与另一条内容重复，已自动跳过"})
             continue
         seen_content.add(key)
         deduped.append(item)
@@ -451,30 +492,14 @@ async def feedback_batch_process(request: Request):
                 conflicts.append({
                     "ids": [a["id"], b["id"]],
                     "type": "mergeable_delete",
-                    "detail": f"两个 delete 内容重叠「{a_content[:20]}」vs「{b_content[:20]}」，需人工决定保留哪个",
+                    "detail": f"两个 delete 内容重叠「{a_content[:20]}」vs「{b_content[:20]}」，自动合并为一条删除",
                 })
-                failed_dedup.append({"id": a["id"], "status": "failed", "result": "去重：与另一条 delete 内容重叠，需人工处理"})
-                failed_dedup.append({"id": b["id"], "status": "failed", "result": "去重：与另一条 delete 内容重叠，需人工处理"})
-                deduped = [d for d in deduped if d["id"] not in (a["id"], b["id"])]
             elif set([a["action"], b["action"]]) <= {"delete", "replace"}:
                 conflicts.append({
                     "ids": [a["id"], b["id"]],
                     "type": "conflict_delete_replace",
                     "detail": f"delete 与 {b['action']} 作用于同一段文本，需 agent 决策 which operation wins",
                 })
-                # 冲突项标记 failed，从 deduped 移除
-                failed_dedup.append({"id": a["id"], "status": "failed", "result": f"冲突：与 {b['id']} 作用重叠"})
-                failed_dedup.append({"id": b["id"], "status": "failed", "result": f"冲突：与 {a['id']} 作用重叠"})
-                deduped = [d for d in deduped if d["id"] not in (a["id"], b["id"])]
-
-    # 标记去重/冲突项为 failed
-    if failed_dedup:
-        batch_update_items(root_id, project, failed_dedup)
-
-    # 标记剩余待处理项为 in_progress
-    if deduped:
-        in_progress_updates = [{"id": item["id"], "status": "in_progress"} for item in deduped]
-        batch_update_items(root_id, project, in_progress_updates)
 
     return {
         "ok": True,
