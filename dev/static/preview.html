@@ -4243,9 +4243,8 @@
   function getPosValue(ext, startLine, endLine) {
     if (!startLine) return '';
     var e = ext ? ext.toLowerCase() : '';
-    var rawFormats = ['txt','py','js','ts','jsx','tsx','html','css','scss','less','json','xml','yaml','yml','toml','ini','cfg','conf','sh','bash','zsh','fish','bat','ps1','c','cpp','h','hpp','java','go','rs','rb','php','sql','r','lua','pl','swift','kt','dart','scala','vue','svelte','astro','ejs','hbs','srt','vtt','ass','ssa','sub'];
+    var rawFormats = ['txt','py','js','ts','jsx','tsx','html','css','scss','less','json','xml','yaml','yml','toml','ini','cfg','conf','sh','bash','zsh','fish','bat','ps1','c','cpp','h','hpp','java','go','rs','rb','php','sql','r','lua','pl','swift','kt','dart','scala','vue','svelte','astro','ejs','hbs','srt','vtt','ass','ssa','sub','md','rmd','mdx'];
     if (rawFormats.includes(e)) return 'Line ' + startLine + '-' + endLine;
-    if (['md','rmd','mdx'].includes(e)) return 'Section ' + startLine;  // for raw/source mode
     if (['docx','doc','pptx','ppt','pdf','odt','odp'].includes(e)) return 'Page ' + startLine + '-' + endLine;
     if (['xlsx','xls','csv','tsv'].includes(e)) return 'Range A' + startLine;
     return 'Line ' + startLine + '-' + endLine;
