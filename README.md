@@ -16,32 +16,12 @@ ClawMate 的解法是：
 - **在线管理 Agent 产出**，Agent 生成文件时直接返回可点击的预览链接，直接进行内容评审。
 - **即时交互反馈**：预览时发现问题 → 直接选中文本 → 填写备注 → 提交 → Agent 自动修改，无需跳出工作流
 - **评审、反馈、修订闭环**，不需要在多个窗口间来回切换，拷贝粘贴。
-- **不仅支持代码和文档**：也支持对 Office 文档、音乐、视频等内容的评审与建议反馈，功能还在完善中。
-
-## 截图
-
-| 多项目、多目录管理 | 手动添加反馈 | 创建反馈 |
-|:---:|:---:|:---:|
-| ![多项目目录管理](assets/cm-desktop-file-manage.jpg) | ![添加反馈操作](assets/cm-desktop-add-feedback.jpg) | ![创建反馈](assets/cm-desktop-create-feed.png) |
-
-| 反馈处理结果 | SRT 字幕提取 | SRT 字幕纠错 |
-|:---:|:---:|:---:|
- | ![反馈处理结果](assets/cm-desktop-review-feedback.jpg) | ![SRT 字幕提取](assets/cm-destkop-extract-srt.png) | ![SRT 字幕纠错](assets/cm-desktop-srt-correct.png) |
+- **不仅支持代码和文档**：也支持对 图片、Office 文档、音乐、视频等内容的评审与建议反馈，功能还在完善中。
 
 ## 核心工作流
 
-```mermaid
-flowchart LR
-    A[Agent 产出文件] -->|写入目录| B[用户打开预览链接]
-    B --> C[preview.html 全屏渲染<br>Mermaid / KaTeX / Office / 视频 / 代码]
-    C --> D{发现问题?}
-    D -->|是| E[选中文本 → 填写备注 → 提交]
-    E --> F[写入 feedback.json<br>即时唤醒 Agent]
-    F --> G[Agent 读取反馈<br>精确定位 → 修改文件]
-    G --> H[更新反馈状态<br>done / failed]
-    H --> B
-    D -->|否| I[完成]
-```
+![核心工作流](assets/openclaw-clawmate-collaboration-loop.png)
+
 
 ---
 
@@ -106,6 +86,16 @@ stateDiagram
 
 ---
 
+## 截图
+
+| 多项目、多目录管理 | 手动添加反馈 | 创建反馈 |
+|:---:|:---:|:---:|
+| ![多项目目录管理](assets/cm-desktop-file-manage.jpg) | ![添加反馈操作](assets/cm-desktop-add-feedback.jpg) | ![创建反馈](assets/cm-desktop-create-feed.png) |
+
+| 反馈处理结果 | SRT 字幕提取 | SRT 字幕纠错 |
+|:---:|:---:|:---:|
+ | ![反馈处理结果](assets/cm-desktop-review-feedback.jpg) | ![SRT 字幕提取](assets/cm-destkop-extract-srt.png) | ![SRT 字幕纠错](assets/cm-desktop-srt-correct.png) |
+
 ## 架构
 
 ```mermaid
@@ -119,7 +109,7 @@ flowchart TD
     D --> H[store.py: 反馈存储引擎]
     B --> I[Webhook /hooks/agent]
     I --> J[OpenClaw Gateway]
-    J --> K[Agent 处理反馈]
+    J --> K[选择Agent 处理反馈]
     K -->|修改文件| E
     B -.-> L[Cron Job 兜底]
     L -.->|每 N 小时| B
@@ -233,6 +223,31 @@ pip install faster-whisper
 
 ## ClawMate Skill（OpenClaw 集成）
 
+## 安装到 OpenClaw
+
+Skill 目录位于 `skills/clawmate/`，包含 `SKILL.md`（命令定义）、`_meta.json`（元数据）、`LICENSE.txt`。
+
+### 方法一：复制到 OpenClaw 技能目录（推荐）
+
+```bash
+# 将 clawmate skill 链接到 OpenClaw 技能目录
+ln -sf $PWD/skills/clawmate ~/.openclaw/skills/clawmate
+# 重启 OpenClaw 使其生效
+openclaw gateway restart
+```
+
+### 验证安装
+
+安装后，在 OpenClaw 会话中执行以下命令测试：
+
+```
+/clawmate link README.md
+```
+
+若返回可点击预览链接，则安装成功。也可通过 `/clawmate list` 确认 skill 已加载。
+
+---
+
 项目中包含 OpenClaw Skill，提供以下 Slash Commands：
 
 ### `/clawmate link <filename>`
@@ -288,32 +303,44 @@ pip install faster-whisper
 
 ### 认证
 
-ClawMate 支持基于 cookie session 的登录认证。设置 `auth.password_hash` 启用：
+ClawMate 支持基于 cookie session 的登录认证。设置 `config.json` 中的 `auth.password_hash` 启用：
+
+#### 方法一：使用 ClawMate 交互式工具（推荐）
 
 ```bash
 python3 main.py --set-password
 ```
 
-启用后所有外部访问需要先登录，127.0.0.1 本地访问自动绕过。
+按提示输入密码，工具自动生成 bcrypt hash 并写入 `config.json`。
+
+#### 方法二：手动生成 hash
+
+使用 Python 一行命令生成 bcrypt hash：
+
+```bash
+python3 -c "import bcrypt; print(bcrypt.hashpw(b'你的密码', bcrypt.gensalt()).decode())"
+```
+
+> 示例输出：`$2b$12$XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`
+> - `$2b$` — bcrypt 算法标识
+> - `12` — 加密轮次（cost factor，默认 12）
+> - 后续字符 — salt + 加密后的 hash
+
+将生成的 hash 填入 `config.json`：
+
+```json
+{
+  "auth": {
+    "username": "admin",
+    "password_hash": "$2b$12$..."
+  }
+}
+```
+
+启用认证后，所有外部访问需要先登录。`127.0.0.1` 本地访问自动绕过认证。
 
 ---
 
-## 产品状态
-
-| 维度 | 状态 |
-|------|:----:|
-| 文件管理（目录浏览/排序/过滤/搜索） | ✅ v1.0 |
-| Markdown 预览（Mermaid/KaTeX/语法高亮） | ✅ v1.0 |
-| Mermaid 缩放（Ctrl+滚轮/按钮/拖拽） | ✅ v1.5 |
-| 代码大纲（函数/类定义导航） | ✅ v1.5 |
-| ONLYOFFICE Office/PDF 预览 | ✅ v1.3 |
-| 图片预览 + 上一页/下一页导航 | ✅ v1.5 |
-| 音视频播放 + SRT 字幕编辑 | ✅ v1.3 |
-| 反馈闭环（选中→提交→Agent 处理） | ✅ v1.3 |
-| 移动端适配（首页/预览/反馈/大纲） | ✅ v1.5 |
-| Docker 部署 | ✅ v1.5 |
-| Slash Commands 集成 | ✅ v1.1 |
-| Daemon 部署（Systemd） | ✅ |
 
 ---
 
