@@ -1833,9 +1833,12 @@
 
   // Toggle right (feedback) panel
   document.getElementById('btnToggleRight').addEventListener('click', () => {
+    const wasHidden = rightSidebar.classList.contains('hidden');
     rightSidebar.classList.toggle('hidden');
     updateGridColumns();
     document.getElementById('btnToggleRight').classList.toggle('active', !rightSidebar.classList.contains('hidden'));
+    // 关闭反馈面板时清除选区高亮 + 隐藏选区提示
+    if (!wasHidden) { clearHL(); hideTooltip(); }
   });
 
   // ============ Raw Markdown Content (for accurate line number calculation) ============
