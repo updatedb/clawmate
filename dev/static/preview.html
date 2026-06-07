@@ -114,6 +114,12 @@
       overflow-y: auto;
       padding: 24px 28px;
     }
+    /* 内容区最小宽度保证 */
+    @media (max-width: 1000px) {
+      .preview-center-body {
+        padding: 20px;
+      }
+    }
 
     /* Right sidebar — feedback panel */
     .preview-right {
@@ -432,17 +438,7 @@
         word-wrap: break-word;
         overflow-wrap: break-word;
       }
-      /* 侧栏打开时中心内容加上遮罩层 */
-      .preview-sidebar-backdrop {
-        display: none;
-        position: fixed;
-        inset: 0;
-        z-index: 49;
-        background: rgba(0,0,0,0.2);
-      }
-      .preview-sidebar-backdrop.show {
-        display: block;
-      }
+      /* 3列网格模式，无需遮罩层 */
       /* 让 markdown 内容和代码块适应窄屏 */
       .preview-center-body .markdown-body {
         min-width: 0;
@@ -899,7 +895,6 @@
     </header>
 
     <!-- Three-column body -->
-    <div class="preview-sidebar-backdrop" id="sidebarBackdrop"></div>
     <div class="preview-three-col">
       <!-- Left: TOC / Outline -->
       <aside class="preview-left" id="leftSidebar">
@@ -1733,7 +1728,6 @@
       outlineBtn.addEventListener('click', function() {
         leftSidebar.classList.toggle('hidden');
         updateGridColumns();
-        updateSidebarBackdrop();
         updatePlainTextDynamicButtons();
       });
       dyn.appendChild(outlineBtn);
@@ -1786,7 +1780,6 @@
       outlineBtn.addEventListener('click', () => {
         leftSidebar.classList.toggle('hidden');
         updateGridColumns();
-        updateSidebarBackdrop();
         updateMarkdownDynamicButtons(); // Refresh active state
       });
       dyn.appendChild(outlineBtn);
@@ -1910,7 +1903,6 @@
     const wasHidden = rightSidebar.classList.contains('hidden');
     rightSidebar.classList.toggle('hidden');
     updateGridColumns();
-    updateSidebarBackdrop();
     document.getElementById('btnToggleRight').classList.toggle('active', !rightSidebar.classList.contains('hidden'));
     // 关闭反馈面板时清除选区高亮 + 隐藏选区提示
     if (!wasHidden) { clearHL(); hideTooltip(); }
@@ -2329,23 +2321,8 @@
   const rightSidebar = document.getElementById('rightSidebar');
   const threeCol = document.querySelector('.preview-three-col');
 
-  var sidebarBackdrop = document.getElementById('sidebarBackdrop');
-  if (sidebarBackdrop) {
-    sidebarBackdrop.addEventListener('click', function() {
-      // 点击遮罩关闭所有侧栏
-      leftSidebar.classList.add('hidden');
-      rightSidebar.classList.add('hidden');
-      updateGridColumns();
-      updateSidebarBackdrop();
-      document.getElementById('btnToggleRight').classList.remove('active');
-    });
-  }
-  
   function updateSidebarBackdrop() {
-    if (!sidebarBackdrop) return;
-    var narrow = window.innerWidth <= 900;
-    var anyOpen = !leftSidebar.classList.contains('hidden') || !rightSidebar.classList.contains('hidden');
-    sidebarBackdrop.classList.toggle('show', narrow && anyOpen);
+    // 3列网格模式，无需遮罩层
   }
 
   function updateGridColumns() {
@@ -2362,15 +2339,8 @@
   } else {
     leftSidebar.classList.remove('hidden');
   }
-  // 窄屏默认隐藏右侧反馈面板（由用户主动 toggle 显示）
-  if (window.innerWidth <= 900) {
-    rightSidebar.classList.add('hidden');
-    document.getElementById('btnToggleRight').classList.remove('active');
-  } else {
-    rightSidebar.classList.remove('hidden');
-  }
+  rightSidebar.classList.remove('hidden');
   updateGridColumns();
-  updateSidebarBackdrop();
 
   // ============ Image Mode Detection ============
   const isImageMode = ['png', 'jpg', 'jpeg', 'svg'].includes(ext);
