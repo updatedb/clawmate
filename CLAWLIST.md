@@ -2834,17 +2834,17 @@ work 端实测到 **2 个不同的 service md5**：
 - [ ] subtitle/correct 改为调用 task_runner
 - [ ] 清理 routes.py 中的 subtitle 代码
 
-### Phase 3 — wake message 改造（待开始）
-- [ ] `_wake_agent_for_root` 改为从 store 读 pending 数据
-- [ ] 拼装完整 message（含所有 operation 详情），不再让 agent 调 API
-- [ ] 去掉 prompt 中的 "GET /list"、"POST /batch-process" 指令
-- [ ] 只留 "做完后 POST /batch-update"
+### Phase 3 — wake message 改造 ✅ (0816696)
+- [x] `_wake_agent_for_root` 改为从 store 读 pending 数据
+- [x] 拼装完整 message，agent 零额外 API 调用
+- [x] 去掉旧 prompt 中的 API 调用指令
+- [x] 只留 "做完后 POST /batch-update" 指令
 
-### Phase 4 — 前端动态按钮（待开始）
-- [ ] preview.html 标签区改为从 `/api/config` 动态渲染
-- [ ] 按 `source` 分组（tooltip / panel / media_bar / image_bar）
-- [ ] 去掉写死的 `.pst-tags` HTML 和部分 JS
-- [ ] 文件切换时按 `match.ext` 重新匹配
+### Phase 4 — 前端动态按钮 ✅ (0a4b207)
+- [x] preview.html 标签区改为从 `/api/config` 动态渲染
+- [x] 按 `source` 分组（tooltip / panel / media_bar / image_bar）
+- [x] 去掉写死的 `.pst-tags` HTML 和部分 JS
+- [x] 文件切换时按 `match.ext` 重新匹配
 
 ### Phase 5 — 收尾清理（待开始）
 - [ ] 老数据兼容：note 前缀匹配降级（review_delete/review_modify 等）
