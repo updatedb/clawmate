@@ -24,13 +24,11 @@ from service import (
     file_info,
     delete_file,
     delete_dir,
-    resolve_root,
-    _root_map,
 )
 from validators import VALIDATORS
 from feedback_api import router as feedback_router, _wake_agent_for_root
 from config import load as config
-from store import create_items as store_create_items, list_items as store_list_items, project_abbr as store_project_abbr
+from store import create_items as store_create_items, list_items as store_list_items, project_abbr as store_project_abbr, update_item as store_update_item
 
 
 router = APIRouter()
@@ -1085,24 +1083,25 @@ async def clawmate_subtitle_correct(request: Request):
     project = media_path.split("/")[0] if "/" in media_path else media_path
 
     # 使用 store.create_items 写入反馈
-    # 避免重复纠错：先检查已有 pending/in_progress
-    existing, _ = store_list_items(root_id, project, status="", file=media_path)
-    for item in existing:
-        if item.get("file") == media_path and item.get("status") in ("pending", "in_progress"):
-            raise HTTPException(status_code=409, detail="已有相同的纠错任务在处理中")
+    # store_create_items 内部按 (content, file) 去重，新的 SRT 内容会创建新任务
+    # 旧的 pending/in_progress 任务通过不同的 content 自动区隔
 
     note_text = (
         "【AI 字幕纠错任务】\n"
         "请修正以下 SRT 字幕文件的文字内容，保持所有时间戳不变。\n"
         "SRT 文件路径（写回目标）：" + safe_rel + "\n"
         "修正规则：\n"
-        "1. 仅修正文字转录错误、添加标点符号\n"
-        "2. 不改变任何时间戳（'--> ' 行保持原样）\n"
-        "3. 不合并或拆分字幕段\n"
-        "4. 不改变原始段落编号\n"
-        "5. 输出必须是合法 SRT 格式\n"
-        "6. 用修正后的完整 SRT 内容替换写回源文件"
+        "1. 修正文字转录错误、添加标点符号（不含句号）、不合理的重复\n"
+        "2. 合并过短的字幕，拆分过长的字幕段，合并时间戳范围\n"
+        "3. 输出必须是合法 SRT 格式\n"
+        "4. 用修正后的完整 SRT 内容替换写回源文件"
     )
+    # 先标记旧的 pending/in_progress 纠错任务为 failed（允许重新提交）
+    existing_items, _ = store_list_items(root_id, project, status="", file=media_path)
+    for item in existing_items:
+        if item.get("file") == media_path and item.get("status") in ("pending", "in_progress"):
+            store_update_item(root_id, project, item["id"], "failed", result="取消：用户重新提交")
+
     new_items = store_create_items(
         root_id, project, media_path,
         [{"text": srt_content.strip(), "note": note_text}],
@@ -1120,7 +1119,6 @@ async def clawmate_subtitle_correct(request: Request):
     return JSONResponse(content={
         "ok": True,
         "id": item_id,
-        "feedbackFile": str(resolve_root(root_id) / project / "feedback.json"),
         "message": "纠错任务已创建，agent 正在处理中",
     })
 
