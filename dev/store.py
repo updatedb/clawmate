@@ -128,7 +128,8 @@ def batch_update_items(root_id: str, project: str, updates: list[dict]) -> list[
         updated.append(item)
     if updated:
         _atomic_write(path, root_id, project, items, data.get("last_id", 0))
-        logger.info("[batch_update] root=%s proj=%s count=%d", root_id, project, len(updated))
+        _ts = datetime.now(CST).isoformat(timespec="seconds")
+    logger.info("[batch_update] %s root=%s proj=%s count=%d", _ts, root_id, project, len(updated))
     return updated
 
 
@@ -273,9 +274,10 @@ def create_items(
     items.extend(new_items)
     _atomic_write(path, root_id, project, items, max(last_id, new_id_num))
 
+    _ts = datetime.now(CST).isoformat(timespec="seconds")
     logger.info(
-        "[store.create] root=%s project=%s file=%s new=%d total=%d",
-        root_id, project, file_path, len(new_items), len(items),
+        "[store.create] %s root=%s project=%s file=%s new=%d total=%d",
+        _ts, root_id, project, file_path, len(new_items), len(items),
     )
     return new_items
 
@@ -321,9 +323,10 @@ def update_item(
 
     _atomic_write(path, root_id, project, items, data.get("last_id", 0))
 
+    _ts = datetime.now(CST).isoformat(timespec="seconds")
     logger.info(
-        "[store.update] root=%s project=%s id=%s status=%s",
-        root_id, project, item_id, new_status,
+        "[store.update] %s root=%s project=%s id=%s status=%s",
+        _ts, root_id, project, item_id, new_status,
     )
     return updated_item
 

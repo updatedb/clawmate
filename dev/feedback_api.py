@@ -89,7 +89,8 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
     # 解析 agent_id
     agent_id = cfg.root_agent(root_id)
 
-    logger.info("[feedback] waking agent: root_id=%s, agent_id=%s", root_id, agent_id)
+    _ts_wake = datetime.now(CST).isoformat(timespec="seconds")
+    logger.info("[feedback.wake] %s start root_id=%s agent_id=%s", _ts_wake, root_id, agent_id)
 
     # 防抖检查
     now = time_module.time()
@@ -151,19 +152,22 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
                 )
             if r.status_code == 200:
                 data = r.json()
+                _ts_end = datetime.now(CST).isoformat(timespec="seconds")
                 logger.info(
-                    "[feedback] wake success: root_id=%s, agent_id=%s, run_name=%s, run_id=%s",
-                    root_id, agent_id, run_name, data.get("runId", ""),
+                    "[feedback.wake] %s success root_id=%s agent_id=%s run_name=%s run_id=%s",
+                    _ts_end, root_id, agent_id, run_name, data.get("runId", ""),
                 )
             else:
+                _ts_end = datetime.now(CST).isoformat(timespec="seconds")
                 logger.warning(
-                    "[feedback] wake failed: root_id=%s, agent_id=%s, HTTP=%d, body=%s",
-                    root_id, agent_id, r.status_code, r.text[:200],
+                    "[feedback.wake] %s failed root_id=%s agent_id=%s HTTP=%d body=%s",
+                    _ts_end, root_id, agent_id, r.status_code, r.text[:200],
                 )
         except Exception as e:
+            _ts_end = datetime.now(CST).isoformat(timespec="seconds")
             logger.warning(
-                "[feedback] wake HTTP error: root_id=%s, agent_id=%s: %s",
-                root_id, agent_id, e,
+                "[feedback.wake] %s error root_id=%s agent_id=%s: %s",
+                _ts_end, root_id, agent_id, e,
             )
 
     threading.Thread(target=_do_wake_sync, daemon=True).start()
