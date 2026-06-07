@@ -112,7 +112,7 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
     items, _ = list_items(root_id, project, status="pending", file=file)
     
     if items:
-        lines = [f"ClawMate 反馈通知，有以下 {len(items)} 条待处理 feedback 需要你执行：", ""]
+        lines = [f"ClawMate 反馈通知：root={root_id}  project={project}  有以下 {len(items)} 条待处理 feedback 需要你执行：", ""]
         for idx, item in enumerate(items):
             item_id = item.get("id", "?")
             task_id = item.get("task_id", "") or item.get("action", "other")
@@ -131,7 +131,6 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
             lines.append(f"   操作：{action_desc}")
             lines.append("")
         lines.append(f"执行完成后，批量 POST {base_url}/api/clawmate/feedback/batch-update 更新状态。")
-        lines.append(f"请求 body: {{\"root\": \"{root_id}\", \"project\": \"{project}\", \"items\": [{{id, status, result}}]}}")
         message = "\n".join(lines)
     else:
         message = f"ClawMate 反馈通知：{scope} 目前无待处理 feedback。"
