@@ -996,6 +996,18 @@
       mdCss.href = 'https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.7.0/github-markdown.min.css';
       hlCss.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css';
     }
+    // 强制设置 markdown-body CSS 变量（绕过 @media prefers-color-scheme 限制）
+    const varsEl = document.getElementById('clawmate-theme-vars') || (() => {
+      const el = document.createElement('style');
+      el.id = 'clawmate-theme-vars';
+      document.head.appendChild(el);
+      return el;
+    })();
+    if (resolved === 'dark') {
+      varsEl.textContent = '[data-theme=dark] { --fgColor-default:#f0f6fc; --fgColor-muted:#9198a1; --fgColor-accent:#4493f8; --fgColor-success:#3fb950; --fgColor-attention:#d29922; --fgColor-danger:#f85149; --fgColor-done:#ab7df8; --bgColor-default:#0d1117; --bgColor-muted:#151b23; --bgColor-neutral-muted:#656c7633; --bgColor-attention-muted:#bb800926; --borderColor-default:#3d444d; --borderColor-muted:#3d444db3; --borderColor-neutral-muted:#3d444db3; --focus-outlineColor:#1f6feb; }';
+    } else {
+      varsEl.textContent = '[data-theme=light] { --fgColor-default:#1f2328; --fgColor-muted:#59636e; --fgColor-accent:#0969da; --fgColor-success:#1a7f37; --fgColor-attention:#9a6700; --fgColor-danger:#d1242f; --fgColor-done:#8250df; --bgColor-default:#ffffff; --bgColor-muted:#f6f8fa; --bgColor-neutral-muted:#818b981f; --bgColor-attention-muted:#fff8c5; --borderColor-default:#d1d9e0; --borderColor-muted:#d1d9e0b3; --borderColor-neutral-muted:#d1d9e0b3; --focus-outlineColor:#0969da; }';
+    }
   }
 
   function applyTheme() {
