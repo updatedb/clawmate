@@ -15,9 +15,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from config import load as load_config
-from feedback_api import _wake_agent_for_root
-from service import safe_path, resolve_root
-from store import create_items, list_items, update_item
+from service import safe_path
+
 
 logger = logging.getLogger("clawmate.subtitle")
 router = APIRouter()

@@ -28,7 +28,7 @@ from service import (
 from validators import VALIDATORS
 from feedback_api import router as feedback_router, _wake_agent_for_root
 from config import load as config
-from store import create_items, list_items, project_abbr, update_item
+from store import create_items, list_items, update_item
 
 
 router = APIRouter()
@@ -36,7 +36,7 @@ router = APIRouter()
 # Feedback routes (extracted to feedback_api.py)
 router.include_router(feedback_router)
 
-from constants import PUBLIC_BASE_URL_ENV, CONFIG_PATH_ENV, ONLYOFFICE_JWT_SECRET_ENV
+from constants import CONFIG_PATH_ENV, ONLYOFFICE_JWT_SECRET_ENV
 
 
 @router.get("/api/clawmate/config", response_class=JSONResponse)

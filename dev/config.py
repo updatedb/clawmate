@@ -8,7 +8,6 @@ Usage:
     config.root_agent("writer")      # → "writer"
     config.root_dir("writer")        # → Path(...)
     config.openclaw.hook_token       # → str
-    config.feedback.tags             # → list[FeedbackTag]
     config.onlyoffice.jwt_secret     # → str
     config.auth.password_hash        # → str
     config.port                      # → 5533
@@ -54,17 +53,9 @@ class TaskTemplate:
     frontend: dict = field(default_factory=dict)
 
 
-@dataclass
-class FeedbackTag:
-    label: str = ""
-    prompt: str = ""
-    action: str = "other"
-    scope: str = "document"
-
 
 @dataclass
 class FeedbackConfig:
-    tags: list[FeedbackTag] = field(default_factory=list)
     enable_subtitle: bool = False
 
 
@@ -208,16 +199,7 @@ def _parse_config(raw: dict) -> AppConfig:
         ),
         feedback=FeedbackConfig(
             enable_subtitle=bool(fb.get("enable_subtitle", False)),
-            tags=[
-                FeedbackTag(
-                    label=t.get("label", ""),
-                    prompt=t.get("prompt", ""),
-                    action=t.get("action", "other"),
-                    scope=t.get("scope", "document"),
-                )
-                for t in (fb.get("tags") or [])
-                if isinstance(t, dict)
-            ]
+
         ),
         onlyoffice=OnlyOfficeConfig(
             api_js_url=env_onlyoffice_js_url or str(oo.get("api_js_url", "")),

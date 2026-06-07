@@ -35,7 +35,7 @@ from fastapi.responses import JSONResponse
 
 from feedback_schema import FEEDBACK_STATUSES
 from config import load as config
-from store import create_items, update_item, list_items, scan_all, project_abbr, batch_update_items
+from store import create_items, update_item, list_items, scan_all, batch_update_items
 from service import resolve_root
 
 # ── 常量 ────────────────────────────────────────────────────────────
