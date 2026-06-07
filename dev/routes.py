@@ -28,7 +28,7 @@ from service import (
 from validators import VALIDATORS
 from feedback_api import router as feedback_router, _wake_agent_for_root
 from config import load as config
-from store import create_items as store_create_items, list_items as store_list_items, project_abbr as store_project_abbr, update_item as store_update_item
+from store import create_items, list_items, project_abbr, update_item
 
 
 router = APIRouter()
@@ -1097,14 +1097,14 @@ async def clawmate_subtitle_correct(request: Request):
         "4. 用修正后的完整 SRT 内容替换写回源文件"
     )
     # 先标记旧的 pending/in_progress 纠错任务为 failed（允许重新提交）
-    existing_items, _ = store_list_items(root_id, project, status="", file=media_path)
+    existing_items, _ = list_items(root_id, project, status="", file=media_path)
     for item in existing_items:
         if item.get("file") == media_path and item.get("status") in ("pending", "in_progress"):
-            store_update_item(root_id, project, item["id"], "failed", result="取消：用户重新提交")
+            update_item(root_id, project, item["id"], "failed", result="取消：用户重新提交")
 
-    new_items = store_create_items(
+    new_items = create_items(
         root_id, project, media_path,
-        [{"text": srt_content.strip(), "note": note_text}],
+        [{"text": srt_content.strip(), "note": note_text, "action": "modify", "scope": "file"}],
     )
 
     if not new_items:
