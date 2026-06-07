@@ -161,8 +161,10 @@ app.add_middleware(AuthMiddleware, config=load_cfg())
 
 # import routes AFTER env vars are set (they read env at import time)
 from routes import router as clawmate_router  # noqa: E402
+from task_runner import router as task_router  # noqa: E402
 
 app.include_router(clawmate_router)
+app.include_router(task_router)
 
 # mount static files under /clawmate/
 if STATIC_DIR.exists() and STATIC_DIR.is_dir():

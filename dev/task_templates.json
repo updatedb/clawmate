@@ -1,0 +1,82 @@
+[
+  {
+    "id": "review_delete",
+    "label": "🗑 删除",
+    "action": "delete",
+    "scope": "document",
+    "source": "selection",
+    "match": {"ext": ["md", "txt", "py", "js", "json", "html", "css", "go", "rs", "ts", "yaml", "xml"]},
+    "agent_prompt": "清除选中内容",
+    "frontend": {"tooltip": true, "panel": true}
+  },
+  {
+    "id": "review_modify",
+    "label": "🔧 修改",
+    "action": "modify",
+    "scope": "document",
+    "source": "selection",
+    "match": {"ext": ["md", "txt", "py", "js", "json", "html"]},
+    "agent_prompt": "修改选中内容，思路如下：",
+    "frontend": {"tooltip": true, "panel": true}
+  },
+  {
+    "id": "review_explain",
+    "label": "📈 扩展",
+    "action": "explain",
+    "scope": "document",
+    "source": "selection",
+    "match": {"ext": ["md", "txt"]},
+    "agent_prompt": "详细解释选中内容",
+    "frontend": {"tooltip": true, "panel": true}
+  },
+  {
+    "id": "review_simplify",
+    "label": "📉 简化",
+    "action": "simplify",
+    "scope": "document",
+    "source": "selection",
+    "match": {"ext": ["md", "txt"]},
+    "agent_prompt": "抽象选中内容，简单描述",
+    "frontend": {"tooltip": true, "panel": true}
+  },
+  {
+    "id": "review_translate",
+    "label": "🌐 翻译",
+    "action": "translate",
+    "scope": "document",
+    "source": "selection",
+    "match": {"ext": ["md", "txt"]},
+    "agent_prompt": "将选中内容翻译为中文：",
+    "frontend": {"tooltip": true, "panel": true}
+  },
+  {
+    "id": "review_add",
+    "label": "➕ 追加",
+    "action": "add",
+    "scope": "document",
+    "source": "selection",
+    "match": {"ext": ["md", "txt", "py", "js", "json", "html"]},
+    "agent_prompt": "在选中内容下方追加说明：",
+    "frontend": {"tooltip": true, "panel": true}
+  },
+  {
+    "id": "project_execute",
+    "label": "⚡ 执行方案",
+    "action": "execute",
+    "scope": "project",
+    "source": "selection",
+    "match": {"ext": ["md", "txt"]},
+    "agent_prompt": "文档审批通过，执行方案。\n读取 {file} 中的方案，在 project 范围内实施。",
+    "frontend": {"tooltip": true, "panel": true}
+  },
+  {
+    "id": "subtitle_correct",
+    "label": "🤖 AI 字幕纠错",
+    "action": "modify",
+    "scope": "document",
+    "source": "media_bar",
+    "match": {"ext": ["mp3", "wav", "m4a", "mp4", "webm", "ogg"]},
+    "agent_prompt": "【AI 字幕纠错任务】\n请修正以下 SRT 字幕文件的文字内容。\nSRT 文件路径：{srt_path}\n修正规则：\n1. 修正文字转录错误、添加标点符号（不含句号）、不合理的重复\n2. 合并过短的字幕，拆分过长的字幕段，合并时间戳范围\n3. 输出必须是合法 SRT 格式\n4. 用修正后的完整 SRT 内容替换写回源文件",
+    "frontend": {"media_bar": true}
+  }
+]

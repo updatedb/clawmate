@@ -43,10 +43,22 @@ from constants import PUBLIC_BASE_URL_ENV, CONFIG_PATH_ENV, ONLYOFFICE_JWT_SECRE
 async def public_config():
     """返回前端安全的公开配置（不含 JWT secret 等敏感字段）。"""
     cfg = config()
+    templates = []
+    try:
+        from config import load_task_templates
+        for t in load_task_templates():
+            templates.append({
+                "id": t.id, "label": t.label, "action": t.action, "scope": t.scope,
+                "source": t.source, "match_ext": t.match_ext, "agent_prompt": t.agent_prompt,
+                "frontend": t.frontend,
+            })
+    except Exception:
+        pass
     return {
         "roots": [{"id": r.id, "label": r.label, "dir": r.dir, "agent_id": r.agent_id} for r in cfg.roots],
         "defaultRootId": cfg.default_root_id,
         "feedback_tags": [{"label": t.label, "prompt": t.prompt} for t in cfg.feedback.tags],
+        "task_templates": templates,
     }
 ONLYOFFICE_TOKEN_TTL = 3600
 

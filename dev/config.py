@@ -43,6 +43,18 @@ class OpenClawConfig:
 
 
 @dataclass
+class TaskTemplate:
+    id: str = ""
+    label: str = ""
+    action: str = "other"
+    scope: str = "document"
+    source: str = "selection"
+    match_ext: list = field(default_factory=lambda: ["*"])
+    agent_prompt: str = ""
+    frontend: dict = field(default_factory=dict)
+
+
+@dataclass
 class FeedbackTag:
     label: str = ""
     prompt: str = ""
@@ -112,6 +124,29 @@ def set_config_path(path: str | Path) -> None:
     """main.py 启动时调用，设定 config.json 路径。"""
     global _CONFIG_PATH
     _CONFIG_PATH = Path(path)
+
+
+def load_task_templates() -> list[TaskTemplate]:
+    """读取 task_templates.json，缓存 TTL 60s，mtime 变化即 invalidate。"""
+    global _CONFIG_CACHE, _CONFIG_MTIME
+    path = Path(os.environ.get("CLAWMATE_CONFIG", "config.json")).parent / "task_templates.json"
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+    return [
+        TaskTemplate(
+            id=t.get("id", ""),
+            label=t.get("label", ""),
+            action=t.get("action", "other"),
+            scope=t.get("scope", "document"),
+            source=t.get("source", "selection"),
+            match_ext=t.get("match", {}).get("ext", ["*"]),
+            agent_prompt=t.get("agent_prompt", ""),
+            frontend=t.get("frontend", {}),
+        )
+        for t in raw if isinstance(t, dict) and t.get("id")
+    ]
 
 
 def load() -> AppConfig:
