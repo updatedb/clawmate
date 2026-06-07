@@ -34,7 +34,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from feedback_schema import FEEDBACK_STATUSES
-from config import load as config
+from config import load as config, load_task_templates
 from store import create_items, update_item, list_items, scan_all, batch_update_items
 from service import resolve_root
 
@@ -52,22 +52,23 @@ _last_wake: dict[str, float] = {}
 _DEBOUNCE_SECONDS = 60
 
 
-def _action_desc(action: str, scope: str) -> str:
-    """将 action + scope 翻译为自然语言操作描述。"""
-    desc_map = {
-        "delete": "从文件中找到 content 匹配的文本段 → 删除",
-        "modify": "在文件中找到 content 匹配的文本段 → 按 note 思路修改",
-        "explain": "在 content 匹配段下方插入补充说明",
-        "simplify": "将 content 匹配段改写为简洁描述",
-        "translate": "将 content 匹配段翻译",
-        "add": "在文件中追加新内容",
-        "execute": "读取 file 全文方案 → 在 project 范围内实施",
+def _get_action_desc(task_id: str, fallback_action: str) -> str:
+    """从 task_template 的 desc 字段获取操作描述。"""
+    _tmpl = next((t for t in load_task_templates() if t.id == task_id), None)
+    if _tmpl and _tmpl.desc:
+        return _tmpl.desc
+    # 降级：按 action 返回默认描述
+    _fallback = {
         "other": "根据 note 描述处理",
+        "delete": "删除匹配内容",
+        "modify": "修改匹配内容",
+        "explain": "补充说明",
+        "simplify": "简化描述",
+        "translate": "翻译",
+        "add": "追加内容",
+        "execute": "执行方案（project 范围）",
     }
-    desc = desc_map.get(action, desc_map["other"])
-    if scope == "project":
-        desc += "（作用域：project）"
-    return desc
+    return _fallback.get(fallback_action, "根据 note 描述处理")
 
 
 def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> None:
@@ -120,7 +121,7 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
             note_val = (item.get("note", "") or "")[:300]
             position_val = item.get("position", "") or "无"
             
-            action_desc = _action_desc(item.get("action", "other"), scope_val)
+            action_desc = _get_action_desc(task_id, item.get("action", "other"))
             lines.append(f"{idx+1}. [{item_id}] task_id={task_id} action={item.get('action','?')} scope={scope_val}")
             lines.append(f"   file: {item_file}")
             lines.append(f"   position: {position_val}")

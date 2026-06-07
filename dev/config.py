@@ -50,6 +50,7 @@ class TaskTemplate:
     source: str = "selection"
     match_ext: list = field(default_factory=lambda: ["*"])
     agent_prompt: str = ""
+    desc: str = ""
     frontend: dict = field(default_factory=dict)
 
 
@@ -134,6 +135,7 @@ def load_task_templates() -> list[TaskTemplate]:
             source=t.get("source", "selection"),
             match_ext=t.get("match", {}).get("ext", ["*"]),
             agent_prompt=t.get("agent_prompt", ""),
+            desc=t.get("desc", ""),
             frontend=t.get("frontend", {}),
         )
         for t in raw if isinstance(t, dict) and t.get("id")
