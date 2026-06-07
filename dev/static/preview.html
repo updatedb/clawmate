@@ -3938,11 +3938,9 @@
           selPayload.startLine = item.startLine;
           selPayload.endLine = item.endLine || item.startLine;
         }
-        if (item.position) {
-          selPayload.position = item.position;
-        }
-      } else if (item.position) {
-        selPayload.position = item.position;
+        selPayload.position = item.position || '';
+      } else {
+        selPayload.position = item.position || '';
       }
       const res = await fetch('/api/clawmate/feedback', {
         method: 'POST',
@@ -4525,10 +4523,7 @@
       selPayload.startLine = startLine;
       selPayload.endLine = endLine;
     }
-    if (rawPosition && !rawPosition.match(/^\d+(-\d+)?$/)) {
-      // 非纯数字位置（如 Section xxx, Page 1-2 等）直接透传
-      selPayload.position = rawPosition;
-    }
+    selPayload.position = rawPosition;
 
     try {
       const res = await fetch('/api/clawmate/feedback', {
