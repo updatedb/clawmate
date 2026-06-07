@@ -113,6 +113,38 @@ def status_count(root_id: str, project: str) -> dict[str, int]:
 
 # ── 写 ─────────────────────────────────────────────────────────
 
+def batch_update_items(root_id: str, project: str, updates: list[dict]) -> list[dict]:
+    """批量更新 feedback item 状态。
+
+    updates: [{id, status, result}, ...]
+    逐项更新，失败项不阻断后续。
+    返回实际更新的 items 列表。
+    """
+    path = _get_feedback_path(root_id, project)
+    data = _read_feedback(path)
+    items = data.get("items", [])
+    id_map = {item.get("id"): item for item in items}
+    updated = []
+    now = str(datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S"))
+    for upd in updates:
+        item_id = upd.get("id", "")
+        if item_id not in id_map:
+            logger.warning("[batch_update] item not found: %s", item_id)
+            continue
+        item = id_map[item_id]
+        new_status = upd.get("status", "")
+        if new_status and new_status in FEEDBACK_STATUSES:
+            item["status"] = new_status
+        if "result" in upd:
+            item["result"] = upd["result"]
+        item["updated"] = now
+        updated.append(item)
+    if updated:
+        _atomic_write(path, root_id, project, items, data.get("last_id", 0))
+        logger.info("[batch_update] root=%s proj=%s count=%d", root_id, project, len(updated))
+    return updated
+
+
 def project_abbr(project: str) -> str:
     """从 project 名生成 2 字符缩写。"""
     # 先查 config.json 自定义缩写
@@ -160,7 +192,12 @@ def create_items(
     ts = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
     abbr = project_abbr(project)
 
-    existing_keys = {(item.get("content", ""), item.get("file", "")) for item in items}
+    # 去重时排除已删除项（允许重新提交相同内容）
+    existing_keys = {
+        (item.get("content", ""), item.get("file", ""))
+        for item in items
+        if item.get("status") != "deleted"
+    }
 
     new_items = []
     for idx, sel in enumerate(selections):

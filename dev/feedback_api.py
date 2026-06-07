@@ -37,7 +37,7 @@ from fastapi.responses import JSONResponse
 
 from feedback_schema import FEEDBACK_STATUSES
 from config import load as config
-from store import create_items, update_item, list_items, status_count, scan_all, project_abbr
+from store import create_items, update_item, list_items, status_count, scan_all, project_abbr, batch_update_items
 from service import resolve_root, get_public_base_url
 
 # ── 常量 ────────────────────────────────────────────────────────────
@@ -93,9 +93,11 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
         f"ClawMate 反馈通知：{scope} 有待处理反馈。\n"
         f"处理步骤：\n"
         f"1. GET {base_url}/api/clawmate/feedback/list?{scope}&status=pending 获取待处理列表\n"
-        f"2. 加载 {root_id}/{project if project else '?'} 项目上下文，逐条读取 note/content 理解改进需求\n"
-        f"3. 综合考虑后执行改动\n"
-        f"4. 完成后检查是否有不恰当的项，并更新反馈状态"
+        f"2. 如果同一文件有 ≥2 条 pending，调用 POST {base_url}/api/clawmate/feedback/batch-process\n"
+        f"   传入 {scope}，获取合并后的 operations + conflicts + current_content\n"
+        f"3. 处理 conflicts（合并/决策），标记异常的 item 为 failed\n"
+        f"4. 一次性执行所有剩余操作（只读一次文件、只写一次）\n"
+        f"5. 批量 POST {base_url}/api/clawmate/feedback/batch-update 逐项更新状态"
     )
     run_name = f"clawmate-fb-{root_id}"
 
@@ -376,5 +378,141 @@ async def cron_tick():
         result.checked_roots, result.pending_total, len(result.pending_roots), len(result.errors),
     )
     return {"ok": True}
+
+
+@router.post("/api/clawmate/feedback/batch-process", response_class=JSONResponse)
+async def feedback_batch_process(request: Request):
+    """
+    批处理入口：收集同一文件的所有 pending item，
+    去重 + 冲突检测后返回操作列表给 agent。
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    root_id = str(body.get("root", "")).strip()
+    project = str(body.get("project", "")).strip()
+    file_path = str(body.get("file", "")).strip()
+
+    if not root_id or not project or not file_path:
+        raise HTTPException(status_code=422, detail="Missing root/project/file")
+
+    # 1. 收集所有 pending item
+    items, _ = list_items(root_id, project, status="pending", file=file_path)
+    if not items:
+        return {"ok": True, "file": file_path, "current_content": "", "operations": [], "conflicts": [], "dedup_count": 0, "conflict_count": 0, "total": 0}
+
+    # 2. 读取文件内容
+    from service import resolve_root
+    rcfg = resolve_root(root_id)
+    if not rcfg:
+        raise HTTPException(status_code=404, detail=f"Root not found: {root_id}")
+    full_path = rcfg.dir / file_path
+    current_content = ""
+    try:
+        current_content = full_path.read_text(encoding="utf-8")
+    except (FileNotFoundError, PermissionError, OSError):
+        pass
+
+    # 3. 去重（同 content 只保留一条）
+    seen_content = set()
+    dedup_count = 0
+    deduped = []
+    for item in items:
+        content = (item.get("content", "") or "").strip()
+        if not content:
+            continue
+        key = content
+        if key in seen_content:
+            dedup_count += 1
+            continue
+        seen_content.add(key)
+        deduped.append(item)
+
+    # 4. 标准化 action
+    def _classify_action(note: str) -> str:
+        note_lower = (note or "").lower()
+        if "清除" in note_lower or "删除" in note_lower or "删掉" in note_lower:
+            return "delete"
+        if "替换" in note_lower or "修改" in note_lower or "改为" in note_lower:
+            return "replace"
+        if "解释" in note_lower or "详细" in note_lower or "说明" in note_lower:
+            return "explain"
+        if "简化" in note_lower or "抽象" in note_lower or "摘要" in note_lower:
+            return "simplify"
+        if "执行" in note_lower or "实施" in note_lower or "审批" in note_lower:
+            return "execute"
+        return "other"
+
+    operations = []
+    for item in deduped:
+        operations.append({
+            "id": item.get("id", ""),
+            "note": item.get("note", ""),
+            "content": item.get("content", ""),
+            "action": _classify_action(item.get("note", "")),
+        })
+
+    # 5. 冲突检测（内容重叠的 delete/replace/explain）
+    conflicts = []
+    for i, a in enumerate(operations):
+        for b in operations[i + 1:]:
+            a_content = (a.get("content", "") or "").strip()
+            b_content = (b.get("content", "") or "").strip()
+            if not a_content or not b_content:
+                continue
+            # 内容重叠：一个 content 是另一个的子串
+            overlap = a_content in b_content or b_content in a_content
+            if not overlap:
+                continue
+            # 同类合并
+            if a["action"] == b["action"] == "delete":
+                conflicts.append({
+                    "ids": [a["id"], b["id"]],
+                    "type": "mergeable_delete",
+                    "detail": f"两个 delete 内容重叠「{a_content[:20]}」vs「{b_content[:20]}」，自动合并为一条删除",
+                })
+            elif set([a["action"], b["action"]]) <= {"delete", "replace"}:
+                conflicts.append({
+                    "ids": [a["id"], b["id"]],
+                    "type": "conflict_delete_replace",
+                    "detail": f"delete 与 {b['action']} 作用于同一段文本，需 agent 决策 which operation wins",
+                })
+
+    return {
+        "ok": True,
+        "file": file_path,
+        "current_content": current_content,
+        "operations": operations,
+        "conflicts": conflicts,
+        "dedup_count": dedup_count,
+        "conflict_count": len(conflicts),
+        "total": len(items),
+    }
+
+
+@router.post("/api/clawmate/feedback/batch-update", response_class=JSONResponse)
+async def feedback_batch_update(request: Request):
+    """
+    批量更新 feedback item 状态。
+    Body: { "root": "...", "project": "...", "items": [{id, status, result}, ...] }
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    root_id = str(body.get("root", "")).strip()
+    project = str(body.get("project", "")).strip()
+    updates = body.get("items", [])
+
+    if not root_id or not project:
+        raise HTTPException(status_code=422, detail="Missing root/project")
+    if not updates or not isinstance(updates, list):
+        raise HTTPException(status_code=422, detail="Missing items")
+
+    result = batch_update_items(root_id, project, updates)
+    return {"ok": True, "updated": len(result), "items": [{"id": it["id"], "status": it["status"]} for it in result]}
 
 
