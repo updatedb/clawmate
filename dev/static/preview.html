@@ -3545,9 +3545,9 @@
     if (hasPending) {
       submitAllBtn.addEventListener('click', () => {
         // Validate: each pending item must have a note
-        const missing = pendingItems.filter(i => (!i.note && !i.text) || !i.action);
+        const missing = pendingItems.filter(i => !i.action);
         if (missing.length > 0) {
-          showToast('请填写备注后再提交', 2000);
+          showToast('请选择操作类型后再提交', 2000);
           return;
         }
         submitAllItems(submitAllBtn, { itemType: 'text' });
@@ -3935,8 +3935,8 @@
   }
 
   async function submitSingleItem(item) {
-    if ((!item.note && !item.text) || !item.action) {
-      showToast('请填写备注并选择操作', 2000);
+    if (!item.action) {
+      showToast('请选择操作类型', 2000);
       return;
     }
     try {
@@ -4443,12 +4443,6 @@
   document.getElementById('pstBtnAdd').addEventListener('click', function() {
     const note = document.getElementById('pstNote').value.trim();
     const st = document.getElementById('pstStatus');
-    if (!note) {
-      st.textContent = '⚠️ 请填写备注';
-      st.className = 'pst-status pst-status-warn';
-      document.getElementById('pstNote').focus();
-      return;
-    }
     if (!_lastPstTag) {
       st.textContent = '⚠️ 请选择操作类型（删除/修改/扩展等）';
       st.className = 'pst-status pst-status-warn';
@@ -4504,12 +4498,6 @@
     if (btn.disabled) return;
     const note = document.getElementById('pstNote').value.trim();
     const st = document.getElementById('pstStatus');
-    if (!note) {
-      st.textContent = '⚠️ 请填写备注';
-      st.className = 'pst-status pst-status-warn';
-      document.getElementById('pstNote').focus();
-      return;
-    }
     if (!_lastPstTag) {
       st.textContent = '⚠️ 请选择操作类型（删除/修改/扩展等）';
       st.className = 'pst-status pst-status-warn';
