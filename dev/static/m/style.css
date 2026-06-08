@@ -680,6 +680,11 @@ display: flex;
   background: var(--bg-tertiary);
   border-color: var(--accent);
 }
+.m-fb-tag.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
 .m-fb-submit {
   width: 100%;
   min-height: var(--touch);

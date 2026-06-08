@@ -142,13 +142,7 @@
       <div class="m-fb-input-selection" id="fbInputSelection"></div>
       <div class="m-fb-input-label">你的意见</div>
       <textarea class="m-fb-textarea" id="fbInputNote" placeholder="简要说明需要的改动"></textarea>
-      <div class="m-fb-tags" id="fbInputTags">
-        <button class="m-fb-tag" data-note="删除">🗑 删除</button>
-        <button class="m-fb-tag" data-note="修改，思路如下：">🔧 修改</button>
-        <button class="m-fb-tag" data-note="详细解释">📈 扩展</button>
-        <button class="m-fb-tag" data-note="简化">📉 简化</button>
-        <button class="m-fb-tag" data-note="审批通过，执行方案：">⚡ 执行</button>
-      </div>
+      <div class="m-fb-tags" id="fbInputTags"></div>
       <button class="m-fb-submit" id="fbInputSubmit">提交反馈</button>
       <div id="fbInputStatus" style="font-size:12px;color:var(--text-muted);padding-top:4px;"></div>
     </div>
@@ -639,7 +633,7 @@
 
     try {
       const sel = {
-        task_id: 'review_modify',
+        task_id: _selectedTaskId || 'review_modify',
         content: currentSelectionText.substring(0, 1000),
         note: note,
         position: currentPosition || getPosValue(ext, currentSelectionStart, currentSelectionEnd),
@@ -673,10 +667,54 @@
   }
 
   // ── Feedback tag clicks (inside input panel) ──
+  let _selectedTaskId = '';
+  let _taskTemplates = [];
+
+  function renderFbTags(filtered) {
+    els.fbInputTags.innerHTML = '';
+    if (!filtered.length) return;
+    filtered.forEach(function(t) {
+      var btn = document.createElement('button');
+      btn.className = 'm-fb-tag';
+      btn.textContent = t.label;
+      btn.setAttribute('data-task-id', t.id);
+      btn.setAttribute('data-note', t.agent_prompt);
+      btn.addEventListener('click', function() {
+        var id = this.getAttribute('data-task-id');
+        // Toggle active state
+        document.querySelectorAll('.m-fb-tag').forEach(function(b) { b.classList.remove('active'); });
+        this.classList.add('active');
+        _selectedTaskId = id;
+        els.fbInputNote.placeholder = '例如：' + this.getAttribute('data-note');
+        els.fbInputNote.focus();
+      });
+      els.fbInputTags.appendChild(btn);
+    });
+    // 默认选中第一个
+    var first = els.fbInputTags.querySelector('.m-fb-tag');
+    if (first) { first.classList.add('active'); _selectedTaskId = first.getAttribute('data-task-id'); }
+  }
+
+  async function loadTaskTemplates() {
+    try {
+      var res = await fetch(API_BASE + '/config');
+      if (!res.ok) return;
+      var cfg = await res.json();
+      if (cfg && cfg.task_templates) {
+        _taskTemplates = cfg.task_templates;
+        var e = (filePath || '').split('.').pop().toLowerCase();
+        var filtered = _taskTemplates.filter(function(t) {
+          return t.source === 'selection' && (t.match_ext.indexOf('*') >= 0 || t.match_ext.indexOf(e) >= 0);
+        });
+        renderFbTags(filtered);
+      }
+    } catch (_) {}
+  }
+
   els.fbInputTags.addEventListener('click', e => {
     const btn = e.target.closest('.m-fb-tag');
     if (!btn) return;
-    els.fbInputNote.value = btn.dataset.note;
+    // The per-button click handler already handles everything
   });
 
   els.fbInputSubmit.addEventListener('click', submitFeedback);
@@ -1209,6 +1247,7 @@
   }, { passive: true });
   // ── Init ──
   async function init() {
+    await loadTaskTemplates();
     // Load content
     await loadContent();
     // Load feedback count for badge
