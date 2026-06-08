@@ -15,12 +15,8 @@ from __future__ import annotations
 import json
 import logging
 import os
-import threading
-import time as time_module
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
 
-import httpx
 
 logger = logging.getLogger("clawmate.feedback")
 if not logger.handlers:
@@ -34,8 +30,8 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from feedback_schema import FEEDBACK_STATUSES
-from config import load as config, load_task_templates
-from store import create_items, update_item, list_items, scan_all, batch_update_items
+from config import load as config
+from store import update_item, list_items, batch_update_items
 from service import resolve_root
 
 # ── 常量 ────────────────────────────────────────────────────────────
@@ -45,139 +41,12 @@ CST = timezone(timedelta(hours=8))
 router = APIRouter()
 
 
-# ── Webhook wake 工具 ───────────────────────────────────────────
-# v1.26: message 内联（不加载任何模板）
-
-_last_wake: dict[str, float] = {}
-_DEBOUNCE_SECONDS = 60
-
-
-def _get_action_desc(task_id: str, fallback_action: str) -> str:
-    """从 task_template 的 desc 字段获取操作描述。"""
-    _tmpl = next((t for t in load_task_templates() if t.id == task_id), None)
-    if _tmpl and _tmpl.desc:
-        return _tmpl.desc
-    # 降级：按 action 返回默认描述
-    _fallback = {
-        "other": "根据 note 描述处理",
-        "delete": "删除匹配内容",
-        "modify": "修改匹配内容",
-        "explain": "补充说明",
-        "simplify": "简化描述",
-        "translate": "翻译",
-        "add": "追加内容",
-        "execute": "执行方案（project 范围）",
-    }
-    return _fallback.get(fallback_action, "根据 note 描述处理")
-
-
-def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> None:
-    """读取 config，直接 POST OpenClaw /hooks/agent（后台线程 fire-and-forget）。
-
-    内联 message（不加载模板），防抖 60s 同 root 跳过。
-    可传 project + file 缩小 agent 查询范围。
-    """
-    cfg = config()
-    oc = cfg.openclaw
-    hook_token = oc.hook_token
-    gateway_url = oc.gateway_url
-
-    if not hook_token:
-        logger.warning("[feedback] wake skipped: openclaw.hook_token not configured in config.json")
-        return
-
-    # 解析 agent_id
-    agent_id = cfg.root_agent(root_id)
-
-    _ts_wake = datetime.now(CST).isoformat(timespec="seconds")
-    logger.info("[feedback.wake] %s start root_id=%s agent_id=%s", _ts_wake, root_id, agent_id)
-
-    # 防抖检查
-    now = time_module.time()
-    last = _last_wake.get(root_id, 0.0)
-    if now - last < _DEBOUNCE_SECONDS:
-        logger.info("[feedback] wake skipped (debounced %ds): root_id=%s", int(now - last), root_id)
-        return
-    _last_wake[root_id] = now
-
-    # 内联 message — 从 store 读取所有 pending items 拼入 prompt
-    base_url = cfg.public_base_url or "http://localhost:5533"
-    scope = f"root={root_id}"
-    if project:
-        scope += f"&project={project}"
-    if file:
-        scope += f"&file={file}"
-
-    # 读取所有 pending items
-    items, _ = list_items(root_id, project, status="pending", file=file)
-    
-    if items:
-        lines = [f"ClawMate 反馈通知：root={root_id}  project={project}  有以下 {len(items)} 条待处理 feedback 需要你执行：", ""]
-        for idx, item in enumerate(items):
-            item_id = item.get("id", "?")
-            task_id = item.get("task_id", "") or item.get("action", "other")
-            scope_val = item.get("scope", "document")
-            item_file = item.get("file", file or "?")
-            content_val = (item.get("content", "") or "")[:200]
-            note_val = (item.get("note", "") or "")[:300]
-            position_val = item.get("position", "") or "无"
-            
-            action_desc = _get_action_desc(task_id, item.get("action", "other"))
-            lines.append(f"{idx+1}. [{item_id}] task_id={task_id} action={item.get('action','?')} scope={scope_val}")
-            lines.append(f"   file: {item_file}")
-            lines.append(f"   position: {position_val}")
-            lines.append(f"   content: {content_val}")
-            lines.append(f"   note: {note_val}")
-            lines.append(f"   操作：{action_desc}")
-            lines.append("")
-        lines.append(f"步骤：")
-        lines.append(f"1. 开始执行前，POST {base_url}/api/clawmate/feedback/batch-update 将所有 items 的 status 设为 in_progress，result 留空")
-        lines.append(f"2. 逐个执行 item，冲突或重复项标记 status=failed")
-        lines.append(f"3. 执行完成后，再次 POST batch-update 更新最终 status（done/failed）和 result")
-        lines.append(f"请求体格式: root={root_id}, project={project}, items=[{{id, status, result}}]")
-        message = "\n".join(lines)
-    else:
-        message = f"ClawMate 反馈通知：{scope} 目前无待处理 feedback。"
-    run_name = f"clawmate-fb-{root_id}"
-
-    def _do_wake_sync():
-        try:
-            with httpx.Client(timeout=10.0) as client:
-                r = client.post(
-                    f"{gateway_url}/hooks/agent",
-                    headers={"Authorization": f"Bearer {hook_token}"},
-                    json={
-                        "message": message,
-                        "agentId": agent_id,
-                        "name": run_name,
-                        "wakeMode": "now",
-                        "deliver": False,
-                    },
-                )
-            if r.status_code == 200:
-                data = r.json()
-                _ts_end = datetime.now(CST).isoformat(timespec="seconds")
-                logger.info(
-                    "[feedback.wake] %s success root_id=%s agent_id=%s run_name=%s run_id=%s",
-                    _ts_end, root_id, agent_id, run_name, data.get("runId", ""),
-                )
-            else:
-                _ts_end = datetime.now(CST).isoformat(timespec="seconds")
-                logger.warning(
-                    "[feedback.wake] %s failed root_id=%s agent_id=%s HTTP=%d body=%s",
-                    _ts_end, root_id, agent_id, r.status_code, r.text[:200],
-                )
-        except Exception as e:
-            _ts_end = datetime.now(CST).isoformat(timespec="seconds")
-            logger.warning(
-                "[feedback.wake] %s error root_id=%s agent_id=%s: %s",
-                _ts_end, root_id, agent_id, e,
-            )
-
-    threading.Thread(target=_do_wake_sync, daemon=True).start()
-
 
 # ── 路由 ─────────────────────────────────────────────────────────────
+
+
+
+
 
 @router.get("/api/clawmate/feedback/list", response_class=JSONResponse)
 async def feedback_list(
@@ -276,43 +145,6 @@ async def feedback_list(
     })
 
 
-@router.post("/api/clawmate/feedback", response_class=JSONResponse)
-async def feedback_create(request: Request):
-    """统一反馈入口 — 写入 feedback.json + 实时唤醒 agent。"""
-    try:
-        body = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
-
-    root_id = str(body.get("root", "")).strip()
-    project = str(body.get("project", "")).strip()
-    file_path = str(body.get("path", "")).strip()
-    selections = body.get("selections", [])
-    if not root_id or not project or not file_path:
-        raise HTTPException(status_code=422, detail="Missing root/project/path")
-    if not selections or not isinstance(selections, list):
-        raise HTTPException(status_code=422, detail="Missing selections")
-
-    new_items = create_items(root_id, project, file_path, selections)
-
-    ids = [i["id"] for i in new_items if i.get("id")]
-
-    # 实时唤醒 agent
-    if ids:
-        _wake_agent_for_root(root_id, project=project, file=file_path)
-
-    _ts = datetime.now(CST).isoformat(timespec="seconds")
-    _user = request.client.host if request.client else "unknown"
-    logger.info(
-        "[feedback.create] %s root=%s project=%s user=%s ids=%s file=%s result=%s",
-        _ts, root_id, project, _user, ids, file_path, "ok",
-    )
-
-    return JSONResponse(content={
-        "ok": True, "ids": ids,
-    })
-
-
 
 @router.post("/api/clawmate/feedback/update", response_class=JSONResponse)
 async def feedback_update(request: Request):
@@ -355,19 +187,6 @@ async def feedback_update(request: Request):
     )
 
     return JSONResponse(content={"ok": True, "id": feedback_id, "newStatus": new_status})
-
-
-@router.post("/api/clawmate/feedback/cron-tick")
-async def cron_tick():
-    """cron 入口：扫所有 root 的 pending feedback，逐 root 唤醒 agent。"""
-    result = scan_all()
-    for root_id in result.pending_roots:
-        _wake_agent_for_root(root_id)
-    logger.info(
-        "[cron-tick] checked=%d pending=%d woken=%d errors=%d",
-        result.checked_roots, result.pending_total, len(result.pending_roots), len(result.errors),
-    )
-    return {"ok": True}
 
 
 @router.post("/api/clawmate/feedback/batch-update", response_class=JSONResponse)

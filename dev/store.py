@@ -190,8 +190,6 @@ def create_items(
     new_items = []
     for idx, sel in enumerate(selections):
         text = str(sel.get("text", "")).strip()
-        if not text:
-            continue
         note = str(sel.get("note", "")).strip()
         _action_from_sel = str(sel.get("action", "")).strip()
         _scope_from_sel = str(sel.get("scope", "")).strip()

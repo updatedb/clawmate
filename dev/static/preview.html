@@ -910,7 +910,7 @@
       <div id="subtitleExtractProgressText" style="font-size:12px;color:var(--text-secondary,#6b7280);margin-bottom:4px;">准备中...</div>
       <div id="subtitleExtractProgressPct" style="font-size:11px;color:var(--text-muted,#9ca3af);">0%</div>
       <div id="subtitleExtractError" style="display:none;margin-top:12px;padding:10px;background:var(--danger-bg,#fee2e2);border:1px solid var(--danger-border,#fca5a5);border-radius:6px;font-size:12px;color:var(--danger,#dc2626);"></div>
-      <button id="subtitleExtractCancelBtn" style="margin-top:16px;width:100%;padding:8px 16px;border-radius:6px;border:1px solid var(--border-color,#d1d5db);background:var(--btn-bg,#f3f4f6);color:var(--btn-text,#374151);cursor:pointer;font-size:13px;" onclick="cancelSubtitleExtract()">取消</button>
+      <button id="subtitleExtractCancelBtn" style="margin-top:16px;width:100%;padding:8px 16px;border-radius:6px;border:1px solid var(--border-color,#d1d5db);background:var(--btn-bg,#f3f4f6);color:var(--btn-text,#374151);cursor:pointer;font-size:13px;">取消</button>
     </div>
   </div>
 
@@ -2426,17 +2426,19 @@
     const btn = document.getElementById('btnSubtitleCorrect');
     if (btn) { btn.disabled = true; btn.textContent = '🤖 纠错中...'; }
     try {
-      const res = await fetch('/api/clawmate/subtitle/correct', {
+      const srtContent = serializeSrt(currentSrt);
+      const res = await fetch('/api/clawmate/task/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ root: rootId, media_path: filePath, srt_path: currentSrtPath }),
+        body: JSON.stringify({ root: rootId, file: filePath, selections: [{ task_id: 'subtitle_correct', content: srtContent, srt_path: currentSrtPath }] }),
       });
       const data = await res.json();
       if (!res.ok) {
         showToast('❌ ' + (data.detail || data.message || '纠错失败'), 4000);
         return;
       }
-      showToast('🤖 ' + (data.message || '纠错任务已提交'), 3000);
+      showToast('🤖 纠错任务已提交', 3000);
+      loadMediaCompletedFeedback();
       // 等待 agent 处理，然后重新加载字幕
       pollSrtReload(currentSrtPath, 30000);
     } catch(e) {
@@ -2494,6 +2496,12 @@
   let _subtitleExtractController = null;  // AbortController for cancellation
 
   function showExtractProgressModal() {
+    // Wire cancel button (one-time)
+    const btn = document.getElementById('subtitleExtractCancelBtn');
+    if (btn && !btn._wired) {
+      btn._wired = true;
+      btn.addEventListener('click', cancelSubtitleExtract);
+    }
     const modal = document.getElementById('subtitleExtractModal');
     const fill = document.getElementById('subtitleExtractProgressFill');
     const text = document.getElementById('subtitleExtractProgressText');
@@ -2543,6 +2551,8 @@
   }
 
   function cancelSubtitleExtract() {
+    const btn = document.getElementById('subtitleExtractCancelBtn');
+    if (btn) btn.disabled = true;
     if (_subtitleExtractController) {
       _subtitleExtractController.abort();
       _subtitleExtractController = null;
@@ -3552,15 +3562,13 @@
       statusEl.className = 'fb-input-status loading';
 
       try {
-        const res = await fetch('/api/clawmate/feedback', {
+        const res = await fetch('/api/clawmate/task/run', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             root: rootId,
-            project: project,
-            path: filePath,
-            selections: [{ text: selection || note, note, position: position || note }],
-            sessionKey: sessionKey,
+            file: filePath,
+            selections: [{ task_id: 'review_modify', content: selection || note, note: note || '', position: position || note }],
           }),
         });
         const data = await res.json();
@@ -3841,6 +3849,12 @@
     } catch (_) {}
   }
 
+  function buildTaskSelection(item) {
+    // 将 feedback panel 的 item 转为 task/run 的 selection 格式
+    const taskId = item.task_id || (item.action ? 'review_' + item.action : 'review_modify');
+    return { task_id: taskId, content: item.text || item.content || '', note: item.note || '', position: item.position || '' };
+  }
+
   async function submitSingleItem(item) {
     if (!item.action) {
       showToast('请选择操作类型', 2000);
@@ -3860,15 +3874,13 @@
       } else {
         selPayload.position = item.position || '';
       }
-      const res = await fetch('/api/clawmate/feedback', {
+      const res = await fetch('/api/clawmate/task/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           root: rootId,
-          project: project,
-          path: filePath,
-          selections: [selPayload],
-          sessionKey: sessionKey,
+          file: filePath,
+          selections: [buildTaskSelection(selPayload)],
         }),
       });
       if (res.ok) {
@@ -3914,17 +3926,14 @@
     btn.disabled = true;
     btn.textContent = '提交中...';
     try {
-      const res = await fetch('/api/clawmate/feedback', {
+      const res = await fetch('/api/clawmate/task/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           root: rootId,
-          project: project,
-          path: filePath,
+          file: filePath,
           selections: pendingArray.map(it => {
-            const p = { text: it.text, note: it.note || '' };
-            if (it.action) p.action = it.action;
-            if (it.scope) p.scope = it.scope;
+            const p = { task_id: it.task_id || (it.action ? 'review_' + it.action : 'review_modify'), content: it.text || it.content || '', note: it.note || '', position: it.position || '' };
             if ((itemType === 'text' || itemType === 'markdown') && it.startLine > 0) {
               p.startLine = it.startLine;
               p.endLine = it.endLine || it.startLine;
@@ -3933,7 +3942,6 @@
             }
             return p;
           }),
-          sessionKey: sessionKey,
         }),
       });
       if (res.ok) {
@@ -4444,15 +4452,13 @@
     selPayload.position = rawPosition;
 
     try {
-      const res = await fetch('/api/clawmate/feedback', {
+      const res = await fetch('/api/clawmate/task/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           root: rootId,
-          project: project,
-          path: filePath,
-          selections: [selPayload],
-          sessionKey: sessionKey,
+          file: filePath,
+          selections: [buildTaskSelection(selPayload)],
         }),
       });
       if (res.ok) {

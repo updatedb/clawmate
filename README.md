@@ -81,6 +81,7 @@ stateDiagram
 
 ### 🔗 OpenClaw 融合
 - 提交 feedback 后即时通过 webhook 唤醒 OpenClaw Agent
+- 支持多任务合并、冲突检查、功能自扩展
 - ClawMate Cron Job 定时兜底扫描（每 6/24h），防止遗漏
 - Slash Commands：`/clawmate preview`、`/clawmate list`、`/clawmate do`
 

@@ -26,9 +26,8 @@ from service import (
     delete_dir,
 )
 from validators import VALIDATORS
-from feedback_api import router as feedback_router, _wake_agent_for_root
+from feedback_api import router as feedback_router
 from config import load as config
-from store import create_items, list_items, update_item
 
 
 router = APIRouter()

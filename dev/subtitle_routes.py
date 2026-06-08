@@ -1,7 +1,8 @@
 """
-Subtitle Routes — 字幕提取 + 纠错 API。
+Subtitle Routes — 字幕提取 API。
 
-从 routes.py 迁出，转为调用 task_runner 处理纠错任务。
+字幕提取功能（faster-whisper 语音识别 → SRT 生成）。
+纠错任务已交由 agent 处理（task/run + subtitle_correct 模板）。
 """
 
 from __future__ import annotations
@@ -9,7 +10,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import re
+import subprocess
 from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -20,6 +25,173 @@ from service import safe_path
 
 logger = logging.getLogger("clawmate.subtitle")
 router = APIRouter()
+
+# ═══════════════════════════════════════════════════════════════════
+#  字幕提取核心模块（原 subtitle.py）
+# ═══════════════════════════════════════════════════════════════════
+
+_WHISPER_MODEL: Optional[object] = None
+
+
+def _format_time(seconds: float) -> str:
+    """秒数 → SRT 时间戳 HH:MM:SS,mmm"""
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    ms = int((seconds % 1) * 1000)
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
+def _check_subtitle_enabled():
+    """检查字幕提取是否启用。"""
+    try:
+        from config import load as _cfg
+        if _cfg().feedback.enable_subtitle:
+            return True
+    except Exception:
+        pass
+    return os.getenv("CLAWMATE_ENABLE_SUBTITLE", "0") == "1"
+
+
+def _get_whisper_model(size: str = "small"):
+    """延迟加载 faster-whisper 模型（全局单例）。"""
+    if not _check_subtitle_enabled():
+        raise RuntimeError("Subtitle extraction disabled. 配置 feedback.enable_subtitle=true 或设置 CLAWMATE_ENABLE_SUBTITLE=1 启用")
+    global _WHISPER_MODEL
+    if _WHISPER_MODEL is None:
+        try:
+            from faster_whisper import WhisperModel
+        except ImportError:
+            raise RuntimeError("faster-whisper 未安装，pip install faster-whisper 后重试")
+        _WHISPER_MODEL = WhisperModel(size, device="cpu", compute_type="int8")
+    return _WHISPER_MODEL
+
+
+def has_audio_stream(input_path: Path) -> bool:
+    """用 ffprobe 检查文件是否包含音频流。"""
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-select_streams", "a",
+        "-show_entries", "stream=codec_type",
+        "-of", "csv=p=0",
+        str(input_path),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    return "audio" in result.stdout
+
+
+def extract_audio(input_path: Path) -> Path:
+    """用 ffmpeg 提取 16kHz mono wav 到临时文件，返回 wav 路径。"""
+    if not has_audio_stream(input_path):
+        raise RuntimeError("文件中没有音频轨道，无法提取字幕")
+
+    output = input_path.with_suffix(".wav")
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(input_path),
+        "-vn",
+        "-acodec", "pcm_s16le",
+        "-ar", "16000",
+        "-ac", "1",
+        str(output),
+    ]
+    subprocess.run(cmd, capture_output=True, check=True)
+    return output
+
+
+def generate_srt(segments, srt_path: Path):
+    """将 faster-whisper segments 写入 SRT 文件。"""
+    with open(srt_path, "w", encoding="utf-8") as f:
+        for i, seg in enumerate(segments, 1):
+            start = _format_time(seg.start)
+            end = _format_time(seg.end)
+            text = seg.text.strip()
+            if not text:
+                continue
+            f.write(f"{i}\n{start} --> {end}\n{text}\n\n")
+
+
+async def _pst_progress(
+    phase: str, pct: int, detail: str,
+    queue: asyncio.Queue,
+):
+    """SSE progress 回调。"""
+    payload = json.dumps({"phase": phase, "progress": pct, "detail": detail}, ensure_ascii=False)
+    await queue.put(f"data: {payload}\n\n")
+
+
+async def _extract_subtitle_core(
+    file_path: Path,
+    srt_path: Path,
+    model_size: str = "small",
+    language: Optional[str] = None,
+    queue: asyncio.Queue = None,
+) -> dict:
+    """核心提取流程。"""
+    # Step 1: 音频提取
+    if queue:
+        await _pst_progress("extracting", 0, "正在提取音频...", queue)
+
+    is_video = file_path.suffix.lower() in (".mp4", ".webm", ".mov", ".avi", ".mkv")
+    if is_video or file_path.suffix.lower() in (".mp3", ".wma", ".ogg", ".flac", ".aac", ".m4a"):
+        audio_path = extract_audio(file_path)
+        cleanup_audio = True
+    else:
+        audio_path = file_path
+        cleanup_audio = False
+
+    if queue:
+        await _pst_progress("extracting", 100, "音频提取完成", queue)
+
+    if queue:
+        await _pst_progress("transcribing", 0, "正在加载模型（首次约需 2-5 分钟）...", queue)
+
+    model = _get_whisper_model(model_size)
+
+    if queue:
+        await _pst_progress("transcribing", 5, "模型加载完成，开始识别...", queue)
+
+    segments_gen, info = model.transcribe(
+        str(audio_path),
+        language=language,
+        beam_size=5,
+        vad_filter=True,
+    )
+
+    seg_list = []
+    total_duration = info.duration or 0.0
+
+    for seg in segments_gen:
+        seg_list.append(seg)
+        if queue and total_duration > 0:
+            pct = min(90, 5 + int(seg.end / total_duration * 85))
+            await _pst_progress("transcribing", pct, f"已识别 {int(seg.end)}/{int(total_duration)} 秒", queue)
+        elif queue:
+            await _pst_progress("transcribing", 50, "识别中...", queue)
+
+    generate_srt(seg_list, srt_path)
+
+    if cleanup_audio and audio_path.exists():
+        try:
+            audio_path.unlink()
+        except OSError:
+            pass
+
+    if queue:
+        await _pst_progress("done", 100, f"字幕已生成: {srt_path.name}", queue)
+
+    return {
+        "srt_path": str(srt_path),
+        "language": info.language,
+        "duration": total_duration,
+        "segments": len(seg_list),
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  路由
+# ═══════════════════════════════════════════════════════════════════
+
 
 @router.post("/api/clawmate/subtitle/extract")
 async def clawmate_subtitle_extract(request: Request):
@@ -35,7 +207,7 @@ async def clawmate_subtitle_extract(request: Request):
     root_id = str(body.get("root", "")).strip()
     file_rel_path = str(body.get("path", "")).strip()
     model_size = str(body.get("model", "small")).strip()
-    language = body.get("language")  # None = auto
+    language = body.get("language")
 
     if not root_id or not file_rel_path:
         raise HTTPException(status_code=422, detail="Missing root or path")
@@ -43,7 +215,6 @@ async def clawmate_subtitle_extract(request: Request):
     if model_size not in ("tiny", "small", "medium"):
         model_size = "small"
 
-    # 安全路径解析
     try:
         _, target, _ = safe_path(root_id, file_rel_path)
     except FileNotFoundError:
@@ -56,7 +227,6 @@ async def clawmate_subtitle_extract(request: Request):
     if not target.exists() or target.is_dir():
         raise HTTPException(status_code=404, detail="File not found")
 
-    # 只处理音视频格式
     audio_exts = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac", ".wma"}
     video_exts = {".mp4", ".webm", ".mov", ".avi", ".mkv", ".wmv", ".flv", ".m4v"}
     allowed = audio_exts | video_exts
@@ -66,31 +236,26 @@ async def clawmate_subtitle_extract(request: Request):
             detail=f"Unsupported file type: {target.suffix}. Supported: {', '.join(sorted(allowed))}",
         )
 
-    # SRT 输出到同目录同名 .srt
     srt_path = target.with_suffix(".srt")
 
-    # SSE 事件流
     async def event_generator():
-        import asyncio
         queue: asyncio.Queue = asyncio.Queue()
 
-        async def progress(phase: str, pct: int, detail: str = ""):
-            payload = json.dumps({"phase": phase, "progress": pct, "detail": detail}, ensure_ascii=False)
-            await queue.put(f"data: {payload}\n\n")
+        async def _run():
+            try:
+                result = await _extract_subtitle_core(
+                    target, srt_path,
+                    model_size=model_size,
+                    language=language,
+                    queue=queue,
+                )
+                await queue.put(f"data: {json.dumps({'phase': 'done', **result}, ensure_ascii=False)}\n\n")
+            except Exception as e:
+                await queue.put(f"data: {json.dumps({'phase': 'error', 'detail': str(e)}, ensure_ascii=False)}\n\n")
+            await queue.put(None)
 
-        try:
-            from subtitle import extract_subtitle
-            result = await extract_subtitle(
-                target, srt_path,
-                model_size=model_size,
-                language=language,
-                progress_callback=progress,
-            )
-            await queue.put(f"data: {json.dumps({'phase': 'done', **result}, ensure_ascii=False)}\n\n")
-        except Exception as e:
-            await queue.put(f"data: {json.dumps({'phase': 'error', 'detail': str(e)}, ensure_ascii=False)}\n\n")
+        asyncio.create_task(_run())
 
-        await queue.put(None)  # sentinel: extraction complete
         while True:
             item = await queue.get()
             if item is None:
@@ -129,55 +294,3 @@ async def clawmate_subtitle_status(root: str = "", path: str = ""):
         "srt_path": str(srt_path) if exists else None,
         "srt_size": srt_path.stat().st_size if exists else None,
     })
-
-
-@router.post("/api/clawmate/subtitle/correct")
-async def clawmate_subtitle_correct(request: Request):
-    """通过 task_runner 纠错 SRT 字幕。"""
-    try:
-        body = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
-
-    root_id = str(body.get("root", "")).strip()
-    media_path = str(body.get("media_path", "")).strip()
-    srt_path = str(body.get("srt_path", "")).strip()
-    if not root_id or not srt_path or not media_path:
-        raise HTTPException(status_code=422, detail="Missing root/media_path/srt_path")
-
-    try:
-        root_path, target, safe_rel = safe_path(root_id, srt_path)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Root not found")
-    except PermissionError:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    if not target.exists():
-        raise HTTPException(status_code=404, detail="SRT file not found")
-    srt_content = target.read_text(encoding="utf-8").strip()
-    if not srt_content:
-        raise HTTPException(status_code=400, detail="SRT file is empty")
-
-    project = media_path.split("/")[0] if "/" in media_path else ""
-    import httpx
-    cfg = load_config()
-    base_url = cfg.public_base_url or "http://localhost:5533"
-    try:
-        r = httpx.post(
-            f"{base_url}/api/clawmate/task/run",
-            json={
-                "root": root_id,
-                "project": project,
-                "task_id": "subtitle_correct",
-                "file": media_path,
-                "content": srt_content,
-                "srt_path": safe_rel,
-            },
-            timeout=10,
-        )
-        if r.status_code == 200:
-            data = r.json()
-            return JSONResponse(content={"ok": True, "id": data["id"], "message": "纠错任务已创建"})
-        detail = r.json().get("detail", "创建失败")
-        raise HTTPException(status_code=r.status_code, detail=detail)
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=502, detail=f"Task runner unavailable: {e}")
