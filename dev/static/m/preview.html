@@ -208,6 +208,7 @@
   let currentSelectionText = '';
   let currentSelectionStart = 0;
   let currentSelectionEnd = 0;
+  let currentPosition = '';
   let pendingSelectionText = '';
   let pendingRange = null;
   let pendingStartLine = 0;
@@ -518,14 +519,49 @@
     return 'Line ' + startLine + '-' + endLine;
   }
 
+  function detectSectionFromDOM(range) {
+    if (!range) return '';
+    var mdBody = document.querySelector('.markdown-body');
+    if (!mdBody) return '';
+    var node = range.startContainer;
+    // Walk up to find heading in ancestor chain
+    for (var n = node; n && n !== mdBody; n = n.parentNode) {
+      if (/^H[1-6]$/i.test(n.tagName)) {
+        return n.textContent.trim().replace(/\s+/g, ' ').slice(0, 80);
+      }
+    }
+    // Walk backward through siblings
+    var prev = node;
+    while (prev) {
+      if (prev.previousSibling) {
+        prev = prev.previousSibling;
+        if (prev.querySelectorAll) {
+          var headings = prev.querySelectorAll('h1,h2,h3,h4,h5,h6');
+          if (headings.length > 0) {
+            var h = headings[headings.length - 1];
+            return h.textContent.trim().replace(/\s+/g, ' ').slice(0, 80);
+          }
+        }
+        if (/^H[1-6]$/i.test(prev.tagName)) {
+          return prev.textContent.trim().replace(/\s+/g, ' ').slice(0, 80);
+        }
+      } else {
+        prev = prev.parentNode;
+      }
+      if (prev === mdBody) break;
+    }
+    return '';
+  }
+
   // ── Selection → Feedback ──
   let fbOverlay = null; // which overlay is used for feedback input
   let fbPanel = null;
 
-  function showFeedbackInput(selectionText, startLine, endLine, prefillNote) {
+  function showFeedbackInput(selectionText, startLine, endLine, prefillNote, position) {
     currentSelectionText = selectionText;
     currentSelectionStart = startLine;
     currentSelectionEnd = endLine;
+    currentPosition = position || '';
 
     els.fbInputSelection.textContent = selectionText.substring(0, 200);
     els.fbInputNote.value = prefillNote || '';
@@ -606,7 +642,7 @@
         task_id: 'review_modify',
         content: currentSelectionText.substring(0, 1000),
         note: note,
-        position: getPosValue(ext, currentSelectionStart, currentSelectionEnd),
+        position: currentPosition || getPosValue(ext, currentSelectionStart, currentSelectionEnd),
       };
       const res = await fetch(API_BASE + '/task/run', {
         method: 'POST',
@@ -1150,7 +1186,16 @@
       if (sel) sel.removeAllRanges();
     }
     hideSelectionTooltip();
-    showFeedbackInput(text, sl, el, '');
+    // Compute position: Markdown 渲染模式用 section，否则用行号
+    var pos = '';
+    if (isMarkdown && range) {
+      var heading = detectSectionFromDOM(range);
+      if (heading) pos = 'Section ' + heading;
+    }
+    if (!pos && sl) {
+      pos = getPosValue(ext, sl, el);
+    }
+    showFeedbackInput(text, sl, el, '', pos);
   });
 
   // Hide tooltip on scroll or tap outside
