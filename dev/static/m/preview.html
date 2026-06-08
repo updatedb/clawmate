@@ -592,26 +592,25 @@
     els.fbInputStatus.style.color = 'var(--text-muted)';
 
     try {
-      const res = await fetch(API_BASE + '/feedback', {
+      const sel = {
+        task_id: 'review_modify',
+        content: currentSelectionText.substring(0, 1000),
+        note: note,
+        position: 'L' + currentSelectionStart + '-' + currentSelectionEnd,
+      };
+      const res = await fetch(API_BASE + '/task/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           root: rootId,
-          project: project,
-          path: filePath,
-          selections: [{
-            text: currentSelectionText.substring(0, 1000),
-            note: note,
-            startLine: currentSelectionStart,
-            endLine: currentSelectionEnd,
-          }],
+          file: filePath,
+          selections: [sel],
         }),
       });
       const data = await res.json();
       if (data.ok) {
         showToast('✅ 反馈已提交', 2500);
         hideFeedbackInput();
-        // Refresh feedback list
         loadFeedbackList();
         showPanel(els.feedbackOverlay, els.feedbackPanel);
       } else {
