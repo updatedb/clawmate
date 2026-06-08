@@ -1515,7 +1515,7 @@ function handleEntryClick(entry) {
 function openEntryPreview(entry) {
   if (!entry || entry.is_dir) return;
   const previewUrl = `/clawmate/preview.html?root=${encodeURIComponent(state.rootId)}&file=${encodeURIComponent(entry.relPath)}`;
-  window.open(previewUrl, "_blank", "noopener");
+  window.location.href = previewUrl;
 }
 
 
