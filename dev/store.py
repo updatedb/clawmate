@@ -31,16 +31,18 @@ CST = timezone(timedelta(hours=8))
 # ── 读 ─────────────────────────────────────────────────────────
 
 def _get_feedback_path(root_id: str, project: str) -> Path:
-    """构造 feedback.json 完整路径。"""
+    """构造 feedback.json 完整路径。
+
+    root_id+project 目录存在 → 返回其下 feedback.json
+    root_id+project 目录不存在 → 回退到 root 目录 + 记录错误日志
+    """
     cfg = load_config()
     root_dir = cfg.root_dir(root_id)
-    # 防御：project 如果含有文件扩展名（如 test.txt），说明传入的是文件路径而非项目名
-    _last = project.rstrip("/").split("/")[-1] if project else ""
-    if _last and "." in _last and not _last.startswith("."):
-        raise ValueError(f"Invalid project name (looks like a file path): {project}")
     project_dir = root_dir / project
-    project_dir.mkdir(parents=True, exist_ok=True)
-    return project_dir / "feedback.json"
+    if project_dir.is_dir():
+        return project_dir / "feedback.json"
+    logger.warning("[feedback] project dir not found, fallback to root: root=%s project=%s", root_id, project)
+    return root_dir / "feedback.json"
 
 
 def _read_feedback(path: Path) -> dict:
@@ -139,6 +141,8 @@ def batch_update_items(root_id: str, project: str, updates: list[dict]) -> list[
 
 def project_abbr(project: str) -> str:
     """从 project 名生成 2 字符缩写。"""
+    if not project:
+        return "RT"  # 根级文件 fallback
     # 先查 config.json 自定义缩写
     try:
         cfg = load_config()
