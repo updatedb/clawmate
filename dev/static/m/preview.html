@@ -508,6 +508,16 @@
     return { startLine, endLine };
   }
 
+  function getPosValue(ext, startLine, endLine) {
+    if (!startLine) return '';
+    var e = ext ? ext.toLowerCase() : '';
+    var rawFormats = ['txt','py','js','ts','tsx','html','css','scss','less','json','xml','yaml','yml','toml','ini','cfg','conf','sh','bash','sql','go','rs','rb','php','c','cpp','h','hpp','swift','kt','scala','lua','r','pl','pm','hs','srt','vtt','log','md','rmd','mdx'];
+    if (rawFormats.includes(e)) return 'Line ' + startLine + '-' + endLine;
+    if (['docx','doc','pptx','ppt','pdf','odt','odp'].includes(e)) return 'Page ' + startLine + '-' + endLine;
+    if (['xlsx','xls','csv','tsv'].includes(e)) return 'Range A' + startLine;
+    return 'Line ' + startLine + '-' + endLine;
+  }
+
   // ── Selection → Feedback ──
   let fbOverlay = null; // which overlay is used for feedback input
   let fbPanel = null;
@@ -596,7 +606,7 @@
         task_id: 'review_modify',
         content: currentSelectionText.substring(0, 1000),
         note: note,
-        position: 'L' + currentSelectionStart + '-' + currentSelectionEnd,
+        position: getPosValue(ext, currentSelectionStart, currentSelectionEnd),
       };
       const res = await fetch(API_BASE + '/task/run', {
         method: 'POST',
