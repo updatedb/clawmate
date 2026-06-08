@@ -41,7 +41,7 @@ def _normalize_rel_path(rel_path: str) -> str:
     if not rel_path:
         return ""
     parts = rel_path.split("/")
-    if any(part in ("", "..") for part in parts):
+    if any(part in ("", ".", "..") for part in parts):
         raise ValueError("Invalid path segment")
     return "/".join(parts)
 
@@ -266,6 +266,8 @@ def preview_text(path: Path) -> Tuple[str, bool]:
 def delete_file(root_id: str, rel_path: str) -> None:
     """Delete a file after validating root access."""
     root_path, target, safe_rel = safe_path(root_id, rel_path)
+    if not safe_rel:
+        raise PermissionError("Cannot delete root directory")
     if not target.exists():
         raise FileNotFoundError("File not found")
     if target.is_dir():
@@ -277,6 +279,8 @@ def delete_dir(root_id: str, rel_path: str) -> None:
     """Delete a directory and all its contents after validating root access."""
     import shutil
     root_path, target, safe_rel = safe_path(root_id, rel_path)
+    if not safe_rel:
+        raise PermissionError("Cannot delete root directory")
     if not target.exists():
         raise FileNotFoundError("Directory not found")
     if not target.is_dir():
