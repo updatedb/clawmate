@@ -1,2 +1,0 @@
-执行 POST {base_url}/api/clawmate/feedback/cron-tick
-其余由 ClawMate 自动处理。无 pending 时不输出。
