@@ -1,53 +1,35 @@
 {
   "roots": [
     {
-      "id": "media",
-      "label": "媒体文件",
-      "dir": "/home/user/media",
-      "agent_id": "writer"
+      "id": "example",
+      "label": "示例目录",
+      "dir": "/home/user/example",
+      "agent_id": "main"
+    },
+    {
+      "id": "projects",
+      "label": "Projects",
+      "dir": "/home/user/projects",
+      "agent_id": "work"
     }
   ],
-  "defaultRootId": "media",
+  "defaultRootId": "example",
   "port": 5533,
   "public_base_url": "",
   "max_upload_mb": 100,
-  "_comment": "v1.22: fallback_cron_interval 是兜底 cron 频率（webhook 不可达时兜底扫描全量 pending）。支持单位: h(小时) d(天) w(周)。默认 24h。",
   "fallback_cron_interval": "24h",
   "openclaw": {
     "gateway_url": "http://127.0.0.1:18789",
-    "hook_token": "",
-    "_comment": "OpenClaw gateway 配置。hook_token 为空时 webhook 唤醒被禁用（仅兜底 cron 生效）。copy from ~/.openclaw/openclaw.json hooks.token"
+    "hook_token": ""
+  },
+  "feedback": {
+    "enable_subtitle": false
   },
   "onlyoffice": {
-    "api_js_url": "https://your-onlyoffice-server.com/web-apps/apps/api/documents/api.js",
+    "api_js_url": "",
     "jwt_secret": "change-me-in-production",
     "mode": "edit",
     "callback_url": ""
-  },
-  "feedback": {
-    "tags": [
-      {
-        "label": "🗑 删除",
-        "prompt": "清除选中内容"
-      },
-      {
-        "label": "🔧 修改",
-        "prompt": "修改选中内容，思路如下："
-      },
-      {
-        "label": "📈 扩展",
-        "prompt": "详细解释选中内容"
-      },
-      {
-        "label": "📉 简化",
-        "prompt": "抽象选中内容，简单描述"
-      },
-      {
-        "label": "⚡ 执行",
-        "prompt": "文档审批通过，执行方案"
-      }
-    ],
-    "enable_subtitle": false
   },
   "auth": {
     "username": "admin",
