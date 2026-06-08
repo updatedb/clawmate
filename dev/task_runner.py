@@ -79,7 +79,7 @@ async def task_run(request: Request):
         raise HTTPException(status_code=422, detail="Missing selections")
 
     if not project:
-        project = file_path.split("/")[0]
+        project = file_path.split("/")[0] if "/" in file_path else ""
 
     # 文件扩展名校验
     ext = file_path.rsplit(".", 1)[-1].lower() if "." in file_path else ""

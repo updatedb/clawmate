@@ -34,6 +34,10 @@ def _get_feedback_path(root_id: str, project: str) -> Path:
     """构造 feedback.json 完整路径。"""
     cfg = load_config()
     root_dir = cfg.root_dir(root_id)
+    # 防御：project 如果含有文件扩展名（如 test.txt），说明传入的是文件路径而非项目名
+    _last = project.rstrip("/").split("/")[-1] if project else ""
+    if _last and "." in _last and not _last.startswith("."):
+        raise ValueError(f"Invalid project name (looks like a file path): {project}")
     project_dir = root_dir / project
     project_dir.mkdir(parents=True, exist_ok=True)
     return project_dir / "feedback.json"
