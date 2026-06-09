@@ -121,79 +121,78 @@ flowchart TD
 
 ## 快速开始
 
-### Docker 部署
+### 方式一：Docker 部署（推荐）
 
 ```bash
-# 1. 准备配置文件
-cd dev
+# 1. 构建镜像
+docker build -t clawmate:latest dev/
+
+# 2. 准备配置文件
 cp config.example.json config.json
-# 编辑 config.json，填入你的目录路径和认证信息
+# 编辑 config.json，填入你的目录路径和 OpenClaw 配置
 
-# 2. 启动
-docker-compose up -d
-
-# 3. 打开浏览器
-open http://localhost:5533/clawmate/
+# 3. 启动容器
+docker run -d \
+  --name clawmate \
+  --restart unless-stopped \
+  -p 5533:5533 \
+  -v $(pwd)/config.json:/app/config.json:ro \
+  -v /path/to/your/data:/data:ro \
+  -e CLAWMATE_CONFIG=/app/config.json \
+  clawmate:latest
 ```
 
-**环境变量**：
+**环境变量**（可配入 config.json 的 `openclaw` / `onlyoffice` 字段）：
 
-| 变量 | 必填 | 默认值 | 说明 |
-|------|:----:|--------|------|
-| `CLAWMATE_PUBLIC_BASE_URL` | ✅ | — | 外部访问地址 |
-| `CLAWMATE_HOOK_TOKEN` | | — | OpenClaw webhook token |
-| `CLAWMATE_GATEWAY_URL` | | `http://host.docker.internal:18789` | OpenClaw Gateway |
-| `CLAWMATE_ONLYOFFICE_URL` | | — | ONLYOFFICE JS URL |
-| `CLAWMATE_ONLYOFFICE_JWT_SECRET` | | — | ONLYOFFICE JWT 密钥 |
-| `CLAWMATE_MAX_UPLOAD_MB` | | `100` | 上传限制 |
-| `CLAWMATE_ENABLE_SUBTITLE` | | `0` | 字幕提取（也可用 config.json `feedback.enable_subtitle: true`） |
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `CLAWMATE_PUBLIC_BASE_URL` | — | 外部访问地址 |
+| `CLAWMATE_HOOK_TOKEN` | — | OpenClaw webhook token |
+| `CLAWMATE_GATEWAY_URL` | `http://host.docker.internal:18789` | OpenClaw Gateway |
+| `CLAWMATE_ONLYOFFICE_URL` | — | ONLYOFFICE JS URL |
+| `CLAWMATE_ONLYOFFICE_JWT_SECRET` | — | ONLYOFFICE JWT 密钥 |
+| `CLAWMATE_MAX_UPLOAD_MB` | `100` | 上传限制 |
+| `CLAWMATE_ENABLE_SUBTITLE` | `0` | 字幕提取 |
 
-**目录挂载**：
-```yaml
-volumes:
-  - ./config.json:/app/config.json:ro    # 配置文件
-  - /path/to/your/data:/data:ro          # 数据目录
-```
+`config.json` 中的 `roots[].dir` 指向容器内路径（如 `/data/projects`）。
 
-`config.json` 中的 `roots[].dir` 需指向容器内路径（如 `/data/media`）。
-
-### 本地直接启动
+### 方式二：本地直接启动
 
 ```bash
-cd dev
-pip install -r requirements.txt
 cp config.example.json config.json
 # 编辑 config.json
-python3 main.py
+pip install -r dev/requirements.txt
+python dev/main.py
 ```
 
-### Systemd 部署
-
-项目提供了 `clawmate.service.system` 模板，部署前需要替换占位符：
+### 方式三：install.sh 一键部署（CLI + systemd）
 
 ```bash
-sed -e "s|__CLAWMATE_DIR__|/opt/clawmate|g" \
-    -e "s|__CLAWMATE_USER__|clawmate|g" \
-    -e "s|__CLAWMATE_GROUP__|clawmate|g" \
-    -e "s|__CLAWMATE_PORT__|5533|g" \
-    clawmate.service.system > /tmp/clawmate.service
-sudo cp /tmp/clawmate.service /etc/systemd/system/clawmate.service
-sudo systemctl daemon-reload && sudo systemctl enable --now clawmate
+sudo bash install.sh                    # 安装到当前目录
+sudo bash install.sh /opt/clawmate      # 安装到指定路径
 ```
+
+脚本会自动：
+1. 复制 `config.example.json` 为 `config.json`（需手动编辑）
+2. 安装 Python 依赖
+3. 创建 systemd 服务并启用开机自启
 
 ### 与 OpenClaw 集成
 
-ClawMate 依赖 OpenClaw 的 cron job 机制处理反馈。在同主机运行时：
+在 `config.json` 中配置 OpenClaw gateway 连接：
 
-```yaml
-# docker-compose environment 或 config.json
-environment:
-  - CLAWMATE_HOOK_TOKEN=your-token
-  - CLAWMATE_GATEWAY_URL=http://host.docker.internal:18789
+```json
+{
+  "openclaw": {
+    "gateway_url": "http://openclaw.lan:18789",
+    "hook_token": "your-hook-token"
+  }
+}
 ```
 
-- `host.docker.internal` 是 Docker 容器访问宿主机的标准地址
-- `CLAWMATE_HOOK_TOKEN` 需与 OpenClaw 配置一致
+- **同主机 Docker**：`gateway_url: http://host.docker.internal:18789`
+- **同主机 CLI**：`gateway_url: http://127.0.0.1:18789`
+- **跨主机**：`gateway_url: http://openclaw.lan:18789`
 
 ### 可选：字幕提取
 
