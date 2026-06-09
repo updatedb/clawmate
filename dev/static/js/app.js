@@ -1895,9 +1895,9 @@ function createFeedbackPanel(container, context) {
       completedItems.forEach(item => {
         const card = document.createElement('div');
         card.className = 'completed-feedback-card';
-        const statusIcon = item.status === 'done' || item.status === '已完成' ? '✅' :
-                           item.status === 'doing' || item.status === '处理中' ? '🔄' :
-                           item.status === 'failed' || item.status === '失败' ? '❌' : '⏳';
+        const statusIcon = item.status === 'done' ? '✅' :
+                           item.status === 'in_progress' ? '🔄' :
+                           item.status === 'failed' ? '❌' : '⏳';
         const isDoneFailed = item.status === 'done' || item.status === 'failed';
         const resultText = (item.result || item.processing_result || '');
         const resultHtml = (isDoneFailed && resultText)

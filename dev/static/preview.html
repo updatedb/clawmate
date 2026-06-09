@@ -3651,9 +3651,9 @@
   // ============ Unified Completed Feedback Card Renderer ============
   function renderCompletedFeedbackCard(item) {
     const statusIcon =
-      item.status === 'done' || item.status === '已完成' ? '✅' :
-      item.status === 'doing' || item.status === '处理中' ? '🔄' :
-      item.status === 'failed' || item.status === '失败' ? '❌' : '⏳';
+      item.status === 'done' ? '✅' :
+      item.status === 'in_progress' ? '🔄' :
+      item.status === 'failed' ? '❌' : '⏳';
 
     // Truncate selection display at 80 chars
     const selText = item.selection_content || item.text || '';
