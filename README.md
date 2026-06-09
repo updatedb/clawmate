@@ -125,7 +125,7 @@ flowchart TD
 
 ```bash
 # 1. 构建镜像
-docker build -t clawmate:latest dev/
+docker build -t clawmate:latest .
 
 # 2. 准备配置文件
 cp config.example.json config.json
@@ -161,8 +161,8 @@ docker run -d \
 ```bash
 cp config.example.json config.json
 # 编辑 config.json
-pip install -r dev/requirements.txt
-python dev/main.py
+pip install -r requirements.txt
+cd dev && python main.py
 ```
 
 ### 方式三：install.sh 一键部署（CLI + systemd）
