@@ -45,3 +45,4 @@ feedback.json
 /test/
 archive/
 config.json.bak
+.*.swp
