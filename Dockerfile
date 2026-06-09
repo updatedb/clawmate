@@ -30,7 +30,8 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages/ /usr/local/lib/pyth
 COPY --from=builder /usr/local/bin/uvicorn /usr/local/bin/uvicorn
 
 # copy application (dev/ 子目录)
-COPY dev/*.py dev/task_templates.json ./
+COPY dev/*.py ./
+COPY task_templates.json ./
 COPY dev/static/ static/
 
 ENV CLAWMATE_PORT=5533
