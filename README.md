@@ -161,8 +161,9 @@ docker run -d \
 ```bash
 cp config.example.json config.json
 # 编辑 config.json
-pip3 install --user --break-system-packages -r requirements.txt
-cd dev && python3 main.py
+python3 -m venv dev/.venv
+dev/.venv/bin/pip install -r requirements.txt
+cd dev && .venv/bin/python main.py
 ```
 
 ### 方式三：install.sh 一键部署（CLI + systemd）

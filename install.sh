@@ -36,13 +36,22 @@ if [ ! -f "$_CFG_PATH" ]; then
   echo "⚠️  请编辑 $_CFG_PATH 填入实际配置"
 fi
 
-# 安装依赖（--user 安装到用户级，--break-system-packages 规避 PEP 668）
+# 准备 venv
+_VENV="$CLAWMATE_DIR/dev/.venv"
+if [ ! -f "$_VENV/bin/pip" ]; then
+  echo "创建 Python 虚拟环境..."
+  if ! python3 -m venv "$_VENV" 2>/dev/null; then
+    echo "  系统缺少 python3-venv，尝试安装..."
+    apt-get update -qq && apt-get install -y -qq python3-venv
+    python3 -m venv "$_VENV"
+  fi
+fi
 echo "安装 Python 依赖..."
-pip3 install --user --break-system-packages -r "$CLAWMATE_DIR/requirements.txt" --quiet
+"$_VENV/bin/pip" install -r "$CLAWMATE_DIR/requirements.txt" --quiet
 
 if [ -n "$SUBITLE_FLAG" ]; then
   echo "安装字幕功能依赖（faster-whisper ~2GB）..."
-  pip3 install --user --break-system-packages -r "$CLAWMATE_DIR/requirements-opt.txt" --quiet
+  "$_VENV/bin/pip" install -r "$CLAWMATE_DIR/requirements-opt.txt" --quiet
   echo "  启用字幕功能：config.json 中设置 feedback.enable_subtitle: true"
 fi
 
@@ -57,7 +66,7 @@ After=network.target
 Type=simple
 User=$CLAWMATE_USER
 WorkingDirectory=$CLAWMATE_DIR/dev
-ExecStart=/usr/bin/python3 main.py
+ExecStart=$_VENV/bin/python main.py
 Restart=on-failure
 RestartSec=5
 Environment=CLAWMATE_PORT=$CLAWMATE_PORT
