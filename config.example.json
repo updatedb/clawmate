@@ -1,0 +1,32 @@
+{
+  "roots": [
+    {
+      "id": "example",
+      "label": "示例目录",
+      "dir": "/data/example",
+      "agent_id": "main"
+    }
+  ],
+  "defaultRootId": "example",
+  "port": 5533,
+  "public_base_url": "http://localhost:5533",
+  "max_upload_mb": 100,
+  "feedback": {
+    "enable_subtitle": false
+  },
+  "openclaw": {
+    "gateway_url": "http://127.0.0.1:18789",
+    "hook_token": ""
+  },
+  "onlyoffice": {
+    "api_js_url": "",
+    "jwt_secret": "change-me-in-production",
+    "mode": "edit",
+    "callback_url": ""
+  },
+  "auth": {
+    "username": "admin",
+    "password_hash": "",
+    "session_ttl_minutes": 480
+  }
+}
