@@ -1,62 +1,22 @@
-# ClawMate systemd service — 系统级部署模板（带占位符）
-#
-# ⚠️ 本文件是模板，含有占位符，不能直接被 systemd 解析。
-#    部署时必须先 sed 替换占位符，再 cp 到 /etc/systemd/system/clawmate.service。
-#
-# ===== 占位符列表 =====
-#   __CLAWMATE_DIR__   → ClawMate 项目根目录（默认 /opt/clawmate）
-#                          替换 WorkingDirectory / CLAWMATE_CONFIG / ReadWritePaths
-#   __CLAWMATE_USER__  → 运行用户名（默认 clawmate）
-#   __CLAWMATE_GROUP__ → 运行用户组（默认 clawmate）
-#   __CLAWMATE_PORT__  → 监听端口（默认 5533）
-#
-# ===== 部署示例（部署到 /opt/clawmate，用户 clawmate，端口 5533） =====
-#
-#   sed -e "s|__CLAWMATE_DIR__|/opt/clawmate|g" \
-#       -e "s|__CLAWMATE_USER__|clawmate|g" \
-#       -e "s|__CLAWMATE_GROUP__|clawmate|g" \
-#       -e "s|__CLAWMATE_PORT__|5533|g" \
-#       clawmate.service.system > /tmp/clawmate.service
-#   sudo cp /tmp/clawmate.service /etc/systemd/system/clawmate.service
-#   sudo systemctl daemon-reload && sudo systemctl enable --now clawmate
-#
-# ===== 配置说明 =====
-#   - config.json 位于项目根目录 /opt/clawmate/config.json（非 dev/ 内），
-#     配置文件和项目文件分离，升级时不会覆盖
-#   - 兜底定时扫描使用内建定时器（cron-tick），不再依赖 openclaw CLI
-#   - 即时 feedback 唤醒通过 webhook POST /hooks/agent 实现
+# ClawMate systemd service
+# 安装: cp 到 /etc/systemd/system/clawmate.service
+#       修改 WorkingDirectory / CLAWMATE_CONFIG / User 为实际路径
+#       然后 systemctl daemon-reload && systemctl enable --now clawmate
 
 [Unit]
 Description=ClawMate File Manager
-Documentation=https://github.com/updatedb/clawmate
-After=network.target network-online.target
-Wants=network-online.target
+After=network.target
 
 [Service]
 Type=simple
-User=__CLAWMATE_USER__
-Group=__CLAWMATE_GROUP__
-WorkingDirectory=__CLAWMATE_DIR__/dev
+User=clawmate
+WorkingDirectory=/opt/clawmate/dev
 ExecStart=/usr/bin/python3 main.py
 Restart=on-failure
 RestartSec=5
-
-Environment=CLAWMATE_PORT=__CLAWMATE_PORT__
-Environment=CLAWMATE_CONFIG=__CLAWMATE_DIR__/config.json
+Environment=CLAWMATE_PORT=5533
+Environment=CLAWMATE_CONFIG=/opt/clawmate/config.json
 Environment=PYTHONUNBUFFERED=1
-
-# 安全加固
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=/var/cache/clawmate __CLAWMATE_DIR__/dev
-PrivateTmp=yes
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-
-# 日志
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=clawmate
 
 [Install]
 WantedBy=multi-user.target
