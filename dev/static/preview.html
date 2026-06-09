@@ -419,7 +419,21 @@
 
 
     /* ===== Print / PDF export ===== */
+    @page {
+      margin: 0;
+      size: auto;
+    }
+
     @media print {
+      /* Suppress link URL footnotes that browsers print by default */
+      a[href]::after {
+        content: none !important;
+      }
+      a[href] {
+        text-decoration: none !important;
+        color: inherit !important;
+      }
+
       /* Hide chrome: topbar, bottombar, sidebars, feedback, tooltips */
       .topbar,
       .preview-bottombar,
@@ -432,6 +446,7 @@
 
       /* Unlock all overflow — fix content clipping in print */
       html, body,
+      .preview-app,
       .preview-three-col,
       .preview-center,
       .preview-center-body,
@@ -3188,8 +3203,41 @@
     }
   });
 
+  /** Clear page title before print so browser header omits date/filename, restore after */
+  function printWithoutHeaderFooter() {
+    const origTitle = document.title;
+    document.title = ' ';
+    setTimeout(() => {
+      window.print();
+      // Restore title after print dialog closes (cannot detect exact close, but short delay is safe)
+      setTimeout(() => { document.title = origTitle; }, 100);
+    }, 50);
+  }
+
   document.getElementById('btnPdf').addEventListener('click', () => {
-    window.print();
+    if (isPdfMode) {
+      // PDF: open raw in new tab — browser's native PDF viewer handles multi-page print
+      const rawUrl = `/api/clawmate/raw?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`;
+      const pdfWindow = window.open(rawUrl, '_blank');
+      if (pdfWindow) {
+        showToast('PDF 已在新标签页打开，可使用浏览器打印所有页面', 3000);
+      } else {
+        // Popup blocked — fallback to window.print
+        showToast('弹窗被拦截，请允许弹窗或手动下载后打印', 4000);
+      }
+    } else if (isOfficeMode) {
+      // Office: try ONLYOFFICE API via postMessage
+      const iframe = document.getElementById('officeIframe');
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.postMessage({ type: 'print-document' }, '*');
+        showToast('已发送打印请求至 ONLYOFFICE', 2000);
+      } else {
+        showToast('ONLYOFFICE 未就绪，使用浏览器打印', 2000);
+        printWithoutHeaderFooter();
+      }
+    } else {
+      printWithoutHeaderFooter();
+    }
   });
 
   document.getElementById('btnRename').addEventListener('click', async () => {

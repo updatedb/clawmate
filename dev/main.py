@@ -191,70 +191,35 @@ async def health():
     return {"status": "ok", "service": "clawmate", "version": "0.1.0"}
 
 
-# ── 启动时同步 cron job(根据 config.json roots 自动生成)───────
+# ── 兜底定时扫描（替代 openclaw CLI cron 管理）────────────
 
-import subprocess  # noqa: E402
-
-from cron_manager import add_cron, _get_cron_bin  # noqa: E402
+import httpx  # noqa: E402
 
 
-def _sync_cron_jobs():
-    """读取 config，创建单一的兜底 cron job。
+def _start_periodic_cron_tick():
+    """容器内定时调用 cron-tick，替代 openclaw CLI 的兜底 cron job。
 
-    v1.26: 使用 config.load() 替代 json.load。
+    即时唤醒已有 webhook (POST /hooks/agent) 负责，
+    此函数仅为网络波动等场景提供兜底扫描。
     """
-    cfg = load_cfg()
+    import time
 
-    roots = cfg.roots
-    if not roots:
-        return
+    interval_hours = 6
+    if load_cfg().openclaw.hook_token:
+        interval_hours = 24  # 有 webhook 时减少兜底频率
 
-    cron_bin = _get_cron_bin()
-    cron_name = "clawmate-fb-fallback"
+    url = "http://localhost:5533/api/clawmate/feedback/cron-tick"
+    print(f"[clawmate] 兜底定时器已启动: 每{interval_hours}h 扫描一次")
 
-    # 先删除已存在的 clawmate-fb-fallback（幂等），用 --json 精准匹配
-    try:
-        list_out = subprocess.run(
-            [cron_bin, "cron", "list", "--json"],
-            timeout=15, capture_output=True, text=True,
-        ).stdout
-        cron_data = json.loads(list_out)
-        cron_jobs = cron_data if isinstance(cron_data, list) else cron_data.get("jobs", cron_data.get("items", []))
-        for job in cron_jobs:
-            if job.get("name") == cron_name:
-                subprocess.run(
-                    [cron_bin, "cron", "rm", job["id"]],
-                    timeout=10, capture_output=True,
-                )
-                print(f"[clawmate] 已删除旧的 {cron_name} ({job['id']})")
-    except Exception as e:
-        print(f"[clawmate] 删除旧 {cron_name} 时出错: {e}")
-
-    # 读取 cron message 模板
-    template_path = Path(__file__).parent / "cron_template.txt"
-    try:
-        with open(template_path, "r", encoding="utf-8") as f:
-            template = f.read()
-    except Exception:
-        print(f"[clawmate] WARNING: 无法读取 {template_path}，跳过 cron job 同步")
-        return
-
-    base_url = "http://localhost:5533"
-    all_root_ids = [r.id for r in roots]
-    all_roots = ", ".join(all_root_ids)
-
-    # agent_id 用第一个 root 的 agent（cron 扫所有 root）
-    primary_agent = roots[0].agent_id
-
-    # 兜底间隔：无 webhook 时 6h，否则 24h
-    has_webhook = bool(cfg.openclaw.hook_token)
-    interval = "6h" if not has_webhook else cfg.fallback_cron_interval
-
-    message = template.format(base_url=base_url, all_roots=all_roots)
-    if add_cron(cron_bin, cron_name, primary_agent, message, every=interval):
-        print(f"[clawmate] 兜底 cron job 已创建: {cron_name} (interval={interval}, agent={primary_agent}, roots=[{all_roots}])")
-    else:
-        print(f"[clawmate] WARNING: 兜底 cron 创建失败 {cron_name}")
+    while True:
+        time.sleep(interval_hours * 3600)
+        try:
+            resp = httpx.post(url, timeout=10)
+            if resp.status_code == 200:
+                rj = resp.json()
+                print(f"[cron-tick] periodic check: checked={rj.get('checked',0)} pending={rj.get('pending',0)}")
+        except Exception:
+            pass  # 下次重试
 
 
 # ── entrypoint ─────────────────────────────────────────────────────
@@ -287,7 +252,7 @@ if __name__ == "__main__":
 
     # 启动时同步 cron job（后台运行，不阻塞服务器）
     import threading
-    t = threading.Thread(target=_sync_cron_jobs, name="cron-sync", daemon=True)
+    t = threading.Thread(target=_start_periodic_cron_tick, name="cron-tick", daemon=True)
     t.start()
 
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")

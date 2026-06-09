@@ -151,11 +151,24 @@
         },
       };
 
+      let docEditor;
       try {
-        new DocsAPI.DocEditor("onlyoffice", config);
+        docEditor = new DocsAPI.DocEditor("onlyoffice", config);
       } catch (err) {
         showFallback("ONLYOFFICE 初始化失败，请使用原始预览或下载。", downloadUrl);
       }
+
+      // Listen for print/export commands from parent page
+      window.addEventListener('message', function(e) {
+        if (e.data && e.data.type === 'print-document' && docEditor) {
+          try {
+            docEditor.serviceCommand('print');
+          } catch (_) {
+            // fallback: try native print
+            window.print();
+          }
+        }
+      });
     }
 
     init().catch(() => {
