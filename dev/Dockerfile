@@ -30,8 +30,8 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.11/site-packages/ /usr/local/lib/python3.11/site-packages/
 COPY --from=builder /usr/local/bin/uvicorn /usr/local/bin/uvicorn
 
-# copy application - all .py files
-COPY *.py ./
+# copy application
+COPY *.py task_templates.json ./
 COPY static/ static/
 
 ENV CLAWMATE_PORT=5533
