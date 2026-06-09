@@ -435,7 +435,12 @@ async def clawmate_rename(request: Request):
     if new_path.exists():
         raise HTTPException(status_code=409, detail="A file with that name already exists")
 
-    target.rename(new_path)
+    try:
+        target.rename(new_path)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied: filesystem is read-only")
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Rename failed: {e}")
 
     # Compute new relative path
     new_safe_rel = str(new_path.relative_to(target.parent.parent)) if hasattr(target.parent, 'parent') else new_name
