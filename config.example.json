@@ -9,20 +9,20 @@
   ],
   "defaultRootId": "example",
   "port": 5533,
-  "public_base_url": "http://localhost:5533",
+  "public_base_url": "http://clawmate.lan:5533",
   "max_upload_mb": 100,
   "feedback": {
     "enable_subtitle": false
   },
   "openclaw": {
-    "gateway_url": "http://127.0.0.1:18789",
+    "gateway_url": "http://openclaw.lan:18789",
     "hook_token": ""
   },
   "onlyoffice": {
-    "api_js_url": "",
+    "api_js_url": "http://onlyoffice.lan/web-apps/apps/api/documents/api.js",
     "jwt_secret": "change-me-in-production",
     "mode": "edit",
-    "callback_url": ""
+    "callback_url": "https://onlyoffice.lan:18443/web-apps/apps/api/documents/api.js"
   },
   "auth": {
     "username": "admin",
