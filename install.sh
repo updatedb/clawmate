@@ -36,13 +36,13 @@ if [ ! -f "$_CFG_PATH" ]; then
   echo "⚠️  请编辑 $_CFG_PATH 填入实际配置"
 fi
 
-# 安装依赖（--user 安装到用户级，避免 PEP 668 限制）
+# 安装依赖（--user 安装到用户级，--break-system-packages 规避 PEP 668）
 echo "安装 Python 依赖..."
-sudo -u "$CLAWMATE_USER" pip3 install --user -r "$CLAWMATE_DIR/requirements.txt" --quiet
+pip3 install --user --break-system-packages -r "$CLAWMATE_DIR/requirements.txt" --quiet
 
 if [ -n "$SUBITLE_FLAG" ]; then
   echo "安装字幕功能依赖（faster-whisper ~2GB）..."
-  sudo -u "$CLAWMATE_USER" pip3 install --user -r "$CLAWMATE_DIR/requirements-opt.txt" --quiet
+  pip3 install --user --break-system-packages -r "$CLAWMATE_DIR/requirements-opt.txt" --quiet
   echo "  启用字幕功能：config.json 中设置 feedback.enable_subtitle: true"
 fi
 
@@ -57,7 +57,7 @@ After=network.target
 Type=simple
 User=$CLAWMATE_USER
 WorkingDirectory=$CLAWMATE_DIR/dev
-ExecStart=$_VENV/bin/python main.py
+ExecStart=/usr/bin/python3 main.py
 Restart=on-failure
 RestartSec=5
 Environment=CLAWMATE_PORT=$CLAWMATE_PORT

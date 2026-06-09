@@ -161,7 +161,7 @@ docker run -d \
 ```bash
 cp config.example.json config.json
 # 编辑 config.json
-pip3 install --user -r requirements.txt
+pip3 install --user --break-system-packages -r requirements.txt
 cd dev && python3 main.py
 ```
 
