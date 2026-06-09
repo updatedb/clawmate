@@ -1,1 +1,0 @@
-执行 POST {base_url}/api/clawmate/feedback/cron-tick
