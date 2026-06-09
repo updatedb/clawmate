@@ -161,8 +161,8 @@ docker run -d \
 ```bash
 cp config.example.json config.json
 # 编辑 config.json
-pip install -r requirements.txt
-cd dev && python main.py
+pip3 install --user -r requirements.txt
+cd dev && python3 main.py
 ```
 
 ### 方式三：install.sh 一键部署（CLI + systemd）
