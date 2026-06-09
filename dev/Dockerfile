@@ -8,11 +8,19 @@
 #     -e CLAWMATE_HOOK_TOKEN=xxx \
 #     -e CLAWMATE_PUBLIC_BASE_URL=https://your-domain.com:5533 \
 #     clawmate
+# 字幕功能：构建时设置 CLAWMATE_ENABLE_SUBTITLE=1 安装 faster-whisper（~2GB）
+#   docker build --build-arg CLAWMATE_ENABLE_SUBTITLE=1 -t clawmate:latest dev/
+ARG CLAWMATE_ENABLE_SUBTITLE=0
+
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements-opt.txt ./
+RUN pip install --no-cache-dir -r requirements.txt \
+    && if [ "$CLAWMATE_ENABLE_SUBTITLE" = "1" ]; then \
+         pip install --no-cache-dir -r requirements-opt.txt; \
+       fi
 
 FROM python:3.11-slim AS runtime
 

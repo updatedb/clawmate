@@ -1,11 +1,24 @@
 #!/bin/bash
 # ClawMate 安装脚本
-# 用法: bash install.sh          # 安装到当前目录
-#       bash install.sh /opt/clawmate  # 安装到指定路径
+# 用法:
+#   sudo bash install.sh                     # 安装到当前目录
+#   sudo bash install.sh /opt/clawmate       # 安装到指定路径
+#   sudo bash install.sh --with-subtitle     # 安装字幕功能（~2GB）
+#   sudo bash install.sh /opt/clawmate --with-subtitle
 
 set -euo pipefail
 
-CLAWMATE_DIR="${1:-$(cd "$(dirname "$0")" && pwd)}"
+# 解析参数
+SUBITLE_FLAG=""
+POSITIONAL_ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --with-subtitle) SUBITLE_FLAG=1 ;;
+    *) POSITIONAL_ARGS+=("$arg") ;;
+  esac
+done
+
+CLAWMATE_DIR="${POSITIONAL_ARGS[0]:-$(cd "$(dirname "$0")" && pwd)}"
 CLAWMATE_USER="${SUDO_USER:-$USER}"
 CLAWMATE_PORT="${CLAWMATE_PORT:-5533}"
 
@@ -25,6 +38,12 @@ fi
 # 安装依赖
 echo "安装 Python 依赖..."
 pip3 install -r "$CLAWMATE_DIR/dev/requirements.txt" --quiet
+
+if [ -n "$SUBITLE_FLAG" ]; then
+  echo "安装字幕功能依赖（faster-whisper ~2GB）..."
+  pip3 install -r "$CLAWMATE_DIR/dev/requirements-opt.txt" --quiet
+  echo "  启用字幕功能：config.json 中设置 feedback.enable_subtitle: true"
+fi
 
 # 创建 systemd 服务
 echo "安装 systemd 服务..."
