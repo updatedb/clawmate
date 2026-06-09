@@ -260,26 +260,33 @@ openclaw gateway restart
 {
   "roots": [
     {
-      "id": "webprojects",
-      "label": "Web Projects",
-      "dir": "/home/user/webprojects",
-      "agent_id": "writer"
+      "id": "example",
+      "label": "示例目录",
+      "dir": "/data/example",
+      "agent_id": "main"
     }
   ],
-  "defaultRootId": "webprojects",
+  "defaultRootId": "example",
   "port": 5533,
-  "public_base_url": "https://your-domain.com:5533",
-  "auth": {
-    "username": "admin",
-    "password_hash": "$2b$12$..."
+  "public_base_url": "http://clawmate.lan:5533",
+  "max_upload_mb": 100,
+  "feedback": {
+    "enable_subtitle": false
   },
   "openclaw": {
-    "hook_token": "your-token",
-    "gateway_url": "http://127.0.0.1:18789"
+    "gateway_url": "http://openclaw.lan:18789",
+    "hook_token": ""
   },
   "onlyoffice": {
-    "api_js_url": "https://your-office-server.com/web-apps/apps/api/documents/api.js",
-    "jwt_secret": "your-jwt-secret"
+    "api_js_url": "http://onlyoffice.lan/web-apps/apps/api/documents/api.js",
+    "jwt_secret": "change-me-in-production",
+    "mode": "edit",
+    "callback_url": "https://clawmate.lan:5533/api/clawmate/onlyoffice/callback"
+  },
+  "auth": {
+    "username": "admin",
+    "password_hash": "",
+    "session_ttl_minutes": 480
   }
 }
 ```
