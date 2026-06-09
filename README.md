@@ -137,7 +137,7 @@ docker run -d \
   --restart unless-stopped \
   -p 5533:5533 \
   -v $(pwd)/config.json:/app/config.json:ro \
-  -v /path/to/your/data:/data \
+  -v /openclaw/store/data:/data \
   -e CLAWMATE_CONFIG=/app/config.json \
   clawmate:latest
 ```

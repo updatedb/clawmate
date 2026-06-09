@@ -4,7 +4,7 @@
 # Run:
 #   docker run -d -p 5533:5533 \
 #     -v /path/to/config.json:/app/config.json:ro \
-#     -v /path/to/data:/data:ro \
+#     -v /openclaw/store/data:/data \
 #     -e CLAWMATE_PUBLIC_BASE_URL=https://your-domain.com:5533 \
 #     clawmate
 # 字幕功能：构建时设置 CLAWMATE_ENABLE_SUBTITLE=1 安装 faster-whisper（~2GB）
