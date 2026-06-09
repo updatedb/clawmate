@@ -23,7 +23,7 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages/ /usr/local/lib/pyth
 COPY --from=builder /usr/local/bin/uvicorn /usr/local/bin/uvicorn
 
 # copy application - all .py files
-COPY *.py cron_template.txt ./
+COPY *.py ./
 COPY static/ static/
 
 ENV CLAWMATE_PORT=5533
