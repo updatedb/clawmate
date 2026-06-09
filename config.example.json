@@ -22,7 +22,7 @@
     "api_js_url": "http://onlyoffice.lan/web-apps/apps/api/documents/api.js",
     "jwt_secret": "change-me-in-production",
     "mode": "edit",
-    "callback_url": "https://onlyoffice.lan:18443/web-apps/apps/api/documents/api.js"
+    "callback_url": "https://clawmate.lan:5533/api/clawmate/onlyoffice/callback"
   },
   "auth": {
     "username": "admin",
