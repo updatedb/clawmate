@@ -14,8 +14,8 @@ ARG CLAWMATE_ENABLE_SUBTITLE=0
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
-COPY dev/requirements.txt .
-COPY dev/requirements-opt.txt ./
+COPY requirements.txt .
+COPY requirements-opt.txt ./
 RUN pip install --no-cache-dir -r requirements.txt \
     && if [ "$CLAWMATE_ENABLE_SUBTITLE" = "1" ]; then \
          pip install --no-cache-dir -r requirements-opt.txt; \
