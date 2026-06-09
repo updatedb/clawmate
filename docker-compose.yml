@@ -23,7 +23,7 @@ services:
       - "${CLAWMATE_PORT:-5533}:5533"
     volumes:
       # 挂载配置文件（必须）
-      - ./dev/config.json:/app/config.json:ro
+      - ./config.json:/app/config.json:ro
       # 挂载数据目录（根据 config.json roots 配置调整）
       - /path/to/your/data:/data:ro
     environment:
