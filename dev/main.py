@@ -154,7 +154,7 @@ app.add_middleware(
 )
 
 # Import auth middleware - must be after CORS, before static files
-from auth import AuthMiddleware  # noqa: E402
+from auth import AuthMiddleware, is_auth_enabled  # noqa: E402
 
 # v1.26: AuthMiddleware 内部使用 config.load()，不再需要传入 config dict
 app.add_middleware(AuthMiddleware, config=load_cfg())
@@ -238,6 +238,14 @@ if __name__ == "__main__":
     print(f"[clawmate] Config: {CONFIG_PATH}")
     print(f"[clawmate] ONLYOFFICE API JS: {ONLYOFFICE_API_JS_URL}")
     print(f"[clawmate] Max upload: {max_upload}MB")
+
+    # 认证状态
+    _auth_enabled = is_auth_enabled(load_cfg())
+    if not _auth_enabled:
+        print(f"[clawmate] ⚠️  认证未配置（auth.password_hash 为空），任何人都可访问")
+        print(f"[clawmate] ⚠️  请运行: python3 main.py --set-password")
+    else:
+        print(f"[clawmate] Auth: ENABLED")
 
     # webhook wake 状态
     if cfg.openclaw.hook_token:
