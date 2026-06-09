@@ -29,10 +29,11 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # 确保 config.json 存在
-if [ ! -f "$CLAWMATE_DIR/config.json" ]; then
+_CFG_PATH="$CLAWMATE_DIR/dev/config.json"
+if [ ! -f "$_CFG_PATH" ]; then
   echo "创建 config.json（从 config.example.json 复制）..."
-  cp "$CLAWMATE_DIR/config.example.json" "$CLAWMATE_DIR/config.json"
-  echo "⚠️  请编辑 $CLAWMATE_DIR/config.json 填入实际配置"
+  cp "$CLAWMATE_DIR/config.example.json" "$_CFG_PATH"
+  echo "⚠️  请编辑 $_CFG_PATH 填入实际配置"
 fi
 
 # 安装依赖
@@ -60,7 +61,7 @@ ExecStart=/usr/bin/python3 main.py
 Restart=on-failure
 RestartSec=5
 Environment=CLAWMATE_PORT=$CLAWMATE_PORT
-Environment=CLAWMATE_CONFIG=$CLAWMATE_DIR/config.json
+Environment=CLAWMATE_CONFIG=$CLAWMATE_DIR/dev/config.json
 Environment=PYTHONUNBUFFERED=1
 
 [Install]

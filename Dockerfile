@@ -38,6 +38,6 @@ EXPOSE 5533
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5533/clawmate/').read()" || exit 1
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5533/api/health').read()" || exit 1
 
 CMD ["python", "-u", "main.py"]
