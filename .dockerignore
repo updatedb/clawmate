@@ -19,3 +19,4 @@ config.json
 sessions.json
 feedback.json
 test/*.pdf
+*.swp
