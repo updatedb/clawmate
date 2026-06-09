@@ -5,18 +5,17 @@
 #   docker run -d -p 5533:5533 \
 #     -v /path/to/config.json:/app/config.json:ro \
 #     -v /path/to/data:/data:ro \
-#     -e CLAWMATE_HOOK_TOKEN=xxx \
 #     -e CLAWMATE_PUBLIC_BASE_URL=https://your-domain.com:5533 \
 #     clawmate
 # 字幕功能：构建时设置 CLAWMATE_ENABLE_SUBTITLE=1 安装 faster-whisper（~2GB）
-#   docker build --build-arg CLAWMATE_ENABLE_SUBTITLE=1 -t clawmate:latest dev/
+#   docker build --build-arg CLAWMATE_ENABLE_SUBTITLE=1 -t clawmate:latest .
 ARG CLAWMATE_ENABLE_SUBTITLE=0
 
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
-COPY requirements.txt .
-COPY requirements-opt.txt ./
+COPY dev/requirements.txt .
+COPY dev/requirements-opt.txt ./
 RUN pip install --no-cache-dir -r requirements.txt \
     && if [ "$CLAWMATE_ENABLE_SUBTITLE" = "1" ]; then \
          pip install --no-cache-dir -r requirements-opt.txt; \
@@ -30,9 +29,9 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.11/site-packages/ /usr/local/lib/python3.11/site-packages/
 COPY --from=builder /usr/local/bin/uvicorn /usr/local/bin/uvicorn
 
-# copy application
-COPY *.py task_templates.json ./
-COPY static/ static/
+# copy application (dev/ 子目录)
+COPY dev/*.py dev/task_templates.json ./
+COPY dev/static/ static/
 
 ENV CLAWMATE_PORT=5533
 EXPOSE 5533

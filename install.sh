@@ -37,11 +37,11 @@ fi
 
 # 安装依赖
 echo "安装 Python 依赖..."
-pip3 install -r "$CLAWMATE_DIR/dev/requirements.txt" --quiet
+pip3 install -r "$CLAWMATE_DIR/requirements.txt" --quiet
 
 if [ -n "$SUBITLE_FLAG" ]; then
   echo "安装字幕功能依赖（faster-whisper ~2GB）..."
-  pip3 install -r "$CLAWMATE_DIR/dev/requirements-opt.txt" --quiet
+  pip3 install -r "$CLAWMATE_DIR/requirements-opt.txt" --quiet
   echo "  启用字幕功能：config.json 中设置 feedback.enable_subtitle: true"
 fi
 

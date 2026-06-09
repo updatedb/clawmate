@@ -204,7 +204,11 @@ ClawMate 通过 `POST {gateway_url}/hooks/agent` 向 OpenClaw 发送 webhook 唤
 {
   "hooks": {
     "agent": {
-      "token": "your-hook-token"
+      "enabled": true,
+      "token": "",
+      "path": "/hooks",
+      "allowRequestSessionKey": false,
+      "allowedAgentIds": ["main"]
     }
   }
 }
