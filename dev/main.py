@@ -31,7 +31,7 @@ from constants import (
 from config import set_config_path, load as load_cfg
 
 # ── config resolution ──────────────────────────────────────────────
-CONFIG_PATH_STR = os.environ.get(CONFIG_PATH_ENV) or str(Path(__file__).parent / "config.json")
+CONFIG_PATH_STR = os.environ.get(CONFIG_PATH_ENV) or str(Path(__file__).resolve().parent.parent / "config.json")
 CONFIG_PATH = Path(CONFIG_PATH_STR)
 set_config_path(CONFIG_PATH_STR)
 STATIC_DIR = Path(__file__).parent / "static"
