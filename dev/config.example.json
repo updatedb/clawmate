@@ -1,39 +1,38 @@
 {
   "roots": [
     {
-      "id": "example",
-      "label": "示例目录",
-      "dir": "/home/user/example",
-      "agent_id": "main"
-    },
-    {
       "id": "projects",
       "label": "Projects",
-      "dir": "/home/user/projects",
+      "dir": "/data/projects",
+      "agent_id": "work"
+    },
+    {
+      "id": "robotaxi-book",
+      "label": "Robotaxi Book",
+      "dir": "/data/robotaxi-book",
       "agent_id": "work"
     }
   ],
-  "defaultRootId": "example",
+  "defaultRootId": "projects",
   "port": 5533,
-  "public_base_url": "",
+  "public_base_url": "http://desktop.lan:5533",
   "max_upload_mb": 100,
-  "fallback_cron_interval": "24h",
-  "openclaw": {
-    "gateway_url": "http://127.0.0.1:18789",
-    "hook_token": ""
-  },
   "feedback": {
     "enable_subtitle": false
   },
+  "openclaw": {
+    "gateway_url": "http://openclaw.lan:18789",
+    "hook_token": "dc8a131785bc805c35a63ce382e34500ef31fa845414033a02d46aead24652e8"
+  },
   "onlyoffice": {
-    "api_js_url": "",
-    "jwt_secret": "change-me-in-production",
+    "api_js_url": "https://file.updatedb.online:18443/web-apps/apps/api/documents/api.js",
+    "jwt_secret": "9f3c0d2e0a9b4baf8c5c7b6e4a8f1d23",
     "mode": "edit",
-    "callback_url": ""
+    "callback_url": "https://note.updatedb.online:18443/api/clawmate/onlyoffice/callback"
   },
   "auth": {
-    "username": "admin",
-    "password_hash": "",
-    "session_ttl_minutes": 480
+    "username": "updatedb",
+    "password_hash": "$2b$12$0x0znq2Rn6SzCXn18q8hYu8yGAqPWlKROQ64z3xiPrt2hescCLDpC",
+    "session_ttl_minutes": 1440
   }
 }
