@@ -3401,33 +3401,37 @@
     noteInput.addEventListener('click', e => e.stopPropagation());
     card.appendChild(noteInput);
 
-    // Tag / action 选择按钮组
+    // Tag / action 选择按钮组（从 task_templates 动态加载）
     const tagRow = document.createElement('div');
     tagRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;';
-    const _TAG_MAP = [
-      { label: '🗑 删除', prompt: '清除选中内容', action: 'delete', scope: 'document' },
-      { label: '🔧 修改', prompt: '修改选中内容，思路如下：', action: 'modify', scope: 'document' },
-      { label: '📈 扩展', prompt: '详细解释选中内容', action: 'explain', scope: 'document' },
-      { label: '📉 简化', prompt: '抽象选中内容，简单描述', action: 'simplify', scope: 'document' },
-      { label: '⚡ 执行', prompt: '文档审批通过，执行方案', action: 'execute', scope: 'project' },
-    ];
-    _TAG_MAP.forEach(t => {
+    var _ext = (filePath || '').split('.').pop().toLowerCase();
+    var _tagMap = _taskTemplates.length ? _taskTemplates.filter(function(t) {
+      return t.source === 'selection' &&
+        (t.match_ext.indexOf('*') >= 0 || t.match_ext.indexOf(_ext) >= 0);
+    }) : [];
+    // 当 _taskTemplates 为空时使用硬编码兜底（兼容旧部署）
+    if (!_tagMap.length) {
+      _tagMap = [
+        { label: '🗑 删除', action: 'delete', scope: 'document' },
+        { label: '🔧 修改', action: 'modify', scope: 'document' },
+        { label: '📈 扩展', action: 'explain', scope: 'document' },
+        { label: '📉 简化', action: 'simplify', scope: 'document' },
+        { label: '⚡ 执行', action: 'execute', scope: 'project' },
+      ];
+    }
+    _tagMap.forEach(function(t) {
       const btn = document.createElement('button');
       btn.textContent = t.label;
       const isActive = item.action === t.action;
       btn.style.cssText = `font-size:11px;padding:2px 6px;border-radius:4px;border:1px solid ${isActive ? 'var(--accent)' : 'var(--border-color)'};background:${isActive ? 'var(--accent)' : 'var(--bg-secondary)'};color:${isActive ? '#fff' : 'var(--text-primary)'};cursor:pointer;transition:all 0.15s;font-weight:${isActive ? '600' : '400'};`;
-      btn.addEventListener('click', e => {
+      btn.addEventListener('click', function(e) {
         e.stopPropagation();
         if (item.action === t.action) {
-          // 点击已选中的标签 → 清除
           delete item.action;
           delete item.scope;
-          // 不改变 note
         } else {
           item.action = t.action;
           item.scope = t.scope;
-          // 不改变 note（note 只保留用户写的实际要求，prompt 由 task_runner 拼接）
-          // execute 时 content 记录文件引用
           if (t.action === 'execute' && typeof filePath !== 'undefined') {
             item.text = '读取文件' + filePath;
           }
