@@ -78,6 +78,27 @@ async def task_run(request: Request):
     if not raw_selections or not isinstance(raw_selections, list):
         raise HTTPException(status_code=422, detail="Missing selections")
 
+    # 校验 root_id 合法性（是否在 config.json 中注册）
+    from config import load as _cfg
+    try:
+        _cfg().root_dir(root_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=f"Root not found: {root_id}")
+
+    # 校验 file_path 合法性（文件必须存在）
+    from pathlib import Path as _Path
+    full_path = _cfg().root_dir(root_id).expanduser().resolve() / file_path.lstrip("/")
+    # 禁止路径遍历
+    try:
+        full_path = full_path.resolve()
+        root_path = _cfg().root_dir(root_id).expanduser().resolve()
+        if not str(full_path).startswith(str(root_path)):
+            raise HTTPException(status_code=422, detail=f"File path traversal detected: {file_path}")
+    except Exception:
+        raise HTTPException(status_code=422, detail=f"Invalid file path: {file_path}")
+    if not full_path.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+
     if not project:
         project = file_path.split("/")[0] if "/" in file_path else ""
 

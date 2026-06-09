@@ -194,6 +194,30 @@ sudo bash install.sh /opt/clawmate      # 安装到指定路径
 - **同主机 CLI**：`gateway_url: http://127.0.0.1:18789`
 - **跨主机**：`gateway_url: http://openclaw.lan:18789`
 
+#### 在 OpenClaw 中配置 `/hooks/agent` 入口
+
+ClawMate 通过 `POST {gateway_url}/hooks/agent` 向 OpenClaw 发送 webhook 唤醒 Agent 处理反馈。
+
+你需要在 OpenClaw 的 `openclaw.json` 中注册该 hook 路由：
+
+```json
+{
+  "hooks": {
+    "agent": {
+      "token": "your-hook-token"
+    }
+  }
+}
+```
+
+> ⚠️ `token` 字段的值必须与 `config.json` 中 `openclaw.hook_token` 的值**完全一致**，否则 webhook 会被 OpenClaw 拒绝。
+
+`gateway_url` + `hook_token` 两者配合使用：
+- `openclaw.json` 中的 `hooks.agent.token` 定义入口鉴权
+- `config.json` 中的 `openclaw.hook_token` 提供调用凭证
+
+> 🔒 请勿将 `hook_token` 提交到公开仓库。生产环境建议通过环境变量 `CLAWMATE_HOOK_TOKEN` 注入。
+
 ### 可选：字幕提取
 
 字幕功能需要额外的 ML 模型依赖（~2GB）。启用方式（二选一）：
