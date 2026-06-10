@@ -122,9 +122,17 @@
       body.innerHTML = '<div class="markdown-body">' + md.render(content) + '</div>';
       if (window.mermaid && mermaidStore.length > 0) {
         try {
+          var blocks = document.querySelectorAll('.markdown-body .mermaid');
+          blocks.forEach(function(b) {
+            var id = b.getAttribute('data-mermaid-id');
+            if (id != null && mermaidStore[id]) b.textContent = mermaidStore[id];
+          });
           window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark' });
-          window.mermaid.run({ querySelector: '.markdown-body .mermaid' });
-        } catch(e) { console.warn('Mermaid error:', e); }
+          (async function() {
+            try { await window.mermaid.run({ querySelector: '.markdown-body .mermaid' }); }
+            catch(e) { console.warn('Mermaid run error:', e); }
+          })();
+        } catch(e) { console.warn('Mermaid init error:', e); }
       }
       try {
         renderMathInElement(body, {
