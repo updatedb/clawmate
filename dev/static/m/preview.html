@@ -126,6 +126,19 @@
     </div>
   </div>
 
+  <!-- Share panel -->
+  <div class="m-panel-overlay" id="shareOverlay"></div>
+  <div class="m-panel" id="sharePanel" style="max-height:50vh;">
+    <div class="m-panel-handle"></div>
+    <div class="m-panel-header">
+      <span class="m-panel-title">🔗 分享链接</span>
+      <button class="m-panel-close" id="shareClose">✕</button>
+    </div>
+    <div class="m-panel-body" id="shareBody">
+      <div class="m-file-empty">生成中...</div>
+    </div>
+  </div>
+
   <!-- Selection tooltip (floating button above selected text) -->
   <div class="m-selection-tooltip" id="selectionTooltip">
     <button class="m-sel-tag" id="tooltipFeedbackBtn" title="添加反馈">✏️ 反馈</button>
@@ -223,6 +236,10 @@
     contentBody: document.getElementById('contentBody'),
     btnBack: document.getElementById('btnBack'),
     btnShare: document.getElementById('btnShare'),
+    shareOverlay: document.getElementById('shareOverlay'),
+    sharePanel: document.getElementById('sharePanel'),
+    shareBody: document.getElementById('shareBody'),
+    shareClose: document.getElementById('shareClose'),
     btnBottomOutline: document.getElementById('btnBottomOutline'),
     btnBottomFeedback: document.getElementById('btnBottomFeedback'),
     outlineOverlay: document.getElementById('outlineOverlay'),
@@ -1245,41 +1262,35 @@
   // ── Share button ──
   els.btnShare.addEventListener('click', async function() {
     try {
+      els.shareBody.innerHTML = '<div class="m-file-empty" style="padding:12px;">生成中...</div>';
+      showPanel(els.shareOverlay, els.sharePanel);
+
       var res = await fetch(API_BASE + '/share/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ root: rootId, path: filePath }),
       });
       if (!res.ok) {
-        alert('分享链接生成失败 (' + res.status + ')');
+        els.shareBody.innerHTML = '<div class="m-file-empty" style="color:var(--danger);padding:12px;">❌ 生成失败 (' + res.status + ')</div>';
         return;
       }
       var data = await res.json();
-      showShareToast(data.url, data.expires_str);
+      els.shareBody.innerHTML =
+        '<div style="padding:12px;font-size:14px;">' +
+        '  <div style="margin-bottom:12px;color:var(--text-secondary);">将该链接发给微信家人即可阅读</div>' +
+        '  <div style="padding:10px;background:var(--bg-secondary);border-radius:8px;word-break:break-all;font-size:13px;">' +
+        '    <a href="' + data.url + '" target="_blank" style="color:var(--accent);text-decoration:underline;">' + data.url + '</a>' +
+        '  </div>' +
+        '  <div style="margin-top:8px;font-size:12px;color:var(--text-muted);">⏳ 24 小时有效 · ' + data.expires_str + ' 前可访问</div>' +
+        '</div>';
     } catch(e) {
-      alert('分享出错: ' + e.message);
+      els.shareBody.innerHTML = '<div class="m-file-empty" style="color:var(--danger);padding:12px;">❌ ' + e.message + '</div>';
     }
   });
 
-  function showShareToast(url, expiresStr) {
-    var existing = document.querySelector('.share-toast');
-    if (existing) existing.remove();
-
-    var toast = document.createElement('div');
-    toast.className = 'share-toast';
-    toast.innerHTML =
-      '<div class="share-toast-header">' +
-      '  <span class="share-toast-title">🔗 分享链接已生成</span>' +
-      '  <button class="share-toast-close" onclick="this.parentElement.parentElement.remove()">✕</button>' +
-      '</div>' +
-      '<div class="share-toast-url"><a href="' + url + '" target="_blank" style="color:var(--accent);text-decoration:underline;">' + url + '</a></div>' +
-      '<div class="share-toast-hint">⏳ 24 小时有效 · ' + expiresStr + ' 前可访问</div>';
-    document.body.appendChild(toast);
-
-    setTimeout(function() {
-      if (toast.parentElement) toast.remove();
-    }, 15000);
-  }
+  // Share panel close/overlay
+  els.shareOverlay.addEventListener('click', () => hidePanel(els.shareOverlay, els.sharePanel));
+  els.shareClose.addEventListener('click', () => hidePanel(els.shareOverlay, els.sharePanel));
 
   // ── Init ──
   async function init() {
