@@ -168,7 +168,14 @@
         }
         var data = await res.json();
         var ext = data.suffix ? data.suffix.replace('.','').toLowerCase() : '';
-        document.getElementById('shareTitle').textContent = '📄 ' + data.name;
+        // 提取标题：Markdown 取第一个 # heading，其余用文件名
+        var pageTitle = data.name;
+        if ((ext === 'md' || ext === 'markdown') && data.content) {
+          var m = data.content.match(/^#\s+(.+)$/m);
+          if (m) pageTitle = m[1].trim();
+        }
+        document.title = pageTitle + ' · ClawMate 分享';
+        document.getElementById('shareTitle').textContent = '📄 ' + pageTitle;
 
         if (IMAGE_EXTS.includes(ext)) {
           body.innerHTML = '<div class="share-media-wrapper"><div class="share-media-title">' + data.name + '</div><img src="' + API_BASE + '/share/' + TOKEN + '/raw" alt="' + data.name + '" /></div>';
