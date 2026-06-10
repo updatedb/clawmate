@@ -3,7 +3,6 @@ Share Routes — 分享链接生成与访问
 
 Endpoints:
     POST /api/clawmate/share/create  — 为指定文件生成 24h 分享链接
-    GET  /share/{token}              — 访问分享链接（只读预览页）
     GET  /api/clawmate/share/{token}/data — 返回分享文件内容 JSON
     GET  /api/clawmate/share/{token}/raw  — 返回原始文件（媒体文件用）
 """
@@ -15,10 +14,9 @@ import os
 import secrets
 import time
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse
 
 from constants import CONFIG_PATH_ENV
 from service import safe_path, guess_category, file_info, preview_text
@@ -148,50 +146,6 @@ async def share_create(request: Request):
         "file": safe_rel,
         "reused": bool(existing),
     })
-
-
-@router.get("/share/{token}")
-async def share_view(token: str):
-    """访问分享链接 — 返回只读预览页"""
-    link = _find_link(token)
-    if not link:
-        return HTMLResponse(
-            "<h2 style='text-align:center;margin-top:20vh;color:#888;'>🔗 链接已过期或不存在</h2>",
-            status_code=410,
-        )
-
-    # Verify file still exists
-    try:
-        _, target, safe_rel = safe_path(link["root"], link["file"])
-    except Exception:
-        return HTMLResponse(
-            "<h2 style='text-align:center;margin-top:20vh;color:#888;'>📄 文件已不存在</h2>",
-            status_code=404,
-        )
-
-    if not target.exists():
-        return HTMLResponse(
-            "<h2 style='text-align:center;margin-top:20vh;color:#888;'>📄 文件已不存在</h2>",
-            status_code=404,
-        )
-
-    # Serve the share page
-    share_html_path = Path(__file__).parent / "static" / "share.html"
-    if not share_html_path.exists():
-        return HTMLResponse("share.html not found", status_code=500)
-
-    with open(share_html_path, "r", encoding="utf-8") as f:
-        html = f.read()
-
-    # Inject token and file info into the page
-    expires_dt = datetime.fromtimestamp(link["expires_at"], tz=timezone.utc).astimezone()
-    expires_str = expires_dt.strftime("%m-%d %H:%M")
-
-    html = html.replace("{{TOKEN}}", token)
-    html = html.replace("{{FILE_NAME}}", target.name)
-    html = html.replace("{{EXPIRES_STR}}", expires_str)
-
-    return HTMLResponse(content=html)
 
 
 @router.get("/api/clawmate/share/{token}/data")
