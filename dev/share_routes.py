@@ -129,10 +129,18 @@ async def share_create(request: Request):
         })
         _save_share_links(data)
 
-    # Build share URL
-    host = request.headers.get("host", f"localhost:{os.environ.get('CLAWMATE_PORT', '5533')}")
-    scheme = request.headers.get("x-forwarded-proto", "http")
-    share_url = f"{scheme}://{host}/clawmate/share-view.html?token={token}"
+    # Build share URL — 优先用 config public_base_url，兜底用请求 host
+    try:
+        from config import load as cfg
+        base = cfg().public_base_url
+    except Exception:
+        base = ""
+    if base:
+        share_url = f"{base.rstrip('/')}/clawmate/share-view.html?token={token}"
+    else:
+        host = request.headers.get("host", f"localhost:{os.environ.get('CLAWMATE_PORT', '5533')}")
+        scheme = request.headers.get("x-forwarded-proto", "http")
+        share_url = f"{scheme}://{host}/clawmate/share-view.html?token={token}"
 
     # Format expiry time for display
     expires_dt = datetime.fromtimestamp(expires_at, tz=timezone.utc).astimezone()
