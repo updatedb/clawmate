@@ -224,6 +224,39 @@ def _nocache_file(path: Path, **kw) -> FileResponse:
     return FileResponse(path, headers=headers, **kw)
 
 
+@router.get("/api/clawmate/preview-link")
+async def clawmate_preview_link(root: str = "", file: str = ""):
+    """Generate a preview URL for a file. Does NOT require the file to exist.
+    
+    This endpoint returns a preview URL that the frontend can use to navigate
+    to the preview page. It validates the root but does not check file existence.
+    """
+    if not root or not root.strip():
+        raise HTTPException(status_code=400, detail="Missing root parameter")
+    try:
+        cfg = config()
+        public_base_url = cfg.public_base_url
+        # Validate root (only; file existence is NOT checked)
+        root_path, _, safe_rel = safe_path(root, file)
+        if not root_path:
+            raise HTTPException(status_code=404, detail="Root not found")
+        # Build preview URL
+        base = public_base_url.rstrip("/")
+        preview_url = f"{base}/clawmate/preview.html?root={quote(root)}&file={quote(safe_rel)}"
+        return _nocache_json({
+            "ok": True,
+            "root": root,
+            "file": safe_rel,
+            "preview_url": preview_url,
+        })
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Root not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+
 @router.get("/api/clawmate/preview")
 async def clawmate_preview(root: str = "", path: str = ""):
     if not root or not root.strip():
