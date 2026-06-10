@@ -461,8 +461,11 @@ dist/ build/
 │   ├── main.py
 │   ├── requirements.txt
 │   └── ...
-├── test/                    ← 测试
-│   └── CLAWLIST.md          ← 研发级：开发任务跟踪
+├── test/                    ← 测试（与源码严格分离）
+│   ├── CLAWLIST.md          ← 研发级：测试任务跟踪
+│   ├── reports/             ← 测试报告（自动化 + 手工）
+│   ├── results/             ← 测试结果、日志、截图
+│   └── scripts/             ← 测试脚本
 ├── archive/                 ← 归档（历史决策、已完成迭代、过期研究）
 │   ├── research/
 │   │   └── 2026-06-技术选型/
@@ -472,6 +475,23 @@ dist/ build/
 │       └── sprint-1.md
 └── .gitignore
 ```
+
+#### 测试目录隔离规则（硬性）
+
+> **测试工作结果必须存放在 test/ 目录，严禁与源码混放。**
+
+| 内容 | 正确位置 | 错误位置 |
+|------|---------|---------|
+| 测试报告 | `test/reports/` | `dev/reports/` ❌ `src/reports/` ❌ |
+| 测试结果/日志 | `test/results/` | `dev/logs/` ❌ `src/logs/` ❌ |
+| 测试脚本 | `test/scripts/` | `dev/scripts/` ❌ `src/scripts/` ❌ |
+| 测试截图 | `test/results/screenshots/` | `dev/` ❌ `src/` ❌ |
+| 测试计划/CLAWLIST | `test/CLAWLIST.md` | `dev/CLAWLIST.md` ❌ |
+
+**理由**：
+- 源码目录（dev/src）只放代码和配置文件
+- 测试目录独立便于 CI/CD 打包时排除
+- 测试历史归档在 archive/iterations/，不污染源码
 
 **研发需求（存量项目保持 dev/）**：
 ```
@@ -490,8 +510,11 @@ dist/ build/
 ├── dev/                     ← 存量保持
 │   ├── main.py
 │   └── ...
-├── test/
-│   └── CLAWLIST.md          ← 研发级
+├── test/                    ← 测试（与源码严格分离）
+│   ├── CLAWLIST.md          ← 研发级：测试任务跟踪
+│   ├── reports/             ← 测试报告
+│   ├── results/             ← 测试结果、日志
+│   └── scripts/             ← 测试脚本
 ├── archive/                 ← 归档目录
 └── .gitignore
 ```
