@@ -90,18 +90,18 @@ Phase I 确认三种类型之一，决定后续全流程和目录结构：
 ### 命令签名
 
 ```
-clawmate project [root] <projectname> [--local]
+clawmate project [root] <projectname>
 ```
 
 - `root`: 可选，指定 ClawMate root_id（默认使用 config.json 的 `defaultRootId`）
 - `projectname`: 项目名称
-- `--local`: 可选，创建为专有项目（`./projects/{name}/`，不对外访问）
+
 
 ### 目录约定
 
 - **默认路径**：`{root_dir}/{项目名}/`（root_dir 由 root_id 解析）
-- **专有路径**：`./projects/{项目名}/`（不对外访问，需显式指定 `--local`）
-- **源码目录**：新项目推荐 `src/`（Python 标准），存量项目保持 `dev/`
+
+- **源码目录**：统一使用 `dev/`
 
 ### 全流程概览
 
@@ -148,7 +148,7 @@ mkdir -p {项目根路径}/{research,collect}
 # 产品方案
 mkdir -p {项目根路径}/{research,collect,prd}
 
-# 研发需求（新项目推荐 src/，存量保持 dev/）
+# 研发需求
 mkdir -p {项目根路径}/{research,collect,prd,src,test}
 # 或 mkdir -p {项目根路径}/{research,collect,prd,dev,test}
 ```
@@ -159,7 +159,7 @@ mkdir -p {项目根路径}/{research,collect,prd,src,test}
 
 **活跃文档（始终加载）**：
 - **CLAWLIST.md**（项目级 — 总览）— 管理所有非研发、测试的项目进展（Phase I-V），并包含研发级/测试级/研究级 CLAWLIST 的整体进展简要汇总（分组体现）
-- **CLAWLIST.md**（研发级 — 明细，可选）— 研发需求项目在 `src/` 或 `dev/` 下创建，管理开发任务明细
+- **CLAWLIST.md**（研发级 — 明细，可选）— 研发需求项目在 `dev/` 下创建，管理开发任务明细
 - **CLAWLIST.md**（研究级 — 明细，可选）— 放在 `research/` 下，管理研究计划与进度（替代独立的 RESEARCH_PLAN.md）
 - **CLAWLIST.md**（测试级 — 明细，可选）— 放在 `test/` 下，管理测试任务明细
 - **PROJECT_NOTE.md** — 产品决策唯一来源 + 信息架构规则
@@ -220,8 +220,8 @@ mkdir -p {项目根路径}/{research,collect,prd,src,test}
 - [ ] 子场景 PRD: {场景1}
 - [ ] 用户评审通过
 
-## 研发进展汇总（明细见 src/CLAWLIST.md 或 dev/CLAWLIST.md）
-- [ ] 架构设计 → [src/CLAWLIST.md](src/CLAWLIST.md)
+## 研发进展汇总（明细见 dev/CLAWLIST.md）
+- [ ] 架构设计 → [dev/CLAWLIST.md](dev/CLAWLIST.md)
 - [ ] 核心功能开发
 - [ ] 接口联调
 - [ ] 单元测试覆盖
@@ -482,7 +482,6 @@ dist/ build/
 ```
 {项目名}/
 ├── CLAWLIST.md
-├── PROJECT_NOTE.md
 ├── PROJECT_NOTE.md          ← 含「需求澄清记录」+「信息架构规则」
 ├── research/
 │   └── CLAWLIST.md            ← 研究计划与进度
@@ -493,7 +492,6 @@ dist/ build/
 ```
 {项目名}/
 ├── CLAWLIST.md
-├── PROJECT_NOTE.md
 ├── PROJECT_NOTE.md          ← 含「需求澄清记录」+「信息架构规则」
 ├── research/
 │   └── CLAWLIST.md            ← 研究计划与进度
@@ -504,7 +502,7 @@ dist/ build/
     └── sub_prd/
 ```
 
-**研发需求（新项目推荐 src/，所有归档统一放 archive/）**：
+**研发需求**：
 ```
 {项目名}/
 ├── CLAWLIST.md              ← 项目级总览：Phase I-V + 研发/测试/研究进展汇总
@@ -517,7 +515,7 @@ dist/ build/
 │   ├── MRD.md               ← 当前版本
 │   ├── PRD.md               ← 当前版本
 │   └── sub_prd/             ← 当前子场景
-├── src/                     ← 源码（推荐）或 dev/
+├── dev/                     ← 源码
 │   ├── main.py
 │   ├── requirements.txt
 │   └── ...
@@ -544,10 +542,10 @@ dist/ build/
 
 | 内容 | 正确位置 | 错误位置 |
 |------|---------|---------|
-| 测试报告 | `test/reports/` | `dev/reports/` ❌ `src/reports/` ❌ |
-| 测试结果/日志 | `test/results/` | `dev/logs/` ❌ `src/logs/` ❌ |
-| 测试脚本 | `test/scripts/` | `dev/scripts/` ❌ `src/scripts/` ❌ |
-| 测试截图 | `test/results/screenshots/` | `dev/` ❌ `src/` ❌ |
+| 测试报告 | `test/reports/` | `dev/reports/` ❌ |
+| 测试结果/日志 | `test/results/` | `dev/logs/` ❌ |
+| 测试脚本 | `test/scripts/` | `dev/scripts/` ❌ |
+| 测试截图 | `test/results/screenshots/` | `dev/` ❌ |
 | 测试计划/CLAWLIST | `test/CLAWLIST.md` | `dev/CLAWLIST.md` ❌ |
 
 **理由**：
@@ -753,7 +751,7 @@ archive/
     └── PRD-v1.2-2026-05-20.md          ← 文件名-版本-日期
 ```
 
-> ⚠️ **严禁**在 `prd/`、`research/`、`src/` 等子目录中创建 `archive/` 或 `done/` 子目录。所有归档统一在根目录 `archive/` 下。
+> ⚠️ **严禁**在 `prd/`、`research/`、`dev/` 等子目录中创建 `archive/` 或 `done/` 子目录。所有归档统一在根目录 `archive/` 下。
 
 ### 6.5 文档同步检查清单
 
