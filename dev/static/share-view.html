@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <link rel="icon" href="data:," />
   <title>分享 · ClawMate</title>
-  <link rel="stylesheet" href="/clawmate/static/m/style.css" />
+  <link rel="stylesheet" href="/clawmate/m/style.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="highlight-theme-css" />
-  <link rel="stylesheet" href="/clawmate/static/vendor/github-markdown-dark.min.css" id="github-markdown-css" />
-  <link rel="stylesheet" href="/clawmate/static/vendor/katex.min.css" />
+  <link rel="stylesheet" href="/clawmate/vendor/github-markdown-dark.min.css" id="github-markdown-css" />
+  <link rel="stylesheet" href="/clawmate/vendor/katex.min.css" />
   <style>
     .share-loading { text-align: center; padding: 48px 16px; color: var(--text-muted); font-size: 15px; }
     .share-error { text-align: center; padding: 48px 16px; color: var(--danger); font-size: 15px; }
@@ -55,7 +55,7 @@
     </div>
   </div>
 
-  <script src="/clawmate/static/vendor/mermaid-v11.min.js"></script>
+  <script src="/clawmate/vendor/mermaid-v11.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/markdown-it-container@4.0.0/dist/markdown-it-container.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/markdown-it-footnote/dist/markdown-it-footnote.min.js"></script>
@@ -85,21 +85,6 @@
 
     const md = window.markdownit({
       html: true, linkify: true, typographer: true, breaks: true,
-      highlight: function(str, lang) {
-        if (lang && lang.toLowerCase() === 'mermaid') {
-          var id = mermaidStore.length;
-          mermaidStore.push(str);
-          return '<div class="mermaid" data-mermaid-id="' + id + '"></div>';
-        }
-        if (lang && hljs.getLanguage(lang)) {
-          try {
-            return '<pre class="hljs" style="overflow-x:auto;max-width:100%;padding:12px;border-radius:8px;background:var(--code-bg);"><code>' +
-              hljs.highlight(str, { language: lang, ignoreIllegals: true }).value + '</code></pre>';
-          } catch(e) {}
-        }
-        return '<pre class="hljs" style="overflow-x:auto;max-width:100%;padding:12px;border-radius:8px;background:var(--code-bg);"><code>' +
-          md.utils.escapeHtml(str) + '</code></pre>';
-      }
     });
     md.use(window.markdownitContainer, 'note');
     md.use(window.markdownitContainer, 'tip');
@@ -107,6 +92,31 @@
     md.use(window.markdownitContainer, 'danger');
     md.use(window.markdownitFootnote);
     md.use(window.markdownitTaskLists, { enabled: true, label: true, labelAfter: true });
+
+    // Override fence renderer for mermaid + highlight.js
+    md.renderer.rules.fence = function(tokens, idx, options, env, slf) {
+      var token = tokens[idx];
+      var language = token.info.trim();
+      var raw = token.content;
+      var cls = language ? 'language-' + language : '';
+
+      if (language === 'mermaid') {
+        var id = mermaidStore.length;
+        mermaidStore.push(raw);
+        return '<div class="mermaid" data-mermaid-id="' + id + '"></div>';
+      }
+
+      if (language && hljs.getLanguage(language)) {
+        try {
+          var langMap = { yml: 'yaml', node: 'javascript', py: 'python', sh: 'bash', text: 'plaintext' };
+          var normalLang = langMap[language.toLowerCase()] || language;
+          var plain = raw.replace(/<[^>]*>/g, '');
+          var highlighted = hljs.highlight(plain, { language: normalLang, ignoreIllegals: true }).value;
+          return '<pre class="hljs" style="overflow-x:auto;max-width:100%;padding:12px;border-radius:8px;background:var(--code-bg);"><code class="' + cls + '">' + highlighted + '</code></pre>';
+        } catch(e) {}
+      }
+      return '<pre style="overflow-x:auto;max-width:100%;padding:12px;border-radius:8px;background:var(--code-bg);"><code class="' + cls + '">' + md.utils.escapeHtml(raw) + '</code></pre>';
+    };
 
     function renderMarkdown(content) {
       body.innerHTML = '<div class="markdown-body">' + md.render(content) + '</div>';
