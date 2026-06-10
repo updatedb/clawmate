@@ -1,6 +1,6 @@
 ---
 name: clawmate
-description: ClawMate 文件管理 + 预览 + 反馈闭环。预览链接生成、feedback 查询与处理。
+description: ClawMate 文件管理 + 预览 + 反馈闭环 + 项目管理。支持文件搜索预览、feedback 处理、项目初始化与前期梳理（Phase I-V）。
 license: MIT
 ---
 
@@ -16,9 +16,9 @@ license: MIT
 | 命令 | 功能 | 状态 |
 |------|------|:----:|
 | `clawmate link <filename>` | 搜索文件生成可点击预览链接 | ✅ |
-| `clawmate feed [status] [filename] [date]` | 查询 feedback 列表 | ✅ |
+| `clawmate project <projectname>` | 项目初始化与前期梳理（Phase I-V） | ✅ |
+| `clawmate feed [status] [project] [filename] [date]` | 查询 feedback 列表 | ✅ |
 | `clawmate do [feedback_id]` | 处理待处理 feedback | ✅ |
-| `clawmate project` | 项目级别文件管理 | 🔄 规划中 |
 
 ---
 
@@ -46,12 +46,265 @@ https://example.com/clawmate/preview.html?root=webprojects&file=clawmate/CLAWLIS
 
 ---
 
-## 2. clawmate feed
+## 2. clawmate project
+
+基于 **skill project** 五阶段框架，在 ClawMate 管理的目录中创建项目并进行前期梳理。
+
+### 项目类型
+
+Phase I 确认三种类型之一，决定后续全流程和目录结构：
+
+| 类型 | 目录 | 流程 | 产出 |
+|------|------|------|------|
+| **观点收集** | research/ collect/ | I→II→III→研究报告 | 结构化研究报告 |
+| **产品方案** | + prd/ | I→II→III→IV(MRD)→V(PRD) | MRD + PRD |
+| **研发需求** | + prd/ dev/ test/ | I→II→III→IV(MRD)→V(PRD) | MRD + PRD + 可运行系统 |
+
+### 目录约定
+
+- **默认路径**：`~/webprojects/{项目名}/`（可通过 http://openclaw.lan/{项目名} 访问）
+- **专有路径**：`./projects/{项目名}/`（不对外访问，需显式指定 `--local`）
+
+### 全流程概览
+
+```mermaid
+flowchart LR
+    A[Phase I<br>项目初始化] --> B[Phase II<br>需求澄清]
+    B --> C[Phase III<br>信息收集]
+    C --> D{项目类型?}
+    D -->|观点收集| E[研究报告<br>编写与评审]
+    D -->|产品方案| F[Phase IV<br>MRD 编写]
+    D -->|研发需求| F
+    E --> G{通过?}
+    G -->|否| C
+    G -->|是| H[✅ 完成]
+    F --> I{通过?}
+    I -->|否| C
+    I -->|是| J[Phase V<br>PRD 编写]
+    J --> K{通过?}
+    K -->|否| J
+    K -->|是| H
+```
+
+### Phase I：项目初始化
+
+**步骤 0：询问项目类型**（必须先执行）
+
+```markdown
+## 🏗️ 请确认项目类型
+
+这个项目属于哪一种？
+1. **观点收集** — 纯文档/研究输出，无需 MRD/PRD
+2. **产品方案** — 需要 MRD + PRD 的产品规划
+3. **研发需求** — 需要开发 + 测试的完整工程
+```
+
+**步骤 1：创建目录结构**
+
+确认类型后立即创建：
+
+```bash
+# 观点收集
+mkdir -p {项目根路径}/{research,collect}
+
+# 产品方案
+mkdir -p {项目根路径}/{research,collect,prd}
+
+# 研发需求
+mkdir -p {项目根路径}/{research,collect,prd,dev,test}
+```
+
+**步骤 2：创建核心文档**
+
+- **CLAWLIST.md** — 树形 TODO 清单（项目管理）
+- **PROJECT_NOTE.md** — 产品管理文档（项目是什么 + 为什么这样 + 关键决策）
+
+**CLAWLIST.md 模板**：
+```markdown
+# CLAWLIST — {项目名}
+
+- [ ] 需求澄清 (Phase II)
+- [ ] 信息收集 (Phase III)
+- [ ] MRD 编写与评审 (Phase IV)  ← 产品方案/研发需求
+- [ ] PRD 编写与评审 (Phase V)    ← 产品方案/研发需求
+  - [ ] 总 PRD
+  - [ ] 子场景 PRD: {场景1}
+```
+
+**PROJECT_NOTE.md 模板**：
+```markdown
+# {项目名} 产品笔记
+
+## 项目简介
+{项目描述}
+
+## 项目方向
+- **要解决的核心问题**: {一句话}
+- **目标用户/受众**: {谁用这个项目}
+- **预期成果**: {最终产出什么}
+- **项目类型**: 观点收集 / 产品方案 / 研发需求
+
+## 关键决策
+| 日期 | 决策 | 理由 | 影响 |
+|------|------|------|------|
+| YYYY-MM-DD | {决策内容} | {为什么} | {影响范围} |
+
+## 开发规范
+## 核心架构
+## 常见问题与修复
+## 关键代码模式
+```
+
+**步骤 3：初始化 Git**
+
+```bash
+cd {项目根路径}
+git init
+git config user.email "openclaw@openclaw.ai"
+git config user.name "OpenClaw"
+```
+
+.gitignore 模板：
+```
+node_modules/ .npm/ .pnpm-store/
+__pycache__/ *.py[cod] .venv/ venv/ .env*
+*.log logs/
+.DS_Store Thumbs.db
+.vscode/ .idea/
+dist/ build/
+```
+
+首次提交：`git add -A && git commit -m "Initial commit: {项目名}"`
+
+### Phase II：需求澄清
+
+五项必问：
+
+1. **目的** — 要达成什么目标？解决什么问题？
+2. **服务对象**（三类必覆盖）：
+   - 产品用户：最终使用者是谁？使用场景？
+   - 项目管理人员：谁负责推进、验收、决策？
+   - 领导/汇报对象：需要向谁汇报？汇报形式？
+3. **输出物** — 最终交付什么？文档/代码/设计/报告/演示文稿？
+4. **评价标准** — 按服务对象分层确认
+5. **工作范围** — 是否需要开发？是否需要测试？
+
+**产出**：`REQUIREMENT_CLARIFICATION.md`
+
+### Phase III：信息收集
+
+1. **识别信息需求**：从 Phase II 推导研究主题
+2. **生成研究计划**：`RESEARCH_PLAN.md`
+3. **执行研究**：调用 `academic-deep-research` / `web_search` / `cto-advisor`
+4. **提示用户补充**
+5. **用户确认**「信息充分，可以进入 Phase IV」
+
+### Phase IV：MRD 编写与评审（产品方案/研发需求）
+
+**MRD 内容框架**：
+
+| # | 章节 | 内容 |
+|---|------|------|
+| 1 | **市场概述** | 市场规模、增长趋势、关键驱动因素 |
+| 2 | **目标市场** | 细分市场定义、目标用户画像 |
+| 3 | **竞品分析** | 主要竞品、差异化定位、竞争格局图 |
+| 4 | **用户需求** | 痛点分析、需求优先级、使用场景 |
+| 5 | **商业价值** | 商业模式、收入预期、投资回报 |
+| 6 | **市场策略** | 进入策略、定价、推广路径 |
+| 7 | **风险与假设** | 关键假设、主要风险、缓解措施 |
+
+**评审检查单**：
+- 核心目标一致性（映射回 Phase II 目标）
+- 市场数据有出处、可溯源
+- 三类服务对象全覆盖
+- 竞品分析覆盖主要对手
+- 商业逻辑可解释、可验证
+- 风险识别 + 缓解措施
+
+### Phase V：PRD 编写与评审（产品方案/研发需求）
+
+**执行步骤**：
+1. 确认 PRD 结构（总 PRD + 子场景 PRD）
+2. 编写总 PRD → `prd/PRD.md`
+3. 逐条编写子场景 PRD → `prd/sub_prd/{场景名}.md`
+4. 每个子场景：编写 → 评审 → 修改 → 通过
+
+**PRD 评审检查单**：
+- 目标用户与 Phase II 服务对象一致
+- 功能完整性覆盖所有输出物
+- 流程闭环（核心流程 + 异常路径）
+- 验收标准可度量
+- Mermaid 图表正确
+
+### 项目目录结构
+
+**观点收集**：
+```
+{项目名}/
+├── CLAWLIST.md
+├── PROJECT_NOTE.md
+├── REQUIREMENT_CLARIFICATION.md
+├── RESEARCH_PLAN.md
+├── research/
+└── collect/
+```
+
+**产品方案**：
+```
+{项目名}/
+├── CLAWLIST.md
+├── PROJECT_NOTE.md
+├── REQUIREMENT_CLARIFICATION.md
+├── RESEARCH_PLAN.md
+├── research/
+├── collect/
+└── prd/
+    ├── MRD.md
+    ├── PRD.md
+    └── sub_prd/
+```
+
+**研发需求**：
+```
+{项目名}/
+├── CLAWLIST.md
+├── PROJECT_NOTE.md
+├── REQUIREMENT_CLARIFICATION.md
+├── RESEARCH_PLAN.md
+├── research/
+├── collect/
+├── prd/
+│   ├── MRD.md
+│   ├── PRD.md
+│   └── sub_prd/
+├── dev/
+└── test/
+```
+
+### Git 提交规范
+
+| 时机 | 类型 | 格式 |
+|------|------|------|
+| 新功能 | `feat:` | `feat: 添加xxx功能` |
+| Bug 修复 | `fix:` | `fix: 修复xxx问题` |
+| 文档 | `docs:` | `docs: 更新xxx文档` |
+| 重构 | `refactor:` | `refactor: 重构xxx` |
+| 测试 | `test:` | `test: 添加xxx测试` |
+| 杂项 | `chore:` | `chore: 更新依赖` |
+
+### 图表规范
+
+所有文档图表使用 **Mermaid 语法**，禁止截图替代。
+
+---
+
+## 3. clawmate feed
 
 查询 feedback 列表，支持过滤。
 
 **参数**：
 - `status`: `pending` / `in_progress` / `done` / `failed`（默认全部）
+- `project`: 项目名称过滤（可选）
 - `filename`: 文件名模糊匹配（可选）
 - `date`: `today` 或 `YYYY-MM-DD`（默认 `today`）
 
@@ -68,7 +321,7 @@ https://example.com/clawmate/preview.html?root=webprojects&file=clawmate/CLAWLIS
 
 ---
 
-## 3. clawmate do
+## 4. clawmate do
 
 处理待处理 feedback（全部或指定 ID）。
 
@@ -92,7 +345,7 @@ clawmate do FD-CM-042
 
 ---
 
-## 4. 文件推送规范
+## 5. 文件推送规范
 
 每次生成本地文件后，必须推送摘要 + 可点击预览链接给用户。
 
@@ -120,4 +373,3 @@ clawmate do FD-CM-042
 - 通过率：49/52 (94%)
 - 3 个问题均为预期行为
 ```
-

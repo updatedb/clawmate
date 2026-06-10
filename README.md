@@ -142,20 +142,6 @@ docker run -d \
   clawmate:latest
 ```
 
-**环境变量**（可配入 config.json 的 `openclaw` / `onlyoffice` 字段）：
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `CLAWMATE_PUBLIC_BASE_URL` | — | 外部访问地址 |
-| `CLAWMATE_HOOK_TOKEN` | — | OpenClaw webhook token |
-| `CLAWMATE_GATEWAY_URL` | `http://host.docker.internal:18789` | OpenClaw Gateway |
-| `CLAWMATE_ONLYOFFICE_URL` | — | ONLYOFFICE JS URL |
-| `CLAWMATE_ONLYOFFICE_JWT_SECRET` | — | ONLYOFFICE JWT 密钥 |
-| `CLAWMATE_MAX_UPLOAD_MB` | `100` | 上传限制 |
-| `CLAWMATE_ENABLE_SUBTITLE` | `0` | 字幕提取 |
-
-`config.json` 中的 `roots[].dir` 指向容器内路径（如 `/data/projects`）。
-
 ### 方式二：本地直接启动
 
 ```bash
