@@ -156,6 +156,10 @@ mkdir -p {项目根路径}/{research,collect,prd,dev,test}
 **步骤 2：创建核心文档 + 归档机制**
 
 > **关键原则**：所有文档必须有明确的「更新触发器」和「归档边界」，避免过期信息堆积。
+> 
+> **硬性规则**：每次保存文档到磁盘后，必须生成 ClawMate 可点击预览链接并回复给用户。
+> 链接格式：`[文件名]({base_url}/clawmate/preview.html?root={root}&file={relative_path})`
+> 使用 `curl -s "http://localhost:5533/api/clawmate/search?q={关键词}&root={root}"` 搜索确认文件后构造链接。
 
 **活跃文档（始终加载）**：
 - **CLAWLIST.md**（项目级 — 总览）— 管理所有非研发、测试的项目进展（Phase I-V），并包含研发级/测试级/研究级 CLAWLIST 的整体进展简要汇总（分组体现）
