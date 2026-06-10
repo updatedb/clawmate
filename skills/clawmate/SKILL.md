@@ -149,7 +149,7 @@ mkdir -p {项目根路径}/{research,collect}
 mkdir -p {项目根路径}/{research,collect,prd}
 
 # 研发需求
-mkdir -p {项目根路径}/{research,collect,prd,src,test}
+mkdir -p {项目根路径}/{research,collect,prd,dev,test}
 # 或 mkdir -p {项目根路径}/{research,collect,prd,dev,test}
 ```
 
@@ -185,7 +185,7 @@ mkdir -p {项目根路径}/{research,collect,prd,src,test}
 # CLAWLIST — {项目名}（项目级 — 总览）
 
 > 本项目级 CLAWLIST 管理所有非研发、测试的项目进展，并汇总各分组的简要状态。
-> 明细任务分别在 src|dev/、test/、research/ 的 CLAWLIST 中管理。
+> 明细任务分别在 dev/、test/、research/ 的 CLAWLIST 中管理。
 
 ## Phase I 项目初始化
 - [x] 确认项目类型
@@ -549,11 +549,11 @@ dist/ build/
 | 测试计划/CLAWLIST | `test/CLAWLIST.md` | `dev/CLAWLIST.md` ❌ |
 
 **理由**：
-- 源码目录（dev/src）只放代码和配置文件
+- 源码目录（dev/）只放代码和配置文件
 - 测试目录独立便于 CI/CD 打包时排除
 - 测试历史归档在 archive/iterations/，不污染源码
 
-**研发需求（存量项目保持 dev/，所有归档统一放 archive/）**：
+**目录结构**：
 ```
 {项目名}/
 ├── CLAWLIST.md              ← 项目级总览
@@ -566,7 +566,7 @@ dist/ build/
 │   ├── MRD.md
 │   ├── PRD.md
 │   └── sub_prd/
-├── dev/                     ← 存量保持
+├── dev/                     ← 源码
 │   ├── main.py
 │   └── ...
 ├── test/                    ← 测试（与源码严格分离）
