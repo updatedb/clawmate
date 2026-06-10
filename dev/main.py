@@ -163,10 +163,12 @@ app.add_middleware(AuthMiddleware, config=load_cfg())
 from routes import router as clawmate_router  # noqa: E402
 from task_runner import router as task_router  # noqa: E402
 from subtitle_routes import router as subtitle_router  # noqa: E402
+from share_routes import router as share_router  # noqa: E402
 
 app.include_router(clawmate_router)
 app.include_router(task_router)
 app.include_router(subtitle_router)
+app.include_router(share_router)
 
 # mount static files under /clawmate/
 if STATIC_DIR.exists() and STATIC_DIR.is_dir():

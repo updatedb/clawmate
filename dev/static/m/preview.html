@@ -82,6 +82,7 @@
     <header class="m-topbar" id="topbar">
       <a class="m-back-btn" id="btnBack">←</a>
       <span class="m-topbar-title" id="docTitle">加载中...</span>
+      <button class="m-share-btn" id="btnShare" title="分享">↗️</button>
     </header>
 
     <!-- Content -->
@@ -221,6 +222,7 @@
   const els = {
     contentBody: document.getElementById('contentBody'),
     btnBack: document.getElementById('btnBack'),
+    btnShare: document.getElementById('btnShare'),
     btnBottomOutline: document.getElementById('btnBottomOutline'),
     btnBottomFeedback: document.getElementById('btnBottomFeedback'),
     outlineOverlay: document.getElementById('outlineOverlay'),
@@ -1240,6 +1242,45 @@
       hideSelectionTooltip();
     }
   }, { passive: true });
+  // ── Share button ──
+  els.btnShare.addEventListener('click', async function() {
+    try {
+      var res = await fetch(API_BASE + '/share/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ root: rootId, path: filePath }),
+      });
+      if (!res.ok) {
+        alert('分享链接生成失败 (' + res.status + ')');
+        return;
+      }
+      var data = await res.json();
+      showShareToast(data.url, data.expires_str);
+    } catch(e) {
+      alert('分享出错: ' + e.message);
+    }
+  });
+
+  function showShareToast(url, expiresStr) {
+    var existing = document.querySelector('.share-toast');
+    if (existing) existing.remove();
+
+    var toast = document.createElement('div');
+    toast.className = 'share-toast';
+    toast.innerHTML =
+      '<div class="share-toast-header">' +
+      '  <span class="share-toast-title">🔗 分享链接已生成</span>' +
+      '  <button class="share-toast-close" onclick="this.parentElement.parentElement.remove()">✕</button>' +
+      '</div>' +
+      '<div class="share-toast-url">' + url + '</div>' +
+      '<div class="share-toast-hint">⏳ 24 小时有效 · ' + expiresStr + ' 前可访问</div>';
+    document.body.appendChild(toast);
+
+    setTimeout(function() {
+      if (toast.parentElement) toast.remove();
+    }, 15000);
+  }
+
   // ── Init ──
   async function init() {
     await loadTaskTemplates();
