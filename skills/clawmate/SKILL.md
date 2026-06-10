@@ -147,11 +147,29 @@ mkdir -p {项目根路径}/{research,collect,prd,src,test}
 # 或 mkdir -p {项目根路径}/{research,collect,prd,dev,test}
 ```
 
-**步骤 2：创建核心文档**
+**步骤 2：创建核心文档 + 归档机制**
 
+> **关键原则**：所有文档必须有明确的「更新触发器」和「归档边界」，避免过期信息堆积。
+
+**活跃文档（始终加载）**：
 - **CLAWLIST.md**（项目级）— 管理 Phase I-V 前期梳理进度
 - **CLAWLIST.md**（研发级，可选）— 研发需求项目在 `src/` 或 `dev/` 下创建，管理开发任务
 - **PROJECT_NOTE.md** — 产品决策唯一来源（见下文「PROJECT_NOTE.md 价值」）
+
+**归档文档（按需加载，详见「懒加载机制」）**：
+- **archive/** — 已完成/过期的研究、方案、迭代记录
+- **prd/archive/** — 已废弃的 PRD 版本
+- **research/done/** — 已实施的改进方案
+
+**归档触发条件**：
+| 场景 | 归档动作 | 示例 |
+|------|---------|------|
+| 研究主题已实施 | `research/{主题}/` → `archive/research/2026-06-{主题}/` | 技术选型完成后归档 |
+| PRD 迭代 | 旧版本 → `prd/archive/PRD-v1.2.md` | PRD v1.3 评审通过后 |
+| 决策过期 | 旧决策 → `archive/decisions/` + 在 PROJECT_NOTE.md 中标注 | 技术方案变更 |
+| 迭代完成 | Sprint/TODO → `archive/iterations/` | 开发阶段结束 |
+
+**归档命名规范**：`{日期}-{主题}/` 或 `{文件名}-v{版本}.md`，确保可检索。
 
 **CLAWLIST.md 模板（项目级）**：
 ```markdown
@@ -215,17 +233,71 @@ mkdir -p {项目根路径}/{research,collect,prd,src,test}
 - [ ] 上线验证
 ```
 
-### PROJECT_NOTE.md 价值与使用规范
+### PROJECT_NOTE.md 价值与使用规范 + 文档同步规则
 
-> **PROJECT_NOTE.md 是产品决策的唯一来源**。所有后续决策（技术选型、功能取舍、优先级调整）必须能在 PROJECT_NOTE.md 中找到依据。
+> **PROJECT_NOTE.md 是产品决策的唯一来源**。所有后续决策必须能在其中找到依据。
 
-**使用规范**：
-1. **决策时引用**：做任何产品/技术决策前，先检查 PROJECT_NOTE.md 中是否有相关记录
-2. **变更时更新**：项目方向、关键假设、服务对象发生变化时，立即更新
-3. **评审时对照**：Phase IV/V 评审时，检查 MRD/PRD 是否与 PROJECT_NOTE.md 一致
-4. **交接时必读**：新成员进入项目时，首先阅读 PROJECT_NOTE.md
+#### 使用规范
+1. **决策时引用**：做任何决策前先检查 PROJECT_NOTE.md
+2. **变更时更新**：方向、假设、服务对象变化时立即更新
+3. **评审时对照**：Phase IV/V 评审时检查 MRD/PRD 一致性
+4. **交接时必读**：新成员首先阅读
 
-**PROJECT_NOTE.md 模板**：
+#### 文档同步规则（防止过期）
+
+**触发器 → 同步动作**矩阵：
+
+| 触发事件 | CLAWLIST | PROJECT_NOTE.md | PRD/MRD | 归档 |
+|---------|----------|-----------------|---------|------|
+| 需求变更 | ✅ 更新 TODO | ✅ 记录决策 | ⚠️ 评估是否需更新 | — |
+| 技术选型变更 | ✅ 标记完成 | ✅ 记录决策 + 理由 | — | ✅ 旧方案归档 |
+| PRD 评审通过 | ✅ 标记完成 | — | ✅ 定稿 | ✅ 旧版本归档 |
+| 功能开发完成 | ✅ 标记完成 | — | ✅ 更新验收状态 | — |
+| Bug 修复 | ✅ 添加/关闭 | — | — | — |
+| 迭代结束 | ✅ 关闭迭代 | ✅ 记录复盘 | — | ✅ 迭代记录归档 |
+
+> **硬性规则**：任何文档超过 2 周未更新 → 进入「过期审查」，标记在 CLAWLIST 中，确认是否归档或更新。
+
+#### 懒加载机制（信息分层）
+
+**首次加载（必须）**：
+```
+1. PROJECT_NOTE.md      ← 最新决策（≤ 50 行摘要 + 关键决策表）
+2. CLAWLIST.md（项目级） ← 当前阶段未完成任务
+```
+
+**按需加载（延迟）**：
+```
+3. CLAWLIST.md（研发级）  ← 仅当进入开发阶段
+4. prd/PRD.md            ← 仅当需要查看详细需求
+5. research/             ← 仅当需要背景信息
+6. archive/              ← 仅当需要历史决策
+```
+
+**加载优先级**：
+- 🔴 P0：PROJECT_NOTE.md（关键决策表）
+- 🟡 P1：CLAWLIST 当前阶段未完成项
+- 🟢 P2：详细 PRD / 研究文档
+- ⚪ P3：archive 历史记录
+
+**实现方式**：
+- 在 PROJECT_NOTE.md 顶部维护「当前焦点」摘要（≤ 20 行）
+- CLAWLIST.md 按阶段分节，仅展开当前阶段
+- archive/ 目录独立，默认不加载
+- 大文件（> 100KB）拆分为子文件，按需读取
+
+**PROJECT_NOTE.md 模板**（更新版，顶部增加「当前焦点」）：
+```markdown
+# {项目名} 产品笔记
+
+## 当前焦点（≤ 20 行，每次会话首先阅读）
+- **当前阶段**: {Phase X}
+- **本周目标**: {一句话}
+- **阻塞项**: {如有}
+- **关键决策**: {最近 3 条}
+
+## 项目方向（只写一次，变更时更新）
+...
 ```markdown
 # {项目名} 产品笔记
 
@@ -369,10 +441,42 @@ dist/ build/
     └── sub_prd/
 ```
 
-**研发需求（新项目推荐 src/）**：
+**研发需求（新项目推荐 src/ + archive/）**：
 ```
 {项目名}/
-├── CLAWLIST.md              ← 项目级：Phase I-V 进度
+├── CLAWLIST.md              ← 项目级：Phase I-V 进度（仅活跃项）
+├── PROJECT_NOTE.md          ← 产品决策唯一来源（顶部含「当前焦点」摘要）
+├── REQUIREMENT_CLARIFICATION.md
+├── RESEARCH_PLAN.md
+├── research/                ← 进行中研究
+│   └── {主题}/
+├── collect/                 ← 收集的素材
+├── prd/
+│   ├── MRD.md               ← 当前版本
+│   ├── PRD.md               ← 当前版本
+│   ├── sub_prd/             ← 当前子场景
+│   └── archive/             ← 废弃版本（按需加载）
+│       └── PRD-v1.2.md
+├── src/                     ← 源码（推荐）或 dev/
+│   ├── main.py
+│   ├── requirements.txt
+│   └── ...
+├── test/                    ← 测试
+│   └── CLAWLIST.md          ← 研发级：开发任务跟踪
+├── archive/                 ← 归档（历史决策、已完成迭代、过期研究）
+│   ├── research/
+│   │   └── 2026-06-技术选型/
+│   ├── decisions/
+│   │   └── 2026-06-10-数据库选型.md
+│   └── iterations/
+│       └── sprint-1.md
+└── .gitignore
+```
+
+**研发需求（存量项目保持 dev/）**：
+```
+{项目名}/
+├── CLAWLIST.md              ← 项目级（仅活跃项）
 ├── PROJECT_NOTE.md          ← 产品决策唯一来源
 ├── REQUIREMENT_CLARIFICATION.md
 ├── RESEARCH_PLAN.md
@@ -381,33 +485,14 @@ dist/ build/
 ├── prd/
 │   ├── MRD.md
 │   ├── PRD.md
-│   └── sub_prd/
-├── src/                     ← 源码（推荐）或 dev/
-│   ├── main.py
-│   ├── requirements.txt
-│   └── ...
-├── test/                    ← 测试
-│   └── CLAWLIST.md          ← 研发级：开发任务跟踪
-└── .gitignore
-```
-
-**研发需求（存量项目保持 dev/）**：
-```
-{项目名}/
-├── CLAWLIST.md              ← 项目级
-├── PROJECT_NOTE.md
-├── REQUIREMENT_CLARIFICATION.md
-├── RESEARCH_PLAN.md
-├── research/
-├── collect/
-├── prd/
-│   ├── MRD.md
-│   ├── PRD.md
-│   └── sub_prd/
+│   ├── sub_prd/
+│   └── archive/             ← 废弃版本
 ├── dev/                     ← 存量保持
 │   ├── main.py
 │   └── ...
 ├── test/
+│   └── CLAWLIST.md          ← 研发级
+├── archive/                 ← 归档目录
 └── .gitignore
 ```
 
@@ -503,3 +588,90 @@ clawmate do FD-CM-042
 - 通过率：49/52 (94%)
 - 3 个问题均为预期行为
 ```
+
+---
+
+## 6. 归档机制与懒加载（核心设计原则）
+
+### 6.1 为什么需要归档
+
+> **经验规律**：项目推进 3 个月后，未归档的文档量通常膨胀 3-5 倍，导致模型加载大量过期信息，干扰当前决策。
+
+**归档目标**：
+- 保证活跃目录下只有「当前有效」信息
+- 历史信息可检索，但不默认加载
+- 减少模型上下文中的干扰项
+
+### 6.2 归档触发条件（明确边界）
+
+| 场景 | 归档源 | 归档目标 | 触发条件 |
+|------|--------|---------|---------|
+| 研究完成 | `research/{主题}/` | `archive/research/YYYY-MM-{主题}/` | 方案已实施或已否决 |
+| PRD 迭代 | `prd/PRD.md` | `prd/archive/PRD-v{X.Y}.md` | 新版本评审通过 |
+| 决策变更 | `PROJECT_NOTE.md` 旧条目 | `archive/decisions/YYYY-MM-DD-{主题}.md` | 决策被新决策覆盖 |
+| 迭代结束 | `CLAWLIST.md` 已完成项 | `archive/iterations/sprint-{N}.md` | Sprint 复盘完成 |
+| 需求取消 | `prd/sub_prd/{场景}.md` | `prd/archive/cancelled/{场景}-v{版本}.md` | 明确取消开发 |
+
+**归档检查点**：
+- 每周五自动检查：扫描 `research/`、`prd/sub_prd/`、CLAWLIST 已完成项
+- 超过 2 周未更新的文档 → 标记「待审查」→ 确认归档或更新
+
+### 6.3 懒加载机制（信息分层）
+
+**第一层：会话初始化（必须加载，≤ 30 行）**
+```
+1. PROJECT_NOTE.md「当前焦点」摘要
+2. CLAWLIST.md 当前阶段未完成项
+```
+
+**第二层：任务执行时（按需加载）**
+```
+3. 具体 PRD 子场景（仅涉及当前任务）
+4. 相关研究文档（仅涉及当前决策）
+5. CLAWLIST.md 研发级任务（仅开发阶段）
+```
+
+**第三层：历史回溯（显式请求时加载）**
+```
+6. archive/ 目录（用户问「为什么当初选 A 不选 B」时）
+7. 旧版本 PRD（用户问「这个需求什么时候改的」时）
+```
+
+**加载控制原则**：
+- 默认不加载 > 100KB 的文件
+- 默认不加载 archive/ 目录
+- 大文件拆分：PRD > 100KB 时拆为 `PRD-core.md` + `sub_prd/`
+- 摘要前置：每个大文件顶部 20 行必须是「快速理解摘要」
+
+### 6.4 归档命名规范
+
+```
+archive/
+├── research/
+│   └── 2026-06-15-数据库选型/          ← 日期-主题
+│       ├── report.md
+│       └── comparison.xlsx
+├── decisions/
+│   └── 2026-06-10-从MySQL迁移到PostgreSQL.md   ← 日期-决策简述
+├── iterations/
+│   └── 2026-Q2-sprint-3.md             ← 季度-sprint编号
+└── prd-versions/
+    └── PRD-v1.2-2026-05-20.md          ← 文件名-版本-日期
+```
+
+### 6.5 文档同步检查清单
+
+每次开发迭代结束后执行：
+
+```markdown
+## 文档同步检查
+
+- [ ] CLAWLIST.md：已完成项已勾选，新增项已添加
+- [ ] PROJECT_NOTE.md：如有决策变更，已记录
+- [ ] PRD.md：如有功能变更，已同步更新
+- [ ] research/：已实施方案已归档到 archive/research/
+- [ ] prd/sub_prd/：已取消/已合并场景已归档
+- [ ] 过期文档（> 2 周未更新）：已审查并标记状态
+```
+
+> **硬性规则**：未通过文档同步检查，不得进入下一阶段。
