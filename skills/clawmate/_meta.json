@@ -1,11 +1,17 @@
 {
   "name": "clawmate",
-  "version": "1.5.2",
-  "description": "ClawMate 文件管理 + 预览 + 反馈闭环。预览链接生成、feedback 查询与处理。",
+  "version": "2.0.1",
+  "description": "ClawMate 文件管理 + 预览 + 反馈闭环 + 项目管理。GitHub: https://github.com/updatedb/clawmate",
   "author": "openclaw",
   "license": "MIT",
   "homepage": "https://github.com/updatedb/clawmate",
-  "tags": ["file-manager", "preview", "feedback", "clawmate", "agent"],
+  "tags": [
+    "file-manager",
+    "preview",
+    "feedback",
+    "clawmate",
+    "agent"
+  ],
   "capabilities": [
     "clawmate_link",
     "clawmate_feed",

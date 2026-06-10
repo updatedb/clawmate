@@ -1,6 +1,6 @@
 ---
 name: clawmate
-description: ClawMate 文件管理 + 预览 + 反馈闭环 + 项目管理。支持文件搜索预览、feedback 处理、项目初始化与前期梳理（Phase I-V）。
+description: ClawMate 文件管理 + 预览 + 反馈闭环 + 项目管理。支持文件搜索预览、feedback 处理、项目初始化与前期梳理（Phase I-V）。GitHub: https://github.com/updatedb/clawmate
 license: MIT
 ---
 
