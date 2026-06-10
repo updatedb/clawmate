@@ -615,11 +615,6 @@
 
   async function submitFeedback() {
     const note = els.fbInputNote.value.trim();
-    if (!note) {
-      els.fbInputStatus.textContent = '⚠️ 请填写意见';
-      els.fbInputStatus.style.color = 'var(--danger)';
-      return;
-    }
     if (!currentSelectionText) {
       els.fbInputStatus.textContent = '⚠️ 请先选择文本';
       els.fbInputStatus.style.color = 'var(--danger)';
