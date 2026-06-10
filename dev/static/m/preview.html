@@ -1275,9 +1275,10 @@
         return;
       }
       var data = await res.json();
+      var headerText = data.reused ? '🔄 已更新有效期' : '🔗 分享链接已生成';
       els.shareBody.innerHTML =
         '<div style="padding:12px;font-size:14px;">' +
-        '  <div style="margin-bottom:12px;color:var(--text-secondary);">将该链接发给微信家人即可阅读</div>' +
+        '  <div style="margin-bottom:12px;color:var(--text-secondary);">' + headerText + '，将该链接发给微信家人即可阅读</div>' +
         '  <div style="padding:10px;background:var(--bg-secondary);border-radius:8px;word-break:break-all;font-size:13px;">' +
         '    <a href="' + data.url + '" target="_blank" style="color:var(--accent);text-decoration:underline;">' + data.url + '</a>' +
         '  </div>' +

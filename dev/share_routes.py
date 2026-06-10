@@ -101,21 +101,34 @@ async def share_create(request: Request):
     if target.is_dir():
         raise HTTPException(status_code=400, detail="Cannot share a directory")
 
-    # Generate token
-    token = secrets.token_hex(12)  # 24 hex chars
     now = int(time.time())
     expires_at = now + SHARE_TTL
 
     data = _load_share_links()
     data = _clean_expired(data)
-    data["links"].append({
-        "token": token,
-        "root": root_id,
-        "file": safe_rel,
-        "created_at": now,
-        "expires_at": expires_at,
-    })
-    _save_share_links(data)
+
+    # 同一文件复用 token，仅更新有效期
+    existing = None
+    for l in data["links"]:
+        if l["root"] == root_id and l["file"] == safe_rel:
+            existing = l
+            break
+
+    if existing:
+        existing["expires_at"] = expires_at
+        existing["created_at"] = now
+        token = existing["token"]
+        _save_share_links(data)
+    else:
+        token = secrets.token_hex(12)  # 24 hex chars
+        data["links"].append({
+            "token": token,
+            "root": root_id,
+            "file": safe_rel,
+            "created_at": now,
+            "expires_at": expires_at,
+        })
+        _save_share_links(data)
 
     # Build share URL
     host = request.headers.get("host", f"localhost:{os.environ.get('CLAWMATE_PORT', '5533')}")
@@ -133,6 +146,7 @@ async def share_create(request: Request):
         "expires_at": expires_at,
         "expires_str": expires_str,
         "file": safe_rel,
+        "reused": bool(existing),
     })
 
 
