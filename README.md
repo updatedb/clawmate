@@ -242,6 +242,13 @@ Skill 目录位于 `skills/clawmate/`，包含 `SKILL.md`（命令定义）、`_
 
 ### 安装
 
+**方式一：从 ClawHub 安装（推荐）**
+```bash
+openclaw skills install clawmate-work
+openclaw gateway restart
+```
+
+**方式二：本地开发（项目目录内直接链接）**
 ```bash
 ln -sf $PWD/skills/clawmate ~/.openclaw/skills/clawmate
 openclaw gateway restart
