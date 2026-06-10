@@ -16,9 +16,30 @@ license: MIT
 | 命令 | 功能 | 状态 |
 |------|------|:----:|
 | `clawmate link <filename>` | 搜索文件生成可点击预览链接 | ✅ |
-| `clawmate project <projectname>` | 项目初始化与前期梳理（Phase I-V） | ✅ |
+| `clawmate project [root] <projectname>` | 项目初始化与前期梳理（Phase I-V），默认 root 为 defaultRootId | ✅ |
 | `clawmate feed [status] [project] [filename] [date]` | 查询 feedback 列表 | ✅ |
 | `clawmate do [feedback_id]` | 处理待处理 feedback | ✅ |
+
+---
+
+## 推荐 Skill 依赖（按工作流阶段）
+
+基于 work agent SOP，各阶段推荐调用的 skill：
+
+| 阶段 | 任务 | 推荐 Skill | 说明 |
+|------|------|-----------|------|
+| **Phase III** | 深度调研 | `academic-deep-research` | 行业分析、竞品研究 |
+| **Phase III** | 快速查证 | `web_search` / `tavily_search` | 事实数据、最新动态 |
+| **Phase III** | 技术评估 | `cto-advisor` | 技术可行性、方案对比 |
+| **Phase IV** | MRD 编写 | `business-writing` | 商业文档写作 |
+| **Phase V** | PRD 编写 | `prd-writer` | 产品需求文档 |
+| **Phase V** | 图表绘制 | `mermaid-diagrams` | 流程图/架构图 |
+| **研发** | 代码开发 | `github` / `gh-issues` | 代码管理、Issue 跟踪 |
+| **研发** | 测试验证 | `healthcheck` | 服务健康检查 |
+| **全部** | 任务管理 | `clawlist` | 树形 TODO + 进度跟踪 |
+| **全部** | 知识沉淀 | `memory` / `wiki-maintainer` | 经验归档、知识库更新 |
+
+> **调用原则**：每个阶段优先使用对应 skill，不重复造轮子。skill 调用后需将结论写回 PROJECT_NOTE.md。
 
 ---
 
@@ -60,10 +81,21 @@ Phase I 确认三种类型之一，决定后续全流程和目录结构：
 | **产品方案** | + prd/ | I→II→III→IV(MRD)→V(PRD) | MRD + PRD |
 | **研发需求** | + prd/ dev/ test/ | I→II→III→IV(MRD)→V(PRD) | MRD + PRD + 可运行系统 |
 
+### 命令签名
+
+```
+clawmate project [root] <projectname> [--local]
+```
+
+- `root`: 可选，指定 ClawMate root_id（默认使用 config.json 的 `defaultRootId`）
+- `projectname`: 项目名称
+- `--local`: 可选，创建为专有项目（`./projects/{name}/`，不对外访问）
+
 ### 目录约定
 
-- **默认路径**：`~/webprojects/{项目名}/`（可通过 http://openclaw.lan/{项目名} 访问）
+- **默认路径**：`{root_dir}/{项目名}/`（root_dir 由 root_id 解析）
 - **专有路径**：`./projects/{项目名}/`（不对外访问，需显式指定 `--local`）
+- **源码目录**：新项目推荐 `src/`（Python 标准），存量项目保持 `dev/`
 
 ### 全流程概览
 
@@ -110,26 +142,88 @@ mkdir -p {项目根路径}/{research,collect}
 # 产品方案
 mkdir -p {项目根路径}/{research,collect,prd}
 
-# 研发需求
-mkdir -p {项目根路径}/{research,collect,prd,dev,test}
+# 研发需求（新项目推荐 src/，存量保持 dev/）
+mkdir -p {项目根路径}/{research,collect,prd,src,test}
+# 或 mkdir -p {项目根路径}/{research,collect,prd,dev,test}
 ```
 
 **步骤 2：创建核心文档**
 
-- **CLAWLIST.md** — 树形 TODO 清单（项目管理）
-- **PROJECT_NOTE.md** — 产品管理文档（项目是什么 + 为什么这样 + 关键决策）
+- **CLAWLIST.md**（项目级）— 管理 Phase I-V 前期梳理进度
+- **CLAWLIST.md**（研发级，可选）— 研发需求项目在 `src/` 或 `dev/` 下创建，管理开发任务
+- **PROJECT_NOTE.md** — 产品决策唯一来源（见下文「PROJECT_NOTE.md 价值」）
 
-**CLAWLIST.md 模板**：
+**CLAWLIST.md 模板（项目级）**：
 ```markdown
-# CLAWLIST — {项目名}
+# CLAWLIST — {项目名}（项目级）
 
-- [ ] 需求澄清 (Phase II)
-- [ ] 信息收集 (Phase III)
-- [ ] MRD 编写与评审 (Phase IV)  ← 产品方案/研发需求
-- [ ] PRD 编写与评审 (Phase V)    ← 产品方案/研发需求
-  - [ ] 总 PRD
-  - [ ] 子场景 PRD: {场景1}
+## Phase I 项目初始化
+- [x] 确认项目类型
+- [x] 创建目录结构
+- [x] 初始化 Git
+
+## Phase II 需求澄清
+- [ ] 目的确认
+- [ ] 服务对象（三类）
+- [ ] 输出物清单
+- [ ] 评价标准
+- [ ] 工作范围
+
+## Phase III 信息收集
+- [ ] 识别信息需求
+- [ ] 生成研究计划
+- [ ] 执行研究
+- [ ] 用户确认
+
+## Phase IV MRD 编写（产品方案/研发需求）
+- [ ] 市场概述
+- [ ] 目标市场
+- [ ] 竞品分析
+- [ ] 用户需求
+- [ ] 商业价值
+- [ ] 市场策略
+- [ ] 风险与假设
+- [ ] 用户评审通过
+
+## Phase V PRD 编写（产品方案/研发需求）
+- [ ] 总 PRD
+- [ ] 子场景 PRD: {场景1}
+- [ ] 用户评审通过
 ```
+
+**CLAWLIST.md 模板（研发级，研发需求项目）**：
+```markdown
+# CLAWLIST — {项目名}（研发级）
+
+## 架构
+- [ ] 技术选型确认
+- [ ] 核心架构设计
+- [ ] 接口契约定义
+
+## 开发
+- [ ] 功能模块 A
+- [ ] 功能模块 B
+- [ ] 单元测试覆盖
+
+## 测试
+- [ ] 集成测试
+- [ ] 回归验证
+- [ ] 性能测试
+
+## 部署
+- [ ] 环境配置
+- [ ] 上线验证
+```
+
+### PROJECT_NOTE.md 价值与使用规范
+
+> **PROJECT_NOTE.md 是产品决策的唯一来源**。所有后续决策（技术选型、功能取舍、优先级调整）必须能在 PROJECT_NOTE.md 中找到依据。
+
+**使用规范**：
+1. **决策时引用**：做任何产品/技术决策前，先检查 PROJECT_NOTE.md 中是否有相关记录
+2. **变更时更新**：项目方向、关键假设、服务对象发生变化时，立即更新
+3. **评审时对照**：Phase IV/V 评审时，检查 MRD/PRD 是否与 PROJECT_NOTE.md 一致
+4. **交接时必读**：新成员进入项目时，首先阅读 PROJECT_NOTE.md
 
 **PROJECT_NOTE.md 模板**：
 ```markdown
@@ -138,21 +232,32 @@ mkdir -p {项目根路径}/{research,collect,prd,dev,test}
 ## 项目简介
 {项目描述}
 
-## 项目方向
+## 项目方向（只写一次，变更时更新）
 - **要解决的核心问题**: {一句话}
 - **目标用户/受众**: {谁用这个项目}
 - **预期成果**: {最终产出什么}
 - **项目类型**: 观点收集 / 产品方案 / 研发需求
 
-## 关键决策
+## 关键决策（所有决策必须记录）
 | 日期 | 决策 | 理由 | 影响 |
 |------|------|------|------|
 | YYYY-MM-DD | {决策内容} | {为什么} | {影响范围} |
 
-## 开发规范
+## 开发规范（研发需求项目）
+- 代码风格：{规范}
+- 测试要求：{覆盖率}
+- 文档要求：{必须更新哪些文档}
+
 ## 核心架构
+{架构图 + 说明}
+
 ## 常见问题与修复
+| 问题 | 原因 | 修复 | 日期 |
+|------|------|------|------|
+| {问题} | {原因} | {修复} | {日期} |
+
 ## 关键代码模式
+{可复用的代码模式 / 设计模式}
 ```
 
 **步骤 3：初始化 Git**
@@ -264,10 +369,32 @@ dist/ build/
     └── sub_prd/
 ```
 
-**研发需求**：
+**研发需求（新项目推荐 src/）**：
 ```
 {项目名}/
-├── CLAWLIST.md
+├── CLAWLIST.md              ← 项目级：Phase I-V 进度
+├── PROJECT_NOTE.md          ← 产品决策唯一来源
+├── REQUIREMENT_CLARIFICATION.md
+├── RESEARCH_PLAN.md
+├── research/
+├── collect/
+├── prd/
+│   ├── MRD.md
+│   ├── PRD.md
+│   └── sub_prd/
+├── src/                     ← 源码（推荐）或 dev/
+│   ├── main.py
+│   ├── requirements.txt
+│   └── ...
+├── test/                    ← 测试
+│   └── CLAWLIST.md          ← 研发级：开发任务跟踪
+└── .gitignore
+```
+
+**研发需求（存量项目保持 dev/）**：
+```
+{项目名}/
+├── CLAWLIST.md              ← 项目级
 ├── PROJECT_NOTE.md
 ├── REQUIREMENT_CLARIFICATION.md
 ├── RESEARCH_PLAN.md
@@ -277,8 +404,11 @@ dist/ build/
 │   ├── MRD.md
 │   ├── PRD.md
 │   └── sub_prd/
-├── dev/
-└── test/
+├── dev/                     ← 存量保持
+│   ├── main.py
+│   └── ...
+├── test/
+└── .gitignore
 ```
 
 ### Git 提交规范
