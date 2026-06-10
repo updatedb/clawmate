@@ -152,28 +152,34 @@ mkdir -p {项目根路径}/{research,collect,prd,src,test}
 > **关键原则**：所有文档必须有明确的「更新触发器」和「归档边界」，避免过期信息堆积。
 
 **活跃文档（始终加载）**：
-- **CLAWLIST.md**（项目级）— 管理 Phase I-V 前期梳理进度
-- **CLAWLIST.md**（研发级，可选）— 研发需求项目在 `src/` 或 `dev/` 下创建，管理开发任务
-- **PROJECT_NOTE.md** — 产品决策唯一来源（见下文「PROJECT_NOTE.md 价值」）
+- **CLAWLIST.md**（项目级 — 总览）— 管理所有非研发、测试的项目进展（Phase I-V），并包含研发级/测试级/研究级 CLAWLIST 的整体进展简要汇总（分组体现）
+- **CLAWLIST.md**（研发级 — 明细，可选）— 研发需求项目在 `src/` 或 `dev/` 下创建，管理开发任务明细
+- **CLAWLIST.md**（研究级 — 明细，可选）— 放在 `research/` 下，管理研究计划与进度（替代独立的 RESEARCH_PLAN.md）
+- **CLAWLIST.md**（测试级 — 明细，可选）— 放在 `test/` 下，管理测试任务明细
+- **PROJECT_NOTE.md** — 产品决策唯一来源 + 信息架构规则
 
 **归档文档（按需加载，详见「懒加载机制」）**：
-- **archive/** — 已完成/过期的研究、方案、迭代记录
-- **prd/archive/** — 已废弃的 PRD 版本
-- **research/done/** — 已实施的改进方案
+- **archive/** — 统一归档目录（项目根目录下），包含已完成/过期的研究、方案、迭代记录、废弃 PRD
+
+> **硬性规则**：所有归档必须放在 `archive/` 根目录下，严禁在子目录中创建 archive/（如 `prd/archive/`、`research/done/` 等）。
 
 **归档触发条件**：
-| 场景 | 归档动作 | 示例 |
-|------|---------|------|
-| 研究主题已实施 | `research/{主题}/` → `archive/research/2026-06-{主题}/` | 技术选型完成后归档 |
-| PRD 迭代 | 旧版本 → `prd/archive/PRD-v1.2.md` | PRD v1.3 评审通过后 |
-| 决策过期 | 旧决策 → `archive/decisions/` + 在 PROJECT_NOTE.md 中标注 | 技术方案变更 |
-| 迭代完成 | Sprint/TODO → `archive/iterations/` | 开发阶段结束 |
+| 场景 | 归档源 | 归档目标 | 示例 |
+|------|--------|---------|------|
+| 研究主题已实施 | `research/{主题}/` | `archive/research/2026-06-{主题}/` | 技术选型完成后归档 |
+| PRD 迭代 | `prd/PRD.md` | `archive/prd-versions/PRD-v1.2-YYYY-MM-DD.md` | PRD v1.3 评审通过后 |
+| 决策过期 | `PROJECT_NOTE.md` 旧条目 | `archive/decisions/YYYY-MM-DD-{主题}.md` | 技术方案变更 |
+| 迭代结束 | `CLAWLIST.md` 已完成项 | `archive/iterations/sprint-{N}-YYYY-MM-DD.md` | Sprint 复盘完成 |
+| 需求取消 | `prd/sub_prd/{场景}.md` | `archive/prd-versions/cancelled/{场景}-v{版本}.md` | 明确取消开发 |
 
-**归档命名规范**：`{日期}-{主题}/` 或 `{文件名}-v{版本}.md`，确保可检索。
+**归档命名规范**：`archive/{类别}/YYYY-MM-{主题}/` 或 `archive/{类别}/YYYY-MM-DD-{简述}.md`，确保可检索。
 
-**CLAWLIST.md 模板（项目级）**：
+**CLAWLIST.md 模板（项目级 — 总览）**：
 ```markdown
-# CLAWLIST — {项目名}（项目级）
+# CLAWLIST — {项目名}（项目级 — 总览）
+
+> 本项目级 CLAWLIST 管理所有非研发、测试的项目进展，并汇总各分组的简要状态。
+> 明细任务分别在 src|dev/、test/、research/ 的 CLAWLIST 中管理。
 
 ## Phase I 项目初始化
 - [x] 确认项目类型
@@ -189,7 +195,7 @@ mkdir -p {项目根路径}/{research,collect,prd,src,test}
 
 ## Phase III 信息收集
 - [ ] 识别信息需求
-- [ ] 生成研究计划
+- [ ] 生成研究计划 → [research/CLAWLIST.md](research/CLAWLIST.md)
 - [ ] 执行研究
 - [ ] 用户确认
 
@@ -207,11 +213,29 @@ mkdir -p {项目根路径}/{research,collect,prd,src,test}
 - [ ] 总 PRD
 - [ ] 子场景 PRD: {场景1}
 - [ ] 用户评审通过
+
+## 研发进展汇总（明细见 src/CLAWLIST.md 或 dev/CLAWLIST.md）
+- [ ] 架构设计 → [src/CLAWLIST.md](src/CLAWLIST.md)
+- [ ] 核心功能开发
+- [ ] 接口联调
+- [ ] 单元测试覆盖
+
+## 测试进展汇总（明细见 test/CLAWLIST.md）
+- [ ] 集成测试 → [test/CLAWLIST.md](test/CLAWLIST.md)
+- [ ] 回归验证
+- [ ] 性能测试
+
+## 研究进展汇总（明细见 research/CLAWLIST.md）
+- [ ] 技术选型 → [research/CLAWLIST.md](research/CLAWLIST.md)
+- [ ] 竞品分析
+- [ ] 用户调研
 ```
 
-**CLAWLIST.md 模板（研发级，研发需求项目）**：
+**CLAWLIST.md 模板（研发级 — 明细）**：
 ```markdown
-# CLAWLIST — {项目名}（研发级）
+# CLAWLIST — {项目名}（研发级 — 明细）
+
+> 本文件只放研发任务明细。项目总览和跨组协调在项目根目录的 CLAWLIST.md 中管理。
 
 ## 架构
 - [ ] 技术选型确认
@@ -223,14 +247,47 @@ mkdir -p {项目根路径}/{research,collect,prd,src,test}
 - [ ] 功能模块 B
 - [ ] 单元测试覆盖
 
-## 测试
-- [ ] 集成测试
-- [ ] 回归验证
-- [ ] 性能测试
+## 联调
+- [ ] 接口联调
+- [ ] 端到端验证
+```
 
-## 部署
-- [ ] 环境配置
-- [ ] 上线验证
+**CLAWLIST.md 模板（研究级 — 明细）**：
+```markdown
+# CLAWLIST — {项目名}（研究级 — 明细）
+
+> 本文件替代独立的 RESEARCH_PLAN.md，管理所有研究主题和进度。
+> 项目总览在项目根目录的 CLAWLIST.md 中管理。
+
+## 进行中
+- [ ] 技术选型：数据库方案对比
+  - [x] MySQL 调研
+  - [x] PostgreSQL 调研
+  - [ ] 性能基准测试
+- [ ] 竞品分析：xxx 产品
+  - [ ] 功能矩阵
+  - [ ] 用户体验报告
+
+## 已完成（归档后从本列表移除）
+- [x] 市场调研报告 → 已归档到 archive/research/2026-06-市场调研/
+```
+
+**CLAWLIST.md 模板（测试级 — 明细）**：
+```markdown
+# CLAWLIST — {项目名}（测试级 — 明细）
+
+> 本文件只放测试任务明细。项目总览在项目根目录的 CLAWLIST.md 中管理。
+
+## 测试计划
+- [ ] 集成测试方案设计
+- [ ] 测试用例编写
+
+## 执行中
+- [ ] API 接口测试
+- [ ] 前端兼容性测试
+
+## 报告
+- [ ] 测试报告 v1.0
 ```
 
 ### PROJECT_NOTE.md 价值与使用规范 + 文档同步规则
@@ -366,12 +423,12 @@ dist/ build/
 4. **评价标准** — 按服务对象分层确认
 5. **工作范围** — 是否需要开发？是否需要测试？
 
-**产出**：`REQUIREMENT_CLARIFICATION.md`
+**产出**：PROJECT_NOTE.md「需求澄清记录」章节（更新）
 
 ### Phase III：信息收集
 
 1. **识别信息需求**：从 Phase II 推导研究主题
-2. **生成研究计划**：`RESEARCH_PLAN.md`
+2. **生成研究计划**：`research/CLAWLIST.md`
 3. **执行研究**：调用 `academic-deep-research` / `web_search` / `cto-advisor`
 4. **提示用户补充**
 5. **用户确认**「信息充分，可以进入 Phase IV」
@@ -420,9 +477,9 @@ dist/ build/
 {项目名}/
 ├── CLAWLIST.md
 ├── PROJECT_NOTE.md
-├── REQUIREMENT_CLARIFICATION.md
-├── RESEARCH_PLAN.md
+├── PROJECT_NOTE.md          ← 含「需求澄清记录」+「信息架构规则」
 ├── research/
+│   └── CLAWLIST.md            ← 研究计划与进度
 └── collect/
 ```
 
@@ -431,9 +488,9 @@ dist/ build/
 {项目名}/
 ├── CLAWLIST.md
 ├── PROJECT_NOTE.md
-├── REQUIREMENT_CLARIFICATION.md
-├── RESEARCH_PLAN.md
+├── PROJECT_NOTE.md          ← 含「需求澄清记录」+「信息架构规则」
 ├── research/
+│   └── CLAWLIST.md            ← 研究计划与进度
 ├── collect/
 └── prd/
     ├── MRD.md
@@ -441,38 +498,37 @@ dist/ build/
     └── sub_prd/
 ```
 
-**研发需求（新项目推荐 src/ + archive/）**：
+**研发需求（新项目推荐 src/，所有归档统一放 archive/）**：
 ```
 {项目名}/
-├── CLAWLIST.md              ← 项目级：Phase I-V 进度（仅活跃项）
-├── PROJECT_NOTE.md          ← 产品决策唯一来源（顶部含「当前焦点」摘要）
-├── REQUIREMENT_CLARIFICATION.md
-├── RESEARCH_PLAN.md
-├── research/                ← 进行中研究
+├── CLAWLIST.md              ← 项目级总览：Phase I-V + 研发/测试/研究进展汇总
+├── PROJECT_NOTE.md          ← 产品决策唯一来源 + 信息架构规则（顶部「当前焦点」）
+├── research/                ← 研究目录
+│   ├── CLAWLIST.md          ← 研究计划与进度（替代 RESEARCH_PLAN.md）
 │   └── {主题}/
-├── collect/                 ← 收集的素材
+├── collect/                 ← 收集素材
 ├── prd/
 │   ├── MRD.md               ← 当前版本
 │   ├── PRD.md               ← 当前版本
-│   ├── sub_prd/             ← 当前子场景
-│   └── archive/             ← 废弃版本（按需加载）
-│       └── PRD-v1.2.md
+│   └── sub_prd/             ← 当前子场景
 ├── src/                     ← 源码（推荐）或 dev/
 │   ├── main.py
 │   ├── requirements.txt
 │   └── ...
 ├── test/                    ← 测试（与源码严格分离）
-│   ├── CLAWLIST.md          ← 研发级：测试任务跟踪
-│   ├── reports/             ← 测试报告（自动化 + 手工）
+│   ├── CLAWLIST.md          ← 测试级：测试任务明细
+│   ├── reports/             ← 测试报告
 │   ├── results/             ← 测试结果、日志、截图
 │   └── scripts/             ← 测试脚本
-├── archive/                 ← 归档（历史决策、已完成迭代、过期研究）
+├── archive/                 ← 统一归档目录（根目录，严禁子目录建 archive/）
 │   ├── research/
 │   │   └── 2026-06-技术选型/
 │   ├── decisions/
 │   │   └── 2026-06-10-数据库选型.md
-│   └── iterations/
-│       └── sprint-1.md
+│   ├── iterations/
+│   │   └── sprint-1.md
+│   └── prd-versions/
+│       └── PRD-v1.2-2026-05-20.md
 └── .gitignore
 ```
 
@@ -493,29 +549,32 @@ dist/ build/
 - 测试目录独立便于 CI/CD 打包时排除
 - 测试历史归档在 archive/iterations/，不污染源码
 
-**研发需求（存量项目保持 dev/，REQUIREMENT_CLARIFICATION 合并到 PROJECT_NOTE.md）**：
+**研发需求（存量项目保持 dev/，所有归档统一放 archive/）**：
 ```
 {项目名}/
-├── CLAWLIST.md              ← 项目级（仅活跃项）
+├── CLAWLIST.md              ← 项目级总览
 ├── PROJECT_NOTE.md          ← 产品决策唯一来源 + 信息架构规则
 ├── research/                ← 研究目录
-│   ├── RESEARCH_PLAN.md     ← 研究计划入口
+│   ├── CLAWLIST.md          ← 研究计划与进度（替代 RESEARCH_PLAN.md）
 │   └── {主题}/
 ├── collect/
 ├── prd/
 │   ├── MRD.md
 │   ├── PRD.md
-│   ├── sub_prd/
-│   └── archive/             ← 废弃版本
+│   └── sub_prd/
 ├── dev/                     ← 存量保持
 │   ├── main.py
 │   └── ...
 ├── test/                    ← 测试（与源码严格分离）
-│   ├── CLAWLIST.md          ← 研发级：测试任务跟踪
+│   ├── CLAWLIST.md          ← 测试级：测试任务明细
 │   ├── reports/             ← 测试报告
 │   ├── results/             ← 测试结果、日志
 │   └── scripts/             ← 测试脚本
-├── archive/                 ← 归档目录
+├── archive/                 ← 统一归档目录（根目录）
+│   ├── research/
+│   ├── decisions/
+│   ├── iterations/
+│   └── prd-versions/
 └── .gitignore
 ```
 
@@ -630,10 +689,10 @@ clawmate do FD-CM-042
 | 场景 | 归档源 | 归档目标 | 触发条件 |
 |------|--------|---------|---------|
 | 研究完成 | `research/{主题}/` | `archive/research/YYYY-MM-{主题}/` | 方案已实施或已否决 |
-| PRD 迭代 | `prd/PRD.md` | `prd/archive/PRD-v{X.Y}.md` | 新版本评审通过 |
+| PRD 迭代 | `prd/PRD.md` | `archive/prd-versions/PRD-v{X.Y}-YYYY-MM-DD.md` | 新版本评审通过 |
 | 决策变更 | `PROJECT_NOTE.md` 旧条目 | `archive/decisions/YYYY-MM-DD-{主题}.md` | 决策被新决策覆盖 |
-| 迭代结束 | `CLAWLIST.md` 已完成项 | `archive/iterations/sprint-{N}.md` | Sprint 复盘完成 |
-| 需求取消 | `prd/sub_prd/{场景}.md` | `prd/archive/cancelled/{场景}-v{版本}.md` | 明确取消开发 |
+| 迭代结束 | `CLAWLIST.md` 已完成项 | `archive/iterations/sprint-{N}-YYYY-MM-DD.md` | Sprint 复盘完成 |
+| 需求取消 | `prd/sub_prd/{场景}.md` | `archive/prd-versions/cancelled/{场景}-v{版本}.md` | 明确取消开发 |
 
 **归档检查点**：
 - 每周五自动检查：扫描 `research/`、`prd/sub_prd/`、CLAWLIST 已完成项
@@ -681,6 +740,8 @@ archive/
 └── prd-versions/
     └── PRD-v1.2-2026-05-20.md          ← 文件名-版本-日期
 ```
+
+> ⚠️ **严禁**在 `prd/`、`research/`、`src/` 等子目录中创建 `archive/` 或 `done/` 子目录。所有归档统一在根目录 `archive/` 下。
 
 ### 6.5 文档同步检查清单
 
