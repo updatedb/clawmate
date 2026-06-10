@@ -3,7 +3,7 @@ Share Routes — 分享链接生成与访问
 
 Endpoints:
     POST /api/clawmate/share/create  — 为指定文件生成 24h 分享链接
-    GET  /s/{token}                  — 访问分享链接（只读预览页）
+    GET  /share/{token}              — 访问分享链接（只读预览页）
     GET  /api/clawmate/share/{token}/data — 返回分享文件内容 JSON
     GET  /api/clawmate/share/{token}/raw  — 返回原始文件（媒体文件用）
 """
@@ -133,7 +133,7 @@ async def share_create(request: Request):
     # Build share URL
     host = request.headers.get("host", f"localhost:{os.environ.get('CLAWMATE_PORT', '5533')}")
     scheme = request.headers.get("x-forwarded-proto", "http")
-    share_url = f"{scheme}://{host}/s/{token}"
+    share_url = f"{scheme}://{host}/clawmate/share-view.html?token={token}"
 
     # Format expiry time for display
     expires_dt = datetime.fromtimestamp(expires_at, tz=timezone.utc).astimezone()
@@ -150,7 +150,7 @@ async def share_create(request: Request):
     })
 
 
-@router.get("/s/{token}")
+@router.get("/share/{token}")
 async def share_view(token: str):
     """访问分享链接 — 返回只读预览页"""
     link = _find_link(token)
