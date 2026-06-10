@@ -112,19 +112,8 @@
       body.innerHTML = '<div class="markdown-body">' + md.render(content) + '</div>';
       if (window.mermaid && mermaidStore.length > 0) {
         try {
-          window.mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' });
-          document.querySelectorAll('.mermaid').forEach(function(el) {
-            var id = parseInt(el.getAttribute('data-mermaid-id'));
-            if (isNaN(id) || !mermaidStore[id]) return;
-            (async function() {
-              try {
-                var result = await window.mermaid.render('mermaid-s-' + id, mermaidStore[id]);
-                el.innerHTML = result.svg;
-              } catch(e) {
-                el.innerHTML = '<pre style="color:var(--danger);font-size:13px;white-space:pre-wrap;">Mermaid 渲染失败: ' + e.message + '</pre>';
-              }
-            })();
-          });
+          window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark' });
+          window.mermaid.run({ querySelector: '.markdown-body .mermaid' });
         } catch(e) { console.warn('Mermaid error:', e); }
       }
       try {
