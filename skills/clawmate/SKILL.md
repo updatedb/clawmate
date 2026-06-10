@@ -493,14 +493,14 @@ dist/ build/
 - 测试目录独立便于 CI/CD 打包时排除
 - 测试历史归档在 archive/iterations/，不污染源码
 
-**研发需求（存量项目保持 dev/）**：
+**研发需求（存量项目保持 dev/，REQUIREMENT_CLARIFICATION 合并到 PROJECT_NOTE.md）**：
 ```
 {项目名}/
 ├── CLAWLIST.md              ← 项目级（仅活跃项）
-├── PROJECT_NOTE.md          ← 产品决策唯一来源
-├── REQUIREMENT_CLARIFICATION.md
-├── RESEARCH_PLAN.md
-├── research/
+├── PROJECT_NOTE.md          ← 产品决策唯一来源 + 信息架构规则
+├── research/                ← 研究目录
+│   ├── RESEARCH_PLAN.md     ← 研究计划入口
+│   └── {主题}/
 ├── collect/
 ├── prd/
 │   ├── MRD.md
