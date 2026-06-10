@@ -203,6 +203,7 @@ _WHITELIST = frozenset([
     "/api/clawmate/auth/change-password",
     "/api/clawmate/onlyoffice/",
     "/clawmate/login.html",
+    "/clawmate/share-view.html",
     "/clawmate/api/health",
 ])
 
@@ -214,6 +215,7 @@ _WHITELIST_PREFIXES = (
     "/clawmate/static/",
     "/clawmate/css/",
     "/clawmate/vendor/",
+    "/api/clawmate/share/",
 )
 
 # Paths that are always allowed regardless of auth config
@@ -222,6 +224,7 @@ _ALWAYS_ALLOWED = frozenset([
     "/api/health",
     "/api/clawmate/preview",
     "/api/clawmate/download",
+    "/clawmate/share-view.html",
 ])
 
 
