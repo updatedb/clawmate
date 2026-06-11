@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.34 (2026-06-11)
+### 分享链接（新增功能）
+- POST /api/clawmate/share/create 生成 24h 短链，同一文件复用 token
+- /clawmate/share-view.html?token=*** 免登录只读预览
+- 支持 Markdown/Mermaid/KaTeX/highlight.js /图片/音视频/Office
+- share_links.json 与 config.json 同目录（磁盘持久化）
+- Auth 白名单放行 share-view.html + share API（免登录）
+
+### 移动端
+- 底栏新增 ↗️ 分享按钮，弹出面板与大纲/反馈统一 m-panel 风格
+- note 字段移除必填校验（与桌面版对齐）
+
+### 后端修复
+- 重命名 API 支持目录（此前仅支持文件）
+- GitHub Actions docker.yml 构建上下文修复（context: ./dev → .）
+
+### Skill
+- clawmate project 统一更名为 init
+- 新增 clawmate plan（规划/更新 CLAWLIST）
+- 安全说明声明：数据不传第三方、仅本地操作、init/do 需用户确认
+- 清理 cron/cron-tick 引用（已废弃）
+- CLAWMATE_URL 配置化（用户自行配置）
+
 ## v1.33 (2026-06-08)
 - task/run 统一为唯一入口（selections 数组，删除 feedback_create）
 - wake_agent_for_root / cron-tick 迁至 task_runner
