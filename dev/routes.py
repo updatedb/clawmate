@@ -393,7 +393,7 @@ async def clawmate_batch_download(request: Request, root: str = "", path: str = 
 
 @router.post("/api/clawmate/rename")
 async def clawmate_rename(request: Request):
-    """Rename a file.
+    """Rename a file or directory.
 
     Request body: {root, path, newName}
     Returns: {ok: true, newName: "xxx", newPath: "yyy/xxx"}
@@ -428,12 +428,12 @@ async def clawmate_rename(request: Request):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid path")
 
-    if not target.exists() or target.is_dir():
-        raise HTTPException(status_code=404, detail="File not found")
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="File or directory not found")
 
     new_path = target.parent / new_name
     if new_path.exists():
-        raise HTTPException(status_code=409, detail="A file with that name already exists")
+        raise HTTPException(status_code=409, detail="A file or directory with that name already exists")
 
     try:
         target.rename(new_path)
