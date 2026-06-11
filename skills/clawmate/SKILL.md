@@ -6,11 +6,12 @@ license: MIT
 
 # ClawMate Skill
 
-> ⚠️ 在使用本 Skill 前，请确保 ClawMate 服务已安装并运行。请在上下文中配置 `CLAWMATE_URL`：
-> - **本地部署（默认）**：`http://localhost:5533`
-> - **远程部署**：`http://your-clawmate-host:5533`
+> ⚠️ **安全说明** — 使用本 Skill 前，请在对话上下文中通过 `memory` 或 `MEMORY.md` 配置 `CLAWMATE_URL`（默认 `http://localhost:5533`）。
 > 
-> **调用方式**：所有 API 调用路径前缀为 `CLAWMATE_URL`。使用 `exec curl` 调用，**禁止**使用 `web_fetch`。`web_fetch` 的安全策略会阻止 `localhost`/私有 IP 地址（SSRF 防护），而 `exec curl` 在宿主机本地执行不受此限制。
+> - **不要将 CLAWMATE_URL 指向不受信的主机**。数据传输目标由此 URL 决定，请确保是你信任的服务。
+> - **所有操作均在本地目录和 ClawMate 服务之间完成**，不向任何第三方发送数据。
+> - `init`/`plan` 会创建目录、写入文件并初始化 Git，执行前会展示路径并等待你确认。
+> - 本 Skill 使用 `exec curl` 调用本地 API（`web_fetch` 的 SSRF 保护会拦截 localhost 请求）。
 
 ---
 

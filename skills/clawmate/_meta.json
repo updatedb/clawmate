@@ -1,9 +1,15 @@
 {
   "name": "clawmate",
-  "version": "2.0.2",
+  "version": "2.3.0",
   "description": "ClawMate 文件管理 + 预览 + 反馈闭环 + 项目管理。GitHub: https://github.com/updatedb/clawmate",
   "author": "openclaw",
   "license": "MIT",
+  "security": {
+    "data_scope": "local_only",
+    "third_party_transmission": false,
+    "filesystem_modification": true,
+    "user_confirmation_required": ["init", "do"]
+  },
   "homepage": "https://github.com/updatedb/clawmate",
   "tags": [
     "file-manager",
