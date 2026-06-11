@@ -6,10 +6,11 @@ license: MIT
 
 # ClawMate Skill
 
-> ⚠️ {base_url} 需要由你根据 ClawMate 服务端的实际访问地址指定，由服务端 config.json 的 public_base_url 配置决定。
-> 内部 API 调用（cron job / agent 处理）使用 `http://localhost:5533` 绕过 nginx basic auth（此地址不受 {base_url} 影响）。
+> ⚠️ 在使用本 Skill 前，请确保 ClawMate 服务已安装并运行。请在上下文中配置 `CLAWMATE_URL`：
+> - **本地部署（默认）**：`http://localhost:5533`
+> - **远程部署**：`http://your-clawmate-host:5533`
 > 
-> **调用方式**：内部 API 调用 (`localhost:5533`) 必须使用 `exec curl`，**禁止**使用 `web_fetch`。`web_fetch` 的安全策略会阻止 `localhost`/私有 IP 地址（SSRF 防护），而 `exec curl` 在宿主机本地执行不受此限制。
+> **调用方式**：所有 API 调用路径前缀为 `CLAWMATE_URL`。使用 `exec curl` 调用，**禁止**使用 `web_fetch`。`web_fetch` 的安全策略会阻止 `localhost`/私有 IP 地址（SSRF 防护），而 `exec curl` 在宿主机本地执行不受此限制。
 
 ---
 
@@ -53,7 +54,7 @@ OpenClaw 编写文件并保存后，使用 `/clawmate link {filename}` 搜索文
 **步骤**：
 1. 搜索文件（使用 exec curl，因为 `web_fetch` 会阻止 localhost）：
    ```bash
-   curl -s "http://localhost:5533/api/clawmate/search?q={关键词}&root={root}" 2>/dev/null
+   curl -s "{CLAWMATE_URL}/api/clawmate/search?q={关键词}&root={root}" 2>/dev/null
    ```
    模糊匹配时简化搜索词（如去空格、取核心词）重试
 2. 匹配到文件后，构造预览链接 `{base_url}/clawmate/preview.html?root={root}&file={encoded_path}`
@@ -113,7 +114,7 @@ clawmate plan [root] <project>
 ### 功能说明
 
 1. 读取项目根目录的 CLAWLIST.md（如不存在则创建模板）
-2. 使用 `curl -s "http://localhost:5533/api/clawmate/search?q={project}&root={root}"` 确认项目路径
+2. 使用 `curl -s "{CLAWMATE_URL}/api/clawmate/search?q={project}&root={root}"` 确认项目路径
 3. 读取 PROJECT_NOTE.md 了解当前阶段
 4. 更新 CLAWLIST.md：
    - 检查当前阶段，标记已完成项
@@ -149,7 +150,19 @@ flowchart LR
 
 ### Phase I：项目初始化
 
-**步骤 0：询问项目类型**（必须先执行）
+**步骤 0：确认项目路径 + 询问项目类型**（必须先执行）
+
+```markdown
+## 🏗️ 确认项目路径
+
+项目将创建在以下路径：
+`{root_dir}/{project}/`
+
+请确认：
+1. 目标 root 是否正确（{root} → {root_dir}）
+2. 项目名是否正确
+3. 路径无误后回复「确认」，否则指定新的路径
+```
 
 ```markdown
 ## 🏗️ 请确认项目类型
@@ -182,7 +195,7 @@ mkdir -p {项目根路径}/{research,collect,prd,dev,test}
 > 
 > **硬性规则**：每次保存文档到磁盘后，必须生成 ClawMate 可点击预览链接并回复给用户。
 > 链接格式：`[文件名]({base_url}/clawmate/preview.html?root={root}&file={relative_path})`
-> 使用 `curl -s "http://localhost:5533/api/clawmate/search?q={关键词}&root={root}"` 搜索确认文件后构造链接。
+> 使用 `curl -s "{CLAWMATE_URL}/api/clawmate/search?q={关键词}&root={root}"` 搜索确认文件后构造链接。
 
 **活跃文档（始终加载）**：
 - **CLAWLIST.md**（项目级 — 总览）— 管理所有非研发、测试的项目进展（Phase I-V），并包含研发级/测试级/研究级 CLAWLIST 的整体进展简要汇总（分组体现）
@@ -639,7 +652,7 @@ dist/ build/
 **步骤**：
 1. 查询 feedback（使用 exec curl）：
    ```bash
-   curl -s "http://localhost:5533/api/clawmate/feedback/list?root={root}&project={project}&status={status}&file={filename}&since={date}" 2>/dev/null
+   curl -s "{CLAWMATE_URL}/api/clawmate/feedback/list?root={root}&project={project}&status={status}&file={filename}&since={date}" 2>/dev/null
    ```
 2. 格式化输出：
 
@@ -654,7 +667,7 @@ dist/ build/
 
 ## 5. clawmate do
 
-处理待处理 feedback（全部或指定 ID）。
+处理待处理 feedback（全部或指定 ID）。执行前会列出待处理项，用户确认后再执行。
 
 ### 全部处理
 ```
@@ -666,12 +679,18 @@ clawmate do
 clawmate do FD-CM-042
 ```
 
-**处理步骤**：
-使用 `/api/clawmate/feedback/cron-tick` 接口执行所有未处理的 feedback 操作（使用 exec curl 调用）：
-```bash
-curl -s "http://localhost:5533/api/clawmate/feedback/cron-tick" 2>/dev/null
-```
-该接口内部依次处理：查询 → 标记 in_progress → 执行变更 → 标记 done/failed。
+**处理步骤（全部处理）**：
+1. 查询所有 pending feedback：
+   ```bash
+   curl -s "{CLAWMATE_URL}/api/clawmate/feedback/list?status=pending" 2>/dev/null
+   ```
+2. 列出待处理项（ID / 文件 / 用户备注）
+3. 等待用户确认是否继续处理
+4. 用户确认后，对每项调用 `/api/clawmate/task/run` 执行：
+   ```bash
+   curl -s -X POST "{CLAWMATE_URL}/api/clawmate/task/run" -H 'Content-Type: application/json' -d '{"root":"<root>","file":"<file_path>","selections":[{"task_id":"review_modify","content":"<content>","note":"<user_note>"}]}' 2>/dev/null
+   ```
+该接口逐条处理：读取 feedback → 执行变更 → 标记 done/failed。
 
 **硬约束**：
 - ⚠️ 禁止直接 read feedback.json，必须通过 API 获取结构化数据
@@ -732,7 +751,6 @@ curl -s "http://localhost:5533/api/clawmate/feedback/cron-tick" 2>/dev/null
 | 需求取消 | `prd/sub_prd/{场景}.md` | `archive/prd-versions/cancelled/{场景}-v{版本}.md` | 明确取消开发 |
 
 **归档检查点**：
-- 每周五自动检查：扫描 `research/`、`prd/sub_prd/`、CLAWLIST 已完成项
 - 超过 2 周未更新的文档 → 标记「待审查」→ 确认归档或更新
 
 ### 6.3 懒加载机制（信息分层）
