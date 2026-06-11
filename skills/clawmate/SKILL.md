@@ -1,6 +1,6 @@
 ---
 name: clawmate
-description: ClawMate 文件管理 + 预览 + 反馈闭环 + 项目管理。支持文件搜索预览、feedback 处理、项目初始化与前期梳理（Phase I-V）。GitHub: https://github.com/updatedb/clawmate
+description: "ClawMate 文件管理 + 预览 + 反馈闭环 + 项目管理。支持文件搜索预览、feedback 处理、项目初始化与前期梳理（Phase I-V）。GitHub: https://github.com/updatedb/clawmate"
 license: MIT
 ---
 
@@ -18,7 +18,8 @@ license: MIT
 | 命令 | 功能 | 状态 |
 |------|------|:----:|
 | `clawmate link <filename>` | 搜索文件生成可点击预览链接 | ✅ |
-| `clawmate project [root] <projectname>` | 项目初始化与前期梳理（Phase I-V），默认 root 为 defaultRootId | ✅ |
+| `clawmate init [root] <project>` | 项目初始化与前期梳理（Phase I-V），默认 root 为 defaultRootId | ✅ |
+| `clawmate plan [root] <project>` | 规划/更新分层项目计划（CLAWLIST） | ✅ |
 | `clawmate feed [status] [project] [filename] [date]` | 查询 feedback 列表 | ✅ |
 | `clawmate do [feedback_id]` | 处理待处理 feedback | ✅ |
 
@@ -73,7 +74,7 @@ https://example.com/clawmate/preview.html?root=webprojects&file=clawmate/CLAWLIS
 
 ---
 
-## 2. clawmate project
+## 2. clawmate init
 
 基于 **skill project** 五阶段框架，在 ClawMate 管理的目录中创建项目并进行前期梳理。
 
@@ -90,17 +91,39 @@ Phase I 确认三种类型之一，决定后续全流程和目录结构：
 ### 命令签名
 
 ```
-clawmate project [root] <projectname>
+clawmate init [root] <project>
 ```
 
 - `root`: 可选，指定 ClawMate root_id（默认使用 config.json 的 `defaultRootId`）
-- `projectname`: 项目名称
+- `project`: 项目名称
 
+## 3. clawmate plan
+
+规划或更新项目计划（CLAWLIST）。
+
+### 命令签名
+
+```
+clawmate plan [root] <project>
+```
+
+- `root`: 可选，指定 ClawMate root_id（默认使用 config.json 的 `defaultRootId`）
+- `project`: 项目名称
+
+### 功能说明
+
+1. 读取项目根目录的 CLAWLIST.md（如不存在则创建模板）
+2. 使用 `curl -s "http://localhost:5533/api/clawmate/search?q={project}&root={root}"` 确认项目路径
+3. 读取 PROJECT_NOTE.md 了解当前阶段
+4. 更新 CLAWLIST.md：
+   - 检查当前阶段，标记已完成项
+   - 按阶段结构（Phase I-V）列出未完成任务
+   - 如有 dev/test/research 子目录，生成对应汇总条目
+5. 输出更新后的计划摘要
 
 ### 目录约定
 
 - **默认路径**：`{root_dir}/{项目名}/`（root_dir 由 root_id 解析）
-
 - **源码目录**：统一使用 `dev/`
 
 ### 全流程概览
@@ -603,7 +626,7 @@ dist/ build/
 
 ---
 
-## 3. clawmate feed
+## 4. clawmate feed
 
 查询 feedback 列表，支持过滤。
 
@@ -629,7 +652,7 @@ dist/ build/
 
 ---
 
-## 4. clawmate do
+## 5. clawmate do
 
 处理待处理 feedback（全部或指定 ID）。
 
@@ -656,7 +679,7 @@ curl -s "http://localhost:5533/api/clawmate/feedback/cron-tick" 2>/dev/null
 
 ---
 
-## 5. 文件推送规范
+## 6. 文件推送规范
 
 每次生成本地文件后，必须推送摘要 + 可点击预览链接给用户。
 
@@ -687,7 +710,7 @@ curl -s "http://localhost:5533/api/clawmate/feedback/cron-tick" 2>/dev/null
 
 ---
 
-## 6. 归档机制与懒加载（核心设计原则）
+## 7. 归档机制与懒加载（核心设计原则）
 
 ### 6.1 为什么需要归档
 

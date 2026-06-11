@@ -267,6 +267,8 @@ openclaw gateway restart
 | 命令 | 用途 |
 |------|------|
 | `/clawmate link <filename>` | 搜索文件并生成可点击预览链接 |
+| `/clawmate init [root] <project>` | 项目初始化与前期梳理（Phase I-V） |
+| `/clawmate plan [root] <project>` | 规划/更新分层项目计划（CLAWLIST） |
 | `/clawmate feed [status] [filename] [date]` | 查询 feedback 列表 |
 | `/clawmate do [#ID]` | 通过 `/cron-tick` 处理待处理反馈 |
 
