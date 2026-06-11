@@ -186,6 +186,17 @@
 
   const API_BASE = '/api/clawmate';
 
+  // ── Auth-aware fetch ──
+  async function authFetch(url, options) {
+    var res = await fetch(url, options);
+    if (res.status === 401) {
+      var redirectTo = '/clawmate/login.html?redirect=' + encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = redirectTo;
+      throw new Error('auth_redirect');
+    }
+    return res;
+  }
+
   // ── URL Params ──
   const params = new URLSearchParams(location.search);
   const rootId = params.get('root') || '';
@@ -652,7 +663,7 @@
         note: note,
         position: currentPosition || getPosValue(ext, currentSelectionStart, currentSelectionEnd),
       };
-      const res = await fetch(API_BASE + '/task/run', {
+      const res = await authFetch(API_BASE + '/task/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -711,7 +722,7 @@
 
   async function loadTaskTemplates() {
     try {
-      var res = await fetch(API_BASE + '/config');
+      var res = await authFetch(API_BASE + '/config');
       if (!res.ok) return;
       var cfg = await res.json();
       if (cfg && cfg.task_templates) {
@@ -741,7 +752,7 @@
 
     try {
       const url = API_BASE + '/feedback/list?root=' + encodeURIComponent(rootId) + '&project=' + encodeURIComponent(project) + '&file=' + encodeURIComponent(filePath);
-      const res = await fetch(url);
+      const res = await authFetch(url);
       if (!res.ok) {
         body.innerHTML = '<div class="m-file-empty">无法加载反馈</div>';
         return;
@@ -802,7 +813,7 @@
       const parentDir = filePath.includes('/') ? filePath.split('/').slice(0, -1).join('/') : '';
       const nav = { prev: null, next: null, idx: 0, total: 0 };
       try {
-        const listRes = await fetch(API_BASE + '/list?root=' + encodeURIComponent(rootId) + '&dir=' + encodeURIComponent(parentDir));
+        const listRes = await authFetch(API_BASE + '/list?root=' + encodeURIComponent(rootId) + '&dir=' + encodeURIComponent(parentDir));
         const listData = await listRes.json();
         const allEntries = listData.entries || [];
         const images = allEntries.filter(e => IMAGE_EXTS.includes((e.name.split('.').pop() || '').toLowerCase()));
@@ -906,7 +917,7 @@
     }
 
     try {
-      const res = await fetch(API_BASE + '/preview?root=' + encodeURIComponent(rootId) + '&path=' + encodeURIComponent(filePath));
+      const res = await authFetch(API_BASE + '/preview?root=' + encodeURIComponent(rootId) + '&path=' + encodeURIComponent(filePath));
       if (!res.ok) {
         body.innerHTML = '<div class="m-loading">\u65e0\u6cd5\u52a0\u8f7d\u6587\u4ef6 (' + res.status + ')</div>';
         return;
@@ -1265,7 +1276,7 @@
       els.shareBody.innerHTML = '<div class="m-file-empty" style="padding:12px;">生成中...</div>';
       showPanel(els.shareOverlay, els.sharePanel);
 
-      var res = await fetch(API_BASE + '/share/create', {
+      var res = await authFetch(API_BASE + '/share/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ root: rootId, path: filePath }),
@@ -1300,7 +1311,7 @@
     await loadContent();
     // Load feedback count for badge
     try {
-      const res = await fetch(API_BASE + '/feedback/list?root=' + encodeURIComponent(rootId) + '&project=' + encodeURIComponent(project) + '&file=' + encodeURIComponent(filePath));
+      const res = await authFetch(API_BASE + '/feedback/list?root=' + encodeURIComponent(rootId) + '&project=' + encodeURIComponent(project) + '&file=' + encodeURIComponent(filePath));
       if (res.ok) {
         const data = await res.json();
         const pending = (data.items || []).filter(i => (i.status || '').toLowerCase() === 'pending').length;

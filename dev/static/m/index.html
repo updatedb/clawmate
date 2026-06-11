@@ -101,12 +101,25 @@
   'use strict';
 
   const API_BASE = '/api/clawmate';
+
+  // ── Auth-aware fetch ──
+  async function authFetch(url, options) {
+  async function authFetch(url, options) {
+    var res = await fetch(url, options);
+    if (res.status === 401) {
+      var redirectTo = '/clawmate/login.html?redirect=' + encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = redirectTo;
+      throw new Error('auth_redirect');
+    }
+    return res;
+  }
+
   // ── Timeout wrapper for fetch ──
   async function fetchTimeout(url, options, ms) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ms);
     try {
-      const res = await fetch(url, { ...options, signal: controller.signal });
+      const res = await authFetch(url, { ...options, signal: controller.signal });
       return res;
     } finally {
       clearTimeout(timer);
