@@ -172,13 +172,9 @@ stateDiagram
 
 ## 截图
 
-| 多项目、多目录管理 | 手动添加反馈 | 创建反馈 |
-|:---:|:---:|:---:|
-| ![多项目目录管理](assets/cm-desktop-file-manage.jpg) | ![添加反馈操作](assets/cm-desktop-add-feedback.jpg) | ![创建反馈](assets/cm-desktop-create-feed.png) |
+![ClawMate 协作界面](assets/cm-feedback-loop.png)
 
-| 反馈处理结果 | SRT 字幕提取 | SRT 字幕纠错 |
-|:---:|:---:|:---:|
- | ![反馈处理结果](assets/cm-desktop-review-feedback.jpg) | ![SRT 字幕提取](assets/cm-destkop-extract-srt.png) | ![SRT 字幕纠错](assets/cm-desktop-srt-correct.png) |
+*左侧：Agent 对话生成内容 → 右侧：ClawMate 预览 + 选中文本提交反馈 + 一键执行修复*
 
 ## 架构
 
