@@ -183,22 +183,93 @@ stateDiagram
 ## 架构
 
 ```mermaid
-flowchart TD
-    A[用户浏览器] -->|HTTP 5533| B[FastAPI Server]
-    B --> C[static/ — 前端页面]
-    B --> D[API /api/clawmate/*]
-    D --> E[文件系统: 读取/写入]
-    D --> F[feedback.json: 反馈持久化]
-    D --> G[subtitle.py: 字幕提取]
-    D --> H[store.py: 反馈存储引擎]
-    B --> I[Webhook /hooks/agent]
-    I --> J[OpenClaw Gateway]
-    J --> K[选择Agent 处理反馈]
-    K -->|修改文件| E
-    B -.-> L[Cron Job 兜底]
-    L -.->|每 N 小时| B
-    M[ONLYOFFICE DS] -->|iframe 嵌入| C
+flowchart TB
+    subgraph Browser["浏览器"]
+        UI["index.html / preview.html\n/ login.html / share-view.html"]
+        MOBILE["m/index.html\nm/preview.html (移动端)"]
+        OO["onlyoffice.html (OO 嵌入)"]
+    end
+
+    subgraph Server["FastAPI Server (5533)"]
+        direction LR
+        STATIC["static/ 前端页面"]
+        API["/api/clawmate/*"]
+        FEEDBACK["feedback_api
+反馈 CRUD"]
+        TASK["task_runner
+自动修复"]
+        AUTH["auth
+登录认证"]
+        SUB["subtitle_routes
+字幕提取"]
+        SHARE["share_routes
+分享"]
+        OOAPI["ONLYOFFICE
+proxy/edit"]
+    end
+
+    subgraph Storage["存储层"]
+        FS["文件系统
+读取/写入/重命名/删除"]
+        FB_JSON["feedback.json
+反馈持久化"]
+    end
+
+    subgraph OpenClaw["OpenClaw Gateway"]
+        HOOK["/hooks/agent
+Webhook 入口"]
+        AGENT["Agent
+处理反馈"]
+        CRON["Cron Job
+兜底扫描"]
+    end
+
+    subgraph External["外部服务"]
+        OODS["ONLYOFFICE
+Document Server"]
+    end
+
+    UI --> STATIC
+    MOBILE --> STATIC
+    OO --> OOAPI
+    OO --> OODS
+
+    Browser --> API
+
+    API --> FEEDBACK
+    API --> TASK
+    API --> AUTH
+    API --> SUB
+    API --> SHARE
+    API --> OOAPI
+
+    FEEDBACK --> FB_JSON
+    TASK --> FS
+    SUB --> FS
+    SHARE --> FS
+    API --> FS
+
+    FEEDBACK --> HOOK
+    HOOK --> AGENT
+    AGENT -->|修改文件| FS
+    CRON -.->|定时扫描| AGENT
 ```
+
+**模块说明**：
+
+| 模块 | 功能 |
+|------|------|
+| `main.py` | FastAPI 应用入口 + 中间件 |
+| `routes.py` | 核心 API：文件 CRUD、搜索、预览、ONLYOFFICE 代理 |
+| `feedback_api.py` | 反馈闭环 CRUD + 状态流转 |
+| `task_runner.py` | 自动修复任务执行引擎 |
+| `auth.py` | Session 登录认证 |
+| `config.py` | 配置加载 |
+| `store.py` | 反馈存储引擎 |
+| `subtitle_routes.py` | SRT 字幕提取 API |
+| `share_routes.py` | 分享链接管理 |
+| `validators.py` | 路径安全校验 |
+| `constants.py` | 常量定义 |
 
 ---
 
@@ -352,8 +423,10 @@ openclaw gateway restart
 | `/clawmate link <filename>` | 搜索文件并生成可点击预览链接 |
 | `/clawmate init [root] <project>` | 项目初始化与前期梳理（Phase I-V） |
 | `/clawmate plan [root] <project>` | 规划/更新分层项目计划（CLAWLIST） |
+| `/clawmate list [agent_id]` | 列出指定 agent 下所有项目 |
 | `/clawmate feed [status] [filename] [date]` | 查询 feedback 列表 |
-| `/clawmate do [#ID]` | 通过 `/cron-tick` 处理待处理反馈 |
+| `/clawmate do [#ID]` | 通过自动修复引擎处理待处理反馈 |
+| `/clawmate project <projectname>` | 为项目切换会话上下文，开始工作 |
 
 > 各命令的详细参数和示例见 `skills/clawmate/SKILL.md`。
 
