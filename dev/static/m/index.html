@@ -104,7 +104,6 @@
 
   // ── Auth-aware fetch ──
   async function authFetch(url, options) {
-  async function authFetch(url, options) {
     var res = await fetch(url, options);
     if (res.status === 401) {
       var redirectTo = '/clawmate/login.html?redirect=' + encodeURIComponent(window.location.pathname + window.location.search);

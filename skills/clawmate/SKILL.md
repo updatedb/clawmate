@@ -867,24 +867,6 @@ ls -1d {root_dir}/*/
 
 若某个项目目录下没有 CLAWLIST.md，链接标记为 `—`。
 
-### 示例输出
-
-```markdown
-## work 的项目
-
-| 项目 | 所在 root | 路径 | CLAWLIST |
-|------|----------|------|:--------:|
-| clawmate | webprojects | ~/webprojects/clawmate/ | [📋](...) |
-| robocar | webprojects | ~/webprojects/robocar/ | [📋](...) |
-| debate-arena | projects | ~/work/projects/debate-arena/ | [📋](...) |
-
-## writer 的项目
-
-| 项目 | 所在 root | 路径 | CLAWLIST |
-|------|----------|------|:--------:|
-| familyhistory | writer | ~/writer/topics/familyhistory/ | — |
-```
-
 ---
 
 ## 8. 文件推送规范
