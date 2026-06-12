@@ -19,6 +19,7 @@ license: MIT
 
 | 命令 | 功能 | 状态 |
 |------|------|:----:|
+| `clawmate list [agent_id]` | 列出指定 agent （默认当前 agent）下所有项目 | ✅ |
 | `clawmate link <filename>` | 搜索文件生成可点击预览链接 | ✅ |
 | `clawmate init [root] <project>` | 项目初始化与前期梳理（Phase I-V），默认 root 为 defaultRootId | ✅ |
 | `clawmate plan [root] <project>` | 规划/更新分层项目计划（CLAWLIST） | ✅ |
@@ -811,7 +812,82 @@ curl -s "{CLAWMATE_URL}/api/clawmate/search?q=$PROJECT&root=$ROOT" 2>/dev/null
 
 ---
 
-## 7. 文件推送规范
+## 7. clawmate list
+
+列出指定 agent 下所有项目。默认列出当前 agent 的项目，可传 agent_id 查其他 agent 的项目。
+
+### 命令签名
+
+```
+clawmate list [agent_id]
+```
+
+- 无参数：列出当前 agent 下的所有项目
+- `clawmate list writer`：列出 writer agent 下的所有项目
+
+### 执行步骤
+
+**步骤 1：获取 config 中的 roots 列表**
+
+```bash
+curl -s "{CLAWMATE_URL}/api/clawmate/config" 2>/dev/null | python3 -c "
+import json, sys
+cfg = json.load(sys.stdin)
+for root in cfg['roots']:
+    agent_id = root.get('agent_id', 'main')
+    print(f\"{root['id']}|{root['dir']}|{agent_id}\")
+"
+```
+
+**步骤 2：筛选目标 agent 的 roots**
+
+根据参数筛选 roots：
+- 无参数：使用当前会话所在 agent 的 id（根据 `MEMORY.md` 或运行时上下文确定）
+- 有参数：筛选 agent_id 匹配的 roots
+
+**步骤 3：列出每个 root 下的一级子目录（即为项目）**
+
+对每个匹配的 root，列出其目录下的所有子目录（跳过隐藏目录）：
+
+```bash
+ls -1d {root_dir}/*/
+```
+
+**步骤 4：输出结果**
+
+按 agent 分组输出表格：
+
+```markdown
+## {agent_id} 的项目
+
+| 项目 | 所在 root | 路径 | CLAWLIST |
+|------|----------|------|:--------:|
+| project_a | root_id | {root_dir}/project_a/ | [📋]({base_url}/clawmate/preview.html?root=root_id&file=project_a%2FCLAWLIST.md) |
+```
+
+若某个项目目录下没有 CLAWLIST.md，链接标记为 `—`。
+
+### 示例输出
+
+```markdown
+## work 的项目
+
+| 项目 | 所在 root | 路径 | CLAWLIST |
+|------|----------|------|:--------:|
+| clawmate | webprojects | ~/webprojects/clawmate/ | [📋](...) |
+| robocar | webprojects | ~/webprojects/robocar/ | [📋](...) |
+| debate-arena | projects | ~/work/projects/debate-arena/ | [📋](...) |
+
+## writer 的项目
+
+| 项目 | 所在 root | 路径 | CLAWLIST |
+|------|----------|------|:--------:|
+| familyhistory | writer | ~/writer/topics/familyhistory/ | — |
+```
+
+---
+
+## 8. 文件推送规范
 
 每次生成本地文件后，必须推送摘要 + 可点击预览链接给用户。
 
