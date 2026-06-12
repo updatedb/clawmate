@@ -24,6 +24,7 @@ license: MIT
 | `clawmate plan [root] <project>` | 规划/更新分层项目计划（CLAWLIST） | ✅ |
 | `clawmate feed [status] [project] [filename] [date]` | 查询 feedback 列表 | ✅ |
 | `clawmate do [feedback_id]` | 处理待处理 feedback | ✅ |
+| `clawmate project <projectname>` | 为 project 对应 agent 创建新会话，切换 workspace 到项目目录，读取顶层介绍 | ✅ |
 
 ---
 
@@ -699,7 +700,118 @@ clawmate do FD-CM-042
 
 ---
 
-## 6. 文件推送规范
+## 6. clawmate project
+
+创建新会话并切换到项目目录。用于在 ClawMate 管理的项目中快速创建工作环境。
+
+### 命令签名
+
+```
+clawmate project <projectname>
+```
+
+### 执行步骤
+
+**步骤 1：搜索项目**
+
+遍历 config.json 中所有 root_id，搜索项目名：
+
+```bash
+# 先获取 config.json 的 roots 列表
+curl -s "{CLAWMATE_URL}/api/clawmate/config" 2>/dev/null | python3 -c "
+import json, sys
+cfg = json.load(sys.stdin)
+for root in cfg['roots']:
+    print(f\"{root['id']}|{root['dir']}|{root.get('agent_id','main')}\")
+"
+```
+
+对每个 root 搜索项目路径：
+```bash
+PROJECT="<projectname>"
+ROOT="<root_id>"
+curl -s "{CLAWMATE_URL}/api/clawmate/search?q=$PROJECT&root=$ROOT" 2>/dev/null
+```
+
+若所有 root 都未找到匹配，提示用户项目未找到。
+
+**步骤 2：确定项目位置与 agent**
+
+从搜索结果中：
+1. 找到匹配 `{projectname}/` 目录的条目 → 确定 root_id 和相对路径
+2. 使用步骤 1 中已获取的该 root 的 `agent_id`
+3. 拼接绝对路径：`{root_dir}/{projectname}/`
+
+**步骤 3：通知目标 agent 主会话切换项目**
+
+分两种情况：
+
+**情况 A：当前 agent 与项目的 agent_id 一致**
+
+直接在当前会话执行 compact 并读取项目文件，通知用户已就绪：
+
+```
+【项目切换】切换到 <projectname> 项目。
+工作目录: <project_abs_path>
+
+请先 compact 清理上下文，然后读取 CLAWLIST.md 和 PROJECT_NOTE.md，
+了解项目目标和当前状态后汇报概况。
+```
+
+**情况 B：当前 agent 与项目的 agent_id 不一致**
+
+提示用户切换到目标 agent 的会话执行 project 命令：
+
+```markdown
+⚠️ 项目 {projectname} 属于 `{agent_id}` agent。
+请在 `agent:{agent_id}` 会话中执行：
+`/clawmate project {projectname}`
+```
+
+**原因**：agentToAgent 跨 agent 消息传递受配置控制，且各 agent 各自管理自己的项目上下文。用户应直接在目标 agent 的会话中操作，work agent 只负责定位和指引。
+
+**步骤 4：输出结果**
+
+根据情况输出不同结果：
+
+**情况 A**（当前 agent 与项目一致）：直接输出项目概况和文件链接：
+
+```markdown
+✅ clawmate project <projectname>
+
+当前会话已切换到 {projectname} 项目。
+
+[CLAWLIST.md]({base_url}/clawmate/preview.html?root=<root>&file=<projectname>%2FCLAWLIST.md)
+[PROJECT_NOTE.md]({base_url}/clawmate/preview.html?root=<root>&file=<projectname>%2FPROJECT_NOTE.md)
+```
+
+**情况 B**（当前 agent 与项目不一致）：提示用户切换会话：
+
+```markdown
+✅ clawmate project <projectname>
+
+项目 {projectname} 在 `{agent_id}` agent 下。
+请在 `agent:{agent_id}` 会话中执行 `/clawmate project {projectname}` 切换。
+
+[CLAWLIST.md]({base_url}/clawmate/preview.html?root=<root>&file=<projectname>%2FCLAWLIST.md)
+[PROJECT_NOTE.md]({base_url}/clawmate/preview.html?root=<root>&file=<projectname>%2FPROJECT_NOTE.md)
+```
+
+### 项目 vs Agent 映射
+
+| 项目所在 root | 对应 agent_id | 主会话 key |
+|--------------|--------------|-----------|
+| webprojects / projects | `work` | `agent:work:main` |
+| writer | `writer` | `agent:writer:main` |
+| trip | `travel` | `agent:travel:main` |
+| helper / 3gpp | `helper` | `agent:helper:main` |
+
+> 映射从 config.json roots 动态获取，不硬编码。
+> 当目标 agent_id 与执行者相同时，直接 compact 当前会话并读取项目文件，无需跨会话发送。
+
+---
+
+## 7. 文件推送规范
 
 每次生成本地文件后，必须推送摘要 + 可点击预览链接给用户。
 
@@ -730,7 +842,7 @@ clawmate do FD-CM-042
 
 ---
 
-## 7. 归档机制与懒加载（核心设计原则）
+## 8. 归档机制与懒加载（核心设计原则）
 
 ### 6.1 为什么需要归档
 
