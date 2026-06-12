@@ -25,6 +25,89 @@ ClawMate 的解法是：
 
 ---
 
+## ClawMate + OpenClaw 协作流程
+
+ClawMate 与 OpenClaw 配合使用，形成完整的「创建 → 评审 → 反馈 → 修复」闭环。
+
+```mermaid
+flowchart LR
+    subgraph A[安装准备]
+        A1[1️⃣ 安装 ClawMate 服务]
+        A2[2️⃣ 安装 clawmate skill 到 OpenClaw]
+    end
+    subgraph B[OpenClaw 端]
+        B1[3a. clawmate init \n初始化项目结构]
+        B2[3b. clawmate project \n切换到项目对话生产]
+    end
+    subgraph C[ClawMate 端]
+        C1[4a. 进入 root → 找到 project]
+        C2[4b. 评审内容 → 选中文本 → 提交反馈]
+    end
+    subgraph D[OpenClaw 端]
+        D1[5. clawmate do \n批量修复反馈问题]
+    end
+    A1 --> A2
+    A2 --> B1
+    B1 --> B2
+    B2 --> C1
+    C1 --> C2
+    C2 --> D1
+    D1 -.->|重新评审| C1
+```
+
+### 步骤详解
+
+**1️⃣ 安装 ClawMate 服务**
+
+```bash
+# 方式：Docker / systemd / 本地启动
+# 详见下方「快速开始」
+docker run -d --name clawmate -p 5533:5533 clawmate:latest
+```
+
+**2️⃣ 安装 clawmate skill 到 OpenClaw**
+
+```bash
+openclaw skills install clawmate-skill
+openclaw gateway restart
+```
+
+**3️⃣ 创建项目（OpenClaw 端操作）**
+
+a. 初始化项目结构：
+```
+/clawmate init [root] <project>
+```
+在当前 root 下建立标准项目目录（CLAWLIST.md + PROJECT_NOTE.md + research/ + prd/ + dev/ + test/）。
+
+b. 切换到项目，开始对话生产内容：
+```
+/clawmate project <projectname>
+```
+切换到项目所属 Agent 的上下文，Agent 读取项目文件后即可围绕需求进行对话、生成文档/代码。
+
+**4️⃣ 项目材料评审（ClawMate 端操作）**
+
+a. 进入 ClawMate Web UI，切换到对应 root，找到项目。
+
+b. 预览项目产出的文件，发现问题时直接选中文本 → 填写备注 → 提交反馈。支持：
+- 连续选中多个位置，统一提交一次反馈
+- 同一文件提交后自动进入 pending 状态
+- 所有反馈汇总在 timeline 中可追溯
+
+**5️⃣ 自动修复用户反馈（OpenClaw 端操作）**
+
+```
+/clawmate do [#ID]
+```
+OpenClaw 读取反馈 JSON → AI 理解选区内容 + 用户备注 → 批量修改对应文件。修改完成后状态流转：
+```
+pending → in_progress → done / failed
+```
+修复后的文件可重新进入评审环节（返回到步骤 4），形成持续迭代闭环。
+
+---
+
 ## 核心能力
 
 ### 🔍 预览引擎
