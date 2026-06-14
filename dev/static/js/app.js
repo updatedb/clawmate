@@ -1434,6 +1434,73 @@ function setupDragDrop() {
     setStatus(`上传完成: ${uploaded} 成功${failed ? ', ' + failed + ' 失败' : ''}`);
     if (uploaded > 0) loadDir(state.dir);
   });
+
+  // ── Clipboard paste: paste image from clipboard and upload ──
+  document.addEventListener('paste', async e => {
+    // Ignore paste in input/textarea/contenteditable
+    var tag = e.target && e.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
+    if (!state.rootId) { setStatus('请先选择根目录'); return; }
+    var files = e.clipboardData.files;
+    var items = e.clipboardData.items;
+    var imageFile = null;
+
+    // Try files first
+    if (files.length) {
+      for (var i = 0; i < files.length; i++) {
+        if (files[i].type && files[i].type.startsWith('image/')) {
+          imageFile = files[i];
+          break;
+        }
+      }
+    }
+
+    // Fallback: check items for image data (e.g. Snipping Tool, screenshot)
+    if (!imageFile && items) {
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].type && items[i].type.startsWith('image/')) {
+          imageFile = items[i].getAsFile();
+          if (imageFile) break;
+        }
+      }
+    }
+
+    if (!imageFile) return; // no image in clipboard, nothing to do
+    e.preventDefault();
+
+    // Generate a filename with timestamp
+    var now = new Date();
+    var ts = now.getFullYear()
+      + String(now.getMonth()+1).padStart(2,'0')
+      + String(now.getDate()).padStart(2,'0') + '-'
+      + String(now.getHours()).padStart(2,'0')
+      + String(now.getMinutes()).padStart(2,'0')
+      + String(now.getSeconds()).padStart(2,'0');
+    var ext = 'png';
+    if (imageFile.name && imageFile.name.includes('.')) {
+      ext = imageFile.name.split('.').pop();
+    }
+    var filename = 'paste-' + ts + '.' + ext;
+
+    setStatus('正在上传剪切板图片...');
+    try {
+      var formData = new FormData();
+      formData.append('file', imageFile, filename);
+      var res = await authFetch(
+        '/api/clawmate/upload?root=' + encodeURIComponent(state.rootId) + '&dir=' + encodeURIComponent(state.dir),
+        { method: 'POST', body: formData }
+      );
+      if (res.ok) {
+        var data = await res.json();
+        setStatus('剪切板图片已上传: ' + (data.filename || filename));
+        loadDir(state.dir);
+      } else {
+        setStatus('上传失败: ' + res.status);
+      }
+    } catch (err) {
+      setStatus('上传出错: ' + (err.message || err));
+    }
+  });
 }
 
 async function loadDir(dir) {
