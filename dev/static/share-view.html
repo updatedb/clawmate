@@ -14,13 +14,24 @@
     .share-error { text-align: center; padding: 48px 16px; color: var(--danger); font-size: 15px; }
     .share-bottombar {
       height: var(--bottombar); min-height: var(--bottombar);
-      display: flex; align-items: center; justify-content: center;
-      padding: 0 12px; padding-bottom: var(--safe-bottom);
-      background: var(--brand-bg); color: var(--brand-text); font-size: 12px; gap: 12px;
+      display: flex; align-items: center; padding: 0 12px; padding-bottom: var(--safe-bottom);
+      background: var(--brand-bg); color: var(--brand-text); font-size: 12px;
       border-top: 1px solid var(--border);
+      position: relative;
     }
-    .share-bottombar .share-expiry { opacity: 0.7; }
-    .share-bottombar .share-brand { opacity: 0.5; }
+    .share-bottombar .share-toc-btn { font-size: 18px; line-height: 1; opacity: 0.8; padding: 2px 6px; border-radius: 6px; transition: background 0.15s; cursor:pointer; user-select:none; position: absolute; left: 12px; z-index: 1; }
+    .share-bottombar .share-toc-btn:hover { background: rgba(255,255,255,0.12); }
+    .share-bottombar .share-brand { flex: 1; text-align: center; opacity: 0.4; font-size: 11px; }
+    .share-bottombar .share-expiry { position: absolute; right: 12px; opacity: 0.5; font-size: 11px; }
+    .share-toc-panel {
+      position: fixed; bottom: var(--bottombar); left: 0; right: 0;
+      background: var(--bg); border-top: 1px solid var(--border);
+      z-index: 50;
+      overflow-y: auto;
+      max-height: 0;
+      transition: max-height 0.25s ease;
+    }
+    .share-toc-panel.open { max-height: 50vh; }
     .share-topbar {
       display: flex; align-items: center; padding: 0 12px;
       height: var(--topbar); min-height: var(--topbar);
@@ -50,9 +61,11 @@
     <div class="share-topbar"><span class="share-title" id="shareTitle">📄 分享</span></div>
     <div class="m-content" id="contentBody"><div class="share-loading">加载中...</div></div>
     <div class="share-bottombar">
-      <span class="share-expiry" id="shareExpiry">⏳ 24 小时有效</span>
-      <span class="share-brand">ClawMate · 只读分享</span>
+      <span class="share-toc-btn" id="shareTocBtn" style="display:none;">📋大纲</span>
+      <span class="share-brand">ClawMate</span>
+      <span class="share-expiry" id="shareExpiry">⏳ -</span>
     </div>
+    <div class="share-toc-panel" id="shareTocPanel"></div>
   </div>
 
   <script src="/clawmate/vendor/mermaid-v11.min.js"></script>
@@ -120,6 +133,7 @@
 
     function renderMarkdown(content) {
       body.innerHTML = '<div class="markdown-body">' + md.render(content) + '</div>';
+      rebuildTOC(body.querySelector('.markdown-body'));
       if (window.mermaid && mermaidStore.length > 0) {
         try {
           var blocks = document.querySelectorAll('.markdown-body .mermaid');
@@ -159,6 +173,65 @@
       body.appendChild(pre);
     }
 
+    var _tocList = null;
+    function rebuildTOC(mdDiv) {
+      _tocList = null;
+      var tocBtn = document.getElementById('shareTocBtn');
+      var tocPanel = document.getElementById('shareTocPanel');
+      if (tocBtn) tocBtn.style.display = 'none';
+      if (tocPanel) tocPanel.classList.remove('open');
+      if (!mdDiv) return;
+      var headings = mdDiv.querySelectorAll('h1, h2, h3, h4');
+      if (headings.length < 2) return;
+      headings.forEach(function(h, i) { if (!h.id) h.id = 'share-heading-' + i; });
+
+      var list = document.createElement('ul');
+      list.style.cssText = 'padding:8px 12px;margin:0;list-style:none;max-height:50vh;overflow-y:auto;';
+      headings.forEach(function(h) {
+        var level = parseInt(h.tagName[1]);
+        var li = document.createElement('li');
+        li.style.cssText = 'padding:3px 0 3px ' + ((level - 1) * 16) + 'px;';
+        var a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = h.textContent;
+        a.style.cssText = 'color:var(--text-secondary);text-decoration:none;cursor:pointer;display:block;padding:3px 8px;border-radius:4px;font-size:13px;';
+        a.addEventListener('mouseenter', function() { this.style.background = 'var(--bg-hover)'; });
+        a.addEventListener('mouseleave', function() { this.style.background = 'transparent'; });
+        a.addEventListener('click', function(e) {
+          e.preventDefault();
+          h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          var panel = document.getElementById('shareTocPanel');
+          if (panel) panel.classList.remove('open');
+          var btn = document.getElementById('shareTocBtn');
+          if (btn) btn.textContent = '📋大纲';
+        });
+        li.appendChild(a);
+        list.appendChild(li);
+      });
+      _tocList = list;
+      var panel = document.getElementById('shareTocPanel');
+      if (panel) {
+        panel.innerHTML = '';
+        panel.appendChild(list);
+      }
+      var btn = document.getElementById('shareTocBtn');
+      if (btn) btn.style.display = '';
+    }
+
+    function setupTocToggle() {
+      var btn = document.getElementById('shareTocBtn');
+      var panel = document.getElementById('shareTocPanel');
+      if (!btn || !panel) return;
+      btn.addEventListener('click', function() {
+        var open = panel.classList.toggle('open');
+        btn.textContent = open ? '📋大纲 ▲' : '📋大纲';
+        if (open && _tocList) {
+          panel.innerHTML = '';
+          panel.appendChild(_tocList);
+        }
+      });
+    }
+
     async function loadContent() {
       try {
         var res = await fetch(API_BASE + '/share/' + TOKEN + '/data');
@@ -167,6 +240,13 @@
           return;
         }
         var data = await res.json();
+
+        // Update expiry time
+        var expiryEl = document.getElementById('shareExpiry');
+        if (expiryEl && data.expires_str) {
+          expiryEl.textContent = '⏳ 有效期 ' + data.expires_str;
+        }
+
         var ext = data.suffix ? data.suffix.replace('.','').toLowerCase() : '';
         // 提取标题：Markdown 取第一个 # heading，其余用文件名
         var pageTitle = data.name;
@@ -195,6 +275,7 @@
       }
     }
     loadContent();
+    setupTocToggle();
   })();
   </script>
 </body>

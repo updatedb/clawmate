@@ -15,6 +15,8 @@ import secrets
 import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+def _fmt_expiry(ts: int) -> str:
+    return datetime.fromtimestamp(ts, tz=timezone.utc).astimezone().strftime("%m-%d %H:%M")
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, FileResponse
@@ -143,8 +145,7 @@ async def share_create(request: Request):
         share_url = f"{scheme}://{host}/clawmate/share-view.html?token={token}"
 
     # Format expiry time for display
-    expires_dt = datetime.fromtimestamp(expires_at, tz=timezone.utc).astimezone()
-    expires_str = expires_dt.strftime("%m-%d %H:%M")
+    expires_str = _fmt_expiry(expires_at)
 
     return JSONResponse(content={
         "ok": True,
@@ -181,6 +182,8 @@ async def share_data(token: str):
         "category": category,
         "suffix": target.suffix.lower(),
         "meta": meta,
+        "expires_at": link["expires_at"],
+        "expires_str": _fmt_expiry(link["expires_at"]),
     }
 
     if category == "text":

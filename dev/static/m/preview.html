@@ -927,8 +927,12 @@
       const data = await res.json();
       rawContent = data.content || '';
 
-      if (isMarkdown) {
+      if (isMarkdown && typeof window.markdownit === 'function') {
         renderMarkdown(rawContent);
+      } else if (isMarkdown) {
+        // markdown-it not loaded, fallback to plain text
+        console.warn('[md] markdown-it not available, using plain text');
+        renderPlainText(rawContent);
       } else if (isJson) {
         renderJsonText(rawContent);
       } else if (isCode) {
@@ -989,9 +993,17 @@
   function renderMarkdown(text) {
     const body = els.contentBody;
 
-    // Create markdown renderer
+    // Create markdown renderer (with fallback if plugins fail)
     mermaidStore = [];
-    const md = createMarkdownRenderer();
+    let md;
+    try {
+      md = createMarkdownRenderer();
+    } catch (e) {
+      console.warn('[md] plugin init failed:', e.message);
+      body.innerHTML = '<div class="m-loading">渲染失败，显示纯文本</div>';
+      renderPlainText(text);
+      return;
+    }
     let html;
     try {
       html = md.render(text);

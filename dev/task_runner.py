@@ -192,7 +192,7 @@ def _action_desc(task_id: str, fallback_action: str = "") -> str:
 
 
 _last_wake: dict[str, float] = {}
-_DEBOUNCE_SECONDS = 60
+_DEBOUNCE_SECONDS = 5
 
 
 def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> None:

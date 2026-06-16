@@ -21,6 +21,7 @@ from service import (
     search_media,
     preview_text,
     guess_category,
+    get_public_base_url,
     file_info,
     delete_file,
     delete_dir,
@@ -39,7 +40,7 @@ from constants import CONFIG_PATH_ENV, ONLYOFFICE_JWT_SECRET_ENV
 
 
 @router.get("/api/clawmate/config", response_class=JSONResponse)
-async def public_config():
+async def public_config(request: Request):
     """返回前端安全的公开配置（不含 JWT secret 等敏感字段）。"""
     cfg = config()
     templates = []
@@ -58,6 +59,7 @@ async def public_config():
         "defaultRootId": cfg.default_root_id,
         "feedback_tags": [{"label": t.label, "prompt": t.agent_prompt} for t in load_task_templates() if t.frontend.get("tooltip") or t.frontend.get("panel")],
         "task_templates": templates,
+        "public_base_url": get_public_base_url(request),
     }
 ONLYOFFICE_TOKEN_TTL = 3600
 
