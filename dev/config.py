@@ -118,9 +118,15 @@ def set_config_path(path: str | Path) -> None:
     _CONFIG_PATH = Path(path)
 
 
+def clear_config_cache() -> None:
+    """清除配置缓存（测试用）。"""
+    global _CONFIG_CACHE
+    _CONFIG_CACHE = None
+
+
 def load_task_templates() -> list[TaskTemplate]:
-    """读取 task_templates.json，缓存 TTL 60s，mtime 变化即 invalidate。"""
-    global _CONFIG_CACHE, _CONFIG_MTIME
+    """读取 task_templates.json，每次调用均重新读取（文件小，I/O 可忽略）。"""
+    # NOTE: 原 _CONFIG_MTIME 全局变量从未定义，修复为移除该无效引用。
     path = Path(os.environ.get("CLAWMATE_CONFIG", "config.json")).parent / "task_templates.json"
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))

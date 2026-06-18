@@ -5,78 +5,163 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <link rel="icon" href="data:," />
   <title>分享 · ClawMate</title>
-  <link rel="stylesheet" href="/clawmate/m/style.css" />
+  <link rel="stylesheet" href="./css/style.css?v=20260606b" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="highlight-theme-css" />
-  <link rel="stylesheet" href="/clawmate/vendor/github-markdown-dark.min.css" id="github-markdown-css" />
-  <link rel="stylesheet" href="/clawmate/vendor/katex.min.css" />
+  <link rel="stylesheet" href="./vendor/github-markdown-dark.min.css" id="github-markdown-css" />
+  <link rel="stylesheet" href="./vendor/katex.min.css" />
   <style>
-    .share-loading { text-align: center; padding: 48px 16px; color: var(--text-muted); font-size: 15px; }
-    .share-error { text-align: center; padding: 48px 16px; color: var(--danger); font-size: 15px; }
+    html, body { overflow: hidden; height: 100%; margin: 0; padding: 0; }
+
+    /* ── Layout (mirrors preview.html) ── */
+    .share-app {
+      display: flex; flex-direction: column;
+      height: 100%; overflow: hidden;
+    }
+    .topbar {
+      display: flex; align-items: center;
+      padding: 0 16px; height: 48px; gap: 12px;
+      background: var(--brand-bg); color: var(--brand-text);
+      flex-shrink: 0; z-index: 10;
+    }
+    .topbar .brand { font-weight: 700; font-size: 14px; flex-shrink: 0; opacity: 0.85; }
+    .topbar .share-title {
+      flex: 1; font-size: 14px; font-weight: 500;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      min-width: 0;
+    }
+    .topbar-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+
+    /* ── Three-column (desktop) ── */
+    .share-three-col {
+      display: grid;
+      grid-template-columns: 240px 1fr 0px;
+      flex: 1; min-height: 0; overflow: hidden; width: 100%;
+    }
+    .share-left {
+      border-right: 1px solid var(--border-color);
+      background: var(--bg-secondary);
+      display: flex; flex-direction: column; overflow: hidden;
+      transition: width 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
+    }
+    .share-left.hidden { width: 0; padding: 0; opacity: 0; overflow: hidden; border: none; }
+    .share-left-header {
+      padding: 12px 16px 8px; border-bottom: 1px solid var(--border-color);
+      flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--text-secondary);
+      text-transform: uppercase; letter-spacing: 0.5px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .share-left-header span { flex: 1; }
+    .share-left-body { flex: 1; overflow-y: auto; padding: 8px 0; }
+
+    .share-center {
+      display: flex; flex-direction: column; overflow: hidden;
+      background: var(--bg-primary); flex: 1; min-height: 0; min-width: 0;
+    }
+    .share-center-body {
+      flex: 1; overflow-y: auto; padding: 20px; min-width: 0;
+    }
+
+    /* ── TOC ── */
+    .share-toc-list { list-style: none; margin: 0; padding: 0; }
+    .share-toc-item { border-radius: 6px; cursor: pointer; }
+    .share-toc-item a {
+      display: block; padding: 5px 16px; color: var(--text-primary);
+      text-decoration: none; border-radius: 6px; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; font-size: 13px;
+      transition: background 0.12s, color 0.12s;
+    }
+    .share-toc-item a:hover { background: var(--bg-tertiary); color: var(--accent); }
+    .share-toc-item a.toc-active { background: var(--accent-light); color: var(--accent); font-weight: 600; }
+    .share-toc-item.toc-h1 a { padding-left: 16px; font-weight: 600; }
+    .share-toc-item.toc-h2 a { padding-left: 28px; }
+    .share-toc-item.toc-h3 a { padding-left: 40px; font-size: 12px; }
+    .share-toc-item.toc-h4 a { padding-left: 52px; font-size: 12px; color: var(--text-secondary); }
+    .share-toc-empty { color: var(--text-muted); font-size: 12px; padding: 20px 16px; text-align: center; }
+
+    /* ── Bottombar ── */
     .share-bottombar {
-      height: var(--bottombar); min-height: var(--bottombar);
-      display: flex; align-items: center; padding: 0 12px; padding-bottom: var(--safe-bottom);
-      background: var(--brand-bg); color: var(--brand-text); font-size: 12px;
-      border-top: 1px solid var(--border);
-      position: relative;
+      height: 40px; background: var(--brand-bg); color: var(--brand-text);
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 16px; flex-shrink: 0; z-index: 10;
+      font-size: 12px; opacity: 0.55;
     }
-    .share-bottombar .share-toc-btn { font-size: 18px; line-height: 1; opacity: 0.8; padding: 2px 6px; border-radius: 6px; transition: background 0.15s; cursor:pointer; user-select:none; position: absolute; left: 12px; z-index: 1; }
-    .share-bottombar .share-toc-btn:hover { background: rgba(255,255,255,0.12); }
-    .share-bottombar .share-brand { flex: 1; text-align: center; opacity: 0.4; font-size: 11px; }
-    .share-bottombar .share-expiry { position: absolute; right: 12px; opacity: 0.5; font-size: 11px; }
-    .share-toc-panel {
-      position: fixed; bottom: var(--bottombar); left: 0; right: 0;
-      background: var(--bg); border-top: 1px solid var(--border);
-      z-index: 50;
-      overflow-y: auto;
-      max-height: 0;
-      transition: max-height 0.25s ease;
-    }
-    .share-toc-panel.open { max-height: 50vh; }
-    .share-topbar {
-      display: flex; align-items: center; padding: 0 12px;
-      height: var(--topbar); min-height: var(--topbar);
-      padding-top: var(--safe-top);
-      background: var(--brand-bg); color: var(--brand-text); gap: 8px;
-    }
-    .share-topbar .share-title { font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .m-content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-    .m-content .markdown-body { background: transparent !important; }
-    .m-content .markdown-body pre { overflow-x: auto; max-width: 100%; }
-    .m-content .markdown-body table { display: block; overflow-x: auto; max-width: 100%; }
-    .m-content .markdown-body img { max-width: 100%; height: auto; }
-    .m-content .markdown-body svg { max-width: 100%; height: auto; }
-    .share-media-wrapper {
-      display: flex; flex-direction: column; align-items: center;
-      justify-content: center; padding: 32px 16px; flex: 1;
-    }
-    .share-media-wrapper img { max-width: 100%; max-height: 70vh; border-radius: 8px; object-fit: contain; }
-    .share-media-wrapper video, .share-media-wrapper audio { width: 100%; max-width: 600px; }
-    .share-media-wrapper video { max-height: 60vh; border-radius: 8px; background: #000; }
-    .share-media-wrapper audio { margin-top: 16px; }
+
+    /* ── Loading & media ── */
+    .share-loading, .share-error { text-align: center; padding: 80px 20px; font-size: 14px; }
+    .share-loading { color: var(--text-secondary); }
+    .share-error { color: var(--danger); }
+    .share-media { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 16px; }
+    .share-media img { max-width: 100%; max-height: 70vh; border-radius: 8px; object-fit: contain; }
+    .share-media video, .share-media audio { width: 100%; max-width: 600px; }
+    .share-media video { max-height: 60vh; border-radius: 8px; background: #000; }
+    .share-media audio { margin-top: 16px; }
     .share-media-title { text-align: center; font-size: 14px; color: var(--text-secondary); margin-bottom: 12px; word-break: break-all; }
+
+    .markdown-body { background: transparent !important; }
+
+    /* ── Mobile (≤768px) ── */
+    @media (max-width: 768px) {
+      .topbar { padding: 0 8px; gap: 6px; }
+      .topbar .brand { display: none; }
+      .topbar-btn { width: 30px; height: 30px; font-size: 13px; }
+      .share-three-col { grid-template-columns: 0px 1fr 0px !important; }
+      .share-center { grid-column: 2 !important; }
+      .share-center-body { padding: 12px; }
+      .share-left { transition: none !important; width: 0 !important; min-width: 0 !important; padding: 0 !important; border-width: 0 !important; overflow: hidden !important; opacity: 0 !important; pointer-events: none !important; }
+      .share-left:not(.hidden) {
+        position: fixed; top: 0; bottom: 0; left: 0; z-index: 7;
+        display: flex; width: min(260px, 70vw) !important; min-width: 240px !important;
+        padding: 48px 0 0 0 !important; border-right: 1px solid var(--border-color) !important;
+        opacity: 1 !important; pointer-events: auto !important; overflow-y: auto !important;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+      }
+    }
   </style>
 </head>
 <body>
-  <div class="m-app">
-    <div class="share-topbar"><span class="share-title" id="shareTitle">📄 分享</span></div>
-    <div class="m-content" id="contentBody"><div class="share-loading">加载中...</div></div>
-    <div class="share-bottombar">
-      <span class="share-toc-btn" id="shareTocBtn" style="display:none;">📋大纲</span>
-      <span class="share-brand">ClawMate</span>
-      <span class="share-expiry" id="shareExpiry">⏳ -</span>
+  <div class="share-app">
+    <!-- Topbar -->
+    <header class="topbar">
+      <span class="brand">ClawMate</span>
+      <span class="share-title" id="shareTitle">📄 加载中...</span>
+      <div class="topbar-actions">
+        <button class="topbar-btn" id="btnToggleToc" title="切换大纲">📑</button>
+        <button class="topbar-btn" id="themeToggle" title="切换主题">🌓</button>
+      </div>
+    </header>
+
+    <!-- Three-column -->
+    <div class="share-three-col" id="shareThreeCol">
+      <aside class="share-left hidden" id="shareLeft">
+        <div class="share-left-header"><span>📑 大纲</span></div>
+        <div class="share-left-body" id="tocBody">
+          <div class="share-toc-empty">非 Markdown，无大纲</div>
+        </div>
+      </aside>
+      <main class="share-center">
+        <div class="share-center-body" id="contentBody">
+          <div class="share-loading">加载中...</div>
+        </div>
+      </main>
     </div>
-    <div class="share-toc-panel" id="shareTocPanel"></div>
+
+    <!-- Bottombar -->
+    <div class="share-bottombar">
+      <span id="shareExpiry">⏳ -</span>
+    </div>
   </div>
 
-  <script src="/clawmate/vendor/mermaid-v11.min.js"></script>
-  <script src="/clawmate/vendor/markdown-it.min.js"></script>
-  <script src="/clawmate/vendor/markdown-it-container.min.js"></script>
-  <script src="/clawmate/vendor/markdown-it-emoji.min.js"></script>
-  <script src="/clawmate/vendor/markdown-it-footnote.min.js"></script>
-  <script src="/clawmate/vendor/markdown-it-task-lists.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+  <script src="./vendor/purify.min.js"></script>
+  <script src="./vendor/markdown-it.min.js"></script>
+  <script src="./vendor/markdown-it-container.min.js"></script>
+  <script src="./vendor/markdown-it-emoji.min.js"></script>
+  <script src="./vendor/markdown-it-footnote.min.js"></script>
+  <script src="./vendor/markdown-it-task-lists.min.js"></script>
+  <script src="./vendor/highlight.min.js"></script>
+  <script src="./vendor/katex.min.js"></script>
+  <script src="./vendor/auto-render.min.js"></script>
+  <script src="./vendor/mermaid-v11.min.js"></script>
+  <script src="./js/preview-common.js"></script>
   <script>
   (function() {
     'use strict';
@@ -89,148 +174,192 @@
 
     const API_BASE = '/api/clawmate';
     const body = document.getElementById('contentBody');
-    const MARKDOWN_EXTS = ['md', 'markdown'];
-    const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'svg', 'webp', 'gif', 'bmp', 'ico'];
-    const AUDIO_EXTS = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma'];
-    const VIDEO_EXTS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'm4v'];
-    const OFFICE_EXTS = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp'];
+    var mermaidStore = [];
 
-    let mermaidStore = [];
+    // ── Elements ──
+    var tocBtn = document.getElementById('btnToggleToc');
+    var shareLeft = document.getElementById('shareLeft');
+    var threeCol = document.getElementById('shareThreeCol');
+    var tocBody = document.getElementById('tocBody');
 
-    const md = window.markdownit({
-      html: true, linkify: true, typographer: true, breaks: true,
+    function updateGrid() {
+      var hidden = shareLeft.classList.contains('hidden');
+      threeCol.style.gridTemplateColumns = (hidden ? '0px' : '240px') + ' 1fr 0px';
+    }
+
+    // ── Theme ──
+    var theme = localStorage.getItem('clawmate-theme') || 'auto';
+    function getResolvedTheme() {
+      if (theme === 'auto') return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      return theme;
+    }
+    function applyTheme() {
+      var resolved = getResolvedTheme();
+      document.documentElement.setAttribute('data-theme', resolved);
+      document.body.classList.toggle('dark', resolved === 'dark');
+      // Highlight.js theme
+      document.getElementById('highlight-theme-css').href = resolved === 'dark'
+        ? 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css'
+        : 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css';
+      // Markdown CSS
+      document.getElementById('github-markdown-css').href = resolved === 'dark'
+        ? './vendor/github-markdown-dark.min.css'
+        : './vendor/github-markdown-light.min.css';
+      // Button icon
+      var btn = document.getElementById('themeToggle');
+      if (btn) btn.textContent = theme === 'auto' ? '🌓' : theme === 'light' ? '☀️' : '🌙';
+    }
+    applyTheme();
+    document.getElementById('themeToggle').addEventListener('click', function() {
+      if (theme === 'auto') theme = 'light';
+      else if (theme === 'light') theme = 'dark';
+      else theme = 'auto';
+      localStorage.setItem('clawmate-theme', theme);
+      applyTheme();
     });
+
+    // ── TOC toggle ──
+    tocBtn.addEventListener('click', function() {
+      shareLeft.classList.toggle('hidden');
+      updateGrid();
+      tocBtn.classList.toggle('active', !shareLeft.classList.contains('hidden'));
+    });
+    tocBtn.classList.toggle('active', !shareLeft.classList.contains('hidden'));
+
+    // ── Markdown renderer ──
+    var md = window.markdownit({ html: true, linkify: true, typographer: true, breaks: true });
     md.use(window.markdownitContainer, 'note');
+    md.use(window.markdownitContainer, 'warning');
     md.use(window.markdownitContainer, 'tip');
-    md.use(window.markdownitContainer, 'warn');
-    md.use(window.markdownitContainer, 'danger');
+    md.use(window.markdownitEmoji);
     md.use(window.markdownitFootnote);
     md.use(window.markdownitTaskLists, { enabled: true, label: true, labelAfter: true });
 
-    // Override fence renderer for mermaid + highlight.js
-    md.renderer.rules.fence = function(tokens, idx, options, env, slf) {
+    // Rewrite relative image paths → share asset endpoint
+    var _shareRoot = '', _shareFile = '';
+    md.renderer.rules.image = function(tokens, idx) {
+      var token = tokens[idx];
+      var src = token.attrGet('src') || '';
+      var alt = token.content || '';
+      var title = token.attrGet('title') || '';
+      if (!/^https?:\/\//i.test(src) && !src.startsWith('/')) {
+        var dir = _shareFile.includes('/') ? _shareFile.split('/').slice(0, -1).join('/') : '';
+        var full = dir ? dir + '/' + src : src;
+        src = API_BASE + '/share/' + TOKEN + '/asset?root=' + encodeURIComponent(_shareRoot) + '&path=' + encodeURIComponent(full);
+      }
+      return '<img src="' + src + '" alt="' + (alt || '') + '"' + (title ? ' title="' + title + '"' : '') + ' onerror="this.style.display=\'none\'">';
+    };
+
+    md.renderer.rules.fence = function(tokens, idx) {
       var token = tokens[idx];
       var language = token.info.trim();
       var raw = token.content;
-      var cls = language ? 'language-' + language : '';
-
       if (language === 'mermaid') {
         var id = mermaidStore.length;
         mermaidStore.push(raw);
         return '<div class="mermaid" data-mermaid-id="' + id + '"></div>';
       }
-
-      if (language && hljs.getLanguage(language)) {
+      var cls = language ? 'language-' + language : '';
+      if (language) {
         try {
-          var langMap = { yml: 'yaml', node: 'javascript', py: 'python', sh: 'bash', text: 'plaintext' };
-          var normalLang = langMap[language.toLowerCase()] || language;
-          var plain = raw.replace(/<[^>]*>/g, '');
-          var highlighted = hljs.highlight(plain, { language: normalLang, ignoreIllegals: true }).value;
-          return '<pre class="hljs" style="overflow-x:auto;max-width:100%;padding:12px;border-radius:8px;background:var(--code-bg);"><code class="' + cls + '">' + highlighted + '</code></pre>';
+          var langMap = { yml:'yaml', node:'javascript', py:'python', sh:'bash', markdown:'md', text:'plaintext' };
+          var nl = langMap[language.toLowerCase()] || language;
+          if (window.hljs && window.hljs.getLanguage && window.hljs.getLanguage(nl)) {
+            return '<pre><code class="' + cls + '">' + window.hljs.highlight(raw.replace(/<[^>]*>/g, ''), { language: nl, ignoreIllegals: true }).value + '</code></pre>';
+          }
         } catch(e) {}
       }
-      return '<pre style="overflow-x:auto;max-width:100%;padding:12px;border-radius:8px;background:var(--code-bg);"><code class="' + cls + '">' + md.utils.escapeHtml(raw) + '</code></pre>';
+      return '<pre><code class="' + cls + '">' + md.utils.escapeHtml(raw) + '</code></pre>';
     };
 
+    function buildTOC(mdDiv) {
+      var headings = mdDiv.querySelectorAll('h1,h2,h3,h4');
+      if (headings.length < 2) {
+        shareLeft.classList.add('hidden'); updateGrid();
+        tocBtn.classList.remove('active');
+        return;
+      }
+      // Keep hidden by default on mobile
+      if (window.innerWidth >= 768) {
+        shareLeft.classList.remove('hidden'); updateGrid();
+        tocBtn.classList.add('active');
+      }
+      headings.forEach(function(heading, i) { if (!heading.id) heading.id = 'share-h-' + i; });
+      var list = document.createElement('ul');
+      list.className = 'share-toc-list';
+      headings.forEach(function(heading) {
+        var level = parseInt(heading.tagName[1]);
+        var li = document.createElement('li');
+        li.className = 'share-toc-item toc-h' + level;
+        var a = document.createElement('a');
+        a.href = '#' + heading.id;
+        a.textContent = heading.textContent;
+        a.addEventListener('click', function(ev) {
+          ev.preventDefault();
+          if (window.innerWidth < 768) { shareLeft.classList.add('hidden'); updateGrid(); tocBtn.classList.remove('active'); }
+          var ct = document.getElementById('contentBody');
+          var hTop = heading.getBoundingClientRect().top;
+          var cTop = ct.getBoundingClientRect().top;
+          ct.scrollTo({ top: hTop - cTop + ct.scrollTop - 20, behavior: 'smooth' });
+        });
+        li.appendChild(a);
+        list.appendChild(li);
+      });
+      tocBody.innerHTML = ''; tocBody.appendChild(list);
+
+      // Active highlight via IntersectionObserver (one observer for all)
+      if (typeof IntersectionObserver !== 'undefined' && headings.length) {
+        var links = list.querySelectorAll('a');
+        var activeLink = null;
+        var observer = new IntersectionObserver(function(entries) {
+          var visible = entries.filter(function(e) { return e.isIntersecting; })
+            .sort(function(a, b) { return a.boundingClientRect.top - b.boundingClientRect.top; });
+          if (visible.length) {
+            var link = list.querySelector('a[href="#' + visible[0].target.id + '"]');
+            if (link && link !== activeLink) {
+              if (activeLink) activeLink.classList.remove('toc-active');
+              link.classList.add('toc-active');
+              activeLink = link;
+            }
+          }
+        }, { rootMargin: '-10% 0px -80% 0px', threshold: 0 });
+        headings.forEach(function(heading) { observer.observe(heading); });
+      }
+    }
+
     function renderMarkdown(content) {
-      body.innerHTML = '<div class="markdown-body">' + md.render(content) + '</div>';
-      rebuildTOC(body.querySelector('.markdown-body'));
-      if (window.mermaid && mermaidStore.length > 0) {
+      var html = md.render(content);
+      body.innerHTML = '<div class="markdown-body">' + html + '</div>';
+      var mdDiv = body.querySelector('.markdown-body');
+      buildTOC(mdDiv);
+
+      if (window.mermaid && mermaidStore.length) {
         try {
-          var blocks = document.querySelectorAll('.markdown-body .mermaid');
+          var blocks = mdDiv.querySelectorAll('.mermaid');
           blocks.forEach(function(b) {
             var id = b.getAttribute('data-mermaid-id');
             if (id != null && mermaidStore[id]) b.textContent = mermaidStore[id];
           });
-          window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark' });
-          (async function() {
-            try { await window.mermaid.run({ querySelector: '.markdown-body .mermaid' }); }
-            catch(e) { console.warn('Mermaid run error:', e); }
-          })();
-        } catch(e) { console.warn('Mermaid init error:', e); }
+          window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: getResolvedTheme() === 'dark' ? 'dark' : 'default' });
+          window.mermaid.run({ querySelector: '.share-center .mermaid' }).catch(function(){});
+        } catch(e) {}
       }
-      try {
-        renderMathInElement(body, {
-          delimiters: [
-            {left: '$$', right: '$$', display: true},
-            {left: '$', right: '$', display: false},
-            {left: '\\(', right: '\\)', display: false},
-            {left: '\\[', right: '\\]', display: true}
-          ], throwOnError: false
-        });
-      } catch(e) {}
-      body.querySelectorAll('pre code:not(.hljs)').forEach(function(b) { hljs.highlightElement(b); });
-      body.querySelectorAll('a[href^="http"]').forEach(function(a) {
-        a.setAttribute('target', '_blank');
-        a.setAttribute('rel', 'noopener');
+      if (window.renderMathInElement) {
+        try { renderMathInElement(mdDiv, { delimiters: [{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}] }); } catch(e) {}
+      }
+      if (window.hljs && window.hljs.highlightElement) {
+        mdDiv.querySelectorAll('pre code:not(.hljs)').forEach(function(b) { try { window.hljs.highlightElement(b); } catch(e) {} });
+      }
+      mdDiv.querySelectorAll('a[href^="http"]').forEach(function(a) {
+        a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener');
       });
     }
 
     function renderPlainText(content) {
       var pre = document.createElement('pre');
-      pre.style.cssText = 'padding:16px;margin:0;overflow-x:auto;font-size:14px;white-space:pre-wrap;word-break:break-word;line-height:1.6;color:var(--text);';
+      pre.style.cssText = 'margin:0;padding:16px;overflow-x:auto;font-size:14px;white-space:pre-wrap;word-break:break-word;border-radius:8px;background:var(--bg-code);color:var(--text-primary);';
       pre.textContent = content;
-      body.innerHTML = '';
-      body.appendChild(pre);
-    }
-
-    var _tocList = null;
-    function rebuildTOC(mdDiv) {
-      _tocList = null;
-      var tocBtn = document.getElementById('shareTocBtn');
-      var tocPanel = document.getElementById('shareTocPanel');
-      if (tocBtn) tocBtn.style.display = 'none';
-      if (tocPanel) tocPanel.classList.remove('open');
-      if (!mdDiv) return;
-      var headings = mdDiv.querySelectorAll('h1, h2, h3, h4');
-      if (headings.length < 2) return;
-      headings.forEach(function(h, i) { if (!h.id) h.id = 'share-heading-' + i; });
-
-      var list = document.createElement('ul');
-      list.style.cssText = 'padding:8px 12px;margin:0;list-style:none;max-height:50vh;overflow-y:auto;';
-      headings.forEach(function(h) {
-        var level = parseInt(h.tagName[1]);
-        var li = document.createElement('li');
-        li.style.cssText = 'padding:3px 0 3px ' + ((level - 1) * 16) + 'px;';
-        var a = document.createElement('a');
-        a.href = '#' + h.id;
-        a.textContent = h.textContent;
-        a.style.cssText = 'color:var(--text-secondary);text-decoration:none;cursor:pointer;display:block;padding:3px 8px;border-radius:4px;font-size:13px;';
-        a.addEventListener('mouseenter', function() { this.style.background = 'var(--bg-hover)'; });
-        a.addEventListener('mouseleave', function() { this.style.background = 'transparent'; });
-        a.addEventListener('click', function(e) {
-          e.preventDefault();
-          h.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          var panel = document.getElementById('shareTocPanel');
-          if (panel) panel.classList.remove('open');
-          var btn = document.getElementById('shareTocBtn');
-          if (btn) btn.textContent = '📋大纲';
-        });
-        li.appendChild(a);
-        list.appendChild(li);
-      });
-      _tocList = list;
-      var panel = document.getElementById('shareTocPanel');
-      if (panel) {
-        panel.innerHTML = '';
-        panel.appendChild(list);
-      }
-      var btn = document.getElementById('shareTocBtn');
-      if (btn) btn.style.display = '';
-    }
-
-    function setupTocToggle() {
-      var btn = document.getElementById('shareTocBtn');
-      var panel = document.getElementById('shareTocPanel');
-      if (!btn || !panel) return;
-      btn.addEventListener('click', function() {
-        var open = panel.classList.toggle('open');
-        btn.textContent = open ? '📋大纲 ▲' : '📋大纲';
-        if (open && _tocList) {
-          panel.innerHTML = '';
-          panel.appendChild(_tocList);
-        }
-      });
+      body.innerHTML = ''; body.appendChild(pre);
     }
 
     async function loadContent() {
@@ -241,32 +370,34 @@
           return;
         }
         var data = await res.json();
-
-        // Update expiry time
-        var expiryEl = document.getElementById('shareExpiry');
-        if (expiryEl && data.expires_str) {
-          expiryEl.textContent = '⏳ 有效期 ' + data.expires_str;
-        }
+        // Store root/file for image path rewriting
+        _shareRoot = data.root || '';
+        _shareFile = data.path || '';
+        document.getElementById('shareExpiry').textContent = data.expires_str ? '⏳ ' + data.expires_str + ' 前有效' : '⏳ -';
 
         var ext = data.suffix ? data.suffix.replace('.','').toLowerCase() : '';
-        // 提取标题：Markdown 取第一个 # heading，其余用文件名
         var pageTitle = data.name;
         if ((ext === 'md' || ext === 'markdown') && data.content) {
           var m = data.content.match(/^#\s+(.+)$/m);
           if (m) pageTitle = m[1].trim();
         }
         document.title = pageTitle + ' · ClawMate 分享';
-        document.getElementById('shareTitle').textContent = '📄 ' + pageTitle;
+        document.getElementById('shareTitle').textContent = pageTitle;
 
-        if (IMAGE_EXTS.includes(ext)) {
-          body.innerHTML = '<div class="share-media-wrapper"><div class="share-media-title">' + data.name + '</div><img src="' + API_BASE + '/share/' + TOKEN + '/raw" alt="' + data.name + '" /></div>';
-        } else if (AUDIO_EXTS.includes(ext)) {
-          body.innerHTML = '<div class="share-media-wrapper"><div class="share-media-title">' + data.name + '</div><audio src="' + API_BASE + '/share/' + TOKEN + '/raw" controls preload="metadata" style="width:100%;max-width:600px;"></audio></div>';
-        } else if (VIDEO_EXTS.includes(ext)) {
-          body.innerHTML = '<div class="share-media-wrapper"><div class="share-media-title">' + data.name + '</div><video src="' + API_BASE + '/share/' + TOKEN + '/raw" controls preload="metadata" style="width:100%;max-height:60vh;border-radius:8px;background:#000;"></video></div>';
-        } else if (OFFICE_EXTS.includes(ext) || ext === 'pdf') {
-          body.innerHTML = '<div class="share-media-wrapper" style="gap:16px;"><div style="font-size:48px;opacity:0.5;">📄</div><div class="share-media-title">' + data.name + '</div><div style="font-size:13px;color:var(--text-muted);">桌面版可预览 Office/PDF 文件</div></div>';
-        } else if (MARKDOWN_EXTS.includes(ext)) {
+        var IMG = ['png','jpg','jpeg','svg','webp','gif','bmp','ico'];
+        var AUD = ['mp3','wav','ogg','flac','aac','m4a','wma'];
+        var VID = ['mp4','webm','mov','avi','mkv','wmv','flv','m4v'];
+        var DOC = ['doc','docx','xls','xlsx','ppt','pptx','odt','ods','odp','pdf'];
+
+        if (IMG.includes(ext)) {
+          body.innerHTML = '<div class="share-media"><div class="share-media-title">' + data.name + '</div><img src="' + API_BASE + '/share/' + TOKEN + '/raw" alt="' + data.name + '" /></div>';
+        } else if (AUD.includes(ext)) {
+          body.innerHTML = '<div class="share-media"><div class="share-media-title">' + data.name + '</div><audio src="' + API_BASE + '/share/' + TOKEN + '/raw" controls preload="metadata" style="width:100%;max-width:600px;"></audio></div>';
+        } else if (VID.includes(ext)) {
+          body.innerHTML = '<div class="share-media"><div class="share-media-title">' + data.name + '</div><video src="' + API_BASE + '/share/' + TOKEN + '/raw" controls preload="metadata" style="width:100%;max-height:60vh;border-radius:8px;background:#000;"></video></div>';
+        } else if (DOC.includes(ext)) {
+          body.innerHTML = '<div class="share-media" style="gap:16px;"><div style="font-size:48px;opacity:0.5;">📄</div><div class="share-media-title">' + data.name + '</div><div style="font-size:13px;color:var(--text-muted);">桌面版可预览 Office/PDF 文件</div></div>';
+        } else if (ext === 'md' || ext === 'markdown') {
           renderMarkdown(data.content || '');
         } else {
           renderPlainText(data.content || '');
@@ -276,7 +407,6 @@
       }
     }
     loadContent();
-    setupTocToggle();
   })();
   </script>
 </body>

@@ -23,11 +23,6 @@ TEXT_EXTENSIONS = {
     ".ps1", ".sql", ".r", ".go", ".java", ".c", ".cpp", ".h", ".hpp", ".vue", ".srt",
 }
 
-# v1.8 B3: TTL 兜底 — 当 config.json mtime 不变时，强制在 TTL 到期后重新加载
-# (mtime 检查仍保留：mtime 改变 → 立即失效；TTL 是兜底)
-_CONFIG_CACHE: Dict[str, Optional[object]] = {"mtime": None, "data": None, "expires_at": 0.0}
-_CONFIG_CACHE_TTL_SECONDS = 60  # dev 可调 (<5min)
-
 
 def _normalize_rel_path(rel_path: str) -> str:
     rel_path = str(rel_path or "").strip()
@@ -202,58 +197,89 @@ def file_info(path: Path, rel_path: str) -> Dict:
     }
 
 
-def list_dir(root_id: str, rel_dir: str = "") -> Dict:
+def list_dir(root_id: str, rel_dir: str = "", offset: int = 0, limit: int = 200) -> Dict:
     root_path, target, _ = safe_path(root_id, rel_dir)
     if not target.exists() or not target.is_dir():
         raise FileNotFoundError("Directory not found")
 
-    entries: List[Dict] = []
+    all_entries: List[Dict] = []
 
     for entry in sorted(target.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
         rel_path = str(entry.relative_to(root_path))
-        entries.append(file_info(entry, rel_path))
+        all_entries.append(file_info(entry, rel_path))
+
+    total = len(all_entries)
+    entries = all_entries[offset:offset + limit] if limit > 0 else all_entries
 
     result = {
         "path": "" if target == root_path else str(target.relative_to(root_path)),
         "name": target.name if target != root_path else root_path.name,
         "entries": entries,
+        "total": total,
+        "offset": offset,
+        "limit": limit,
     }
 
     return result
 
 
-def search_media(query: str, root_id: str, rel_dir: str = "", recursive: bool = True, limit: int = 200) -> Dict:
+def search_media(query: str, root_id: str, rel_dir: str = "", recursive: bool = True,
+                 limit: int = 200, max_depth: int = 8, timeout: float = 10.0) -> Dict:
+    """搜索文件/目录名，支持递归深度限制和硬超时。
+
+    Args:
+        max_depth: 递归最大深度（从 start_dir 算起），默认 8 层
+        timeout: 搜索超时秒数，默认 10s；超时后返回已有结果并标记 truncated=True
+    """
+    import time as _time
+    _deadline = _time.time() + timeout
+
     root_path, target, _ = safe_path(root_id, rel_dir)
     if not target.exists() or not target.is_dir():
         raise FileNotFoundError("Directory not found")
 
     query_lower = query.lower().strip()
     results: List[Dict] = []
+    truncated = False
     if not query_lower:
-        return {"query": query, "results": results}
-
-    def maybe_add(path: Path, rel_path: str):
-        nonlocal results
-        results.append(file_info(path, rel_path))
+        return {"query": query, "results": results, "truncated": False}
 
     if recursive:
-        for root, dirs, files in os.walk(target):
-            for name in dirs + files:
-                if query_lower in name.lower():
-                    maybe_add(Path(root) / name, str(Path(root).relative_to(root_path) / name))
+        from collections import deque
+        queue: deque = deque([(target, 0)])  # (dir_path, depth)
+        while queue:
+            if _time.time() > _deadline:
+                truncated = True
+                break
+            dir_path, depth = queue.popleft()
+            if depth > max_depth:
+                continue
+            try:
+                entries = sorted(dir_path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
+            except (OSError, PermissionError):
+                continue
+            for entry in entries:
+                if query_lower in entry.name.lower():
+                    results.append(file_info(entry, str(entry.relative_to(root_path))))
                     if len(results) >= limit:
                         break
             if len(results) >= limit:
                 break
+            if depth < max_depth:
+                for entry in entries:
+                    if entry.is_dir():
+                        queue.append((entry, depth + 1))
     else:
         for entry in target.iterdir():
+            if _time.time() > _deadline:
+                truncated = True
+                break
             if query_lower in entry.name.lower():
-                rel_path = str(entry.relative_to(root_path))
-                maybe_add(entry, rel_path)
+                results.append(file_info(entry, str(entry.relative_to(root_path))))
                 if len(results) >= limit:
                     break
 
-    return {"query": query, "results": results}
+    return {"query": query, "results": results, "truncated": truncated}
 
 
 def preview_text(path: Path) -> Tuple[str, bool]:

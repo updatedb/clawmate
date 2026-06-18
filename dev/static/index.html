@@ -20,6 +20,7 @@
       </div>
       <div class="topbar-actions">
         <button id="themeToggle" class="topbar-btn" title="切换主题">🌓</button>
+        <button id="btnLogout" class="topbar-btn" title="退出登录">🚪</button>
       </div>
     </header>
     <div class="content">
@@ -37,7 +38,7 @@
           </div>
           <div class="toolbar-bottom">
             <div class="tb-left">
-              <label>类型</label>
+              <label id="filterLabel">类型</label>
               <select id="filterType">
                 <option value="all">全部</option>
                 <option value="dir">目录</option>
@@ -48,12 +49,9 @@
                 <option value="other">其他</option>
               </select>
               <label>排序</label>
-              <select id="sortKey">
-                <option value="time">时间</option>
-                <option value="name">名称</option>
-                <option value="size">大小</option>
-              </select>
-              <button id="sortDir">↓ 最新优先</button>
+              <button id="sortTime" class="sort-pill active" data-key="time" data-dir="desc">↓ 最新</button>
+              <button id="sortName" class="sort-pill" data-key="name" data-dir="asc">↑ 名称</button>
+              <button id="sortSize" class="sort-pill" data-key="size" data-dir="desc">↓ 大小</button>
               <button id="multiSelectToggle" title="多选">☐ 多选</button>
             </div>
             <div class="tb-right">
@@ -70,6 +68,7 @@
             <button id="prevPage">上一页</button>
             <span id="pageInfo"></span>
             <button id="nextPage">下一页</button>
+            <button id="loadMoreBtn" style="display:none;margin-top:8px;width:100%;padding:10px;font-size:15px;border:1px dashed var(--border);background:var(--bg);color:var(--text);cursor:pointer;border-radius:6px;">加载更多</button>
           </div>
         </div>
       </main>

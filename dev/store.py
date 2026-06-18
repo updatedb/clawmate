@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import re
+import threading
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -26,6 +27,10 @@ if not logger.handlers:
     logger.setLevel(logging.INFO)
 
 CST = timezone(timedelta(hours=8))
+
+# ── 并发写保护 ─────────────────────────────────────────────────────
+# 所有读-改-写操作共用此锁，防止并发请求导致 feedback.json 数据丢失。
+_feedback_write_lock = threading.Lock()
 
 
 # ── 读 ─────────────────────────────────────────────────────────
@@ -113,6 +118,11 @@ def batch_update_items(root_id: str, project: str, updates: list[dict]) -> list[
     逐项更新，失败项不阻断后续。
     返回实际更新的 items 列表。
     """
+    with _feedback_write_lock:
+        return _batch_update_items_locked(root_id, project, updates)
+
+
+def _batch_update_items_locked(root_id: str, project: str, updates: list[dict]) -> list[dict]:
     path = _get_feedback_path(root_id, project)
     data = _read_feedback(path)
     items = data.get("items", [])
@@ -132,9 +142,9 @@ def batch_update_items(root_id: str, project: str, updates: list[dict]) -> list[
             item["result"] = upd["result"]
         item["updated"] = now
         updated.append(item)
+    _ts = datetime.now(CST).isoformat(timespec="seconds")
     if updated:
         _atomic_write(path, root_id, project, items, data.get("last_id", 0))
-        _ts = datetime.now(CST).isoformat(timespec="seconds")
     logger.info("[batch_update] %s root=%s proj=%s count=%d", _ts, root_id, project, len(updated))
     return updated
 
@@ -169,8 +179,7 @@ def create_items(
     file_path: str,
     selections: list[dict],
 ) -> list[dict]:
-    """
-    写入新反馈条目。
+    """写入新反馈条目（带并发写锁）。
 
     selections 每项字段：
     - text (str, 必填) → item.content
@@ -181,6 +190,16 @@ def create_items(
 
     内部去重（同 content + file + note + action 跳过），自增 ID，原子写。
     """
+    with _feedback_write_lock:
+        return _create_items_locked(root_id, project, file_path, selections)
+
+
+def _create_items_locked(
+    root_id: str,
+    project: str,
+    file_path: str,
+    selections: list[dict],
+) -> list[dict]:
     path = _get_feedback_path(root_id, project)
     data = _read_feedback(path)
     items = list(data.get("items", []))
@@ -201,13 +220,7 @@ def create_items(
         note = str(sel.get("note", "")).strip()
         _action_from_sel = str(sel.get("action", "")).strip()
         _scope_from_sel = str(sel.get("scope", "")).strip()
-        dedup_key = (text, file_path, note, _action_from_sel)
-        if dedup_key in existing_keys:
-            continue
         position = str(sel.get("position", "") or "").strip()
-
-        new_id_num = last_id + idx + 1
-        item_id = f"FD-{abbr}-{new_id_num:04d}"
 
         # action/scope：优先使用前端传入值，降级到从 note 匹配标签
         _action, _scope = _action_from_sel, _scope_from_sel
@@ -226,6 +239,14 @@ def create_items(
                 _action = "other"
             if not _scope:
                 _scope = "document"
+
+        # 去重 key 使用解析后的 action（而非原始可能为空的 selection.action）
+        dedup_key = (text, file_path, note, _action)
+        if dedup_key in existing_keys:
+            continue
+
+        new_id_num = last_id + idx + 1
+        item_id = f"FD-{abbr}-{new_id_num:04d}"
 
         new_items.append({
             "id": item_id,
@@ -263,14 +284,24 @@ def update_item(
     new_status: str,
     result: str = "",
 ) -> dict:
-    """
-    更新反馈条目状态。
+    """更新反馈条目状态（带并发写锁）。
 
     Raises:
         ValueError: new_status 不合法
         FileNotFoundError: feedback.json 不存在
         LookupError: item_id 不存在
     """
+    with _feedback_write_lock:
+        return _update_item_locked(root_id, project, item_id, new_status, result)
+
+
+def _update_item_locked(
+    root_id: str,
+    project: str,
+    item_id: str,
+    new_status: str,
+    result: str = "",
+) -> dict:
     if new_status not in FEEDBACK_STATUSES and new_status != "deleted":
         raise ValueError(f"status must be one of {FEEDBACK_STATUSES} or deleted")
 

@@ -47,6 +47,10 @@ const state = {
   sortDir: "desc",
   page: 1,
   pageSize: 60,
+  total: 0,
+  hasMore: false,
+  loadingMore: false,
+  pageLimit: 200,  // 每页从服务器请求的最大条目数
   selectedPaths: new Set(),
   multiSelectEnabled: false,
   onlyofficeAvailable: null, // null=unknown, true=available, false=unavailable
@@ -76,11 +80,13 @@ const els = {
   viewGrid: document.getElementById("viewGrid"),
   viewList: document.getElementById("viewList"),
   filterType: document.getElementById("filterType"),
-  sortKey: document.getElementById("sortKey"),
-  sortDir: document.getElementById("sortDir"),
+  sortTime: document.getElementById("sortTime"),
+  sortName: document.getElementById("sortName"),
+  sortSize: document.getElementById("sortSize"),
   prevPage: document.getElementById("prevPage"),
   nextPage: document.getElementById("nextPage"),
   pageInfo: document.getElementById("pageInfo"),
+  loadMoreBtn: document.getElementById("loadMoreBtn"),
   rootSelect: document.getElementById("rootSelect"),
   batchDownloadBtn: document.getElementById("batchDownloadBtn"),
   themeToggle: document.getElementById("themeToggle"),
@@ -141,15 +147,22 @@ function cycleTheme() {
 
 // Initialize theme on load
 // 排序标签更新函数
-function updateSortLabel() {
-  const labels = {
-    time: { desc: "↓ 最新优先", asc: "↑ 最早优先" },
-    name: { desc: "↓ Z→A", asc: "↑ A→Z" },
-    size: { desc: "↓ 最大优先", asc: "↑ 最小优先" },
-  };
-  if (els.sortDir) {
-    els.sortDir.textContent = labels[state.sortKey][state.sortDir];
-  }
+function updateSortPills() {
+  const pills = [
+    { el: els.sortTime, key: "time", desc: "↓ 最新", asc: "↑ 最早" },
+    { el: els.sortName, key: "name", desc: "↓ Z→A", asc: "↑ A→Z" },
+    { el: els.sortSize, key: "size", desc: "↓ 最大", asc: "↑ 最小" },
+  ];
+  pills.forEach(p => {
+    if (!p.el) return;
+    const active = state.sortKey === p.key;
+    p.el.classList.toggle("active", active);
+    if (active) {
+      const isDesc = state.sortDir === "desc";
+      p.el.textContent = isDesc ? p.desc : p.asc;
+      p.el.dataset.dir = state.sortDir;
+    }
+  });
 }
 
 function initTheme() {
@@ -1322,6 +1335,7 @@ function render() {
   renderGallery(pagedMarkdown, pagedFolder, pagedOther);
   renderList(pagedMarkdown, pagedFolder, pagedOther);
   updatePagination(totalPages);
+  updateLoadMoreBtn();
   updateBatchBar();
 
   const baseCount = entries.length;
@@ -1515,11 +1529,10 @@ async function loadDir(dir) {
   state.searchResults = null;
   state.searchQuery = "";
   state.page = 1;
+  state.loadingMore = false;
   setStatus("加载中...");
   // Show skeleton while loading
-  if (state.view === 'grid') { showGallerySkeleton(); } else { showListSkeleton(); }
-  console.log("loadDir API call:", "/api/clawmate/list?root=" + state.rootId + "&dir=" + safeDir);
-  const res = await authFetch(`/api/clawmate/list?root=${encodeURIComponent(state.rootId)}&dir=${encodeURIComponent(safeDir)}`);
+  if (state.view === 'grid') { showGallerySkeleton(); } else { showListSkeleton(); }  const res = await authFetch(`/api/clawmate/list?root=${encodeURIComponent(state.rootId)}&dir=${encodeURIComponent(safeDir)}&limit=${state.pageLimit}`);
   if (!res.ok) {
     if (res.status === 404) {
       setStatus("目录不存在");
@@ -1530,14 +1543,52 @@ async function loadDir(dir) {
     }
     return;
   }
-  const data = await res.json();
-  console.log("loadDir API response:", data);
-  state.dir = data.path || "";
+  const data = await res.json();  state.dir = data.path || "";
   state.entries = (data.entries || []).map(mapEntry);
+  state.total = data.total || 0;
+  state.hasMore = state.entries.length < state.total;
   updateUrl();
   // Also load parent dir for sidebar
   await loadSidebarParent(state.dir);
   render();
+}
+
+async function loadMore() {
+  if (state.loadingMore || !state.hasMore || state.searchResults) return;
+  state.loadingMore = true;
+  const btn = els.loadMoreBtn;
+  if (btn) { btn.textContent = "加载中..."; btn.disabled = true; }
+
+  const offset = state.entries.length;
+  const safeDir = state.dir || "";  try {
+    const res = await authFetch(`/api/clawmate/list?root=${encodeURIComponent(state.rootId)}&dir=${encodeURIComponent(safeDir)}&offset=${offset}&limit=${state.pageLimit}`);
+    if (!res.ok) { state.loadingMore = false; updateLoadMoreBtn(); return; }
+    const data = await res.json();
+    const newEntries = (data.entries || []).map(mapEntry);
+    state.entries = state.entries.concat(newEntries);
+    state.total = data.total || 0;
+    state.hasMore = state.entries.length < state.total;
+  } catch (e) {
+    console.error("loadMore error:", e);
+  }
+  state.loadingMore = false;
+  updateLoadMoreBtn();
+  render();
+}
+
+function updateLoadMoreBtn() {
+  const btn = els.loadMoreBtn;
+  if (!btn) return;
+  if (state.searchResults) { btn.style.display = 'none'; return; }
+  if (state.loadingMore) { btn.textContent = "加载中..."; btn.disabled = true; btn.style.display = ''; return; }
+  if (state.hasMore) {
+    const remaining = state.total - state.entries.length;
+    btn.textContent = `加载更多 (剩余 ${remaining} 项)`;
+    btn.disabled = false;
+    btn.style.display = '';
+  } else {
+    btn.style.display = 'none';
+  }
 }
 
 async function search() {
@@ -1613,17 +1664,17 @@ function setFilterType(value) {
   render();
 }
 
-function setSortKey(value) {
-  state.sortKey = value;
+function handleSortPill(btn) {
+  const key = btn.dataset.key;
+  if (state.sortKey === key) {
+    // Same key: toggle direction
+    state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
+  } else {
+    // Different key: switch sort key, keep current direction
+    state.sortKey = key;
+  }
   state.page = 1;
-  updateSortLabel();
-  render();
-}
-
-function toggleSortDir() {
-  state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
-  updateSortLabel();
-  state.page = 1;
+  updateSortPills();
   render();
 }
 
@@ -1687,8 +1738,9 @@ els.sidebarOverlay && els.sidebarOverlay.addEventListener("click", () => {
   if (els.sidebarOverlay) els.sidebarOverlay.style.display = "none";
 });
 els.filterType.addEventListener("change", (e) => setFilterType(e.target.value));
-els.sortKey.addEventListener("change", (e) => setSortKey(e.target.value));
-els.sortDir.addEventListener("click", toggleSortDir);
+els.sortTime && els.sortTime.addEventListener("click", () => handleSortPill(els.sortTime));
+els.sortName && els.sortName.addEventListener("click", () => handleSortPill(els.sortName));
+els.sortSize && els.sortSize.addEventListener("click", () => handleSortPill(els.sortSize));
 els.prevPage.addEventListener("click", () => {
   if (state.page > 1) {
     state.page -= 1;
@@ -1699,9 +1751,18 @@ els.nextPage.addEventListener("click", () => {
   state.page += 1;
   render();
 });
+els.loadMoreBtn && els.loadMoreBtn.addEventListener("click", loadMore);
 
 // Theme toggle
 els.themeToggle && els.themeToggle.addEventListener("click", cycleTheme);
+
+// Logout
+const btnLogoutMain = document.getElementById("btnLogout");
+btnLogoutMain && btnLogoutMain.addEventListener("click", async function() {
+  if (!confirm("确定要退出登录吗？")) return;
+  try { await fetch("/api/clawmate/auth/logout", { method: "POST" }); } catch (_) {}
+  window.location.href = "/clawmate/login.html";
+});
 
 // Multi-select
 els.multiSelectToggle && els.multiSelectToggle.addEventListener("click", toggleMultiSelect);
@@ -2165,8 +2226,7 @@ async function init() {
   await loadConfig();
   initTheme(); // Apply theme before render
   // Sync sort select with state default
-  els.sortKey.value = state.sortKey;
-  updateSortLabel();
+  updateSortPills();
   setupDragDrop(); // Activate drag-and-drop upload
   // Pre-check ONLYOFFICE availability in background
   checkOnlyofficeAvailable();
@@ -2202,5 +2262,27 @@ async function init() {
   }
   await loadDir(dirParam || "");
 }
+
+// ── Responsive: auto-switch to list on small screens ──
+const RESPONSIVE_BREAKPOINT = 768;
+let _responsiveViewActive = false;
+
+function applyResponsiveView() {
+  const small = window.innerWidth < RESPONSIVE_BREAKPOINT;
+  if (small && !_responsiveViewActive) {
+    _responsiveViewActive = true;
+    if (state.view === "grid") setView("list");
+  } else if (!small && _responsiveViewActive) {
+    _responsiveViewActive = false;
+  }
+}
+
+// Run on load and on resize (debounced)
+applyResponsiveView();
+let _resizeTimer;
+window.addEventListener("resize", () => {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(applyResponsiveView, 250);
+});
 
 init();

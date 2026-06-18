@@ -12,6 +12,7 @@ import re
 import time
 import zipfile
 import httpx
+import jwt as pyjwt
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -76,47 +77,30 @@ def _get_onlyoffice_secret() -> str:
     return secret
 
 
-
-def _b64url_encode(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("utf-8")
-
-
-def _b64url_decode(data: str) -> bytes:
-    padding = "=" * (-len(data) % 4)
-    return base64.urlsafe_b64decode(data + padding)
-
-
 def _encode_jwt(payload: dict, secret: str) -> str:
-    header = {"alg": "HS256", "typ": "JWT"}
-    header_b64 = _b64url_encode(json.dumps(header, separators=(",", ":")).encode("utf-8"))
-    payload_b64 = _b64url_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
-    signing_input = f"{header_b64}.{payload_b64}".encode("utf-8")
-    signature = hmac.new(secret.encode("utf-8"), signing_input, hashlib.sha256).digest()
-    return f"{header_b64}.{payload_b64}.{_b64url_encode(signature)}"
+    """使用 PyJWT 生成 HS256 token。"""
+    return pyjwt.encode(payload, secret, algorithm="HS256")
 
 
 def _decode_jwt(token: str, secret: str) -> dict:
-    parts = token.split(".")
-    if len(parts) != 3:
-        raise ValueError("Invalid token")
-    signing_input = f"{parts[0]}.{parts[1]}".encode("utf-8")
-    signature = _b64url_decode(parts[2])
-    expected = hmac.new(secret.encode("utf-8"), signing_input, hashlib.sha256).digest()
-    if not hmac.compare_digest(signature, expected):
-        raise ValueError("Invalid signature")
-    payload = json.loads(_b64url_decode(parts[1]))
-    exp = payload.get("exp")
-    if exp is None:
-        raise ValueError("Missing exp")
-    if int(exp) < int(time.time()):
-        raise PermissionError("Token expired")
-    return payload
+    """使用 PyJWT 验证并解码 HS256 token。
+
+    Raises:
+        pyjwt.ExpiredSignatureError: token 已过期
+        pyjwt.InvalidTokenError: token 无效
+    """
+    return pyjwt.decode(token, secret, algorithms=["HS256"], options={"require": ["exp"]})
 
 
 @router.get("/api/clawmate/list", response_class=JSONResponse)
-async def clawmate_list(root: str = "", dir: str = ""):
+async def clawmate_list(
+    root: str = "",
+    dir: str = "",
+    offset: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=1000),
+):
     try:
-        return JSONResponse(content=list_dir(root, dir))
+        return JSONResponse(content=list_dir(root, dir, offset=offset, limit=limit))
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Directory not found")
     except PermissionError:
@@ -175,9 +159,14 @@ async def clawmate_search(
     dir: str = "",
     recursive: bool = True,
     limit: int = Query(200, ge=1, le=500),
+    max_depth: int = Query(8, ge=1, le=20),
+    timeout: float = Query(10.0, ge=1.0, le=30.0),
 ):
     try:
-        return JSONResponse(content=search_media(q, root_id=root, rel_dir=dir, recursive=recursive, limit=limit))
+        return JSONResponse(content=search_media(
+            q, root_id=root, rel_dir=dir, recursive=recursive,
+            limit=limit, max_depth=max_depth, timeout=timeout,
+        ))
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Directory not found")
     except PermissionError:
@@ -186,15 +175,15 @@ async def clawmate_search(
         raise HTTPException(status_code=400, detail="Invalid path")
 
 
-import hmac, hashlib, time as time_module
-
 _PREVIEW_TOKEN_TTL_SECONDS = 3600  # 1 hour
-_PREVIEW_TOKEN_SECRET = os.environ.get("CLAWMATE_PREVIEW_TOKEN_SECRET", "dev-secret-change-me")
+_PREVIEW_TOKEN_SECRET = os.environ.get("CLAWMATE_PREVIEW_TOKEN_SECRET", "")
+if not _PREVIEW_TOKEN_SECRET:
+    print("[clawmate] WARNING: CLAWMATE_PREVIEW_TOKEN_SECRET not set — preview token verification will fail", flush=True)
 
 
 def generate_preview_token(root_id: str, rel_path: str) -> str:
     """Generate a time-limited HMAC-signed preview token for root_id:rel_path."""
-    expires = int(time_module.time()) + _PREVIEW_TOKEN_TTL_SECONDS
+    expires = int(time.time()) + _PREVIEW_TOKEN_TTL_SECONDS
     msg = f"{root_id}:{rel_path}:{expires}"
     sig = hmac.new(_PREVIEW_TOKEN_SECRET.encode(), msg.encode(), hashlib.sha256).hexdigest()
     return f"{expires}:{sig}"
@@ -205,7 +194,7 @@ def verify_preview_token(root_id: str, rel_path: str, token: str) -> bool:
     try:
         expires_str, sig = token.split(":", 1)
         expires = int(expires_str)
-        if time_module.time() > expires:
+        if time.time() > expires:
             return False
         msg = f"{root_id}:{rel_path}:{expires}"
         expected = hmac.new(_PREVIEW_TOKEN_SECRET.encode(), msg.encode(), hashlib.sha256).hexdigest()
@@ -713,9 +702,9 @@ async def clawmate_onlyoffice_file(token: str = ""):
         raise HTTPException(status_code=403, detail="Missing token")
     try:
         payload = _decode_jwt(token, secret)
-    except PermissionError:
+    except pyjwt.ExpiredSignatureError:
         raise HTTPException(status_code=403, detail="Token expired")
-    except Exception:
+    except pyjwt.InvalidTokenError:
         raise HTTPException(status_code=403, detail="Invalid token")
 
     root = payload.get("root", "")
@@ -746,9 +735,9 @@ async def clawmate_onlyoffice_callback(request: Request, token: str = ""):
         return JSONResponse(content={"error": 1, "message": "Missing token"}, status_code=403)
     try:
         payload = _decode_jwt(token, secret)
-    except PermissionError:
+    except pyjwt.ExpiredSignatureError:
         return JSONResponse(content={"error": 1, "message": "Token expired"}, status_code=403)
-    except Exception:
+    except pyjwt.InvalidTokenError:
         return JSONResponse(content={"error": 1, "message": "Invalid token"}, status_code=403)
 
     root = payload.get("root", "")
@@ -812,6 +801,22 @@ def _get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def _request_is_https(request: Request) -> bool:
+    """判断请求是否通过 HTTPS 访问（支持反向代理）。"""
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    if forwarded_proto:
+        return forwarded_proto.split(",")[0].strip() == "https"
+    # 检查 public_base_url 配置
+    try:
+        base = config().public_base_url
+        if base.startswith("https://"):
+            return True
+    except Exception:
+        pass
+    # 兜底：检查请求本身的 scheme
+    return request.url.scheme == "https"
+
+
 @router.post("/api/clawmate/auth/login")
 async def auth_login(request: Request):
     """Verify credentials, issue session, set session cookie."""
@@ -866,12 +871,15 @@ async def auth_login(request: Request):
     sid, _ = await create_session(username, ttl)
 
     response = JSONResponse({"ok": True, "username": username})
+    # 根据请求协议或 public_base_url 决定是否设置 secure cookie
+    _is_https = _request_is_https(request)
     response.set_cookie(
         key="clawmate_session",
         value=sid,
         max_age=ttl,
         httponly=True,
         samesite="lax",
+        secure=_is_https,
         path="/",
     )
     return response

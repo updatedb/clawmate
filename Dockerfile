@@ -37,8 +37,8 @@ COPY dev/static/ static/
 ENV CLAWMATE_PORT=5533
 EXPOSE 5533
 
-# Health check
-HEALTHCHECK --interval=60m --timeout=5s --start-period=10s \
+# Health check — 每 30s 探测一次，启动 10s 后开始
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5533/api/health').read()" || exit 1
 
 CMD ["python", "-u", "main.py"]

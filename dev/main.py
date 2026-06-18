@@ -129,7 +129,6 @@ def _run_set_password(force: bool = False):
 # ── FastAPI app ────────────────────────────────────────────────────
 app = FastAPI(
     title="ClawMate",
-    version="0.1.0",
     docs_url=None,
     redoc_url=None,
 )
@@ -152,6 +151,10 @@ app.add_middleware(
     allow_headers=["*"],
     allow_credentials=True,
 )
+
+# Request logging middleware — before auth, to log all requests
+from logging_middleware import RequestLoggingMiddleware  # noqa: E402
+app.add_middleware(RequestLoggingMiddleware)
 
 # Import auth middleware - must be after CORS, before static files
 from auth import AuthMiddleware, is_auth_enabled  # noqa: E402
@@ -177,20 +180,15 @@ if STATIC_DIR.exists() and STATIC_DIR.is_dir():
 
 # redirect root to /clawmate/
 @app.get("/")
-async def root_redirect(request: Request):
+async def root_redirect():
     from fastapi.responses import RedirectResponse
-    ua = request.headers.get("user-agent", "").lower()
-    is_tablet = "ipad" in ua
-    mobile_keywords = ["iphone", "android", "mobile", "windows phone", "blackberry"]
-    if not is_tablet and any(k in ua for k in mobile_keywords):
-        return RedirectResponse(url="/clawmate/m/index.html")
     return RedirectResponse(url="/clawmate/")
 
 
 # ── health check ───────────────────────────────────────────────────
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "service": "clawmate", "version": "0.1.0"}
+    return {"status": "ok", "service": "clawmate"}
 
 
 # ── 兜底定时扫描（替代 openclaw CLI cron 管理）────────────

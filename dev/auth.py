@@ -208,10 +208,9 @@ _WHITELIST = frozenset([
 ])
 
 # Prefix-based whitelist (order matters — checked after exact match)
-# Feedback APIs whitelisted for internal/cron use without auth
+# NOTE: /api/clawmate/feedback/ 不再白名单免登录，改用内部 token 或 localhost 鉴权。
 _WHITELIST_PREFIXES = (
     "/api/clawmate/onlyoffice/",
-    "/api/clawmate/feedback/",
     "/clawmate/static/",
     "/clawmate/css/",
     "/clawmate/vendor/",
@@ -280,6 +279,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if client_host in ("127.0.0.1", "::1", "localhost"):
             return await call_next(request)
 
+        # Internal token check for feedback/shared API routes (used by OpenClaw agent callbacks)
+        if path.startswith("/api/clawmate/feedback/") or path.startswith("/api/clawmate/task/"):
+            if verify_internal_token(request):
+                return await call_next(request)
+
         # IP lockout check — pre-auth stage, username not yet known
         client_ip = self._get_client_ip(request)
         locked, remaining = check_ip_lockout("?", client_ip)
@@ -326,3 +330,27 @@ class AuthMiddleware(BaseHTTPMiddleware):
             full_path += "?" + request.url.query
         redirect_to = f"/clawmate/login.html?redirect={quote(full_path, safe='')}"
         return RedirectResponse(url=redirect_to, status_code=302)
+
+
+# ── Internal API token（供 OpenClaw agent 回调 /feedback 接口）────────────
+
+def verify_internal_token(request: Request) -> bool:
+    """验证内部 API token（X-Internal-Token header 或 Authorization Bearer）。
+
+    用于 feedback API 等需要免 session 但非公开的接口。
+    token 值来自 config.json → openclaw.hook_token。
+    """
+    from config import load as _cfg
+    expected = _cfg().openclaw.hook_token
+    if not expected:
+        return False  # 未配置则拒绝
+    # 支持两种格式: X-Internal-Token: <token> 或 Authorization: Bearer <token>
+    internal = request.headers.get("X-Internal-Token", "")
+    if internal and hmac.compare_digest(internal, expected):
+        return True
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        bearer = auth_header[7:]
+        if hmac.compare_digest(bearer, expected):
+            return True
+    return False

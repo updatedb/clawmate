@@ -179,6 +179,7 @@ async def share_data(token: str):
     result = {
         "name": target.name,
         "path": safe_rel,
+        "root": link["root"],
         "category": category,
         "suffix": target.suffix.lower(),
         "meta": meta,
@@ -222,3 +223,37 @@ async def share_raw(token: str):
         "X-Content-Type-Options": "nosniff",
     }
     return FileResponse(target, media_type=media_type, headers=headers)
+
+
+@router.get("/api/clawmate/share/{token}/asset")
+async def share_asset(token: str, root: str = "", path: str = ""):
+    """Serve an asset file referenced by the shared document (e.g. markdown images)."""
+    link = _find_link(token)
+    if not link:
+        raise HTTPException(status_code=410, detail="链接已过期或不存在")
+
+    # Security: only allow assets under the same root as the shared file
+    if root != link["root"]:
+        raise HTTPException(status_code=403, detail="Asset root mismatch")
+
+    try:
+        _, target, _ = safe_path(root, path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Root not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    if not target.exists() or target.is_dir():
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    import mimetypes
+    media_type, _ = mimetypes.guess_type(str(target))
+    if not media_type:
+        media_type = "application/octet-stream"
+
+    return FileResponse(target, media_type=media_type, headers={
+        "Cache-Control": "public, max-age=3600",
+        "X-Content-Type-Options": "nosniff",
+    })
