@@ -272,6 +272,12 @@
   // ── 为渲染后的链接添加 target=_blank ────────────────────────────
   global.openLinksInNewTab = function(container) {
     container.querySelectorAll('a').forEach(function(a) {
+      var href = a.getAttribute('href') || '';
+      // Internal ClawMate preview links + hash anchors: stay in same tab
+      if (href.indexOf('preview.html?root=') !== -1 || href.startsWith('#')) {
+        a.setAttribute('target', '_self');
+        return;
+      }
       a.setAttribute('target', '_blank');
       a.setAttribute('rel', 'noopener noreferrer');
     });

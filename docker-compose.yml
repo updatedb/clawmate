@@ -14,6 +14,12 @@
 # 目录挂载说明:
 #   config.json → 配置文件，用户需自行创建并挂载（参考 config.example.json）
 #   /data       → 文件浏览根目录，config.json 中 roots[].dir 需指向容器内路径（如 /data/media）
+#
+# ⚠️ OpenClaw 容器文件路径一致性:
+#   如果 OpenClaw 也运行在 Docker 中，需挂载相同的卷以确保 agent 能访问文件：
+#     OpenClaw docker-compose 中添加:  - /openclaw/store/data:/data
+#   如果 OpenClaw 运行在宿主机，文件路径在容器内外不同（/data vs /openclaw/store/data），
+#   agent 收到的绝对路径是容器内路径。建议 OpenClaw 也容器化并使用相同卷挂载。
 
 services:
   clawmate:

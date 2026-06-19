@@ -11,6 +11,7 @@ Components:
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import secrets
 import time

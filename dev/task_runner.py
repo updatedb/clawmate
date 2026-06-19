@@ -282,7 +282,8 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
             position_val = item.get("position", "") or "无"
 
             lines.append(f"{idx+1}. [{item_id}] task_id={task_id} action={item.get('action','?')} scope={scope_val}")
-            lines.append(f"   file: {item_file}")
+            _display_file = str((_root_dir / item_file).resolve()) if item_file and item_file != '?' else item_file
+            lines.append(f"   file: {_display_file}")
             lines.append(f"   position: {position_val}")
             lines.append(f"   content: {content_val}")
             lines.append(f"   note: {note_val}")
@@ -290,14 +291,16 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
             lines.append(f"   操作：{_desc}")
             lines.append("")
         lines.append(f"步骤：")
+        lines.append(f"0. 【效率优先】position 已标注目标位置（Section xxx / Line xxx），先用 grep 定位 position 得到行号范围，仅读取该范围内的内容匹配 content，避免全文件读取")
         lines.append(f"1. 开始执行前，POST {base_url}/api/clawmate/feedback/batch-update 将所有 items 的 status 设为 in_progress，result 留空")
+        lines.append(f"   认证: Header X-Internal-Token: {hook_token}")
         lines.append(f"2. 逐个执行 item，冲突或重复项标记 status=failed")
-        lines.append(f"3. 执行完成后，再次 POST batch-update 更新最终 status（done/failed）和 result")
+        lines.append(f"3. 执行完成后，再次 POST batch-update 更新最终 status（done/failed）和 result（同样带上认证 Header）")
         lines.append(f"请求体格式: root={root_id}, project={project}, items=[{{id, status, result}}]")
         lines.append(f"")
         lines.append(f"⚠️ 安全约束：")
         lines.append(f"- 所有操作只在本地文件系统完成（不访问远程目录 / 远程系统）")
-        lines.append(f"- 所有操作基于 {root_id} 指向的目录；scope=document 时 file 必须存在，scope=project 时 project 必须存在，不存在直接标记 status=failed")
+        lines.append(f"- 所有操作基于 {root_id} 指向的目录；file 已给出绝对路径（已验证存在），scope=project 时 project 必须存在，不存在直接标记 status=failed")
         lines.append(f"- 禁止创建或删除任何文件/目录（包括临时文件）")
         lines.append(f"- 禁止修改配置文件和项目配置（config.json, config.example.json, .gitignore 等）")
         message = "\n".join(lines)

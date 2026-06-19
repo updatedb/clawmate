@@ -10,7 +10,16 @@
   // ============ URL Params ============
   const params = new URLSearchParams(window.location.search);
   const rootId = params.get('root') || '';
-  const filePath = params.get('file') || '';
+  const filePathRaw = params.get('file') || '';
+  // Fix double-encoded paths: keep decoding while %XX patterns remain
+  var filePath = filePathRaw;
+  try {
+    while (/%[0-9A-Fa-f]{2}/.test(filePath)) {
+      var decoded = decodeURIComponent(filePath);
+      if (decoded === filePath) break; // no change, stop
+      filePath = decoded;
+    }
+  } catch(_) { filePath = filePathRaw; }
   const sessionKey = params.get('session') || '';
   const fileName = filePath.split('/').pop() || '未命名';
   const ext = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '';
@@ -86,10 +95,12 @@
       document.head.appendChild(el);
       return el;
     })();
+    // 统一字体栈：优先使用 Noto Sans SC 确保中英文混排时字体一致
+    var _mdFontStack = '-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","Noto Sans",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji"';
     if (resolved === 'dark') {
-      varsEl.textContent = '[data-theme=dark] .markdown-body { color:#f0f6fc; background-color:#0d1117; } [data-theme=dark] .markdown-body * { color:#f0f6fc; } [data-theme=dark] .markdown-body table tr { background-color:#0d1117; border-top:1px solid #3d444db3; } [data-theme=dark] .markdown-body table td,[data-theme=dark] .markdown-body table th { border:1px solid #3d444d; } [data-theme=dark] .markdown-body code { background-color:#656c7633; color:#e1e4e8; } [data-theme=dark] .markdown-body pre { background-color:#151b23; color:#f0f6fc; } [data-theme=dark] .markdown-body pre code { background:transparent; color:#f0f6fc; } [data-theme=dark] .markdown-body blockquote { color:#9198a1; border-left-color:#3d444d; }';
+      varsEl.textContent = '[data-theme=dark] .markdown-body { color:#f0f6fc; background-color:#0d1117; font-family:' + _mdFontStack + '; } [data-theme=dark] .markdown-body * { color:#f0f6fc; } [data-theme=dark] .markdown-body table tr { background-color:#0d1117; border-top:1px solid #3d444db3; } [data-theme=dark] .markdown-body table td,[data-theme=dark] .markdown-body table th { border:1px solid #3d444d; } [data-theme=dark] .markdown-body code { background-color:#656c7633; color:#e1e4e8; } [data-theme=dark] .markdown-body pre { background-color:#151b23; color:#f0f6fc; } [data-theme=dark] .markdown-body pre code { background:transparent; color:#f0f6fc; } [data-theme=dark] .markdown-body blockquote { color:#9198a1; border-left-color:#3d444d; }';
     } else {
-      varsEl.textContent = '[data-theme=light] .markdown-body { color:#1f2328; background-color:#ffffff; } [data-theme=light] .markdown-body table tr { background-color:#ffffff; border-top:1px solid #d1d9e0b3; } [data-theme=light] .markdown-body table td,[data-theme=light] .markdown-body table th { border:1px solid #d1d9e0; } [data-theme=light] .markdown-body code { background:rgba(175,184,193,0.2); color:#d73a49; } [data-theme=light] .markdown-body pre { background:#f6f8fa; color:#1f2328; } [data-theme=light] .markdown-body pre code { background:transparent; color:#1f2328; } [data-theme=light] .markdown-body blockquote { color:#656d76; border-left-color:#d0d7de; }';
+      varsEl.textContent = '[data-theme=light] .markdown-body { color:#1f2328; background-color:#ffffff; font-family:' + _mdFontStack + '; } [data-theme=light] .markdown-body table tr { background-color:#ffffff; border-top:1px solid #d1d9e0b3; } [data-theme=light] .markdown-body table td,[data-theme=light] .markdown-body table th { border:1px solid #d1d9e0; } [data-theme=light] .markdown-body code { background:rgba(175,184,193,0.2); color:#d73a49; } [data-theme=light] .markdown-body pre { background:#f6f8fa; color:#1f2328; } [data-theme=light] .markdown-body pre code { background:transparent; color:#1f2328; } [data-theme=light] .markdown-body blockquote { color:#656d76; border-left-color:#d0d7de; }';
     }
   }
 
@@ -176,6 +187,22 @@
         href = `/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(fullPath)}`;
       }
       return `<img src="${href}" alt="${escHtml(text)}"${title ? ` title="${escHtml(title)}"` : ''}>`;
+    };
+
+    // Rewrite relative markdown links to ClawMate preview URLs
+    const defaultLinkOpen = md.renderer.rules.link_open || function(tokens, idx, options, env, slf) {
+      return slf.renderToken(tokens, idx, options);
+    };
+    md.renderer.rules.link_open = function(tokens, idx, options, env, slf) {
+      const token = tokens[idx];
+      let href = token.attrGet('href') || '';
+      if (href && !/^https?:\/\//i.test(href) && !href.startsWith('/') && !href.startsWith('#')) {
+        const dir = entryRelPath.split('/').slice(0, -1).join('/');
+        const fullPath = dir ? dir + '/' + href : href;
+        href = `preview.html?root=${encodeURIComponent(rootId)}&file=${encodeURIComponent(fullPath)}`;
+        token.attrSet('href', href);
+      }
+      return defaultLinkOpen(tokens, idx, options, env, slf);
     };
 
     // Handle fenced code blocks (mermaid + syntax highlighting)
@@ -497,6 +524,12 @@
 
   function openLinksInNewTab(div) {
     div.querySelectorAll('a').forEach(a => {
+      var href = a.getAttribute('href') || '';
+      // Internal ClawMate links: open in same tab
+      if (href.indexOf('preview.html?root=') !== -1 || href.startsWith('#')) {
+        a.setAttribute('target', '_self');
+        return;
+      }
       a.setAttribute('target', '_blank');
       a.setAttribute('rel', 'noopener noreferrer');
     });
@@ -959,7 +992,15 @@
     rightSidebar.classList.toggle('hidden');
     updateGridColumns();
     document.getElementById('btnToggleRight').classList.toggle('active', !rightSidebar.classList.contains('hidden'));
-    if (!wasHidden) { clearHL(); hideTooltip(); }
+    if (!wasHidden) {
+      // Closing sidebar
+      clearHL(); hideTooltip();
+      _stopSidebarRefresh();
+    } else {
+      // Opening sidebar — start auto-refresh and do an immediate load
+      _startSidebarRefresh();
+      reloadCurrentFeedback();
+    }
   });
 
   // Close buttons on panel headers
@@ -974,6 +1015,7 @@
     rightSidebar.classList.add('hidden');
     updateGridColumns();
     document.getElementById('btnToggleRight').classList.remove('active');
+    _stopSidebarRefresh();
   });
 
   // ============ Raw Markdown Content (for accurate line number calculation) ============
@@ -1236,9 +1278,7 @@
             renderMathInElement(mdDiv, {
               delimiters: [
                 {left: '$$', right: '$$', display: true},
-                {left: '$', right: '$', display: false},
-                {left: '\(', right: '\)', display: false},
-                {left: '\[', right: '\]', display: true}
+                {left: '$', right: '$', display: false}
               ],
               throwOnError: false,
               errorColor: '#dc2626',
@@ -2772,9 +2812,20 @@
         if (data.ok) {
           statusEl.textContent = '✅ 已提交';
           statusEl.className = 'fb-input-status ok';
-          card.remove();
-          if (onSubmit) await onSubmit();
-          else await reloadCurrentFeedback();
+          // Immediately close the card and auto-open sidebar
+          setTimeout(function() { card.remove(); }, 400);
+          // Auto-open right sidebar
+          if (rightSidebar.classList.contains('hidden')) {
+            rightSidebar.classList.remove('hidden');
+            updateGridColumns();
+            document.getElementById('btnToggleRight').classList.add('active');
+          }
+          // Start polling with returned IDs
+          var ids = data.ids || [];
+          _startDesktopPolling(ids, reloadCurrentFeedback);
+          if (onSubmit) {
+            setTimeout(function() { onSubmit(); }, 100);
+          }
         } else {
           statusEl.textContent = '❌ ' + (data.detail || '提交失败');
           statusEl.className = 'fb-input-status error';
@@ -2791,6 +2842,10 @@
     else if (isMediaMode) await loadMediaCompletedFeedback();
     else if (isOfficePdfMode) await loadOfficePdfCompletedFeedback();
     else await loadCompletedFeedback();
+    // Auto-start sidebar refresh timer if sidebar is visible
+    if (!rightSidebar.classList.contains('hidden')) {
+      _startSidebarRefresh();
+    }
   }
 
   // ============ Unified Completed Feedback Card Renderer ============
@@ -3046,6 +3101,97 @@
     } catch (_) {}
   }
 
+  // ── Desktop polling: refresh completed items until all submitted IDs are done/failed ──
+  var _desktopPollTimer = null;
+  var _desktopPollIds = [];
+
+  function _getCompletedItemsForMode() {
+    if (isImageMode) return imageCompletedItems;
+    if (isMediaMode) return mediaCompletedItems;
+    if (isOfficePdfMode) return officePdfCompletedItems;
+    return completedItems;
+  }
+
+  function _startDesktopPolling(ids, reloadFn) {
+    if (_desktopPollTimer) { clearInterval(_desktopPollTimer); _desktopPollTimer = null; }
+    _desktopPollIds = ids || [];
+    // Do an immediate reload
+    if (reloadFn) reloadFn();
+    if (!_desktopPollIds.length) return; // no IDs to track, one-shot reload is enough
+
+    var attempts = 0;
+    var MAX_ATTEMPTS = 30; // ~4 minutes at 8s intervals
+    var headerEl = document.querySelector('.preview-right-header span');
+    var _origHeaderText = headerEl ? headerEl.textContent : '💬 反馈';
+
+    _desktopPollTimer = setInterval(async function() {
+      attempts++;
+      if (attempts > MAX_ATTEMPTS) {
+        clearInterval(_desktopPollTimer);
+        _desktopPollTimer = null;
+        if (reloadFn) await reloadFn();
+        if (headerEl) headerEl.textContent = _origHeaderText;
+        return;
+      }
+      if (reloadFn) await reloadFn();
+      var allItems = _getCompletedItemsForMode();
+      var tracked = allItems.filter(function(it) { return _desktopPollIds.indexOf(it.id) >= 0; });
+      if (tracked.length === 0) {
+        // Items not yet in the list (still being created), keep polling
+        if (headerEl) headerEl.textContent = '⏳ 反馈';
+        return;
+      }
+      var doneCount = tracked.filter(function(it) { return it.status === 'done'; }).length;
+      var failCount = tracked.filter(function(it) { return it.status === 'failed'; }).length;
+      var total = tracked.length;
+      if (doneCount + failCount >= total) {
+        // All items resolved
+        clearInterval(_desktopPollTimer);
+        _desktopPollTimer = null;
+        if (headerEl) headerEl.textContent = _origHeaderText;
+        if (reloadFn) await reloadFn();
+        // Auto-open right sidebar if it was hidden
+        if (rightSidebar.classList.contains('hidden')) {
+          rightSidebar.classList.remove('hidden');
+          updateGridColumns();
+          document.getElementById('btnToggleRight').classList.add('active');
+        }
+        _startSidebarRefresh();
+      } else {
+        if (headerEl) headerEl.textContent = '⏳ 反馈 (' + (doneCount + failCount) + '/' + total + ')';
+      }
+    }, 8000);
+  }
+
+  // Clean up desktop poll timer on page unload
+  window.addEventListener('beforeunload', function() {
+    if (_desktopPollTimer) { clearInterval(_desktopPollTimer); _desktopPollTimer = null; }
+    if (_sidebarRefreshTimer) { clearInterval(_sidebarRefreshTimer); _sidebarRefreshTimer = null; }
+  });
+
+  // ── Sidebar auto-refresh: poll feedback list every 10s while right sidebar is visible ──
+  var _sidebarRefreshTimer = null;
+
+  function _startSidebarRefresh() {
+    if (_sidebarRefreshTimer) return; // already running
+    _sidebarRefreshTimer = setInterval(function() {
+      if (rightSidebar.classList.contains('hidden')) {
+        // Sidebar was closed externally — stop
+        clearInterval(_sidebarRefreshTimer);
+        _sidebarRefreshTimer = null;
+        return;
+      }
+      reloadCurrentFeedback();
+    }, 10000);
+  }
+
+  function _stopSidebarRefresh() {
+    if (_sidebarRefreshTimer) {
+      clearInterval(_sidebarRefreshTimer);
+      _sidebarRefreshTimer = null;
+    }
+  }
+
   function buildTaskSelection(item) {
     // 将 feedback panel 的 item 转为 task/run 的 selection 格式
     const taskId = item.task_id || (item.action ? 'review_' + item.action : 'review_modify');
@@ -3080,8 +3226,9 @@
           selections: [buildTaskSelection(selPayload)],
         }),
       });
-      if (res.ok) {
-        // Remove from the appropriate pending array
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        // Immediately remove from pending and close tooltip
         if (item.type === 'media') {
           mediaPendingItems = mediaPendingItems.filter(i => i.id !== item.id);
         } else if (item.type === 'office') {
@@ -3093,22 +3240,39 @@
         }
         if (selectedPendingId === item.id) selectedPendingId = null;
         clearHL();
-        // Reload the appropriate panel
-        if (item.type === 'media') {
-          await loadMediaCompletedFeedback();
-        } else if (item.type === 'office') {
-          await loadOfficePdfCompletedFeedback();
-        } else if (item.type === 'image') {
-          await loadImageCompletedFeedback();
-        } else {
-          await loadCompletedFeedback();
+        hideTooltip();
+        // Auto-open right sidebar
+        if (rightSidebar.classList.contains('hidden')) {
+          rightSidebar.classList.remove('hidden');
+          updateGridColumns();
+          document.getElementById('btnToggleRight').classList.add('active');
         }
+        _startSidebarRefresh();
+        renderFeedbackPanel();
+        // Start polling with the returned IDs
+        var ids = data.ids || [];
+        var reloadFn;
+        if (item.type === 'media') reloadFn = loadMediaCompletedFeedback;
+        else if (item.type === 'office') reloadFn = loadOfficePdfCompletedFeedback;
+        else if (item.type === 'image') reloadFn = loadImageCompletedFeedback;
+        else reloadFn = loadCompletedFeedback;
+        _startDesktopPolling(ids, reloadFn);
         showToast('✅ 已发送', 2000);
       } else {
-        const err = await res.json().catch(() => ({}));
-        showToast('❌ ' + (err.detail || '发送失败'), 3000);
+        // Error: show inline in tooltip status
+        const st = document.getElementById('pstStatus');
+        if (st) {
+          st.textContent = '❌ ' + (data.detail || '发送失败');
+          st.className = 'pst-status pst-status-error';
+        }
+        showToast('❌ ' + (data.detail || '发送失败'), 3000);
       }
     } catch (e) {
+      const st = document.getElementById('pstStatus');
+      if (st) {
+        st.textContent = '❌ 网络错误';
+        st.className = 'pst-status pst-status-error';
+      }
       showToast('❌ 网络错误', 3000);
     }
   }
@@ -3141,21 +3305,45 @@
           }),
         }),
       });
-      if (res.ok) {
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        // Immediately clear pending items and close windows
         pendingArray.length = 0;  // Clear in-place
         selectedPendingId = null;
         clearHL();
-        await onReload();
-        showToast('✅ 已全部提交', 2000);
+        hideTooltip();
+        // Auto-open right sidebar
+        if (rightSidebar.classList.contains('hidden')) {
+          rightSidebar.classList.remove('hidden');
+          updateGridColumns();
+          document.getElementById('btnToggleRight').classList.add('active');
+        }
+        _startSidebarRefresh();
+        renderFeedbackPanel();
+        // Start polling with returned IDs
+        var ids = data.ids || [];
+        _startDesktopPolling(ids, onReload);
+        btn.textContent = '✅ 已提交';
+        setTimeout(function() {
+          btn.disabled = false;
+          btn.textContent = '✅ 全部提交';
+        }, 2000);
       } else {
-        const err = await res.json().catch(() => ({}));
-        showToast('❌ ' + (err.detail || '提交失败'), 3000);
+        // Error: show on the button itself
+        btn.textContent = '❌ ' + (data.detail || '提交失败');
+        btn.disabled = false;
+        setTimeout(function() {
+          btn.textContent = '✅ 全部提交（' + pendingArray.length + ' 条）';
+        }, 3000);
+        showToast('❌ ' + (data.detail || '提交失败'), 3000);
       }
     } catch (e) {
-      showToast('❌ 网络错误', 3000);
-    } finally {
+      btn.textContent = '❌ 网络错误';
       btn.disabled = false;
-      btn.textContent = `✅ 全部提交（${pendingArray.length} 条）`;
+      setTimeout(function() {
+        btn.textContent = '✅ 全部提交（' + pendingArray.length + ' 条）';
+      }, 3000);
+      showToast('❌ 网络错误', 3000);
     }
   }
 
@@ -3242,6 +3430,9 @@
 
       const selText = sel.toString().trim();
       if (!selText) { hideTooltip(); return; }
+
+      // 桌面端选中文本时自动复制到剪贴板（仅新选中时触发，tooltip 已显示时不重复复制）
+      if (tooltip.style.display === 'none') copyText(selText, '已复制到剪贴板');
 
       // ── Rendered Markdown mode: detect section heading ──
       if ((isMarkdownMode) && !isRawMode && !isPlainTextEditMode) {
@@ -3630,22 +3821,34 @@
           selections: [buildTaskSelection(selPayload)],
         }),
       });
-      if (res.ok) {
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        // Immediately close tooltip and auto-open sidebar
         st.textContent = '✅ 已发送';
         st.className = 'pst-status pst-status-ok';
-        await loadCompletedFeedback();
-        setTimeout(hideTooltip, 800);
+        hideTooltip();
+        // Auto-open right sidebar
+        if (rightSidebar.classList.contains('hidden')) {
+          rightSidebar.classList.remove('hidden');
+          updateGridColumns();
+          document.getElementById('btnToggleRight').classList.add('active');
+        }
+        // Start polling with returned IDs
+        var ids = data.ids || [];
+        _startDesktopPolling(ids, loadCompletedFeedback);
       } else {
-        const err = await res.json().catch(() => ({}));
+        const err = data;
         st.textContent = '❌ ' + (err.detail || '发送失败');
         st.className = 'pst-status pst-status-error';
+        btn.disabled = false;
+        btn.textContent = '⚡ 立刻执行';
       }
     } catch (e) {
       st.textContent = '❌ 网络错误';
       st.className = 'pst-status pst-status-error';
+      btn.disabled = false;
+      btn.textContent = '⚡ 立刻执行';
     }
-    btn.disabled = false;
-    btn.textContent = '⚡ 立刻执行';
   });
 
   // ============ postMessage: ONLYOFFICE error → PDF fallback to pdf.js ============
@@ -3743,7 +3946,10 @@
     if (!selBtn) return;
 
     var pendingText = '', pendingRange = null, pendingStart = 0, pendingEnd = 0;
+    var _savedText = '';  // persists across panel open/close to prevent data loss
     var mobileSelTaskId = '';
+    var _pollTimer = null;
+    var _submittedIds = [];
 
     // Bottom panel elements
     var overlay = document.getElementById('mobileFbOverlay');
@@ -3757,7 +3963,13 @@
 
     function hideSelBtn() {
       selBtn.style.display = 'none';
+    }
+
+    function clearMobileSelection() {
       pendingText = ''; pendingRange = null;
+      _savedText = '';
+      hideSelBtn();
+      try { CSS.highlights.delete('preview-hl'); } catch (_) {}
     }
 
     function showSelBtn(range) {
@@ -3775,45 +3987,82 @@
       if (!overlay || !panel) return;
       overlay.classList.add('visible');
       panel.classList.add('visible');
+      document.body.style.overflow = 'hidden';
     }
 
-    function hidePanel() {
+    function hidePanel(preserveText) {
       if (!overlay || !panel) return;
       overlay.classList.remove('visible');
       panel.classList.remove('visible');
+      document.body.style.overflow = '';
+      if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+      if (!preserveText) {
+        _savedText = '';
+      }
       hideSelBtn();
     }
 
-    // Selection detection
+    // ── Unified selection check (called by both selectionchange + touchend) ──
+    function _checkMobileSelection() {
+      if (window.innerWidth >= 768) return;
+      var sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.toString().trim()) { hideSelBtn(); return; }
+      var text = sel.toString().trim();
+      if (text.length < 2) { hideSelBtn(); return; }
+      pendingText = text;
+      pendingRange = sel.getRangeAt(0).cloneRange();
+      // Save text to survive panel open/close cycles
+      _savedText = text;
+      var startLine = 0, endLine = 0;
+      if (rawContent) {
+        var idx = rawContent.indexOf(text);
+        if (idx !== -1) {
+          startLine = (rawContent.substring(0, idx).match(/\n/g) || []).length + 1;
+          endLine = startLine + (text.match(/\n/g) || []).length;
+        }
+      }
+      pendingStart = startLine; pendingEnd = endLine;
+      showSelBtn(sel.getRangeAt(0));
+    }
+
+    // Selection detection — selectionchange + touchend for reliable mobile coverage
     document.addEventListener('selectionchange', function() {
       clearTimeout(selBtn._timer);
-      selBtn._timer = setTimeout(function() {
-        if (window.innerWidth >= 768) return;
-        var sel = window.getSelection();
-        if (!sel || sel.isCollapsed || !sel.toString().trim()) { hideSelBtn(); return; }
-        var text = sel.toString().trim();
-        if (text.length < 2) { hideSelBtn(); return; }
-        pendingText = text;
-        pendingRange = sel.getRangeAt(0).cloneRange();
-        var startLine = 0, endLine = 0;
-        if (rawContent) {
-          var idx = rawContent.indexOf(text);
-          if (idx !== -1) {
-            startLine = (rawContent.substring(0, idx).match(/\n/g) || []).length + 1;
-            endLine = startLine + (text.match(/\n/g) || []).length;
-          }
-        }
-        pendingStart = startLine; pendingEnd = endLine;
-        showSelBtn(sel.getRangeAt(0));
-      }, 300);
+      selBtn._timer = setTimeout(_checkMobileSelection, 150);
     });
 
-    document.addEventListener('scroll', function() { hideSelBtn(); }, { passive: true });
+    // touchend fallback: some mobile browsers don't fire selectionchange reliably
+    document.addEventListener('touchend', function(e) {
+      // Only check if touch ended inside content area
+      var ct = document.getElementById('contentBody');
+      if (ct && ct.contains(e.target)) {
+        clearTimeout(selBtn._touchendTimer);
+        selBtn._touchendTimer = setTimeout(_checkMobileSelection, 200);
+      }
+    });
+
+    document.addEventListener('scroll', function() {
+      if (panel && panel.classList.contains('visible')) return;
+      hideSelBtn();
+    }, { passive: true });
 
     // Open bottom panel
     selBtn.addEventListener('click', function(e) {
       e.stopPropagation();
+      // Restore from saved text if pendingText was cleared (e.g., panel was hidden)
+      if (!pendingText && _savedText) {
+        pendingText = _savedText;
+        // Re-derive line numbers from rawContent
+        if (rawContent) {
+          var idx2 = rawContent.indexOf(pendingText);
+          if (idx2 !== -1) {
+            pendingStart = (rawContent.substring(0, idx2).match(/\n/g) || []).length + 1;
+            pendingEnd = pendingStart + (pendingText.match(/\n/g) || []).length;
+          }
+        }
+      }
       if (!pendingText) return;
+      copyText(pendingText, '已复制到剪贴板');
       // Highlight selection
       try {
         if (pendingRange && window.Highlight) {
@@ -3860,17 +4109,72 @@
     });
 
     // Close handlers
-    if (fbClose) fbClose.addEventListener('click', hidePanel);
-    if (overlay) overlay.addEventListener('click', hidePanel);
+    // Close button: full clear (user deliberately dismissed)
+    if (fbClose) fbClose.addEventListener('click', function() {
+      clearMobileSelection();
+      hidePanel(false);
+    });
+    // Overlay tap: hide panel but preserve text (user may re-open)
+    if (overlay) overlay.addEventListener('click', function() { hidePanel(true); });
+
+    // ── 轮询提交的任务状态 ──
+    function _startPolling() {
+      if (_pollTimer) clearInterval(_pollTimer);
+      var attempts = 0;
+      var MAX_ATTEMPTS = 30; // 最多 5 分钟
+      _pollTimer = setInterval(async function() {
+        attempts++;
+        if (attempts > MAX_ATTEMPTS) {
+          clearInterval(_pollTimer);
+          _pollTimer = null;
+          if (fbStatus) { fbStatus.textContent = '⏰ 超时，请手动刷新'; fbStatus.style.color = 'var(--warning)'; }
+          return;
+        }
+        try {
+          var fn = (filePath || '').split('/').pop();
+          var proj = filePath && filePath.includes('/') ? filePath.split('/')[0] : (rootId || '');
+          var res = await fetch('/api/clawmate/feedback/list?root=' + encodeURIComponent(rootId) +
+            '&project=' + encodeURIComponent(proj) +
+            '&file=' + encodeURIComponent(fn));
+          if (!res.ok) return;
+          var data = await res.json();
+          var items = data.items || [];
+          var mine = items.filter(function(it) { return _submittedIds.indexOf(it.id) >= 0; });
+          if (mine.length === 0) return; // 尚未入库，等下一轮
+          var allDone = mine.every(function(it) { return it.status === 'done' || it.status === 'failed'; });
+          if (allDone) {
+            clearInterval(_pollTimer);
+            _pollTimer = null;
+            var doneCount = mine.filter(function(it) { return it.status === 'done'; }).length;
+            var failCount = mine.filter(function(it) { return it.status === 'failed'; }).length;
+            if (fbStatus) {
+              fbStatus.textContent = '✅ 完成 ' + doneCount + ' 项' + (failCount > 0 ? '，❌ ' + failCount + ' 项失败' : '');
+              fbStatus.style.color = failCount > 0 ? 'var(--warning)' : 'var(--success)';
+            }
+            // Also refresh the desktop completed items list (right sidebar)
+            if (typeof reloadCurrentFeedback === 'function') {
+              try { reloadCurrentFeedback(); } catch (_) {}
+            }
+            setTimeout(function() { hidePanel(false); }, 2000);
+          } else {
+            var progressCount = mine.filter(function(it) { return it.status === 'done' || it.status === 'failed'; }).length;
+            if (fbStatus) { fbStatus.textContent = '⏳ 处理中... (' + progressCount + '/' + mine.length + ')'; }
+          }
+        } catch (_) {}
+      }, 10000);
+    }
 
     // Submit
     if (fbSubmit) {
       fbSubmit.addEventListener('click', async function() {
         var note = fbNote ? fbNote.value.trim() : '';
-        if (!pendingText) { return; }
+        if (!pendingText) {
+          if (fbStatus) { fbStatus.textContent = '⚠️ 请先选中文本'; fbStatus.style.color = 'var(--warning)'; }
+          return;
+        }
         fbSubmit.disabled = true;
         fbSubmit.textContent = '提交中...';
-        if (fbStatus) fbStatus.textContent = '⏳ 提交中';
+        if (fbStatus) { fbStatus.textContent = '⏳ 提交中'; fbStatus.style.color = 'var(--text-muted)'; }
         try {
           var pos = '';
           if (isMarkdownMode && pendingRange) {
@@ -3888,14 +4192,26 @@
           });
           var data = await res.json();
           if (data.ok) {
+            _submittedIds = data.ids || [];
             if (fbStatus) { fbStatus.textContent = '✅ 已提交'; fbStatus.style.color = 'var(--success)'; }
-            setTimeout(hidePanel, 800);
+            clearMobileSelection();
+            // Close bottom panel after brief success feedback
+            setTimeout(function() { hidePanel(false); }, 600);
+            // Auto-open right sidebar so user can track feedback status
+            if (rightSidebar.classList.contains('hidden')) {
+              rightSidebar.classList.remove('hidden');
+              updateGridColumns();
+              document.getElementById('btnToggleRight').classList.add('active');
+            }
+            // Start sidebar auto-refresh + immediate load
+            reloadCurrentFeedback();
           } else {
             if (fbStatus) { fbStatus.textContent = '❌ ' + (data.detail || '提交失败'); fbStatus.style.color = 'var(--danger)'; }
+            fbSubmit.disabled = false;
+            fbSubmit.textContent = '提交反馈';
           }
         } catch (e) {
           if (fbStatus) { fbStatus.textContent = '❌ 网络错误'; fbStatus.style.color = 'var(--danger)'; }
-        } finally {
           fbSubmit.disabled = false;
           fbSubmit.textContent = '提交反馈';
         }

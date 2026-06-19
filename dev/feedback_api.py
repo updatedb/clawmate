@@ -213,6 +213,9 @@ async def feedback_batch_update(request: Request):
         result = batch_update_items(root_id, project, updates)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    except Exception:
+        logger.exception("[batch-update] unhandled error root=%s project=%s", root_id, project)
+        raise HTTPException(status_code=500, detail="Internal server error — check server logs")
     return {"ok": True, "updated": len(result), "items": [{"id": it["id"], "status": it["status"]} for it in result]}
 
 

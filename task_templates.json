@@ -15,7 +15,7 @@
       "tooltip": true,
       "panel": true
     },
-    "desc": "从文件中找到 content 匹配的文本段 → 删除"
+    "desc": "按 position 定位章节 → 在章节内匹配 content → 删除"
   },
   {
     "id": "review_modify",
@@ -33,7 +33,7 @@
       "tooltip": true,
       "panel": true
     },
-    "desc": "在文件中找到 content 匹配的文本段 → 按 note 思路修改"
+    "desc": "按 position 定位章节 → 在章节内匹配 content → 按 note 思路修改"
   },
   {
     "id": "review_explain",
@@ -51,7 +51,7 @@
       "tooltip": true,
       "panel": true
     },
-    "desc": "在 content 匹配段下方插入补充说明"
+    "desc": "按 position 定位章节 → 在 content 匹配段下方插入补充说明"
   },
   {
     "id": "review_simplify",
@@ -69,7 +69,7 @@
       "tooltip": true,
       "panel": true
     },
-    "desc": "将 content 匹配段改写为简洁描述"
+    "desc": "按 position 定位章节 → 将 content 匹配段改写为简洁描述"
   },
   {
     "id": "review_translate",
@@ -87,7 +87,7 @@
       "tooltip": true,
       "panel": true
     },
-    "desc": "将 content 匹配段翻译"
+    "desc": "按 position 定位章节 → 将 content 匹配段翻译"
   },
   {
     "id": "review_add",
@@ -105,7 +105,7 @@
       "tooltip": true,
       "panel": true
     },
-    "desc": "在文件中追加新内容"
+    "desc": "按 position 定位章节 → 在章节内追加新内容"
   },
   {
     "id": "project_execute",

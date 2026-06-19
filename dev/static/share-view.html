@@ -272,6 +272,22 @@
       return '<pre><code class="' + cls + '">' + md.utils.escapeHtml(raw) + '</code></pre>';
     };
 
+    // Rewrite relative markdown links to ClawMate preview URLs
+    var _defaultLinkOpen = md.renderer.rules.link_open || function(tokens, idx, options, env, slf) {
+      return slf.renderToken(tokens, idx, options);
+    };
+    md.renderer.rules.link_open = function(tokens, idx, options, env, slf) {
+      var token = tokens[idx];
+      var href = token.attrGet('href') || '';
+      if (href && !/^https?:\/\//i.test(href) && !href.startsWith('/') && !href.startsWith('#')) {
+        var dir = (_shareFile || '').includes('/') ? _shareFile.split('/').slice(0, -1).join('/') : '';
+        var fullPath = dir ? dir + '/' + href : href;
+        href = 'preview.html?root=' + encodeURIComponent(_shareRoot) + '&file=' + encodeURIComponent(fullPath);
+        token.attrSet('href', href);
+      }
+      return _defaultLinkOpen(tokens, idx, options, env, slf);
+    };
+
     function buildTOC(mdDiv) {
       var headings = mdDiv.querySelectorAll('h1,h2,h3,h4');
       if (headings.length < 2) {
@@ -352,6 +368,10 @@
       }
       mdDiv.querySelectorAll('a[href^="http"]').forEach(function(a) {
         a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener');
+      });
+      // Internal ClawMate links stay in same tab
+      mdDiv.querySelectorAll('a[href*="preview.html?root="]').forEach(function(a) {
+        a.setAttribute('target', '_self');
       });
     }
 
