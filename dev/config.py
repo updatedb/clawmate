@@ -58,6 +58,7 @@ class TaskTemplate:
 @dataclass
 class FeedbackConfig:
     enable_subtitle: bool = False
+    cleanup_done_after_days: int = 30  # 0=禁用，>0=清理超过N天的 done/failed/deleted 条目
 
 
 @dataclass
@@ -207,6 +208,7 @@ def _parse_config(raw: dict) -> AppConfig:
         ),
         feedback=FeedbackConfig(
             enable_subtitle=bool(fb.get("enable_subtitle", False)),
+            cleanup_done_after_days=int(fb.get("cleanup_done_after_days", 30)),
 
         ),
         onlyoffice=OnlyOfficeConfig(

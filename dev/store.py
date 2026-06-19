@@ -32,6 +32,13 @@ CST = timezone(timedelta(hours=8))
 # 所有读-改-写操作共用此锁，防止并发请求导致 feedback.json 数据丢失。
 _feedback_write_lock = threading.Lock()
 
+# ── 读缓存 ─────────────────────────────────────────────────────────
+# key: str(path) → (mtime_ns, parsed_dict)
+# 分离锁：读缓存不与写锁竞争，允许并发读。
+_feedback_read_cache: dict[str, tuple[int, dict]] = {}
+_cache_lock = threading.Lock()
+_CACHE_MAX_ENTRIES = 256  # 安全上限，超过则 LRU 淘汰最旧条目
+
 
 # ── 读 ─────────────────────────────────────────────────────────
 
@@ -51,14 +58,45 @@ def _get_feedback_path(root_id: str, project: str) -> Path:
 
 
 def _read_feedback(path: Path) -> dict:
-    """读取 feedback.json，返回标准 dict。"""
+    """读取 feedback.json，优先命中内存缓存（基于 mtime_ns 校验）。"""
+    cache_key = str(path)
+    _now_ns = path.stat().st_mtime_ns if path.exists() else 0
+
+    with _cache_lock:
+        if cache_key in _feedback_read_cache:
+            cached_mtime, cached_data = _feedback_read_cache[cache_key]
+            if cached_mtime == _now_ns:
+                return cached_data
+
+    # 缓存未命中或已过期 → 解析文件
     if not path.exists():
-        return {"items": []}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, FileNotFoundError):
-        return {"items": []}
+        data = {"items": []}
+    else:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError):
+            data = {"items": []}
+
+    # 写入缓存
+    with _cache_lock:
+        # LRU 淘汰：超上限时删除最旧的条目
+        if len(_feedback_read_cache) >= _CACHE_MAX_ENTRIES:
+            oldest_key = min(
+                _feedback_read_cache,
+                key=lambda k: _feedback_read_cache[k][0],
+            )
+            del _feedback_read_cache[oldest_key]
+        _feedback_read_cache[cache_key] = (_now_ns, data)
+
+    return data
+
+
+def _invalidate_cache(path: Path) -> None:
+    """写操作后清除指定文件的读缓存。"""
+    cache_key = str(path)
+    with _cache_lock:
+        _feedback_read_cache.pop(cache_key, None)
 
 
 def list_items(
@@ -383,10 +421,55 @@ def scan_all() -> ScanResult:
     return result
 
 
+def _cleanup_expired(items: list[dict]) -> list[dict]:
+    """移除超过阈值的 done/failed/deleted 条目。
+
+    - pending / in_progress 的条目永不清理
+    - cleanup_done_after_days ≤ 0 时跳过清理
+
+    Returns: 保留的 items 列表
+    """
+    cfg = load_config()
+    threshold_days = cfg.feedback.cleanup_done_after_days
+    if threshold_days <= 0:
+        return items  # 禁用清理
+
+    cutoff = datetime.now(CST) - timedelta(days=threshold_days)
+
+    def _parse_ts(ts: str):
+        try:
+            return datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=CST)
+        except Exception:
+            return datetime.min.replace(tzinfo=CST)
+
+    kept = []
+    removed = 0
+    for item in items:
+        status = item.get("status", "")
+        if status in ("pending", "in_progress"):
+            kept.append(item)  # 永不清理未完成的工作
+        elif _parse_ts(item.get("updated", "")) >= cutoff:
+            kept.append(item)  # 在阈值内保留
+        else:
+            removed += 1  # 过期，丢弃
+
+    if removed:
+        _ts = datetime.now(CST).isoformat(timespec="seconds")
+        logger.info(
+            "[cleanup] %s removed=%d kept=%d threshold=%dd",
+            _ts, removed, len(kept), threshold_days,
+        )
+
+    return kept
+
+
 # ── 内部工具 ───────────────────────────────────────────────────────
 
 def _atomic_write(path: Path, root_id: str, project: str, items: list, last_id: int) -> None:
-    """原子写 feedback.json（tmp + os.replace）。"""
+    """原子写 feedback.json（tmp + os.replace），写入前清理过期条目。"""
+    # 清理过期 done/failed/deleted
+    items = _cleanup_expired(items)
+
     ts = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
     data = {
         "root": root_id,
@@ -399,3 +482,5 @@ def _atomic_write(path: Path, root_id: str, project: str, items: list, last_id: 
     with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     os.replace(tmp_path, path)
+    # 写后失效缓存，下一次读取会重新解析
+    _invalidate_cache(path)
