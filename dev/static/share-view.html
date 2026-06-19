@@ -51,6 +51,11 @@
       display: flex; align-items: center; justify-content: space-between;
     }
     .share-left-header span { flex: 1; }
+    .share-left-close {
+      background: none; border: none; font-size: 16px; cursor: pointer;
+      color: var(--text-secondary); padding: 2px 4px; line-height: 1; border-radius: 4px;
+    }
+    .share-left-close:hover { background: var(--bg-tertiary); color: var(--text-primary); }
     .share-left-body { flex: 1; overflow-y: auto; padding: 8px 0; }
 
     .share-center {
@@ -133,7 +138,7 @@
     <!-- Three-column -->
     <div class="share-three-col" id="shareThreeCol">
       <aside class="share-left hidden" id="shareLeft">
-        <div class="share-left-header"><span>📑 大纲</span></div>
+        <div class="share-left-header"><span>📑 大纲</span><button class="share-left-close" id="btnCloseToc" title="关闭大纲">✕</button></div>
         <div class="share-left-body" id="tocBody">
           <div class="share-toc-empty">非 Markdown，无大纲</div>
         </div>
@@ -225,6 +230,13 @@
       tocBtn.classList.toggle('active', !shareLeft.classList.contains('hidden'));
     });
     tocBtn.classList.toggle('active', !shareLeft.classList.contains('hidden'));
+
+    // ── TOC close button ──
+    document.getElementById('btnCloseToc').addEventListener('click', function() {
+      shareLeft.classList.add('hidden');
+      updateGrid();
+      tocBtn.classList.remove('active');
+    });
 
     // ── Markdown renderer ──
     var md = window.markdownit({ html: true, linkify: true, typographer: true, breaks: true });
@@ -410,16 +422,30 @@
         var DOC = ['doc','docx','xls','xlsx','ppt','pptx','odt','ods','odp','pdf'];
 
         if (IMG.includes(ext)) {
+          shareLeft.classList.add('hidden'); updateGrid(); tocBtn.classList.remove('active');
           body.innerHTML = '<div class="share-media"><div class="share-media-title">' + data.name + '</div><img src="' + API_BASE + '/share/' + TOKEN + '/raw" alt="' + data.name + '" /></div>';
         } else if (AUD.includes(ext)) {
+          shareLeft.classList.add('hidden'); updateGrid(); tocBtn.classList.remove('active');
           body.innerHTML = '<div class="share-media"><div class="share-media-title">' + data.name + '</div><audio src="' + API_BASE + '/share/' + TOKEN + '/raw" controls preload="metadata" style="width:100%;max-width:600px;"></audio></div>';
         } else if (VID.includes(ext)) {
+          shareLeft.classList.add('hidden'); updateGrid(); tocBtn.classList.remove('active');
           body.innerHTML = '<div class="share-media"><div class="share-media-title">' + data.name + '</div><video src="' + API_BASE + '/share/' + TOKEN + '/raw" controls preload="metadata" style="width:100%;max-height:60vh;border-radius:8px;background:#000;"></video></div>';
         } else if (DOC.includes(ext)) {
+          shareLeft.classList.add('hidden'); updateGrid(); tocBtn.classList.remove('active');
           body.innerHTML = '<div class="share-media" style="gap:16px;"><div style="font-size:48px;opacity:0.5;">📄</div><div class="share-media-title">' + data.name + '</div><div style="font-size:13px;color:var(--text-muted);">桌面版可预览 Office/PDF 文件</div></div>';
         } else if (ext === 'md' || ext === 'markdown') {
           renderMarkdown(data.content || '');
+        } else if (ext === 'html' || ext === 'htm') {
+          shareLeft.classList.add('hidden'); updateGrid();
+          tocBtn.classList.remove('active');
+          var iframe = document.createElement('iframe');
+          iframe.style.cssText = 'width:100%;height:100%;border:none;background:#fff;';
+          iframe.srcdoc = data.content || '';
+          body.innerHTML = '';
+          body.appendChild(iframe);
         } else {
+          shareLeft.classList.add('hidden'); updateGrid();
+          tocBtn.classList.remove('active');
           renderPlainText(data.content || '');
         }
       } catch(e) {
