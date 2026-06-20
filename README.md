@@ -1,4 +1,4 @@
-# ClawMate 🦞
+# ClawMate
 
 > Agent 产出的每一个文件，点击即预览，选中即反馈。
 
