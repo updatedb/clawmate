@@ -3,24 +3,36 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="icon" href="data:," />
+  <link rel="icon" href="./asset/clawmate-logo.png" />
   <title>ClawMate</title>
-  <link rel="stylesheet" href="./css/style.css?v=20260606b" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./css/style.css?v=20260620a" />
   <link rel="stylesheet" href="./vendor/github-markdown-dark.min.css" id="github-markdown-css" />
 </head>
 <body>
   <div class="app">
     <header class="topbar">
-      <button id="hamburgerBtn" aria-label="菜单">☰</button>
-      <div class="brand">ClawMate</div>
+      <button id="hamburgerBtn" class="topbar-btn" aria-label="菜单">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+      </button>
+      <div class="brand"><img src="./asset/clawmate-logo.png" alt="" width="28" height="28" style="flex-shrink:0;" />ClawMate</div>
       <div class="search-group">
         <input id="searchInput" type="text" placeholder="搜索文件名" />
-        <button id="searchBtn">搜索</button>
+        <button id="searchBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <span>搜索</span>
+        </button>
         <button id="clearSearchBtn">清除</button>
       </div>
       <div class="topbar-actions">
-        <button id="themeToggle" class="topbar-btn" title="切换主题">🌓</button>
-        <button id="btnLogout" class="topbar-btn" title="退出登录">🚪</button>
+        <button id="themeToggle" class="topbar-btn" title="切换主题">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+        </button>
+        <button id="btnLogout" class="topbar-btn" title="退出登录">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+        </button>
       </div>
     </header>
     <div class="content">
@@ -52,11 +64,20 @@
               <button id="sortTime" class="sort-pill active" data-key="time" data-dir="desc">↓ 最新</button>
               <button id="sortName" class="sort-pill" data-key="name" data-dir="asc">↑ 名称</button>
               <button id="sortSize" class="sort-pill" data-key="size" data-dir="desc">↓ 大小</button>
-              <button id="multiSelectToggle" title="多选">☐ 多选</button>
+              <button id="multiSelectToggle" title="多选">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                <span> 多选</span>
+              </button>
             </div>
             <div class="tb-right">
-              <button id="viewGrid" class="active">画廊</button>
-              <button id="viewList">列表</button>
+              <button id="viewGrid" class="active" title="画廊视图">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+                <span> 画廊</span>
+              </button>
+              <button id="viewList" title="列表视图">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
+                <span> 列表</span>
+              </button>
             </div>
           </div>
           <div id="status" class="status"></div>
@@ -80,8 +101,14 @@
     <div class="batch-bar-inner">
       <span class="batch-count" id="batchCount">已选 0 个文件</span>
       <div class="batch-actions">
-        <button id="batchDeleteBtn">🗑 批量删除</button>
-        <button id="batchDownloadBtn2">📦 批量下载</button>
+        <button id="batchDeleteBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          <span> 批量删除</span>
+        </button>
+        <button id="batchDownloadBtn2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
+          <span> 批量下载</span>
+        </button>
         <button id="batchSelectAllBtn">全选当前页</button>
         <button id="batchClearBtn">取消选择</button>
       </div>
@@ -99,8 +126,9 @@
   <link rel="stylesheet" href="./vendor/katex.min.css">
   <script src="./vendor/katex.min.js"></script>
   <script src="./vendor/auto-render.min.js"></script>
-  <!-- Mermaid v11 UMD (同步加载，确保 window.mermaid 在 app.js 执行前可用) -->
+  <!-- Mermaid v11 UMD -->
   <script src="./vendor/mermaid-v11.min.js"></script>
-  <script src="./js/app.js?v=20260606b"></script>
+  <script src="./js/icons.js?v=20260620a"></script>
+  <script src="./js/app.js?v=20260620a"></script>
 </body>
 </html>

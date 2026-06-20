@@ -14,9 +14,9 @@
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
   --border-color: #334155;
-  --border-focus: #6366f1;
-  --accent: #6366f1;
-  --accent-hover: #4f46e5;
+  --border-focus: #14b8a6;
+  --accent: #14b8a6;
+  --accent-hover: #0d9488;
   --danger: #ef4444;
   --danger-bg: #2d1515;
   --danger-border: #7f1d1d;
@@ -28,10 +28,12 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
 }
 
 body {
-  font-family: "Inter", "Noto Sans SC", system-ui, -apple-system, sans-serif;
+  font-family: "DM Sans", "Noto Sans SC", system-ui, -apple-system, sans-serif;
   background: var(--bg-primary);
   color: var(--text-primary);
   min-height: 100vh;
@@ -54,7 +56,6 @@ body {
   padding-left: calc(20px + var(--safe-left));
   padding-right: calc(20px + var(--safe-right));
   background: radial-gradient(ellipse at 50% 30%, #1a2540 0%, var(--bg-primary) 70%);
-  /* Subtle animated grain */
   position: relative;
   overflow: hidden;
 }
@@ -63,7 +64,7 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  background: repeating-conic-gradient(rgba(99,102,241,0.03) 0% 25%, transparent 0% 50%) 50% / 60px 60px;
+  background: repeating-conic-gradient(rgba(20,184,166,0.03) 0% 25%, transparent 0% 50%) 50% / 60px 60px;
   opacity: 0.4;
   z-index: 0;
 }
@@ -86,10 +87,15 @@ body {
 }
 
 .login-logo {
-  font-size: 44px;
-  line-height: 1;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.login-logo img {
   display: block;
+  max-width: 100%;
+  height: auto;
 }
 
 .login-title {
@@ -132,10 +138,11 @@ body {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
-  font-size: 16px;  /* 16px prevents iOS zoom on focus */
+  font-size: 16px;
   font-family: inherit;
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
   -webkit-appearance: none;
   appearance: none;
   min-height: 44px;
@@ -147,7 +154,7 @@ body {
 
 .form-group input:focus {
   border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.25);
 }
 
 .form-error {
@@ -176,7 +183,9 @@ body {
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
-  transition: background 0.15s, transform 0.1s, opacity 0.15s;
+  transition: background var(--duration-fast) var(--ease-out),
+              transform 0.1s var(--ease-out),
+              opacity var(--duration-fast) var(--ease-out);
   letter-spacing: 0.5px;
   -webkit-tap-highlight-color: transparent;
 }
@@ -210,124 +219,62 @@ body {
 }
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
-/* Mobile first — default is mobile-friendly */
 
-/* Small phones */
 @media (max-width: 400px) {
   .login-card {
     padding: 28px 20px;
     border-radius: var(--radius-md);
   }
-
-  .login-title {
-    font-size: 18px;
-  }
-
-  .login-logo {
-    font-size: 36px;
-  }
-
-  .form-group input {
-    font-size: 16px;
-  }
+  .login-title { font-size: 18px; }
+  .login-logo img { width: 52px; height: 52px; }
+  .form-group input { font-size: 16px; }
 }
 
-/* Landscape phones */
 @media (max-height: 500px) and (orientation: landscape) {
-  .login-bg {
-    padding: 8px 16px;
-  }
-
-  .login-card {
-    padding: 20px 24px;
-    max-width: 500px;
-  }
-
-  .login-header {
-    margin-bottom: 16px;
-  }
-
-  .login-logo {
-    font-size: 28px;
-    margin-bottom: 4px;
-  }
-
-  .login-title {
-    font-size: 18px;
-  }
-
-  .login-form {
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 10px;
-  }
-
-  .form-group {
-    flex: 1;
-    min-width: 140px;
-  }
-
-  .btn-login {
-    flex: 0 0 auto;
-    padding: 10px 32px;
-  }
-
-  .login-footer {
-    margin-top: 12px;
-  }
+  .login-bg { padding: 8px 16px; }
+  .login-card { padding: 20px 24px; max-width: 500px; }
+  .login-header { margin-bottom: 16px; }
+  .login-logo img { width: 40px; height: 40px; }
+  .login-title { font-size: 18px; }
+  .login-form { flex-direction: row; flex-wrap: wrap; gap: 10px; }
+  .form-group { flex: 1; min-width: 140px; }
+  .btn-login { flex: 0 0 auto; padding: 10px 32px; }
+  .login-footer { margin-top: 12px; }
 }
 
-/* Desktop */
 @media (min-width: 768px) {
-  .login-card {
-    padding: 44px 40px;
-    max-width: 400px;
-  }
-
-  .login-title {
-    font-size: 24px;
-  }
-
-  .login-logo {
-    font-size: 48px;
-  }
-
-  .form-group input {
-    font-size: 14px;
-  }
+  .login-card { padding: 44px 40px; max-width: 400px; }
+  .login-title { font-size: 24px; }
+  .login-logo img { width: 72px; height: 72px; }
+  .form-group input { font-size: 14px; }
 }
 
-/* High DPI screens */
 @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
-  .login-bg::before {
-    opacity: 0.3;
-  }
+  .login-bg::before { opacity: 0.3; }
 }
 
-/* Dark mode support for system-level */
+/* Light mode via system preference */
 @media (prefers-color-scheme: light) {
   :root {
-    --bg-primary: #f1f5f9;
+    --bg-primary: #f8fafc;
     --bg-card: #ffffff;
     --bg-input: #f8fafc;
     --text-primary: #0f172a;
     --text-secondary: #475569;
     --text-muted: #94a3b8;
     --border-color: #e2e8f0;
-    --border-focus: #6366f1;
-    --accent: #4f46e5;
-    --accent-hover: #4338ca;
+    --border-focus: #0d9488;
+    --accent: #0d9488;
+    --accent-hover: #0f766e;
     --danger: #dc2626;
     --danger-bg: #fef2f2;
     --danger-border: #fecaca;
     --shadow: 0 8px 32px rgba(0,0,0,0.08);
   }
-
   .login-bg {
-    background: radial-gradient(ellipse at 50% 30%, #e2e8f0 0%, var(--bg-primary) 70%);
+    background: radial-gradient(ellipse at 50% 30%, #f1f5f9 0%, var(--bg-primary) 70%);
   }
-
   .login-bg::before {
-    background: repeating-conic-gradient(rgba(99,102,241,0.04) 0% 25%, transparent 0% 50%) 50% / 60px 60px;
+    background: repeating-conic-gradient(rgba(13,148,136,0.04) 0% 25%, transparent 0% 50%) 50% / 60px 60px;
   }
 }

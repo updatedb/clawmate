@@ -122,17 +122,13 @@ function applyTheme() {
     html.setAttribute('data-theme', 'light');
   }
 
-  // Update button emoji
+  // Update theme button icon
   if (els.themeToggle) {
-    if (currentTheme === 'auto') {
-      els.themeToggle.textContent = '🌓';
-      els.themeToggle.title = '主题: 自动';
-    } else if (currentTheme === 'light') {
-      els.themeToggle.textContent = '☀️';
-      els.themeToggle.title = '主题: 浅色';
-    } else {
-      els.themeToggle.textContent = '🌙';
-      els.themeToggle.title = '主题: 深色';
+    var iconName = currentTheme === 'auto' ? 'sun-moon' : currentTheme === 'light' ? 'sun' : 'moon';
+    var title = '主题: ' + (currentTheme === 'auto' ? '自动' : currentTheme === 'light' ? '浅色' : '深色');
+    els.themeToggle.title = title;
+    if (typeof iconSVG === 'function') {
+      els.themeToggle.innerHTML = iconSVG(iconName, 16);
     }
   }
 }
@@ -387,53 +383,14 @@ function groupEntries(entries) {
 }
 
 // ===== File Type Icons =====
-const FILE_ICON_MAP = {
-  // Archives
-  zip: "🗜️", tar: "🗜️", gz: "🗜️", "7z": "🗜️", rar: "🗜️", bz2: "🗜️",
-  // Documents
-  pdf: "📕",
-  // Word documents — rendered as styled HTML tags
-  // Excel spreadsheets — rendered as styled HTML tags
-  // PowerPoint presentations — rendered as styled HTML tags
-
-  // Text / Markup
-  md: "📝", markdown: "📝",
-  txt: "📄", log: "📄",
-  // Config / Data
-  json: "🔧", yaml: "🔧", yml: "🔧", toml: "🔧", ini: "🔧", env: "🔧",
-  xml: "🔧",
-  sql: "🗃️",
-  // Code
-  py: "🐍", js: "📜", ts: "📘", jsx: "⚛️", tsx: "⚛️",
-  html: "🌐", htm: "🌐", css: "🎨", scss: "🎨", less: "🎨",
-  sh: "💻", bash: "💻", zsh: "💻",
-  go: "🐹", rs: "🦀", java: "☕", c: "⚙️", cpp: "⚙️", h: "⚙️",
-  // Media fallback (images/audio handled separately)
-  mp3: "🎵", wav: "🎵", flac: "🎵", aac: "🎵", ogg: "🎵",
-  mp4: "🎬", mkv: "🎬", avi: "🎬", mov: "🎬", webm: "🎬",
-  jpg: "🖼️", jpeg: "🖼️", png: "🖼️", gif: "🖼️", webp: "🖼️", bmp: "🖼️", svg: "🖼️",
-  // Default
-  other: "📦",
-};
-
+// Uses SVG icons from icons.js (loaded before app.js)
 function getFileIcon(entry) {
-  if (!entry) return `<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;font-size:18px;flex-shrink:0;">📦</span>`;
-  if (entry.is_dir) return `<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;font-size:18px;flex-shrink:0;">📁</span>`;
-  if (entry.category === "image" || entry.category === "audio" || entry.category === "video") return `<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;font-size:18px;flex-shrink:0;">${entry.category === "video" ? "🎬" : entry.category === "audio" ? "🎵" : "🖼️"}</span>`;
-  const ext = getEntryExt(entry);
-  const icon = FILE_ICON_MAP[ext] || "📦";
-  // Word / Excel / PowerPoint: use styled letter tags
-  if (ext === "doc" || ext === "docx") {
-    return `<span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:#2b5797;border-radius:6px;font-size:11px;font-weight:700;color:#fff;font-family:sans-serif;letter-spacing:0;flex-shrink:0;">W</span>`;
-  }
-  if (ext === "xls" || ext === "xlsx" || ext === "csv") {
-    return `<span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:#217346;border-radius:6px;font-size:11px;font-weight:700;color:#fff;font-family:sans-serif;letter-spacing:0;flex-shrink:0;">X</span>`;
-  }
-  if (ext === "ppt" || ext === "pptx") {
-    return `<span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:#c43e1c;border-radius:6px;font-size:11px;font-weight:700;color:#fff;font-family:sans-serif;letter-spacing:0;flex-shrink:0;">P</span>`;
-  }
-  // Wrap emoji in a 32x32 box to match thumb height
-  return `<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;font-size:18px;flex-shrink:0;">${icon}</span>`;
+  // fileThumbSVG is defined in icons.js — returns inline SVG wrapped in 32x32 container
+  if (typeof fileThumbSVG === 'function') return fileThumbSVG(entry);
+  // Fallback if icons.js not loaded
+  if (!entry || !entry.is_dir && !entry.category) return '<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;font-size:18px;flex-shrink:0;">📄</span>';
+  if (entry.is_dir) return '<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;font-size:18px;flex-shrink:0;">📁</span>';
+  return '<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;font-size:18px;flex-shrink:0;">📄</span>';
 }
 
 function toAbsoluteUrl(url) {
@@ -670,7 +627,7 @@ async function renderMermaid(div, mermaidStore) {
     console.warn('Mermaid not loaded');
     for (const block of mermaidBlocks) {
       block.classList.add('mermaid-error');
-      block.textContent = '⚠️ Mermaid 未加载，请刷新页面重试。';
+      block.innerHTML = (typeof iconSVG === 'function' ? iconSVG('x', 14) + ' ' : '') + 'Mermaid 未加载，请刷新页面重试。';
     }
     return;
   }
@@ -689,7 +646,7 @@ async function renderMermaid(div, mermaidStore) {
       const id = block.getAttribute('data-mermaid-id');
       if (id == null || !mermaidStore[id]) {
         block.classList.add('mermaid-error');
-        block.textContent = '⚠️ 图表数据丢失';
+        block.innerHTML = (typeof iconSVG === 'function' ? iconSVG('x', 14) + ' ' : '') + '图表数据丢失';
         continue;
       }
       block.textContent = mermaidStore[id];
@@ -709,7 +666,7 @@ async function renderMermaid(div, mermaidStore) {
     console.warn('Mermaid error:', err);
     for (const block of mermaidBlocks) {
       block.classList.add('mermaid-error');
-      block.textContent = '⚠️ 图表渲染失败，请检查 Mermaid 语法。';
+      block.innerHTML = (typeof iconSVG === 'function' ? iconSVG('x', 14) + ' ' : '') + '图表渲染失败，请检查 Mermaid 语法。';
     }
   } finally {
     div.classList.remove(scopeClass);
@@ -873,7 +830,7 @@ function renderSidebarTree() {
     li.style.borderRadius = "4px";
 
     const icon = document.createElement("span");
-    icon.textContent = entry.relPath === state.dir ? "📂" : "📁";
+    icon.innerHTML = typeof iconSVG === 'function' ? iconSVG(entry.relPath === state.dir ? 'folder-open' : 'folder', 14) : (entry.relPath === state.dir ? '📂' : '📁');
     icon.style.flexShrink = "0";
 
     const label = document.createElement("span");
@@ -923,7 +880,11 @@ function toggleSelect(relPath, checked) {
 function toggleMultiSelect() {
   state.multiSelectEnabled = !state.multiSelectEnabled;
   if (els.multiSelectToggle) {
-    els.multiSelectToggle.textContent = state.multiSelectEnabled ? "☑ 多选" : "☐ 多选";
+    if (typeof iconSVG === 'function') {
+      els.multiSelectToggle.innerHTML = (state.multiSelectEnabled ? iconSVG('check-square', 14) : iconSVG('check-square', 14)) + ' 多选';
+    } else {
+      els.multiSelectToggle.textContent = state.multiSelectEnabled ? "☑ 多选" : "☐ 多选";
+    }
     if (state.multiSelectEnabled) {
       els.multiSelectToggle.classList.add("active");
     } else {
@@ -1097,7 +1058,7 @@ function updatePagination(totalPages) {
 function appendGalleryGroupHeader(container, label) {
   const header = document.createElement("div");
   header.className = "entry-group-header";
-  header.textContent = label;
+  header.innerHTML = label;
   container.appendChild(header);
 }
 
@@ -1248,9 +1209,27 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
     });
   };
 
-  renderGroup(markdownEntries, "📝 Markdown");
-  renderGroup(folderEntries, "📁 文件夹");
-  renderGroup(otherEntries, "📄 文件");
+  renderGroup(markdownEntries, (typeof iconSVG === 'function' ? iconSVG('file-text', 12) + ' ' : '') + 'Markdown');
+  renderGroup(folderEntries, (typeof iconSVG === 'function' ? iconSVG('folder', 12) + ' ' : '') + '文件夹');
+  renderGroup(otherEntries, (typeof iconSVG === 'function' ? iconSVG('file', 12) + ' ' : '') + '文件');
+
+  // Staggered reveal animation
+  animateCards();
+}
+
+function animateCards() {
+  var cards = document.querySelectorAll('#gallery .card');
+  cards.forEach(function(card, i) {
+    card.style.opacity = '0';
+    card.style.transform = 'translateY(12px)';
+    card.style.transition = 'opacity 0.3s cubic-bezier(0.16,1,0.3,1), transform 0.3s cubic-bezier(0.16,1,0.3,1)';
+    requestAnimationFrame(function() {
+      setTimeout(function() {
+        card.style.opacity = '1';
+        card.style.transform = 'translateY(0)';
+      }, i * 40);
+    });
+  });
 }
 
 function renderList(markdownEntries, folderEntries, otherEntries) {
@@ -1260,7 +1239,7 @@ function renderList(markdownEntries, folderEntries, otherEntries) {
     if (!entries.length) return;
     const header = document.createElement("div");
     header.className = "entry-group-header";
-    header.textContent = label;
+    header.innerHTML = label;
     els.list.appendChild(header);
     entries.forEach((entry) => {
       const row = document.createElement("div");
@@ -1311,9 +1290,9 @@ function renderList(markdownEntries, folderEntries, otherEntries) {
     });
   };
 
-  renderGroup(markdownEntries, "📝 Markdown");
-  renderGroup(folderEntries, "📁 文件夹");
-  renderGroup(otherEntries, "📄 文件");
+  renderGroup(markdownEntries, (typeof iconSVG === 'function' ? iconSVG('file-text', 12) + ' ' : '') + 'Markdown');
+  renderGroup(folderEntries, (typeof iconSVG === 'function' ? iconSVG('folder', 12) + ' ' : '') + '文件夹');
+  renderGroup(otherEntries, (typeof iconSVG === 'function' ? iconSVG('file', 12) + ' ' : '') + '文件');
 }
 
 function render() {
@@ -1854,12 +1833,13 @@ function createFeedbackPanel(container, context) {
 
   const header = document.createElement('div');
   header.className = 'preview-feedback-panel-header';
-  header.textContent = '💬 反馈';
+  header.innerHTML = (typeof iconSVG === 'function' ? iconSVG('message-square', 14) + ' ' : '') + '反馈';
   panel.appendChild(header);
 
   const body = document.createElement('div');
   body.className = 'preview-feedback-panel-body';
-  body.innerHTML = '<div class="feedback-empty">选中文本后点击「📋 加入面板」即可累积</div>';
+  var copyIcon = typeof iconSVG === 'function' ? iconSVG('copy', 12) : '';
+  body.innerHTML = '<div class="feedback-empty">选中文本后点击「' + copyIcon + ' 加入面板」即可累积</div>';
   panel.appendChild(body);
 
   // Helper: scroll container to make a given line range visible
@@ -1901,7 +1881,8 @@ function createFeedbackPanel(container, context) {
 
     // Empty state: no pending and no completed items
     if (items.length === 0 && completedItems.length === 0) {
-      body.innerHTML = '<div class="feedback-empty">选中文本后点击「📋 加入面板」即可累积</div>';
+      var copyIcon = typeof iconSVG === 'function' ? iconSVG('copy', 12) : '';
+  body.innerHTML = '<div class="feedback-empty">选中文本后点击「' + copyIcon + ' 加入面板」即可累积</div>';
       return;
     }
 

@@ -215,6 +215,7 @@ _WHITELIST_PREFIXES = (
     "/clawmate/static/",
     "/clawmate/css/",
     "/clawmate/vendor/",
+    "/clawmate/asset/",
     "/clawmate/m/",
     "/api/clawmate/share/",
 )

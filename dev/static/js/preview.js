@@ -115,9 +115,11 @@
     }
     switchThemeCSS(resolved);
     const btn = document.getElementById('themeToggle');
-    if (currentTheme === 'auto') btn.textContent = '🌓';
-    else if (currentTheme === 'light') btn.textContent = '☀️';
-    else btn.textContent = '🌙';
+    if (btn) {
+      var iconName = currentTheme === 'auto' ? 'sun-moon' : currentTheme === 'light' ? 'sun' : 'moon';
+      btn.title = '主题: ' + (currentTheme === 'auto' ? '自动' : currentTheme === 'light' ? '浅色' : '深色');
+      if (typeof iconSVG === 'function') btn.innerHTML = iconSVG(iconName, 16);
+    }
   }
 
   function cycleTheme() {
@@ -3434,6 +3436,14 @@
       // 桌面端选中文本时自动复制到剪贴板（仅新选中时触发，tooltip 已显示时不重复复制）
       if (tooltip.style.display === 'none') copyText(selText, '已复制到剪贴板');
 
+      // 重置"立刻执行"按钮状态（上次成功提交后 hideTooltip 不会恢复按钮状态，
+      // 导致新选中时按钮仍然显示为 disabled "⏳ ...")
+      const sendBtn = document.getElementById('pstBtnSend');
+      if (sendBtn) {
+        sendBtn.disabled = false;
+        sendBtn.textContent = '⚡ 立刻执行';
+      }
+
       // ── Rendered Markdown mode: detect section heading ──
       if ((isMarkdownMode) && !isRawMode && !isPlainTextEditMode) {
         currentStartLine = null;
@@ -3823,6 +3833,9 @@
       });
       const data = await res.json();
       if (res.ok && data.ok) {
+        // 恢复按钮状态（hideTooltip 不会重置按钮，避免新选中时仍显示 disabled "⏳ ...")
+        btn.disabled = false;
+        btn.textContent = '⚡ 立刻执行';
         // Immediately close tooltip and auto-open sidebar
         st.textContent = '✅ 已发送';
         st.className = 'pst-status pst-status-ok';

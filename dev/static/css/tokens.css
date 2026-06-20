@@ -1,0 +1,205 @@
+/* ===== ClawMate Design Tokens =====
+ * Warm Utility — Teal + Slate
+ * Brand colors derived from clawmate-logo (#00a090) + clawmate-txt-logo (#006060)
+ */
+
+:root {
+  /* ── Brand (Teal 青碧) ── */
+  --accent:         #0d9488;  /* teal-600 — matches logo #00a090 */
+  --accent-hover:   #0f766e;  /* teal-700 */
+  --accent-light:   #f0fdfa;  /* teal-50 */
+  --accent-border:  #99f6e4;  /* teal-200 */
+
+  /* ── Neutrals (Slate 暖灰) ── */
+  --bg-primary:     #f8fafc;  /* slate-50 */
+  --bg-secondary:   #ffffff;
+  --bg-tertiary:    #f1f5f9;  /* slate-100 */
+  --bg-code:        #f8fafc;
+  --text-primary:   #0f172a;  /* slate-900 */
+  --text-secondary: #334155;  /* slate-700 — AA+ on light bg */
+  --text-muted:     #64748b;  /* slate-500 — AA on light bg */
+  --border-color:   #e2e8f0;  /* slate-200 */
+
+  /* ── Brand chrome (topbar / bottombar) ── */
+  --brand-bg:       #042f2e;  /* teal-950 — matches txt-logo #006060 */
+  --brand-text:     #f0fdfa;  /* teal-50 */
+  --brand-input-bg: rgba(255,255,255,0.10);
+  --brand-input-focus: rgba(255,255,255,0.18);
+
+  /* ── Buttons ── */
+  --btn-bg:         #f8fafc;
+  --btn-text:       #334155;
+  --btn-border:     #e2e8f0;
+
+  /* ── Cards ── */
+  --card-bg:        #ffffff;
+  --card-shadow:      0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --card-shadow-hover: 0 8px 24px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.06);
+
+  /* ── Semantic ── */
+  --danger:         #dc2626;
+  --danger-bg:      #fef2f2;
+  --danger-border:  #fecaca;
+  --success:        #16a34a;
+  --success-bg:     #f0fdf4;
+  --warning-bg:     #fef9c3;
+  --warning-text:   #a16207;
+  --info:           #2563eb;
+  --link-color:     #0d9488;
+
+  /* ── Code ── */
+  --code-border:    #e2e8f0;
+
+  /* ── Focus & Highlight ── */
+  --focus-ring:     rgba(13, 148, 136, 0.25);
+  --highlight:      rgba(13, 148, 136, 0.08);
+
+  /* ── Typography ── */
+  --font-ui:        "DM Sans", "Noto Sans SC", system-ui, -apple-system, sans-serif;
+  --font-mono:      "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+  --font-size-xs:   11px;
+  --font-size-sm:   12px;
+  --font-size-base: 13px;
+  --font-size-lg:   15px;
+  --font-size-xl:   18px;
+  --font-size-2xl:  22px;
+
+  /* ── Spacing ── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ── Radii ── */
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   14px;
+  --radius-full: 9999px;
+
+  /* ── Shadows ── */
+  --shadow-card:    0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-card-h:  0 8px 24px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-modal:   0 16px 48px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.08);
+  --shadow-topbar:  0 1px 0 var(--border-color);
+  --shadow-batch:   0 -2px 12px rgba(0,0,0,0.08);
+
+  /* ── Easing ── */
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 300ms;
+
+  /* ── Layout ── */
+  --sidebar-w: 240px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Dark Mode
+   ═══════════════════════════════════════════════════════════════════ */
+[data-theme="dark"] {
+  /* ── Brand (Teal — calm for dark bg, not blinding) ── */
+  --accent:         #14b8a6;  /* teal-500 — visible but soft */
+  --accent-hover:   #0d9488;  /* teal-600 */
+  --accent-light:   #042f2e;  /* teal-950 */
+  --accent-border:  #134e4a;  /* teal-900 */
+
+  /* ── Neutrals ── */
+  --bg-primary:     #0f172a;  /* slate-900 */
+  --bg-secondary:   #1e293b;  /* slate-800 */
+  --bg-tertiary:    #334155;  /* slate-700 */
+  --bg-code:        #0f172a;
+
+  --text-primary:   #f8fafc;
+  --text-secondary: #cbd5e1;  /* slate-300 — brighter for readability */
+  --text-muted:     #94a3b8;  /* slate-400 — brighter for readability */
+  --border-color:   #334155;
+
+  /* ── Brand chrome ── */
+  --brand-bg:       #020617;  /* slate-950 */
+  --brand-text:     #f8fafc;
+  --brand-input-bg: rgba(255,255,255,0.08);
+  --brand-input-focus: rgba(255,255,255,0.14);
+
+  /* ── Buttons ── */
+  --btn-bg:         #334155;
+  --btn-text:       #e2e8f0;
+  --btn-border:     #475569;
+
+  /* ── Cards ── */
+  --card-bg:        #1e293b;
+  --card-shadow:      0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --card-shadow-hover: 0 8px 24px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.25);
+
+  /* ── Semantic ── */
+  --danger:         #f87171;
+  --danger-bg:      #450a0a;
+  --danger-border:  #7f1d1d;
+  --success:        #4ade80;
+  --success-bg:     #052e16;
+  --warning-bg:     #422006;
+  --warning-text:   #fbbf24;
+  --link-color:     #14b8a6;
+
+  /* ── Code ── */
+  --code-border:    #334155;
+
+  /* ── Focus ── */
+  --focus-ring:     rgba(20, 184, 166, 0.3);
+  --highlight:      rgba(20, 184, 166, 0.1);
+
+  /* ── Shadows (darker for depth on dark bg) ── */
+  --shadow-card:    0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-card-h:  0 8px 24px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.25);
+  --shadow-modal:   0 16px 48px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.25);
+  --shadow-topbar:  0 1px 0 var(--border-color);
+  --shadow-batch:   0 -2px 12px rgba(0,0,0,0.25);
+
+  /* ── hljs syntax colors (dark mode code highlighting) ── */
+  --hljs-keyword:   #ff7b72;
+  --hljs-string:    #a5d6ff;
+  --hljs-number:    #79c0ff;
+  --hljs-comment:   #8b949e;
+  --hljs-meta:      #ff7b72;
+  --hljs-built_in:  #ffa657;
+  --hljs-title:     #d2a8ff;
+  --hljs-function:  #d2a8ff;
+  --hljs-type:      #ffa657;
+  --hljs-literal:   #79c0ff;
+  --hljs-attr:      #79c0ff;
+  --hljs-variable:  #ffa657;
+  --hljs-property:  #79c0ff;
+}
+
+/* ── hljs dark-mode code highlight rules ── */
+[data-theme="dark"] pre.code-highlighted .hljs-keyword,
+[data-theme="dark"] pre.raw-text .hljs-keyword { color: var(--hljs-keyword); }
+[data-theme="dark"] pre.code-highlighted .hljs-string,
+[data-theme="dark"] pre.raw-text .hljs-string { color: var(--hljs-string); }
+[data-theme="dark"] pre.code-highlighted .hljs-number,
+[data-theme="dark"] pre.raw-text .hljs-number { color: var(--hljs-number); }
+[data-theme="dark"] pre.code-highlighted .hljs-comment,
+[data-theme="dark"] pre.raw-text .hljs-comment { color: var(--hljs-comment); font-style: italic; }
+[data-theme="dark"] pre.code-highlighted .hljs-meta,
+[data-theme="dark"] pre.raw-text .hljs-meta { color: var(--hljs-meta); }
+[data-theme="dark"] pre.code-highlighted .hljs-built_in,
+[data-theme="dark"] pre.raw-text .hljs-built_in { color: var(--hljs-built_in); }
+[data-theme="dark"] pre.code-highlighted .hljs-title,
+[data-theme="dark"] pre.raw-text .hljs-title { color: var(--hljs-title); }
+[data-theme="dark"] pre.code-highlighted .hljs-function,
+[data-theme="dark"] pre.raw-text .hljs-function { color: var(--hljs-function); }
+[data-theme="dark"] pre.code-highlighted .hljs-type,
+[data-theme="dark"] pre.raw-text .hljs-type { color: var(--hljs-type); }
+[data-theme="dark"] pre.code-highlighted .hljs-literal,
+[data-theme="dark"] pre.raw-text .hljs-literal { color: var(--hljs-literal); }
+[data-theme="dark"] pre.code-highlighted .hljs-attr,
+[data-theme="dark"] pre.raw-text .hljs-attr { color: var(--hljs-attr); }
+[data-theme="dark"] pre.code-highlighted .hljs-variable,
+[data-theme="dark"] pre.raw-text .hljs-variable { color: var(--hljs-variable); }
+[data-theme="dark"] pre.code-highlighted .hljs-property,
+[data-theme="dark"] pre.raw-text .hljs-property { color: var(--hljs-property); }
