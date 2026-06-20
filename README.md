@@ -147,7 +147,7 @@ stateDiagram
 ```
 
 **关键流程**：
-1. 在预览页选中任意文本 → 浮动 `✏️ 反馈` 按钮出现
+1. 在预览页选中任意文本 → 浮动「反馈」按钮出现
 2. 点击按钮 → 填写备注 → 提交（可连续选中多个位置，统一提交）
 3. 写入 `feedback.json` → 即时唤醒 Agent
 4. Agent 读取反馈 → 精确定位选区 → AI 理解备注 → 修改文件
@@ -181,7 +181,7 @@ stateDiagram
 ```mermaid
 flowchart TB
     subgraph Browser["浏览器"]
-        UI["index.html / preview.html\n/ login.html / share-view.html"]
+        UI["index.html / preview.html\n/ login.html / share-view.html\n+ tokens.css / icons.js / asset/"]
         MOBILE["m/index.html\nm/preview.html (移动端)"]
         OO["onlyoffice.html (OO 嵌入)"]
     end
@@ -266,6 +266,9 @@ Document Server"]
 | `share_routes.py` | 分享链接管理 |
 | `validators.py` | 路径安全校验 |
 | `constants.py` | 常量定义 |
+| `css/tokens.css` | 设计 Token（Teal 主题、间距、动效） |
+| `js/icons.js` | Lucide SVG 图标系统（31 个图标） |
+| `asset/` | Logo 及静态资源 |
 
 ---
 
