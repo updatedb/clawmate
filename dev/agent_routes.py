@@ -357,6 +357,7 @@ async def _openclaw_backend(
         try_urls.append("ws://127.0.0.1:18789")  # local fallback
 
     oc_ws = None
+    conn_url = ""
     req_id = 0
     line_buf = ""
 
@@ -366,6 +367,7 @@ async def _openclaw_backend(
                 websockets.connect(url, ping_interval=30, ping_timeout=60),
                 timeout=5,
             )
+            conn_url = url
             break
         except Exception:
             continue
@@ -416,10 +418,14 @@ async def _openclaw_backend(
         # Verify required scopes were granted
         granted = hello.get("payload", {}).get("auth", {}).get("scopes", [])
         if "operator.write" not in granted:
-            token_preview = oc_token[:6] + "..." if len(oc_token) > 6 else "(empty)"
             await ws.send_text(json.dumps({
                 "type": "error",
-                "text": f"OpenClaw: missing operator.write scope. Granted: {granted}. Token prefix: {token_preview}. Check agent.openclaw_token matches gateway.auth.token."
+                "text": (
+                    f"OpenClaw: missing operator.write scope. Granted: {granted}. "
+                    f"Token len={len(oc_token)} prefix={oc_token[:8] if oc_token else 'EMPTY'}. "
+                    f"Gateway conn={conn_url}. "
+                    f"Check gateway.auth.token permissions."
+                )
             }, ensure_ascii=False))
             return
 
