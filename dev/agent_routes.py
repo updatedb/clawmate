@@ -352,9 +352,10 @@ async def _openclaw_backend(
 
     # Resolve URL: try configured URL first (guaranteed scope grant),
     # fall back to local gateway
-    try_urls = [oc_url]
-    if oc_url.startswith("wss://") and "127.0.0.1" not in oc_url:
-        try_urls.append("ws://127.0.0.1:18789")  # local fallback
+    # Try local first (loopback gets scopes), WSS as fallback
+    try_urls = ["ws://127.0.0.1:18789"]
+    if oc_url and oc_url not in try_urls:
+        try_urls.append(oc_url)
 
     oc_ws = None
     conn_url = ""
@@ -400,7 +401,7 @@ async def _openclaw_backend(
         # Step 2: authenticate
         await oc_send("connect", {
             "minProtocol": 4, "maxProtocol": 4,
-            "client": {"id": "openclaw-probe", "version": "1.0.0", "platform": "linux", "mode": "probe"},
+            "client": {"id": "gateway-client", "version": "1.0.0", "platform": "linux", "mode": "backend"},
             "role": "operator",
             "scopes": ["operator.read", "operator.write", "operator.admin"],
             "auth": {"token": oc_token},
