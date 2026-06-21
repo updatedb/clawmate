@@ -682,20 +682,18 @@ async def clawmate_onlyoffice_config(request: Request, root: str = "", path: str
     # Configurable via config.json → onlyoffice.ui (optional, defaults below).
     ui_cfg = onlyoffice_cfg.get("ui", {})
     customization = {
-        "compactHeader":     ui_cfg.get("compactHeader",     True  if editor_mode == "view" else "default"),
-        "compactToolbar":    ui_cfg.get("compactToolbar",    True  if editor_mode == "view" else "default"),
-        "hideRightMenu":     ui_cfg.get("hideRightMenu",     True  if editor_mode == "view" else "default"),
-        "toolbarNoTabs":     ui_cfg.get("toolbarNoTabs",     True  if editor_mode == "view" else "default"),
+        "compactHeader":     ui_cfg.get("compactHeader",     True),
+        "compactToolbar":    ui_cfg.get("compactToolbar",    True),
+        "hideRightMenu":     ui_cfg.get("hideRightMenu",     True),
+        "toolbarNoTabs":     ui_cfg.get("toolbarNoTabs",     True),
         "toolbarHideFileName": ui_cfg.get("toolbarHideFileName", True),
         "hideRulers":        ui_cfg.get("hideRulers",        True),
-        "chat":              ui_cfg.get("chat",              False if editor_mode == "view" else "default"),
+        "chat":              ui_cfg.get("chat",              False),
         "help":              ui_cfg.get("help",              False),
         "feedback":          ui_cfg.get("feedback",          False),
         "forcesave":         ui_cfg.get("forcesave",         False),
         "goback":            ui_cfg.get("goback",            {"blank": False, "text": "返回 ClawMate", "url": "#"}),
     }
-    # Remove keys set to "default" (ONLYOFFICE will use its own default)
-    customization = {k: v for k, v in customization.items() if v != "default"}
 
     oo_config = {
         "document": document,
