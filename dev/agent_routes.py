@@ -350,10 +350,11 @@ async def _openclaw_backend(
         )
         return
 
-    # Resolve URL: try local first, fall back to configured
+    # Resolve URL: try configured URL first (guaranteed scope grant),
+    # fall back to local gateway
     try_urls = [oc_url]
-    if oc_url.startswith("wss://") or "updatedb.online" in oc_url:
-        try_urls.insert(0, "ws://127.0.0.1:18789")  # try local gateway first
+    if oc_url.startswith("wss://") and "127.0.0.1" not in oc_url:
+        try_urls.append("ws://127.0.0.1:18789")  # local fallback
 
     oc_ws = None
     req_id = 0
