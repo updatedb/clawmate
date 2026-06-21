@@ -686,7 +686,6 @@ async def clawmate_onlyoffice_config(request: Request, root: str = "", path: str
         "compactHeader":     True,
         "compactToolbar":    True,
         "hideRightMenu":     True,
-        "toolbarNoTabs":     True,
         "toolbarHideFileName": True,
         "hideRulers":        True,
         "chat":              False,
