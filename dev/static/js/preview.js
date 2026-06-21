@@ -157,6 +157,34 @@
     if (el) el.remove();
   }
 
+  // ============ Dynamic vendor loading ============
+  function loadScript(src) {
+    return new Promise(function(resolve, reject) {
+      var s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+
+  var _mermaidLoaded = false, _katexLoaded = false;
+
+  async function ensureMermaid() {
+    if (_mermaidLoaded) return;
+    if (window.mermaid) { _mermaidLoaded = true; return; }
+    await loadScript('./vendor/mermaid-v11.min.js');
+    _mermaidLoaded = true;
+  }
+
+  async function ensureKatex() {
+    if (_katexLoaded) return;
+    if (window.renderMathInElement) { _katexLoaded = true; return; }
+    await loadScript('./vendor/katex.min.js');
+    await loadScript('./vendor/auto-render.min.js');
+    _katexLoaded = true;
+  }
+
   // ============ Markdown Renderer Setup ============
   if (window.hljs) window.hljs.configure({ ignoreUnescapedHTML: true });
 
@@ -1257,6 +1285,11 @@
 
         let html;
         let mermaidStore = [];
+        // Conditional load heavy vendors only when content needs them
+        var loadPromises = [];
+        if (content.indexOf('```mermaid') !== -1) loadPromises.push(ensureMermaid());
+        if (content.indexOf('$') !== -1) loadPromises.push(ensureKatex());
+        if (loadPromises.length) await Promise.all(loadPromises);
         try {
           const result = createMarkdownRenderer(filePath);
           const md = result.md;

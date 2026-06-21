@@ -341,6 +341,7 @@ async function deleteEntry(entry) {
       return;
     }
     setStatus("删除成功");
+    invalidateDirCache();
     await loadDir(state.dir);
   } catch (e) {
     setStatus("删除失败: " + e.message);
@@ -613,7 +614,32 @@ function openLinksInNewTab(div) {
   });
 }
 
-// ===== Mermaid Loading State =====
+// ===== Dynamic vendor loading (Mermaid/KaTeX) =====
+function loadScript(src) {
+  return new Promise(function(resolve, reject) {
+    var s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+var _mermaidLoaded = false, _katexLoaded = false;
+
+async function ensureMermaid() {
+  if (_mermaidLoaded) return;
+  if (window.mermaid) { _mermaidLoaded = true; return; }
+  await loadScript('./vendor/mermaid-v11.min.js');
+  _mermaidLoaded = true;
+}
+async function ensureKatex() {
+  if (_katexLoaded) return;
+  if (window.renderMathInElement) { _katexLoaded = true; return; }
+  await loadScript('./vendor/katex.min.js');
+  await loadScript('./vendor/auto-render.min.js');
+  _katexLoaded = true;
+}
+
 // ===== Mermaid Error Visualization =====
 async function renderMermaid(div, mermaidStore) {
   const mermaidBlocks = div.querySelectorAll('.mermaid');
@@ -1137,7 +1163,7 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
           if (newName && newName !== entry.name) {
             authFetch(`/api/clawmate/rename?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}&new_name=${encodeURIComponent(newName)}`, { method: 'POST' })
               .then(r => r.json())
-              .then(data => { if (data.ok) { state.page = 1; state.searchResults = null; if (state.rootId) loadDir(state.dir); else loadConfig(); } else { alert('重命名失败：' + (data.detail || data.error || '未知错误')); } })
+              .then(data => { if (data.ok) { state.page = 1; state.searchResults = null; invalidateDirCache(); if (state.rootId) loadDir(state.dir); else loadConfig(); } else { alert('重命名失败：' + (data.detail || data.error || '未知错误')); } })
               .catch(() => alert('重命名失败'));
           }
         });
@@ -1178,7 +1204,7 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
           if (newName && newName !== entry.name) {
             authFetch(`/api/clawmate/rename?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}&new_name=${encodeURIComponent(newName)}`, { method: 'POST' })
               .then(r => r.json())
-              .then(data => { if (data.ok) { state.page = 1; state.searchResults = null; if (state.rootId) loadDir(state.dir); else loadConfig(); } else { alert('重命名失败：' + (data.detail || data.error || '未知错误')); } })
+              .then(data => { if (data.ok) { state.page = 1; state.searchResults = null; invalidateDirCache(); if (state.rootId) loadDir(state.dir); else loadConfig(); } else { alert('重命名失败：' + (data.detail || data.error || '未知错误')); } })
               .catch(() => alert('重命名失败'));
           }
         });
@@ -1496,6 +1522,23 @@ function setupDragDrop() {
   });
 }
 
+// ── Directory list cache (30s TTL, keyed by root:dir) ──
+const _dirCache = {};
+const _DIR_CACHE_TTL = 30000; // 30 seconds
+
+function _getCachedDir(key) {
+  const entry = _dirCache[key];
+  if (entry && Date.now() - entry.ts < _DIR_CACHE_TTL) return entry.data;
+  return null;
+}
+function _setCachedDir(key, data) {
+  _dirCache[key] = { data: data, ts: Date.now() };
+}
+// Invalidate cache on mutations (delete/rename/upload/save)
+function invalidateDirCache() {
+  for (var k in _dirCache) delete _dirCache[k];
+}
+
 async function loadDir(dir) {
   if (!state.rootId) {
     setStatus("请先选择根目录");
@@ -1509,6 +1552,20 @@ async function loadDir(dir) {
   state.searchQuery = "";
   state.page = 1;
   state.loadingMore = false;
+
+  const cacheKey = state.rootId + ':' + (safeDir || '');
+  const cached = _getCachedDir(cacheKey);
+  if (cached) {
+    state.dir = cached.dir;
+    state.entries = cached.entries;
+    state.total = cached.total;
+    state.hasMore = cached.hasMore;
+    updateUrl();
+    await loadSidebarParent(state.dir);
+    render();
+    return;
+  }
+
   setStatus("加载中...");
   // Show skeleton while loading
   if (state.view === 'grid') { showGallerySkeleton(); } else { showListSkeleton(); }  const res = await authFetch(`/api/clawmate/list?root=${encodeURIComponent(state.rootId)}&dir=${encodeURIComponent(safeDir)}&limit=${state.pageLimit}`);
@@ -1526,6 +1583,9 @@ async function loadDir(dir) {
   state.entries = (data.entries || []).map(mapEntry);
   state.total = data.total || 0;
   state.hasMore = state.entries.length < state.total;
+  _setCachedDir(cacheKey, {
+    dir: state.dir, entries: state.entries, total: state.total, hasMore: state.hasMore
+  });
   updateUrl();
   // Also load parent dir for sidebar
   await loadSidebarParent(state.dir);
