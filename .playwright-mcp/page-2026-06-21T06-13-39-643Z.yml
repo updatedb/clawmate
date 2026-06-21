@@ -1,0 +1,15 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - img "ClawMate" [ref=e6]
+    - heading "ClawMate" [level=1] [ref=e7]
+    - paragraph [ref=e8]: AI文档评审助手
+  - generic [ref=e9]:
+    - generic [ref=e10]:
+      - generic [ref=e11]: 用户名
+      - textbox "用户名" [active] [ref=e12]:
+        - /placeholder: admin
+    - generic [ref=e13]:
+      - generic [ref=e14]: 密码
+      - textbox "密码" [ref=e15]:
+        - /placeholder: ••••••••
+    - button "登 录" [ref=e16] [cursor=pointer]
