@@ -9,6 +9,7 @@
 #   CLAWMATE_ONLYOFFICE_URL       选填，ONLYOFFICE Document Server JS URL
 #   CLAWMATE_ONLYOFFICE_JWT_SECRET 选填，ONLYOFFICE JWT 密钥
 #   CLAWMATE_MAX_UPLOAD_MB        选填，上传文件大小限制，默认 100
+#   CLAWMATE_AGENT_BACKEND        选填，Agent 后端选择（claude | openclaw），默认 claude
 #   CLAWMATE_ENABLE_SUBTITLE      选填，字幕提取功能（需安装 faster-whisper），设置 1 启用
 #
 # 目录挂载说明:
@@ -41,6 +42,7 @@ services:
       - CLAWMATE_ONLYOFFICE_JWT_SECRET=${CLAWMATE_ONLYOFFICE_JWT_SECRET:-}
       - CLAWMATE_ONLYOFFICE_URL=${CLAWMATE_ONLYOFFICE_URL:-}
       - CLAWMATE_MAX_UPLOAD_MB=${CLAWMATE_MAX_UPLOAD_MB:-100}
+      - CLAWMATE_AGENT_BACKEND=${CLAWMATE_AGENT_BACKEND:-claude}
       - CLAWMATE_ENABLE_SUBTITLE=${CLAWMATE_ENABLE_SUBTITLE:-0}
     restart: unless-stopped
 

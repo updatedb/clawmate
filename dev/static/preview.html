@@ -56,6 +56,8 @@
         <div class="subtitle-sync-panel hidden" id="subtitleSyncPanel"></div>
       </main>
 
+      <!-- Resize handle -->
+      <div id="previewResizeHandle" class="preview-resize-handle hidden"></div>
       <!-- Right: Feedback Panel -->
       <aside class="preview-right" id="rightSidebar">
         <div class="preview-right-header"><span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> 反馈</span><button class="panel-close-btn" id="btnCloseRight" title="关闭面板"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></div>
@@ -67,7 +69,6 @@
 
     <!-- Bottom toolbar -->
     <div class="preview-bottombar">
-      <a class="preview-bottom-btn" id="btnBack" title="返回目录"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg> 返回</a>
       <div class="preview-btn-group"><button class="preview-bottom-btn" id="btnPath" title="复制绝对路径"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg> 路径</button><button class="preview-bottom-btn" id="btnPdf" title="导出"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M4 7V4a2 2 0 0 1 2-2h8.5L20 7.5V20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/><path d="M4 14h6"/><path d="m7 11-3 3 3 3"/></svg> 导出</button><button class="preview-bottom-btn" id="btnDownload" title="下载文件"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg> 下载</button><button class="preview-bottom-btn" id="btnRename" title="重命名"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg> 重命名</button><button class="preview-bottom-btn" id="btnShare" title="生成分享链接"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg> 分享</button></div>
       <!-- Dynamic zone: image/audio/video modules populate this -->
       <div id="bottombarDynamic" style="display:flex;align-items:center;gap:4px;"></div>

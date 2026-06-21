@@ -12,6 +12,8 @@
 
 ClawMate 是一个面向 AI Agent 工作流的**文件管理 → 预览发现问题 → 即时反馈 → Agent 自动修改**工具。
 
+支持 **Claude Code** 和 **OpenClaw** 双后端 Agent 终端，在文件浏览器中直接与 AI 对话。
+
 ## 为什么需要 ClawMate？
 
 在使用 OpenClaw 等 AI Agent 的过程中，会产生大量待发布的文稿、待实施的方案、以及大量的代码文件。
@@ -166,7 +168,7 @@ stateDiagram
 - 类型过滤（文档/代码/数据/媒体/其他）+ 排序（时间/名称/大小）
 - 搜索（桌面端递归搜索，移动端输入即搜）
 - 批量下载、拖拽上传、重命名、删除（含鉴权+审计日志）
-- **移动端响应式**：独立 `m/` 页面，触控优化
+- **移动端响应式**：CSS 媒体查询自适应，触控优化
 
 ### 🔗 OpenClaw 融合
 - 提交 feedback 后即时通过 webhook 唤醒 OpenClaw Agent
@@ -182,13 +184,73 @@ stateDiagram
 
 *左侧：Agent 对话生成内容 → 右侧：ClawMate 预览 + 选中文本提交反馈 + 一键执行修复*
 
+## Agent 面板（双后端）
+
+ClawMate 右侧面板内置 AI Agent 终端，支持两种后端：
+
+| 后端 | 模式 | 交互方式 | 适用场景 |
+|------|------|---------|---------|
+| **Claude Code** | xterm.js 终端 | 完整 CLI 操作（Read/Write/Edit/Bash） | 直接文件操作、项目开发 |
+| **OpenClaw** | Markdown 聊天 | 结构化消息（chat.send/history） | 通过 Gateway 与多 Agent 协作 |
+
+切换方式：修改 `config.json` 中 `agent.backend` 为 `"claude"` 或 `"openclaw"`。
+
+Feedback 任务路由：当 Claude Code 终端活跃时，预览页的「立刻执行」任务直接注入终端处理；否则通过 OpenClaw gateway webhook 转发。
+
+### Claude Code 后端配置
+
+Claude Code 模式无需额外配置，只需确保服务器上已安装并登录 Claude Code CLI：
+
+```bash
+# 安装 Claude Code
+npm install -g @anthropic-ai/claude-code
+
+# 登录认证
+claude login
+```
+
+ClawMate 通过 Python `pty.spawn()` 启动 `claude --dangerously-skip-permissions`，工作目录自动设为当前浏览的 root 目录。终端输入直接转发到 Claude Code 进程。
+
+`config.json` 中的 Claude 模式配置：
+
+```json
+{
+  "agent": {
+    "backend": "claude"
+  }
+}
+```
+
+### OpenClaw 后端配置
+
+需要配置 OpenClaw Gateway 的连接信息：
+
+```json
+{
+  "agent": {
+    "backend": "openclaw",
+    "openclaw_ws_url": "wss://your-openclaw-server:18443",
+    "openclaw_token": "your-gateway-token"
+  }
+}
+```
+
+| 字段 | 说明 | 必填 |
+|------|------|------|
+| `openclaw_ws_url` | OpenClaw Gateway WebSocket 地址 | 是 |
+| `openclaw_token` | Gateway 认证令牌（`openclaw.json` → `gateway.auth.token`） | 是 |
+
+本地开发时 `openclaw_ws_url` 可设为 `ws://127.0.0.1:18789`。公网部署时使用 `wss://`。
+
+OpenClaw 后端使用 `chat.send` / `chat.history` 协议，`sessionKey` 格式为 `agent:{agent_id}:main`，与 `config.json` 中 root 的 `agent_id` 对应。
+
 ## 架构
 
 ```mermaid
 flowchart TB
     subgraph Browser["浏览器"]
-        UI["index.html / preview.html\n/ login.html / share-view.html\n+ tokens.css / icons.js / asset/"]
-        MOBILE["m/index.html\nm/preview.html (移动端)"]
+        UI["index.html (含 Agent 面板)
++ preview.html + login.html"]
         OO["onlyoffice.html (OO 嵌入)"]
     end
 
@@ -196,34 +258,29 @@ flowchart TB
         direction LR
         STATIC["static/ 前端页面"]
         API["/api/clawmate/*"]
+        AGENT_WS["agent_routes
+WebSocket 终端/聊天"]
         FEEDBACK["feedback_api
 反馈 CRUD"]
         TASK["task_runner
-自动修复"]
-        AUTH["auth
-登录认证"]
-        SUB["subtitle_routes
-字幕提取"]
-        SHARE["share_routes
-分享"]
-        OOAPI["ONLYOFFICE
-proxy/edit"]
+自动修复 → PTY 注入"]
+        AUTH["auth 登录认证"]
+        SUB["subtitle_routes"]
+        SHARE["share_routes 分享"]
+        OOAPI["ONLYOFFICE proxy"]
+    end
+
+    subgraph Backend["Agent 后端"]
+        direction LR
+        CLAUDE["Claude Code CLI
+PTY 终端"]
+        OC_GW["OpenClaw Gateway
+(chat.send 协议)"]
     end
 
     subgraph Storage["存储层"]
-        FS["文件系统
-读取/写入/重命名/删除"]
-        FB_JSON["feedback.json
-反馈持久化"]
-    end
-
-    subgraph OpenClaw["OpenClaw Gateway"]
-        HOOK["/hooks/agent
-Webhook 入口"]
-        AGENT["Agent
-处理反馈"]
-        CRON["Cron Job
-兜底扫描"]
+        FS["文件系统"]
+        FB_JSON["feedback.json"]
     end
 
     subgraph External["外部服务"]
@@ -232,11 +289,11 @@ Document Server"]
     end
 
     UI --> STATIC
-    MOBILE --> STATIC
     OO --> OOAPI
-    OO --> OODS
-
     Browser --> API
+    Browser --> AGENT_WS
+    AGENT_WS --> CLAUDE
+    AGENT_WS --> OC_GW
 
     API --> FEEDBACK
     API --> TASK

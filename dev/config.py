@@ -42,6 +42,13 @@ class OpenClawConfig:
 
 
 @dataclass
+class AgentConfig:
+    backend: str = "claude"          # "claude" | "openclaw"
+    openclaw_ws_url: str = ""        # wss://ai.updatedb.online:18443
+    openclaw_token: str = ""         # gateway auth token
+
+
+@dataclass
 class TaskTemplate:
     id: str = ""
     label: str = ""
@@ -85,6 +92,7 @@ class AppConfig:
     public_base_url: str = ""
     fallback_cron_interval: str = "24h"
     openclaw: OpenClawConfig = field(default_factory=OpenClawConfig)
+    agent: AgentConfig = field(default_factory=AgentConfig)
     feedback: FeedbackConfig = field(default_factory=FeedbackConfig)
     onlyoffice: OnlyOfficeConfig = field(default_factory=OnlyOfficeConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
@@ -186,6 +194,7 @@ def _parse_config(raw: dict) -> AppConfig:
     fb = raw.get("feedback") or {}
     oo = raw.get("onlyoffice") or {}
     ac = raw.get("auth") or {}
+    ag = raw.get("agent") or {}
     # Env var overrides (Docker / CI)
     env_hook_token = os.getenv("CLAWMATE_HOOK_TOKEN")
     env_gateway_url = os.getenv("CLAWMATE_GATEWAY_URL")
@@ -210,6 +219,11 @@ def _parse_config(raw: dict) -> AppConfig:
             enable_subtitle=bool(fb.get("enable_subtitle", False)),
             cleanup_done_after_days=int(fb.get("cleanup_done_after_days", 30)),
 
+        ),
+        agent=AgentConfig(
+            backend=str(ag.get("backend", "claude")),
+            openclaw_ws_url=str(ag.get("openclaw_ws_url", "")),
+            openclaw_token=str(ag.get("openclaw_token", "")),
         ),
         onlyoffice=OnlyOfficeConfig(
             api_js_url=env_onlyoffice_js_url or str(oo.get("api_js_url", "")),

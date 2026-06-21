@@ -168,11 +168,13 @@ from routes import router as clawmate_router  # noqa: E402
 from task_runner import router as task_router  # noqa: E402
 from subtitle_routes import router as subtitle_router  # noqa: E402
 from share_routes import router as share_router  # noqa: E402
+from agent_routes import router as agent_router  # noqa: E402
 
 app.include_router(clawmate_router)
 app.include_router(task_router)
 app.include_router(subtitle_router)
 app.include_router(share_router)
+app.include_router(agent_router)
 
 # mount static files under /clawmate/
 if STATIC_DIR.exists() and STATIC_DIR.is_dir():
@@ -264,4 +266,9 @@ if __name__ == "__main__":
     t = threading.Thread(target=_start_periodic_cron_tick, name="cron-tick", daemon=True)
     t.start()
 
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+    uvicorn.run(
+        app, host="0.0.0.0", port=port, log_level="info",
+        ws_ping_interval=30,      # send ping every 30s to keep connection alive
+        ws_ping_timeout=60,       # wait 60s for pong before closing (generous for slow clients)
+        timeout_keep_alive=120,   # HTTP keep-alive for WebSocket upgrade
+    )

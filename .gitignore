@@ -49,3 +49,10 @@ config.json.bak
 share_links.json
 CHANGELOG.md
 .playwright-mcp/
+agent-chat-test.png
+agent-panel-test.png
+agent-terminal-test.png
+agent-zindex-fix.png
+mobile-agent-topbar-test.png
+mobile-layout-test.png
+openclaw-*-test.png

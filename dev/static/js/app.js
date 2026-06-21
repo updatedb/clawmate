@@ -184,8 +184,10 @@ function formatSize(bytes) {
 
 function formatMtime(ts) {
   if (!ts) return "-";
-  const dt = new Date(ts * 1000);
-  return isNaN(dt.getTime()) ? "-" : dt.toLocaleString();
+  var dt = new Date(ts * 1000);
+  if (isNaN(dt.getTime())) return "-";
+  var mo = dt.getMonth() + 1, d = dt.getDate(), h = dt.getHours(), mi = dt.getMinutes();
+  return mo + '/' + d + ' ' + String(h).padStart(2,'0') + ':' + String(mi).padStart(2,'0');
 }
 
 function getFileTypeLabel(entry) {
@@ -246,6 +248,10 @@ function selectRoot(rootId) {
   state.rootLabel = root.label || root.id;
   if (els.rootSelect) {
     els.rootSelect.value = root.id;
+  }
+  // Close agent panel on root switch (session is root-specific)
+  if (window.Agent) {
+    window.Agent.close();
   }
   return true;
 }
@@ -799,6 +805,21 @@ function renderBreadcrumbs() {
     els.currentPath.classList.add("breadcrumb");
     renderBreadcrumbContainer(els.currentPath);
   }
+  // Add "复制" link after breadcrumb
+  var container = els.currentPath || els.breadcrumb;
+  if (!container) return;
+  var existing = container.querySelector('.breadcrumb-copy');
+  if (existing) existing.remove();
+  var copyLink = document.createElement('a');
+  copyLink.className = 'breadcrumb-copy';
+  copyLink.textContent = '复制';
+  copyLink.href = '#';
+  copyLink.addEventListener('click', function (e) {
+    e.preventDefault();
+    var path = state.dir || '';
+    copyText(path || state.rootLabel || '');
+  });
+  container.appendChild(copyLink);
 }
 
 // Compute parent directory path from a given dir
@@ -1308,7 +1329,8 @@ function renderList(markdownEntries, folderEntries, otherEntries) {
       size.textContent = entry.is_dir ? "-" : formatSize(entry.size);
       const mtime = document.createElement("span");
       const dt = new Date(entry.mtime * 1000);
-      mtime.textContent = isNaN(dt.getTime()) ? "-" : dt.toLocaleString();
+      var mo = dt.getMonth() + 1, d = dt.getDate(), h = dt.getHours(), mi = dt.getMinutes();
+      mtime.textContent = isNaN(dt.getTime()) ? "-" : (mo + '/' + d + ' ' + String(h).padStart(2,'0') + ':' + String(mi).padStart(2,'0'));
 
       row.appendChild(name);
       row.appendChild(type);
@@ -1675,7 +1697,7 @@ function handleEntryClick(entry) {
 function openEntryPreview(entry) {
   if (!entry || entry.is_dir) return;
   const previewUrl = `/clawmate/preview.html?root=${encodeURIComponent(state.rootId)}&file=${encodeURIComponent(entry.relPath)}`;
-  window.location.href = previewUrl;
+  window.open(previewUrl, '_blank');
 }
 
 
@@ -1730,6 +1752,8 @@ async function loadConfig() {
     if (!state.roots.length) {
       state.roots = [{ id: "media", label: "媒体", dir: "" }];
     }
+    // Store agent config for later init (after root selection)
+    state.agentConfig = data.agent || null;
   } catch (err) {
     state.roots = [{ id: "media", label: "媒体", dir: "" }];
     state.defaultRootId = "";
@@ -1749,6 +1773,7 @@ if (els.rootSelect) {
       setStatus("根目录无效");
       return;
     }
+    _initAgent();
     // Reset multi-select state on root change
     if (state.multiSelectEnabled) {
       state.multiSelectEnabled = false;
@@ -1774,10 +1799,16 @@ els.hamburgerBtn && els.hamburgerBtn.addEventListener("click", () => {
   if (els.sidebarOverlay) {
     els.sidebarOverlay.style.display = els.sidebar.classList.contains("open") ? "block" : "none";
   }
+  // Sync sidebar toggle button state
+  const btn = document.getElementById("btnToggleSidebar");
+  if (btn) btn.classList.toggle("active", els.sidebar && els.sidebar.classList.contains("open"));
 });
 els.sidebarOverlay && els.sidebarOverlay.addEventListener("click", () => {
   els.sidebar && els.sidebar.classList.remove("open");
   if (els.sidebarOverlay) els.sidebarOverlay.style.display = "none";
+  // Sync sidebar toggle button state
+  const btn = document.getElementById("btnToggleSidebar");
+  if (btn) btn.classList.remove("active");
 });
 els.filterType.addEventListener("change", (e) => setFilterType(e.target.value));
 els.sortTime && els.sortTime.addEventListener("click", () => handleSortPill(els.sortTime));
@@ -1795,8 +1826,69 @@ els.nextPage.addEventListener("click", () => {
 });
 els.loadMoreBtn && els.loadMoreBtn.addEventListener("click", loadMore);
 
+// Sidebar toggle
+const btnToggleSidebar = document.getElementById("btnToggleSidebar");
+if (btnToggleSidebar) {
+  // Set initial active state
+  if (window.innerWidth >= 768) {
+    btnToggleSidebar.classList.add("active");
+  }
+  btnToggleSidebar.addEventListener("click", function () {
+    const sidebar = els.sidebar;
+    if (!sidebar) return;
+    if (window.innerWidth < 768) {
+      // Mobile: toggle overlay (open class)
+      const isOpen = sidebar.classList.contains("open");
+      if (isOpen) {
+        sidebar.classList.remove("open");
+        btnToggleSidebar.classList.remove("active");
+      } else {
+        sidebar.classList.add("open");
+        btnToggleSidebar.classList.add("active");
+      }
+      // Toggle overlay
+      if (els.sidebarOverlay) {
+        els.sidebarOverlay.style.display = isOpen ? "none" : "block";
+      }
+    } else {
+      // Desktop: toggle hidden class + grid
+      const isHidden = sidebar.classList.contains("hidden");
+      if (isHidden) {
+        sidebar.classList.remove("hidden");
+        btnToggleSidebar.classList.add("active");
+      } else {
+        sidebar.classList.add("hidden");
+        btnToggleSidebar.classList.remove("active");
+      }
+      _updateContentGrid();
+    }
+    syncSidebarBtn();
+  });
+}
+
+// Update content grid columns when sidebar/agent panel change
+function _updateContentGrid() {
+  // Delegate to agent.js for consistent grid management
+  if (window.Agent && window.Agent.updateGrid) {
+    window.Agent.updateGrid();
+  }
+}
+
 // Theme toggle
 els.themeToggle && els.themeToggle.addEventListener("click", cycleTheme);
+
+// Agent panel toggle
+const btnToggleAgent = document.getElementById("btnToggleAgent");
+btnToggleAgent && btnToggleAgent.addEventListener("click", function () {
+  if (window.Agent) {
+    window.Agent.toggle();
+    if (window.Agent.isOpen()) {
+      btnToggleAgent.classList.add("active");
+    } else {
+      btnToggleAgent.classList.remove("active");
+    }
+  }
+});
 
 // Logout
 const btnLogoutMain = document.getElementById("btnLogout");
@@ -1884,6 +1976,13 @@ let _activeFeedbackPanel = null;
 function createFeedbackPanel(container, context) {
   // context: { root, project, path, rawContent, isStandalone }
   let items = [];
+
+  // Stub functions referenced by feedback panel UI
+  function clearHighlight() { /* no-op: main page has no highlight region */ }
+  function highlightLinesInContainer(c, start, end) { /* no-op */ }
+  async function _batchSendItems(api, items) {
+    throw new Error('batchSendItems not implemented for main page feedback panel');
+  }
   let completedItems = [];
   let idCounter = 0;
   let visible = false;
@@ -2297,6 +2396,7 @@ async function init() {
     }
     updateUrl();
     await loadDir("");
+    _initAgent();
     return;
   }
 
@@ -2305,6 +2405,19 @@ async function init() {
     return;
   }
   await loadDir(dirParam || "");
+  _initAgent();
+}
+
+function _initAgent() {
+  if (state.agentConfig && window.Agent) {
+    var curRoot = getRootById(state.rootId) || state.roots[0] || {};
+    window.Agent.init({
+      backend: state.agentConfig.backend || "claude",
+      wsUrl: state.agentConfig.ws_url || "",
+      rootId: state.rootId || "",
+      agentId: curRoot.agent_id || "",
+    });
+  }
 }
 
 // ── Responsive: auto-switch to list on small screens ──
@@ -2319,6 +2432,28 @@ function applyResponsiveView() {
   } else if (!small && _responsiveViewActive) {
     _responsiveViewActive = false;
   }
+  // Sync sidebar button with actual sidebar visibility
+  syncSidebarBtn();
+}
+
+function syncSidebarBtn() {
+  const btn = document.getElementById("btnToggleSidebar");
+  const sidebar = els.sidebar;
+  if (!btn || !sidebar) return;
+  // Desktop: check actual visibility (CSS may have auto-hidden it)
+  const visible = getComputedStyle(sidebar).display !== 'none' && !sidebar.classList.contains('hidden');
+  if (window.innerWidth < 768) {
+    btn.classList.toggle("active", sidebar.classList.contains("open"));
+  } else {
+    btn.classList.toggle("active", visible);
+  }
+}
+
+// Watch for CSS-driven sidebar auto-hide (agent-open mode)
+if (window.matchMedia) {
+  window.matchMedia('(max-width: 1500px)').addEventListener('change', function () {
+    if (document.body.classList.contains('agent-open')) syncSidebarBtn();
+  });
 }
 
 // Run on load and on resize (debounced)

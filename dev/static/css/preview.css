@@ -13,12 +13,25 @@
     /* Three-column grid */
     .preview-three-col {
       display: grid;
-      grid-template-columns: 240px 1fr 300px;
+      grid-template-columns: 240px 1fr 0px 380px;
       flex: 1;
       min-height: 0;
       overflow: hidden;
       width: 100%;
     }
+
+    /* Preview resize handle */
+    .preview-resize-handle {
+      width: 5px; cursor: col-resize; flex-shrink: 0;
+      background: transparent;
+      transition: background var(--duration-fast) var(--ease-out);
+      z-index: 5;
+    }
+    .preview-resize-handle:hover,
+    .preview-resize-handle.active {
+      background: var(--accent);
+    }
+    .preview-resize-handle.hidden { display: none; }
 
     /* Left sidebar */
     .preview-left {
@@ -200,18 +213,21 @@
     }
     .fb-card .fb-btn-delete {
       position: absolute;
-      top: 4px;
-      right: 4px;
-      padding: 2px 6px;
-      border-radius: 4px;
-      border: 1px solid var(--danger-border);
-      background: var(--btn-bg);
+      top: 6px;
+      right: 6px;
+      width: 22px; height: 22px;
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 0;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: transparent;
       cursor: pointer;
       font-size: 12px;
-      color: var(--danger);
+      color: var(--text-muted);
       line-height: 1;
+      transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
     }
-    .fb-card .fb-btn-delete:hover { background: var(--danger-bg); border-color: var(--danger); }
+    .fb-card .fb-btn-delete:hover { background: var(--bg-tertiary); color: var(--danger); }
     .fb-card .fb-btn-submit {
       margin-left: auto;
       padding: 3px 8px;
@@ -897,7 +913,7 @@
 
       /* Single column: keep grid 0px 1fr 0px, sidebars as fixed overlays */
       .preview-three-col {
-        grid-template-columns: 0px 1fr 0px !important;
+        grid-template-columns: 0px 1fr 0px 0px !important;
       }
       /* Pin center to column 2 — prevents auto-placement shift when sidebars become position:fixed */
       .preview-center { grid-column: 2 !important; }

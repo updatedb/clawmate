@@ -67,7 +67,8 @@
   // Back button
   const parentDir = filePath.split('/').slice(0, -1).join('/');
   const backHref = `/clawmate/?root=${encodeURIComponent(rootId)}&dir=${encodeURIComponent(parentDir)}`;
-  document.getElementById('btnBack').href = backHref;
+  const btnBack = document.getElementById('btnBack');
+  if (btnBack) btnBack.href = backHref;
   const btnBackMobile = document.getElementById('btnBackMobile');
   if (btnBackMobile) btnBackMobile.href = backHref;
 
@@ -262,7 +263,7 @@
   async function renderMermaid(div, mermaidStore) {
     var blocks = div.querySelectorAll('.mermaid');
     if (!blocks.length) return;
-    console.log('[ClawMate] renderMermaid: found ' + blocks.length + ' mermaid block(s), store size=' + mermaidStore.length);
+    // DEBUG:  renderMermaid: found ' + blocks.length + ' mermaid block(s), store size=' + mermaidStore.length);
 
     var scopeClass = 'mermaid-scope-' + Date.now();
     div.classList.add(scopeClass);
@@ -300,9 +301,9 @@
         b.textContent = mermaidStore[id];
       }
 
-      console.log('[ClawMate] Calling mermaid.run() with scope=' + scopeClass + ', store has ' + mermaidStore.length + ' entries');
+      // DEBUG:  Calling mermaid.run() with scope=' + scopeClass + ', store has ' + mermaidStore.length + ' entries');
       await window.mermaid.run({ querySelector: '.' + scopeClass + ' .mermaid' });
-      console.log('[ClawMate] mermaid.run() completed successfully');
+      // DEBUG:  mermaid.run() completed successfully');
 
       // Setup zoom for each rendered SVG
       await new Promise(r => setTimeout(r, 100));
@@ -1387,7 +1388,7 @@
           } catch (_) {}
         }
 
-        console.log('[ClawMate] About to call renderMermaid, mermaidStore has ' + mermaidStore.length + ' entries');
+        // DEBUG:  About to call renderMermaid, mermaidStore has ' + mermaidStore.length + ' entries');
         try { await renderMermaid(mdDiv, mermaidStore); } catch (e) { console.error('[ClawMate] renderMermaid threw:', e); }
         removeLoading();
         updateMarkdownDynamicButtons();
@@ -1545,12 +1546,52 @@
   // Initialize active state based on current sidebar visibility
   btnToggleLeft.classList.toggle('active', !leftSidebar.classList.contains('hidden'));
 
+  // --- Right panel resize ---
+  const resizeHandle = document.getElementById('previewResizeHandle');
+  let rightPanelWidth = 380; // default 380px
+  let dragStartX = 0;
+  let dragStartWidth = 0;
+
   function updateGridColumns() {
     const lHidden = leftSidebar.classList.contains('hidden');
     const rHidden = rightSidebar.classList.contains('hidden');
     const lW = lHidden ? '0px' : '240px';
-    const rW = rHidden ? '0px' : '300px';
-    threeCol.style.gridTemplateColumns = `${lW} 1fr ${rW}`;
+    if (rHidden) {
+      threeCol.style.gridTemplateColumns = `${lW} 1fr 0px 0px`;
+      if (resizeHandle) resizeHandle.classList.add('hidden');
+    } else {
+      if (resizeHandle) resizeHandle.classList.remove('hidden');
+      threeCol.style.gridTemplateColumns = `${lW} 1fr 5px ${rightPanelWidth}px`;
+    }
+  }
+
+  if (resizeHandle) {
+    resizeHandle.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      dragStartX = e.clientX;
+      dragStartWidth = rightPanelWidth;
+      resizeHandle.classList.add('active');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      document.addEventListener('mousemove', onResizeMove);
+      document.addEventListener('mouseup', onResizeUp);
+    });
+
+    function onResizeMove(e) {
+      const delta = dragStartX - e.clientX;
+      rightPanelWidth = Math.max(260, Math.min(700, dragStartWidth + delta));
+      threeCol.style.gridTemplateColumns =
+        (leftSidebar.classList.contains('hidden') ? '0px' : '240px') +
+        ' 1fr 5px ' + rightPanelWidth + 'px';
+    }
+
+    function onResizeUp() {
+      resizeHandle.classList.remove('active');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onResizeMove);
+      document.removeEventListener('mouseup', onResizeUp);
+    }
   }
 
   // Left sidebar: markdown shows it (via buildTOC), non-markdown hides it

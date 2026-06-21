@@ -18,6 +18,11 @@
     "gateway_url": "http://openclaw.lan:18789",
     "hook_token": ""
   },
+  "agent": {
+    "backend": "claude",
+    "openclaw_ws_url": "ws://openclaw.lan:18789",
+    "openclaw_token": ""
+  },
   "onlyoffice": {
     "api_js_url": "http://onlyoffice.lan/web-apps/apps/api/documents/api.js",
     "jwt_secret": "change-me-in-production",

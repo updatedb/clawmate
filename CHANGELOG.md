@@ -1,5 +1,71 @@
 # Changelog
 
+## v1.40 (2026-06-22)
+### 响应式策略统一 — Agent 面板打开时渐进隐藏
+- Agent 打开时 `body.agent-open`，CSS 断点自动匹配移动端策略：
+  - ≤1500px：隐藏目录面板 → ≤1300px：隐藏 label + 按钮文字 + list type/size 列
+- 通用断点合并：≤1000px 隐藏 label + 按钮文字
+- 目录自动隐藏/显示同步按钮状态（`matchMedia` + `getComputedStyle`）
+- 目录隐藏时 agent 面板宽度不变，main 自动扩展
+
+### 列表视图优化
+- 日期缩短为 `M/D HH:mm` 格式
+- `minmax(0, 1fr) + max-content` 自适应列宽，不换行
+- ≤700px 隐藏 size，≤520px 隐藏 type
+- 面包屑后添加「复制」链接
+
+### Agent 面板
+- 最大宽度降至 680px，默认 45vw
+- 打开/关闭幻灯片动画（`forceExpand` 防 race condition）
+- Claude Code 反馈注入（`get_claude_session` + `inject_to_session`）
+- 修复 `open()` grid 不展开 bug
+
+### 移动端
+- 目录按钮替代 hamburger，sidebar overlay 与 agent 统一 `top:48px`
+- Topbar 始终单行（`flex-wrap: nowrap`），搜索自适应收缩
+- 搜索按钮高度/圆角与 topbar 按钮统一
+
+### 清理
+- 移除 `_md_to_ansi` 死代码
+- Markdown 暗色主题改用 `[data-theme="dark"]`
+- 注释 preview.js 4 个 debug `console.log`
+- xterm addon CDN 版本对齐 5.5.0
+
+## v1.39 (2026-06-22)
+### Agent 面板 — Claude Code + OpenClaw 双后端
+- 右侧面板嵌入 AI Agent 终端，支持拖拽调整宽度（360–1100px）
+- **Claude Code 后端**：Python PTY 直连，完整 CLI 体验（--dangerously-skip-permissions）
+- **OpenClaw 后端**：WebSocket JSON 协议 → Markdown 聊天视图（markdown-it 渲染）
+- 会话持久化：Claude Code 进程存活于 WebSocket 断开期间（10min idle 超时），重连回放输出缓冲
+- Feedback 任务路由：Claude 活跃时注入 PTY，否则回退 OpenClaw gateway webhook
+
+### 首页改进
+- 目录切换按钮（顶栏 📁），桌面端切换左侧栏显隐，移动端浮层滑入
+- 切换 root 时自动关闭 Agent 面板（session root 绑定）
+- Agent 按钮放在主题按钮之前
+- 移动端顶栏：搜索始终同行，品牌名隐藏，≤480px 搜索按钮仅图标
+- 移动端工具栏：隐藏多选/画廊/列表文字、隐藏类型/排序标签
+- 侧栏浮层和 Agent 面板统一 top:48px 高度
+
+### 预览页改进
+- 反馈面板拖拽调整宽度（260–700px）
+- 文件点击新标签页打开（保护 Agent 会话）
+- 底栏移除「返回」按钮
+- 反馈卡片删除按钮风格统一
+
+### 配置文件
+- config.json / config.example.json 新增 `agent` 配置块
+- docker-compose.yml 新增 `CLAWMATE_AGENT_BACKEND` 环境变量
+
+### 修复
+- Ctrl+C/V 在终端中行为正常（有选区时复制，Ctrl+V 粘贴）
+- 不支持文件类型显示友好 fallback + 下载按钮
+- uvicorn WebSocket ping 间隔 30s，超时 60s
+- 移动端 main 宽度修复（grid-column 错位）
+- agent panel slide-in/slide-out 动画
+- output_buffer 按条目数限制（200条），防止内存泄漏
+- chat.history 响应消费，聊天重连状态提示，流式自动滚屏
+
 ## v1.38 (2026-06-21)
 ### 性能优化
 - KaTeX CSS 按需加载：仅含 `$`/`$$` 数学公式的 Markdown 才注入 KaTeX 样式

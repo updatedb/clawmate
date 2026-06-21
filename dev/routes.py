@@ -58,11 +58,35 @@ async def public_config(request: Request):
     return {
         "roots": [{"id": r.id, "label": r.label, "dir": r.dir, "agent_id": r.agent_id} for r in cfg.roots],
         "defaultRootId": cfg.default_root_id,
+        "agent": {
+            "backend": cfg.agent.backend,
+            "ws_url": _agent_ws_url(request),
+        },
         "feedback_tags": [{"label": t.label, "prompt": t.agent_prompt} for t in load_task_templates() if t.frontend.get("tooltip") or t.frontend.get("panel")],
         "task_templates": templates,
         "public_base_url": get_public_base_url(request),
     }
 ONLYOFFICE_TOKEN_TTL = 3600
+
+
+def _agent_ws_url(request: Request) -> str:
+    """Build the agent WebSocket URL for the frontend.
+
+    Uses public_base_url when behind a TLS-terminating proxy (e.g. nginx),
+    otherwise falls back to the request's scheme and host.
+    """
+    from urllib.parse import urlparse
+
+    public_base = get_public_base_url(request)
+    if public_base:
+        parsed = urlparse(public_base)
+        proto = "wss" if parsed.scheme == "https" else "ws"
+        host = parsed.netloc
+        return f"{proto}://{host}/api/clawmate/agent/terminal"
+
+    proto = "wss" if request.url.scheme == "https" else "ws"
+    host = request.url.netloc
+    return f"{proto}://{host}/api/clawmate/agent/terminal"
 
 
 def _get_onlyoffice_secret() -> str:

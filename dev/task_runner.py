@@ -308,6 +308,61 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
         message = f"ClawMate 反馈通知：{scope} 目前无待处理 feedback。"
     run_name = f"clawmate-fb-{root_id}"
 
+    # ── 优先注入 Claude Code PTY（agent panel 活跃时）──
+    try:
+        from agent_routes import get_claude_session, inject_to_session
+        sess = get_claude_session(root_id, agent_id)
+        if sess is not None and items:
+            # Build a compact task prompt for PTY injection
+            pty_lines = [
+                "\r\n\x1b[1;33m── ClawMate Feedback Task ──\x1b[0m\r\n",
+                f"root={root_id}  agent={agent_id}  items={len(items)}\r\n",
+                "\r\n",
+            ]
+            for idx, item in enumerate(items):
+                item_id = item.get("id", "?")
+                task_id = item.get("task_id", "") or item.get("action", "other")
+                item_file = item.get("file", "?")
+                position_val = item.get("position", "")
+                content_val = (item.get("content", "") or "")[:200]
+                note_val = (item.get("note", "") or "")[:200]
+                pty_lines.append(
+                    f"  [{item_id}] {task_id} file={item_file} position={position_val}\r\n"
+                )
+                if content_val:
+                    pty_lines.append(f"       content: {content_val}\r\n")
+                if note_val:
+                    pty_lines.append(f"       note: {note_val}\r\n")
+            pty_lines.append("\r\n")
+            pty_lines.append("\x1b[2m处理步骤：\x1b[0m\r\n")
+            pty_lines.append("1. 先标记 in_progress:\r\n")
+            pty_lines.append(
+                f'   curl -s -X POST http://127.0.0.1:5533/api/clawmate/feedback/batch-update '
+                f'-H "X-Internal-Token: {hook_token}" '
+                f'-H "Content-Type: application/json" '
+                f'-d \'{{"root":"{root_id}","project":"{project}","items":['
+                f'{{"id":"{items[0].get("id","?")}","status":"in_progress"}}]}}\'\r\n'
+            )
+            pty_lines.append("2. 修改文件（Read → Edit / Bash sed）\r\n")
+            pty_lines.append("3. 完成后标记 done:\r\n")
+            pty_lines.append(
+                f'   curl ... -d \'...{{"id":"...","status":"done","result":"改动说明"}}...\'\r\n'
+            )
+            pty_lines.append("\r\n")
+            for line in pty_lines:
+                inject_to_session(sess, line)
+            _ts_end = datetime.now(CST).isoformat(timespec="seconds")
+            logger.info(
+                "[task.wake] %s injected to Claude PTY root_id=%s agent_id=%s items=%d",
+                _ts_end, root_id, agent_id, len(items),
+            )
+            return
+    except ImportError:
+        pass  # agent_routes not available
+    except Exception as e:
+        logger.warning("[task.wake] Claude PTY injection failed, falling back to webhook: %s", e)
+
+    # ── 回退：通过 webhook 发送给 OpenClaw gateway ──
     def _do_wake_sync():
         try:
             with httpx.Client(timeout=10.0) as client:
