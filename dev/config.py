@@ -46,6 +46,8 @@ class AgentConfig:
     backend: str = "claude"          # "claude" | "openclaw"
     openclaw_ws_url: str = ""        # wss://ai.updatedb.online:18443
     openclaw_token: str = ""         # gateway auth token
+    openclaw_device_secret: str = "" # HMAC secret for device pairing
+    openclaw_device_token: str = ""  # device token from Gateway (saved after pairing)
 
 
 @dataclass
@@ -224,6 +226,8 @@ def _parse_config(raw: dict) -> AppConfig:
             backend=str(ag.get("backend", "claude")),
             openclaw_ws_url=str(ag.get("openclaw_ws_url", "")),
             openclaw_token=str(ag.get("openclaw_token", "")),
+            openclaw_device_secret=str(ag.get("openclaw_device_secret", "")),
+            openclaw_device_token=str(ag.get("openclaw_device_token", "")),
         ),
         onlyoffice=OnlyOfficeConfig(
             api_js_url=env_onlyoffice_js_url or str(oo.get("api_js_url", "")),

@@ -21,7 +21,9 @@
   "agent": {
     "backend": "claude",
     "openclaw_ws_url": "ws://openclaw.lan:18789",
-    "openclaw_token": ""
+    "openclaw_token": "",
+    "openclaw_device_secret": "",
+    "openclaw_device_token": ""
   },
   "onlyoffice": {
     "api_js_url": "http://onlyoffice.lan/web-apps/apps/api/documents/api.js",

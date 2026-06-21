@@ -336,6 +336,8 @@ async def _openclaw_backend(
     agent_cfg = cfg.agent
     oc_url = agent_cfg.openclaw_ws_url
     oc_token = agent_cfg.openclaw_token
+    device_secret = agent_cfg.openclaw_device_secret
+    device_token = agent_cfg.openclaw_device_token
 
     if not oc_url:
         await ws.send_text(
@@ -349,6 +351,10 @@ async def _openclaw_backend(
             "\x1b[2m  Set agent.openclaw_token in config.json\x1b[0m\r\n"
         )
         return
+
+    # Device identity for pairing
+    import hashlib, hmac as _hmac
+    device_id = "clawmate-" + hashlib.sha256(b"clawmate-agent-device").hexdigest()[:16]
 
     # Resolve URL: try configured URL first (guaranteed scope grant),
     # fall back to local gateway
@@ -398,13 +404,32 @@ async def _openclaw_backend(
             await ws.send_text(json.dumps({"type": "error", "text": "Unexpected OpenClaw handshake"}, ensure_ascii=False))
             return
 
-        # Step 2: authenticate
+        # Step 2: build device pairing info
+        nonce = challenge.get("payload", {}).get("nonce", "")
+        ts = challenge.get("payload", {}).get("ts", 0)
+        device_info = {
+            "id": device_id,
+            "publicKey": hashlib.sha256(device_secret.encode() if device_secret else b"clawmate").hexdigest(),
+            "signedAt": ts,
+            "nonce": nonce,
+        }
+        if device_secret:
+            sig = _hmac.new(device_secret.encode(), f"{nonce}:{ts}".encode(), hashlib.sha256).hexdigest()
+            device_info["signature"] = sig
+
+        # Build auth: prefer device token, fall back to gateway token
+        auth_params = {"token": oc_token}
+        if device_token:
+            auth_params["deviceToken"] = device_token
+
+        # Step 3: authenticate
         await oc_send("connect", {
             "minProtocol": 4, "maxProtocol": 4,
             "client": {"id": "gateway-client", "version": "1.0.0", "platform": "linux", "mode": "backend"},
             "role": "operator",
             "scopes": ["operator.read", "operator.write", "operator.admin"],
-            "auth": {"token": oc_token},
+            "auth": auth_params,
+            "device": device_info,
             "locale": "en-US",
             "userAgent": "clawmate-agent/1.0.0",
         })
@@ -416,7 +441,18 @@ async def _openclaw_backend(
             await ws.send_text(json.dumps({"type": "error", "text": f"OpenClaw auth failed: {err}"}, ensure_ascii=False))
             return
 
-        # Log granted scopes for diagnostics
+        # Save device token if returned (pairing approved)
+        new_device_token = hello.get("payload", {}).get("auth", {}).get("deviceToken", "")
+        if new_device_token and new_device_token != device_token:
+            await ws.send_text(json.dumps({
+                "type": "info",
+                "text": f"Device paired! Token saved. Add to config.json: agent.openclaw_device_token"
+            }, ensure_ascii=False))
+            # Log for user to save
+            import sys
+            print(f"[clawmate] OpenClaw device paired. Add to config.json: \"openclaw_device_token\": \"{new_device_token}\"", file=sys.stderr)
+
+        # Log granted scopes
         granted = hello.get("payload", {}).get("auth", {}).get("scopes", [])
 
         server_ver = hello.get("payload", {}).get("server", {}).get("version", "?")
