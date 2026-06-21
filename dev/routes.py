@@ -608,7 +608,7 @@ async def clawmate_onlyoffice_config(request: Request, root: str = "", path: str
 
     # Determine mode: query param > config.json > default "edit"
     if not mode:
-        mode = onlyoffice_cfg.get("mode", "edit") or "edit"
+        mode = onlyoffice_cfg.mode or "edit"
 
     payload = {
         "root": root,
@@ -678,21 +678,19 @@ async def clawmate_onlyoffice_config(request: Request, root: str = "", path: str
     else:
         callback_url = f"{public_base_url}/api/clawmate/onlyoffice/callback?token={quote(token)}"
 
-    # Customization: minimal chrome for cleaner preview experience.
-    # Configurable via config.json → onlyoffice.ui (optional, defaults below).
-    ui_cfg = onlyoffice_cfg.get("ui", {})
+    # Customization: minimal chrome for cleaner document viewing/editing.
     customization = {
-        "compactHeader":     ui_cfg.get("compactHeader",     True),
-        "compactToolbar":    ui_cfg.get("compactToolbar",    True),
-        "hideRightMenu":     ui_cfg.get("hideRightMenu",     True),
-        "toolbarNoTabs":     ui_cfg.get("toolbarNoTabs",     True),
-        "toolbarHideFileName": ui_cfg.get("toolbarHideFileName", True),
-        "hideRulers":        ui_cfg.get("hideRulers",        True),
-        "chat":              ui_cfg.get("chat",              False),
-        "help":              ui_cfg.get("help",              False),
-        "feedback":          ui_cfg.get("feedback",          False),
-        "forcesave":         ui_cfg.get("forcesave",         False),
-        "goback":            ui_cfg.get("goback",            {"blank": False, "text": "返回 ClawMate", "url": "#"}),
+        "compactHeader":     True,
+        "compactToolbar":    True,
+        "hideRightMenu":     True,
+        "toolbarNoTabs":     True,
+        "toolbarHideFileName": True,
+        "hideRulers":        True,
+        "chat":              False,
+        "help":              False,
+        "feedback":          False,
+        "forcesave":         False,
+        "goback":            {"blank": False, "text": "返回 ClawMate", "url": "#"},
     }
 
     oo_config = {
