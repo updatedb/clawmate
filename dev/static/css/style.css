@@ -389,7 +389,7 @@ button svg, .btn svg, a svg {
 @media (max-width: 768px) {
   /* Topbar: compact with hamburger, search collapses */
   .topbar { padding: 6px 10px; gap: 6px; flex-wrap: wrap; height: auto; min-height: 48px; }
-  .brand { font-size: 13px; }
+  .brand { font-size: 0; flex: none; }
   #hamburgerBtn { display: flex; align-items: center; justify-content: center; }
 
   /* Search: take full width on its own row when needed */
@@ -401,7 +401,6 @@ button svg, .btn svg, a svg {
 
   /* Topbar actions: right-aligned */
   .topbar { justify-content: flex-start; }
-  .brand { flex: 1; }
   .topbar-actions { gap: 4px; margin-left: auto; }
   .topbar-btn { width: 30px; height: 30px; font-size: 13px; }
 
