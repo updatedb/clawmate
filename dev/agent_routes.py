@@ -336,8 +336,6 @@ async def _openclaw_backend(
     agent_cfg = cfg.agent
     oc_url = agent_cfg.openclaw_ws_url
     oc_token = agent_cfg.openclaw_token
-    device_secret = agent_cfg.openclaw_device_secret
-    device_token = agent_cfg.openclaw_device_token
 
     if not oc_url:
         await ws.send_text(
@@ -364,7 +362,6 @@ async def _openclaw_backend(
         try_urls.append(oc_url)
 
     oc_ws = None
-    conn_url = ""
     req_id = 0
     line_buf = ""
 
@@ -404,39 +401,13 @@ async def _openclaw_backend(
             await ws.send_text(json.dumps({"type": "error", "text": "Unexpected OpenClaw handshake"}, ensure_ascii=False))
             return
 
-        # Step 2: build device pairing info with Ed25519 signature
-        nonce = challenge.get("payload", {}).get("nonce", "")
-        ts = challenge.get("payload", {}).get("ts", 0)
-        device_info = {"id": device_id, "signedAt": ts, "nonce": nonce}
-
-        if device_secret:
-            try:
-                from cryptography.hazmat.primitives.asymmetric import ed25519
-                from cryptography.hazmat.primitives import serialization
-                priv_bytes = _b64.b64decode(device_secret)
-                sk = ed25519.Ed25519PrivateKey.from_private_bytes(priv_bytes)
-                pk_bytes = sk.public_key().public_bytes_raw()
-                device_info["publicKey"] = _b64.b64encode(pk_bytes).decode()
-                sig = sk.sign(f"{nonce}:{ts}".encode())
-                device_info["signature"] = _b64.b64encode(sig).decode()
-            except ImportError:
-                pass  # cryptography not installed, skip device pairing
-            except Exception:
-                pass
-
-        # Build auth: prefer device token, fall back to gateway token
-        auth_params = {"token": oc_token}
-        if device_token:
-            auth_params["deviceToken"] = device_token
-
-        # Step 3: authenticate
+        # Step 2: authenticate
         await oc_send("connect", {
             "minProtocol": 4, "maxProtocol": 4,
-            "client": {"id": device_id, "version": "1.0.0", "platform": "linux", "mode": "backend"},
+            "client": {"id": "gateway-client", "version": "1.0.0", "platform": "linux", "mode": "backend"},
             "role": "operator",
             "scopes": ["operator.read", "operator.write", "operator.admin"],
-            "auth": auth_params,
-            "device": device_info,
+            "auth": {"token": oc_token},
             "locale": "en-US",
             "userAgent": "clawmate-agent/1.0.0",
         })
