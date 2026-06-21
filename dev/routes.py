@@ -679,6 +679,9 @@ async def clawmate_onlyoffice_config(request: Request, root: str = "", path: str
         callback_url = f"{public_base_url}/api/clawmate/onlyoffice/callback?token={quote(token)}"
 
     # Customization: minimal chrome for cleaner document viewing/editing.
+    # NOTE: hideRightMenu can be overridden by browser localStorage if the
+    # user has ever toggled the right panel manually. To reset: DevTools →
+    # Application → Local Storage → clear ONLYOFFICE entries → reload.
     customization = {
         "compactHeader":     True,
         "compactToolbar":    True,
@@ -687,10 +690,9 @@ async def clawmate_onlyoffice_config(request: Request, root: str = "", path: str
         "toolbarHideFileName": True,
         "hideRulers":        True,
         "chat":              False,
+        "comments":          False,
         "help":              False,
-        "feedback":          False,
-        "forcesave":         False,
-        "goback":            {"blank": False, "text": "返回 ClawMate", "url": "#"},
+        "plugins":           False,
     }
 
     oo_config = {
