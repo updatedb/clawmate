@@ -415,7 +415,11 @@ async def _openclaw_backend(
         # Verify required scopes were granted
         granted = hello.get("payload", {}).get("auth", {}).get("scopes", [])
         if "operator.write" not in granted:
-            await ws.send_text(json.dumps({"type": "error", "text": f"OpenClaw: missing operator.write scope. Granted: {granted}. Check gateway auth.token permissions."}, ensure_ascii=False))
+            token_preview = oc_token[:6] + "..." if len(oc_token) > 6 else "(empty)"
+            await ws.send_text(json.dumps({
+                "type": "error",
+                "text": f"OpenClaw: missing operator.write scope. Granted: {granted}. Token prefix: {token_preview}. Check agent.openclaw_token matches gateway.auth.token."
+            }, ensure_ascii=False))
             return
 
         server_ver = hello.get("payload", {}).get("server", {}).get("version", "?")
