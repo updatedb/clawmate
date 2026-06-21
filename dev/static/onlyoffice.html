@@ -180,7 +180,7 @@
       const root = params.get('root');
       const path = params.get('path');
       const rawUrl = `/api/clawmate/raw?root=${encodeURIComponent(root)}&path=${encodeURIComponent(path)}`;
-      const pdfJsUrl = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf viewer.min.html?file=${encodeURIComponent(rawUrl)}`;
+      const pdfJsUrl = `/clawmate/pdfjs/viewer.html?file=${encodeURIComponent(window.location.origin + rawUrl)}`;
       const onlyofficeDiv = document.getElementById('onlyoffice');
       if (onlyofficeDiv) onlyofficeDiv.innerHTML = '';
       const iframe = document.createElement('iframe');

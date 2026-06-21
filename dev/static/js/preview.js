@@ -84,9 +84,9 @@
   function switchThemeCSS(resolved) {
     const hlCss = document.getElementById('highlight-theme-css');
     if (resolved === 'dark') {
-      hlCss.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css';
+      hlCss.href = './vendor/github-dark.min.css';
     } else {
-      hlCss.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css';
+      hlCss.href = './vendor/github.min.css';
     }
     // 用 inline style 覆盖 markdown 主题色（CDN CSS 的变量被 @media 包裹，不可靠）
     const varsEl = document.getElementById('clawmate-theme-vars') || (() => {
@@ -180,6 +180,10 @@
   async function ensureKatex() {
     if (_katexLoaded) return;
     if (window.renderMathInElement) { _katexLoaded = true; return; }
+    // Load CSS first so fonts begin fetching
+    var css = document.createElement('link');
+    css.rel = 'stylesheet'; css.href = './vendor/katex.min.css';
+    document.head.appendChild(css);
     await loadScript('./vendor/katex.min.js');
     await loadScript('./vendor/auto-render.min.js');
     _katexLoaded = true;

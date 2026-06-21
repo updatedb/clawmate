@@ -635,6 +635,9 @@ async function ensureMermaid() {
 async function ensureKatex() {
   if (_katexLoaded) return;
   if (window.renderMathInElement) { _katexLoaded = true; return; }
+  var css = document.createElement('link');
+  css.rel = 'stylesheet'; css.href = './vendor/katex.min.css';
+  document.head.appendChild(css);
   await loadScript('./vendor/katex.min.js');
   await loadScript('./vendor/auto-render.min.js');
   _katexLoaded = true;
