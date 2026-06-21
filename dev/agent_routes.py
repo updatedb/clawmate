@@ -351,15 +351,11 @@ async def _openclaw_backend(
         return
 
     # Device identity for pairing
-    import hashlib, base64 as _b64
-    device_id = "clawmate-" + hashlib.sha256(b"clawmate-agent-device").hexdigest()[:16]
-
-    # Resolve URL: try configured URL first (guaranteed scope grant),
-    # fall back to local gateway
-    # Try local first (loopback gets scopes), WSS as fallback
-    try_urls = ["ws://127.0.0.1:18789"]
-    if oc_url and oc_url not in try_urls:
-        try_urls.append(oc_url)
+    # Configured URL first, local Gateway default as fallback
+    try_urls = [oc_url] if oc_url else []
+    fallback = "ws://127.0.0.1:18789"
+    if fallback not in try_urls:
+        try_urls.append(fallback)
 
     oc_ws = None
     req_id = 0
