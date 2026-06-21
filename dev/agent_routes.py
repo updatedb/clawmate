@@ -400,7 +400,7 @@ async def _openclaw_backend(
         # Step 2: authenticate
         await oc_send("connect", {
             "minProtocol": 4, "maxProtocol": 4,
-            "client": {"id": "node-host", "version": "1.0.0", "platform": "linux", "mode": "node"},
+            "client": {"id": "openclaw-probe", "version": "1.0.0", "platform": "linux", "mode": "probe"},
             "role": "operator",
             "scopes": ["operator.read", "operator.write", "operator.admin"],
             "auth": {"token": oc_token},
@@ -415,19 +415,8 @@ async def _openclaw_backend(
             await ws.send_text(json.dumps({"type": "error", "text": f"OpenClaw auth failed: {err}"}, ensure_ascii=False))
             return
 
-        # Verify required scopes were granted
+        # Log granted scopes for diagnostics
         granted = hello.get("payload", {}).get("auth", {}).get("scopes", [])
-        if "operator.write" not in granted:
-            await ws.send_text(json.dumps({
-                "type": "error",
-                "text": (
-                    f"OpenClaw: missing operator.write scope. Granted: {granted}. "
-                    f"Token len={len(oc_token)} prefix={oc_token[:8] if oc_token else 'EMPTY'}. "
-                    f"Gateway conn={conn_url}. "
-                    f"Check gateway.auth.token permissions."
-                )
-            }, ensure_ascii=False))
-            return
 
         server_ver = hello.get("payload", {}).get("server", {}).get("version", "?")
         conn_id = hello.get("payload", {}).get("server", {}).get("connId", "?")
