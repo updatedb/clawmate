@@ -1173,11 +1173,30 @@
       contentBody.dataset.feedbackPath = filePath;
       contentBody.dataset.feedbackProject = project;
 
-      // ======== Office / PDF ========
-      if (isOfficePdfMode) {
-        // Office/PDF mode: all buttons still visible (拷贝/导出/下载/重命名)
+      // ======== PDF: lightweight pdf.js viewer (no editing needed) ========
+      if (isPdfMode) {
+        const wrap = document.createElement('div');
+        wrap.className = 'office-iframe-wrap';
+        wrap.id = 'officeIframeWrap';
 
-        // Build wrapper div for iframe
+        const iframe = document.createElement('iframe');
+        iframe.id = 'officeIframe';
+        const rawUrl = `${window.location.origin}/api/clawmate/raw?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`;
+        iframe.src = `${window.location.protocol}//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf viewer.min.html?file=${encodeURIComponent(rawUrl)}`;
+        iframe.style.cssText = 'width:100%;height:100%;border:none;overflow:hidden;';
+        wrap.appendChild(iframe);
+
+        contentBody.style.cssText = 'display:flex;flex-direction:column;flex:1;min-height:0;padding:0;';
+        contentBody.appendChild(wrap);
+        removeLoading();
+
+        setupOfficePdfToolbar();
+        loadOfficePdfCompletedFeedback();
+        return;
+      }
+
+      // ======== Office (ONLYOFFICE) ========
+      if (isOfficeMode) {
         const wrap = document.createElement('div');
         wrap.className = 'office-iframe-wrap';
         wrap.id = 'officeIframeWrap';
@@ -1192,7 +1211,6 @@
         contentBody.appendChild(wrap);
         removeLoading();
 
-        // Set up dynamic toolbar and feedback
         setupOfficePdfToolbar();
         loadOfficePdfCompletedFeedback();
         return;
@@ -3883,7 +3901,7 @@
     wrap.innerHTML = '';
 
     const iframe = document.createElement('iframe');
-    const pdfJsUrl = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf viewer.min.html?file=${encodeURIComponent(`/api/clawmate/raw?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`)}`;
+    const pdfJsUrl = `${window.location.protocol}//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf viewer.min.html?file=${encodeURIComponent(window.location.origin + `/api/clawmate/raw?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`)}`;
     iframe.src = pdfJsUrl;
     iframe.style.cssText = 'width:100%;height:100%;border:none;overflow:hidden;';
     wrap.appendChild(iframe);

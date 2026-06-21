@@ -143,6 +143,7 @@ _cors_allowed.extend([
     "http://localhost:5533",
     "http://127.0.0.1",
     "http://127.0.0.1:5533",
+    "https://cdnjs.cloudflare.com",
 ])
 app.add_middleware(
     CORSMiddleware,
