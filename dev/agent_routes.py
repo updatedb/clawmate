@@ -400,7 +400,7 @@ async def _openclaw_backend(
         # Step 2: authenticate
         await oc_send("connect", {
             "minProtocol": 4, "maxProtocol": 4,
-            "client": {"id": "gateway-client", "version": "1.0.0", "platform": "linux", "mode": "backend"},
+            "client": {"id": "node-host", "version": "1.0.0", "platform": "linux", "mode": "node"},
             "role": "operator",
             "scopes": ["operator.read", "operator.write", "operator.admin"],
             "auth": {"token": oc_token},
