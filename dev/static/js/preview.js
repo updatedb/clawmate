@@ -1182,7 +1182,7 @@
         const iframe = document.createElement('iframe');
         iframe.id = 'officeIframe';
         const rawUrl = `${window.location.origin}/api/clawmate/raw?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`;
-        iframe.src = `${window.location.protocol}//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf viewer.min.html?file=${encodeURIComponent(rawUrl)}`;
+        iframe.src = `/clawmate/pdfjs/viewer.html?file=${encodeURIComponent(rawUrl)}`;
         iframe.style.cssText = 'width:100%;height:100%;border:none;overflow:hidden;';
         wrap.appendChild(iframe);
 
@@ -3901,7 +3901,7 @@
     wrap.innerHTML = '';
 
     const iframe = document.createElement('iframe');
-    const pdfJsUrl = `${window.location.protocol}//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf viewer.min.html?file=${encodeURIComponent(window.location.origin + `/api/clawmate/raw?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`)}`;
+    const pdfJsUrl = `/clawmate/pdfjs/viewer.html?file=${encodeURIComponent(window.location.origin + `/api/clawmate/raw?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`)}`;
     iframe.src = pdfJsUrl;
     iframe.style.cssText = 'width:100%;height:100%;border:none;overflow:hidden;';
     wrap.appendChild(iframe);

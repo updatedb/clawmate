@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF Viewer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; background: #525659; }
+    #container { width: 100%; height: 100%; overflow: auto; }
+    .page { margin: 10px auto; position: relative; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+    canvas { display: block; }
+    .error { color: #f8b4b4; text-align: center; padding: 40px 20px; font-family: sans-serif; }
+    .loading { color: #ccc; text-align: center; padding: 40px 20px; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+  <script src="/clawmate/pdfjs/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/clawmate/pdfjs/pdf.worker.min.js';
+
+    const params = new URLSearchParams(window.location.search);
+    const fileUrl = params.get('file');
+    const container = document.getElementById('container');
+
+    if (!fileUrl) {
+      container.innerHTML = '<div class="error">缺少 file 参数</div>';
+    } else {
+      container.innerHTML = '<div class="loading">加载中...</div>';
+
+      pdfjsLib.getDocument(fileUrl).promise.then(function(pdf) {
+        container.innerHTML = '';
+        const pages = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          pages.push(pdf.getPage(i));
+        }
+        return Promise.all(pages).then(function(pages) {
+          const scale = 1.5;
+          pages.forEach(function(page) {
+            const viewport = page.getViewport({ scale: scale });
+            const canvas = document.createElement('canvas');
+            canvas.className = 'page';
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const ctx = canvas.getContext('2d');
+            page.render({ canvasContext: ctx, viewport: viewport });
+            const pageDiv = document.createElement('div');
+            pageDiv.className = 'page';
+            pageDiv.appendChild(canvas);
+            container.appendChild(pageDiv);
+          });
+        });
+      }).catch(function(err) {
+        container.innerHTML = '<div class="error">无法加载 PDF: ' + (err.message || err) + '</div>';
+      });
+    }
+  </script>
+</body>
+</html>
