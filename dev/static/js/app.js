@@ -1826,7 +1826,12 @@ if (btnToggleSidebar) {
     const sidebar = els.sidebar;
     if (!sidebar) return;
     if (window.innerWidth < 768) {
-      // Mobile: toggle overlay (open class)
+      // Mobile: close agent overlay first if showing
+      const agentPanel = document.getElementById("agentPanel");
+      if (agentPanel && !agentPanel.classList.contains("hidden")) {
+        if (window.Agent) window.Agent.close();
+      }
+      // Toggle overlay (open class)
       const isOpen = sidebar.classList.contains("open");
       if (isOpen) {
         sidebar.classList.remove("open");
@@ -1840,7 +1845,13 @@ if (btnToggleSidebar) {
         els.sidebarOverlay.style.display = isOpen ? "none" : "block";
       }
     } else {
-      // Desktop: toggle hidden class + grid
+      // Desktop: if CSS auto-hides sidebar (agent-open + narrow), close agent first
+      const agentPanel = document.getElementById("agentPanel");
+      const cssHidden = agentPanel && !agentPanel.classList.contains("hidden") && window.innerWidth <= 1500 && document.body.classList.contains("agent-open");
+      if (cssHidden && sidebar.classList.contains("hidden")) {
+        if (window.Agent) window.Agent.close();
+      }
+      // Toggle hidden class + grid
       const isHidden = sidebar.classList.contains("hidden");
       if (isHidden) {
         sidebar.classList.remove("hidden");
@@ -1870,6 +1881,14 @@ els.themeToggle && els.themeToggle.addEventListener("click", cycleTheme);
 const btnToggleAgent = document.getElementById("btnToggleAgent");
 btnToggleAgent && btnToggleAgent.addEventListener("click", function () {
   if (window.Agent) {
+    // If opening agent at narrow width, hide sidebar first
+    if (!window.Agent.isOpen() && window.innerWidth <= 1500 && window.innerWidth >= 768) {
+      if (els.sidebar && !els.sidebar.classList.contains("hidden")) {
+        els.sidebar.classList.add("hidden");
+        syncSidebarBtn();
+        _updateContentGrid();
+      }
+    }
     window.Agent.toggle();
     if (window.Agent.isOpen()) {
       btnToggleAgent.classList.add("active");
