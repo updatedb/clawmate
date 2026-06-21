@@ -393,7 +393,7 @@ button svg, .btn svg, a svg {
   #hamburgerBtn { display: flex; align-items: center; justify-content: center; }
 
   /* Search: take full width on its own row when needed */
-  .search-group { max-width: none; flex: 1 1 auto; min-width: 120px; order: 3; }
+  .search-group { max-width: none; flex: 1 1 auto; min-width: 100px; order: 0; }
   .search-group input { min-width: 80px; font-size: 12px; height: 28px; padding: 0 8px; box-sizing: border-box; }
   .search-group button { padding: 0 8px; font-size: 11px; height: 28px; box-sizing: border-box; }
   #searchBtn { display: inline-flex; align-items: center; gap: 3px; padding: 0 10px; height: 28px; }
