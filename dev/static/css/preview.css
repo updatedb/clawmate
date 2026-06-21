@@ -10,6 +10,12 @@
       overflow: hidden;
     }
 
+/* Desktop: hide mobile-only elements */
+.mobile-fb-overlay,
+.mobile-fb-panel,
+.mobile-sel-btn { display: none; }
+
+
     /* Three-column grid */
     .preview-three-col {
       display: grid;
@@ -972,7 +978,7 @@
       /* Hide desktop tooltip on mobile */
       .preview-selection-tooltip { display: none !important; }
 
-      /* ── Bottom feedback add panel ── */
+/* ── Bottom feedback add panel ── */
       .mobile-fb-overlay {
         display: none; position: fixed; inset: 0;
         background: rgba(0,0,0,0.4); z-index: 30;

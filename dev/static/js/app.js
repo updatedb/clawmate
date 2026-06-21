@@ -914,16 +914,11 @@ function toggleSelect(relPath, checked) {
   } else {
     state.selectedPaths.delete(relPath);
   }
-  // Re-render to update visual state
-  const entries = state.searchResults || state.entries;
-  const { filtered } = applyFilterSort(entries);
-  const allGrouped = [...filtered.filter(isMarkdownEntry), ...filtered.filter(e => e.is_dir), ...filtered.filter(e => !isMarkdownEntry(e) && !e.is_dir)];
-  const { paged } = paginate(allGrouped);
-  const pagedMarkdown = paged.filter(e => isMarkdownEntry(e));
-  const pagedFolder = paged.filter(e => e.is_dir);
-  const pagedOther = paged.filter(e => !isMarkdownEntry(e) && !e.is_dir);
-  renderGallery(pagedMarkdown, pagedFolder, pagedOther);
-  renderList(pagedMarkdown, pagedFolder, pagedOther);
+  // Lightweight: toggle CSS class on existing cards, don't rebuild
+  var sel = checked ? 'add' : 'remove';
+  document.querySelectorAll('[data-path="' + CSS.escape(relPath) + '"]').forEach(function (el) {
+    el.classList[sel]('selected');
+  });
   updateBatchBar();
 }
 
@@ -937,14 +932,14 @@ function toggleMultiSelect() {
     }
     if (state.multiSelectEnabled) {
       els.multiSelectToggle.classList.add("active");
+      document.body.classList.add("multiselect");
     } else {
       els.multiSelectToggle.classList.remove("active");
-      // clear selections when disabling multi-select
+      document.body.classList.remove("multiselect");
       state.selectedPaths.clear();
-      updateBatchBar();
+      deselectAll();
     }
   }
-  render();
 }
 
 function selectAll() {
@@ -952,28 +947,20 @@ function selectAll() {
   const { filtered } = applyFilterSort(entries);
   const allGrouped = [...filtered.filter(isMarkdownEntry), ...filtered.filter(e => e.is_dir), ...filtered.filter(e => !isMarkdownEntry(e) && !e.is_dir)];
   const { paged } = paginate(allGrouped);
-  paged.forEach(entry => {
-    state.selectedPaths.add(entry.relPath);
+  paged.forEach(function (entry) { state.selectedPaths.add(entry.relPath); });
+  // Lightweight: just toggle classes on all visible cards
+  document.querySelectorAll('.card, .list-item').forEach(function (el) {
+    if (state.selectedPaths.has(el.dataset.path)) el.classList.add('selected');
   });
-  const pagedMarkdown = paged.filter(e => isMarkdownEntry(e));
-  const pagedFolder = paged.filter(e => e.is_dir);
-  const pagedOther = paged.filter(e => !isMarkdownEntry(e) && !e.is_dir);
-  renderGallery(pagedMarkdown, pagedFolder, pagedOther);
-  renderList(pagedMarkdown, pagedFolder, pagedOther);
   updateBatchBar();
 }
 
 function deselectAll() {
   state.selectedPaths.clear();
-  const entries = state.searchResults || state.entries;
-  const { filtered } = applyFilterSort(entries);
-  const allGrouped = [...filtered.filter(isMarkdownEntry), ...filtered.filter(e => e.is_dir), ...filtered.filter(e => !isMarkdownEntry(e) && !e.is_dir)];
-  const { paged } = paginate(allGrouped);
-  const pagedMarkdown = paged.filter(e => isMarkdownEntry(e));
-  const pagedFolder = paged.filter(e => e.is_dir);
-  const pagedOther = paged.filter(e => !isMarkdownEntry(e) && !e.is_dir);
-  renderGallery(pagedMarkdown, pagedFolder, pagedOther);
-  renderList(pagedMarkdown, pagedFolder, pagedOther);
+  // Lightweight: just remove selected class from all cards
+  document.querySelectorAll('.card.selected, .list-item.selected').forEach(function (el) {
+    el.classList.remove('selected');
+  });
   updateBatchBar();
 }
 
@@ -1117,25 +1104,25 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
 
   const renderGroup = (entries, label) => {
     if (!entries.length) return;
-    appendGalleryGroupHeader(els.gallery, label);
+    var frag = document.createDocumentFragment();
+    appendGalleryGroupHeader(frag, label);
     entries.forEach((entry) => {
       const card = document.createElement("div");
       card.className = "card";
+      card.dataset.path = entry.relPath;
       const isSelected = state.selectedPaths.has(entry.relPath);
       if (isSelected) card.classList.add("selected");
 
-      // Checkbox (show when multi-select enabled)
-      if (state.multiSelectEnabled) {
-        const check = document.createElement("input");
-        check.type = "checkbox";
-        check.className = "card-check";
-        check.checked = isSelected;
-        check.addEventListener("click", (e) => {
-          e.stopPropagation();
-          toggleSelect(entry.relPath, check.checked);
-        });
-        card.appendChild(check);
-      }
+      // Checkbox always present, visibility via CSS .multiselect
+      const check = document.createElement("input");
+      check.type = "checkbox";
+      check.className = "card-check";
+      check.checked = isSelected;
+      check.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleSelect(entry.relPath, check.checked);
+      });
+      card.appendChild(check);
 
       const thumb = document.createElement("div");
       thumb.className = "thumb";
@@ -1255,8 +1242,10 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
       card.appendChild(actions);
 
       card.onclick = () => handleEntryClick(entry);
-      els.gallery.appendChild(card);
+      frag.appendChild(card);
     });
+    // Batch insert this group
+    els.gallery.appendChild(frag);
   };
 
   renderGroup(markdownEntries, (typeof iconSVG === 'function' ? iconSVG('file-text', 12) + ' ' : '') + 'Markdown');
@@ -1268,16 +1257,11 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
 }
 
 function animateCards() {
+  // Simultaneous fade-in — no stagger, all cards appear together
   var cards = document.querySelectorAll('#gallery .card');
-  cards.forEach(function(card, i) {
-    card.style.opacity = '0';
-    card.style.transform = 'translateY(12px)';
-    card.style.transition = 'opacity 0.3s cubic-bezier(0.16,1,0.3,1), transform 0.3s cubic-bezier(0.16,1,0.3,1)';
-    requestAnimationFrame(function() {
-      setTimeout(function() {
-        card.style.opacity = '1';
-        card.style.transform = 'translateY(0)';
-      }, i * 40);
+  requestAnimationFrame(function () {
+    cards.forEach(function (card) {
+      card.style.animation = 'cardFadeIn 0.3s cubic-bezier(0.16,1,0.3,1) both';
     });
   });
 }
@@ -1294,25 +1278,20 @@ function renderList(markdownEntries, folderEntries, otherEntries) {
     entries.forEach((entry) => {
       const row = document.createElement("div");
       row.className = "list-item";
+      row.dataset.path = entry.relPath;
       const isSelected = state.selectedPaths.has(entry.relPath);
       if (isSelected) row.classList.add("selected");
 
-      // Checkbox cell (show when multi-select enabled)
-      if (state.multiSelectEnabled) {
-        const check = document.createElement("input");
-        check.type = "checkbox";
-        check.className = "list-check";
-        check.checked = isSelected;
-        check.addEventListener("click", (e) => {
-          e.stopPropagation();
-          toggleSelect(entry.relPath, check.checked);
-        });
-        row.appendChild(check);
-      } else {
-        // Empty spacer when multi-select disabled (UI stays aligned)
-        const spacer = document.createElement("span");
-        row.appendChild(spacer);
-      }
+      // Checkbox always present, visibility via CSS .multiselect
+      const check = document.createElement("input");
+      check.type = "checkbox";
+      check.className = "list-check";
+      check.checked = isSelected;
+      check.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleSelect(entry.relPath, check.checked);
+      });
+      row.appendChild(check);
 
       const icon = document.createElement("span");
       icon.innerHTML = getFileIcon(entry);
@@ -1346,9 +1325,15 @@ function renderList(markdownEntries, folderEntries, otherEntries) {
   renderGroup(otherEntries, (typeof iconSVG === 'function' ? iconSVG('file', 12) + ' ' : '') + '文件');
 }
 
+// Cache breadcrumb/sidebar between renders (only rebuild on dir change)
+var _lastRenderedDir = null;
 function render() {
-  renderBreadcrumbs();
-  renderDirs();
+  var dirChanged = _lastRenderedDir !== state.dir;
+  if (dirChanged) {
+    _lastRenderedDir = state.dir;
+    renderBreadcrumbs();
+    renderDirs();
+  }
 
   const entries = state.searchResults || state.entries;
   const { filtered, markdownEntries, folderEntries, otherEntries } = applyFilterSort(entries);
@@ -1362,8 +1347,12 @@ function render() {
   const pagedFolder = paged.filter((e) => folderEntries.includes(e));
   const pagedOther = paged.filter((e) => otherEntries.includes(e));
 
-  renderGallery(pagedMarkdown, pagedFolder, pagedOther);
-  renderList(pagedMarkdown, pagedFolder, pagedOther);
+  // Only render current view (the other is hidden — skip wasted DOM work)
+  if (state.view === 'grid') {
+    renderGallery(pagedMarkdown, pagedFolder, pagedOther);
+  } else {
+    renderList(pagedMarkdown, pagedFolder, pagedOther);
+  }
   updatePagination(totalPages);
   updateLoadMoreBtn();
   updateBatchBar();

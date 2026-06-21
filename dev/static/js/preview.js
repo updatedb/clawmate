@@ -1197,8 +1197,11 @@
       const data = await res.json();
       const content = data.content || '';
 
+      // Office/PDF files: supported via ONLYOFFICE/pdf.js, skip fallback
+      if (isOfficeMode || isPdfMode) {
+        // handled below
+      } else if (!data.content && data.download_url) {
       // Unsupported file type: has download_url but no previewable content
-      if (!data.content && data.download_url) {
         const meta = data.meta || {};
         const ext = (meta.ext || '').toUpperCase();
         const sizeStr = typeof formatSize === 'function' ? formatSize(meta.size || 0) : (meta.size || 0) + ' B';
