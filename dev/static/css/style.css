@@ -245,6 +245,7 @@ button svg, .btn svg, a svg {
 #rootSelect option { background: var(--bg-primary); color: var(--text-primary); }
 #multiSelectToggle { display: inline-flex; align-items: center; gap: 3px; }
 #multiSelectToggle.active { background: var(--accent); color: #fff; }
+#filterType.filtering { border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring); }
 .breadcrumb { font-size: 12px; margin-bottom: 8px; color: var(--text-secondary); }
 .path.breadcrumb { font-size: 14px; margin-bottom: 0; }
 .path.breadcrumb a, .breadcrumb-link { font-size: 12px; }
