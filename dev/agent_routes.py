@@ -399,7 +399,7 @@ async def _openclaw_backend(
             "minProtocol": 4, "maxProtocol": 4,
             "client": {"id": "gateway-client", "version": "1.0.0", "platform": "linux", "mode": "backend"},
             "role": "operator",
-            "scopes": ["operator.read", "operator.write"],
+            "scopes": ["operator.read", "operator.write", "operator.admin"],
             "auth": {"token": oc_token},
             "locale": "en-US",
             "userAgent": "clawmate-agent/1.0.0",
@@ -410,6 +410,12 @@ async def _openclaw_backend(
         if not hello.get("ok"):
             err = hello.get("error", {}).get("message", "unknown")
             await ws.send_text(json.dumps({"type": "error", "text": f"OpenClaw auth failed: {err}"}, ensure_ascii=False))
+            return
+
+        # Verify required scopes were granted
+        granted = hello.get("payload", {}).get("auth", {}).get("scopes", [])
+        if "operator.write" not in granted:
+            await ws.send_text(json.dumps({"type": "error", "text": f"OpenClaw: missing operator.write scope. Granted: {granted}. Check gateway auth.token permissions."}, ensure_ascii=False))
             return
 
         server_ver = hello.get("payload", {}).get("server", {}).get("version", "?")
