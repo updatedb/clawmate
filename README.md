@@ -1,8 +1,14 @@
+<p align="center">
+  <img src="dev/static/asset/clawmate-logo.png" alt="ClawMate" width="80" />
+</p>
+
 # ClawMate
 
 > Agent 产出的每一个文件，点击即预览，选中即反馈。
 
+<!-- ALL-CLAWMATE-BADGES:START -->
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<!-- ALL-CLAWMATE-BADGES:END -->
 
 ClawMate 是一个面向 AI Agent 工作流的**文件管理 → 预览发现问题 → 即时反馈 → Agent 自动修改**工具。
 
