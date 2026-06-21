@@ -353,7 +353,7 @@ async def _openclaw_backend(
         return
 
     # Device identity for pairing
-    import hashlib, hmac as _hmac
+    import hashlib, base64 as _b64
     device_id = "clawmate-" + hashlib.sha256(b"clawmate-agent-device").hexdigest()[:16]
 
     # Resolve URL: try configured URL first (guaranteed scope grant),
@@ -404,18 +404,25 @@ async def _openclaw_backend(
             await ws.send_text(json.dumps({"type": "error", "text": "Unexpected OpenClaw handshake"}, ensure_ascii=False))
             return
 
-        # Step 2: build device pairing info
+        # Step 2: build device pairing info with Ed25519 signature
         nonce = challenge.get("payload", {}).get("nonce", "")
         ts = challenge.get("payload", {}).get("ts", 0)
-        device_info = {
-            "id": device_id,
-            "publicKey": hashlib.sha256(device_secret.encode() if device_secret else b"clawmate").hexdigest(),
-            "signedAt": ts,
-            "nonce": nonce,
-        }
+        device_info = {"id": device_id, "signedAt": ts, "nonce": nonce}
+
         if device_secret:
-            sig = _hmac.new(device_secret.encode(), f"{nonce}:{ts}".encode(), hashlib.sha256).hexdigest()
-            device_info["signature"] = sig
+            try:
+                from cryptography.hazmat.primitives.asymmetric import ed25519
+                from cryptography.hazmat.primitives import serialization
+                priv_bytes = _b64.b64decode(device_secret)
+                sk = ed25519.Ed25519PrivateKey.from_private_bytes(priv_bytes)
+                pk_bytes = sk.public_key().public_bytes_raw()
+                device_info["publicKey"] = _b64.b64encode(pk_bytes).decode()
+                sig = sk.sign(f"{nonce}:{ts}".encode())
+                device_info["signature"] = _b64.b64encode(sig).decode()
+            except ImportError:
+                pass  # cryptography not installed, skip device pairing
+            except Exception:
+                pass
 
         # Build auth: prefer device token, fall back to gateway token
         auth_params = {"token": oc_token}
@@ -425,7 +432,7 @@ async def _openclaw_backend(
         # Step 3: authenticate
         await oc_send("connect", {
             "minProtocol": 4, "maxProtocol": 4,
-            "client": {"id": "gateway-client", "version": "1.0.0", "platform": "linux", "mode": "backend"},
+            "client": {"id": device_id, "version": "1.0.0", "platform": "linux", "mode": "backend"},
             "role": "operator",
             "scopes": ["operator.read", "operator.write", "operator.admin"],
             "auth": auth_params,
