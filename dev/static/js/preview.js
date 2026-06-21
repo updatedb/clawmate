@@ -1098,6 +1098,13 @@
         img.id = 'previewImage';
         img.src = `/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`;
         img.style.cssText = 'max-width:100%;max-height:70vh;object-fit:contain;border-radius:8px;';
+        img.onerror = function() {
+          this.style.display = 'none';
+          const errDiv = document.createElement('div');
+          errDiv.className = 'preview-error';
+          errDiv.textContent = '图片加载失败，文件可能已损坏或格式不支持';
+          imgWrap.appendChild(errDiv);
+        };
         imgWrap.appendChild(img);
         wrap.appendChild(imgWrap);
 
@@ -1188,6 +1195,41 @@
 
       const data = await res.json();
       const content = data.content || '';
+
+      // Unsupported file type: has download_url but no previewable content
+      if (!data.content && data.download_url) {
+        const meta = data.meta || {};
+        const ext = (meta.ext || '').toUpperCase();
+        const sizeStr = typeof formatSize === 'function' ? formatSize(meta.size || 0) : (meta.size || 0) + ' B';
+
+        contentBody.innerHTML = `
+          <div class="preview-unsupported">
+            <div class="preview-unsupported-icon">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="9" y1="15" x2="15" y2="15"/>
+              </svg>
+            </div>
+            <div class="preview-unsupported-title">无法预览此文件类型</div>
+            <div class="preview-unsupported-meta">
+              <span class="preview-unsupported-name">${escHtml(meta.name || fileName)}</span>
+              ${ext ? `<span class="preview-unsupported-badge">${escHtml(ext)}</span>` : ''}
+              <span class="preview-unsupported-size">${escHtml(sizeStr)}</span>
+            </div>
+            <div class="preview-unsupported-hint">该文件格式不支持在线预览，请下载后用本地应用打开</div>
+            <a class="preview-unsupported-download-btn" href="${escHtml(data.download_url)}" download>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px;margin-right:6px;">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              下载文件
+            </a>
+          </div>`;
+        removeLoading();
+        return;
+      }
 
       // Truncation notice
       if (data.truncated) {
@@ -1569,6 +1611,13 @@
     mediaEl.controls = true;
     mediaEl.id = 'mediaEl';
     mediaEl.src = `/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`;
+    mediaEl.onerror = function() {
+      this.style.display = 'none';
+      const errDiv = document.createElement('div');
+      errDiv.className = 'preview-error';
+      errDiv.textContent = (type === 'video' ? '视频' : '音频') + '加载失败，文件可能已损坏或编码格式不支持';
+      playerWrap.appendChild(errDiv);
+    };
     playerWrap.appendChild(mediaEl);
     container.appendChild(playerWrap);
 

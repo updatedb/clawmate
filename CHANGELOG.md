@@ -1,5 +1,49 @@
 # Changelog
 
+## v1.38 (2026-06-21)
+### 性能优化
+- KaTeX CSS 按需加载：仅含 `$`/`$$` 数学公式的 Markdown 才注入 KaTeX 样式
+- 本地化 CSS 资源（github-markdown-dark、highlight.js），不再依赖外部 CDN
+- Logo 图片压缩（PNG → SVG/WebP）
+- `<script defer>` 加载所有脚本，CSS 独立文件并行下载
+- Mermaid/KaTeX/highlight.js 懒加载：首屏不阻塞
+- 目录列表内存缓存（30s TTL），减少重复 API 请求
+
+### PDF 预览重构
+- 自托管 pdf.js viewer（`/clawmate/pdfjs/`），完全脱离 CDN 依赖
+- PDF 文件直接使用 pdf.js 渲染，不再经过 ONLYOFFICE 编辑器
+
+### ONLYOFFICE 修复
+- `toolbarNoTabs` 移除，解决 `indexPostfix=_loader` 导致的 JS 加载失败
+- 最小化 UI：紧凑工具栏（无侧面板、无标尺、无右侧面板）
+- 查看/编辑模式统一 minimal chrome
+- `forcesave`/`goback`/`feedback` 等无效 customization key 移除
+- `dataclass.get()` 替换为属性访问（兼容性修复）
+
+### 首页改进
+- 类型过滤 `<select>`：选中非"全部"时紫色高亮
+- 480-768px 断点顶栏重排：搜索输入置于品牌与操作按钮之间
+- ≤768px 仅显示 logo（隐藏 "ClawMate" 文字）
+
+### 分享视图修复
+- HTML 文件在 iframe 中渲染（与 preview 行为一致）
+- 非 Markdown 文件自动隐藏左侧 TOC 大纲
+- 添加关闭按钮（返回首页）
+
+### 移动端修复
+- 反馈面板：选中文本延迟复制+高亮（等待面板开启），关闭时清理
+
+### 登录页修复
+- 资源/CSS 使用相对路径加载，多 base URL 部署可移植
+
+### 不支持文件类型的预览体验
+- `.tar.gz`/`.rar`/`.exe` 等二进制文件显示友好 fallback 页面：文件图标 + 名称/类型/大小 + 下载按钮
+- `<img>` 加载失败显示降级提示，而非浏览器默认破碎图标
+- `<video>`/`<audio>` 加载失败显示编码/损坏提示
+
+### 杂物
+- `.gitignore` 新增 Playwright 临时文件
+
 ## v1.37 (2026-06-19)
 ### 反馈存储性能优化
 - 内存读缓存：基于 mtime_ns 校验，分离 cache_lock 避免读写互斥，LRU 淘汰(256条上限)

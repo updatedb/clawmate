@@ -356,6 +356,72 @@
       font-size: 14px;
     }
 
+    /* Unsupported file type fallback */
+    .preview-unsupported {
+      text-align: center;
+      padding: 60px 20px;
+    }
+    .preview-unsupported-icon {
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+    .preview-unsupported-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+    }
+    .preview-unsupported-meta {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .preview-unsupported-name {
+      font-weight: 500;
+      word-break: break-all;
+    }
+    .preview-unsupported-badge {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    .preview-unsupported-size {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+    .preview-unsupported-hint {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+    .preview-unsupported-download-btn {
+      display: inline-block;
+      padding: 10px 28px;
+      background: var(--primary);
+      color: #fff;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      text-decoration: none;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .preview-unsupported-download-btn:hover {
+      opacity: 0.85;
+      color: #fff;
+      text-decoration: none;
+    }
+
     /* Selection tooltip */
     .preview-selection-tooltip {
       position: fixed;
