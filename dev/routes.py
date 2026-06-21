@@ -683,8 +683,6 @@ async def clawmate_onlyoffice_config(request: Request, root: str = "", path: str
     # user has ever toggled the right panel manually. To reset: DevTools →
     # Application → Local Storage → clear ONLYOFFICE entries → reload.
     customization = {
-        "compactHeader":     True,
-        "compactToolbar":    True,
         "hideRightMenu":     True,
         "toolbarNoTabs":     True,
         "toolbarHideFileName": True,
