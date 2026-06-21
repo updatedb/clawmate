@@ -3416,6 +3416,10 @@
   }
 
   document.addEventListener('mouseup', function(e) {
+    // Mobile: selection handling is done by touchend + mobileSelBtn flow;
+    // skip desktop auto-copy + auto-highlight on small screens so users
+    // can select text without immediately copying/highlighting it.
+    if (window.innerWidth < 768) return;
     setTimeout(() => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || !sel.toString().trim()) {
@@ -4012,6 +4016,9 @@
       if (!preserveText) {
         _savedText = '';
       }
+      // Always clear highlight + browser selection when panel is dismissed
+      try { CSS.highlights.delete('preview-hl'); } catch (_) {}
+      if (window.getSelection) window.getSelection().removeAllRanges();
       hideSelBtn();
     }
 
