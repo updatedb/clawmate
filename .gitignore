@@ -48,3 +48,4 @@ config.json.bak
 .*.swp
 share_links.json
 CHANGELOG.md
+.playwright-mcp/
