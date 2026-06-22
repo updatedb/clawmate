@@ -206,13 +206,14 @@ button svg, .btn svg, a svg {
 #hamburgerBtn:hover { background: rgba(255,255,255,0.1); }
 /* Search */
 .search-group { display: flex; gap: 6px; align-items: center; flex: 1; max-width: 400px; }
-.search-group input { height: 30px; padding: 0 12px; border-radius: var(--radius-md); border: none; min-width: 0; flex: 1; font-size: 13px; background: var(--brand-input-bg); color: #fff; outline: none; transition: background var(--duration-fast) var(--ease-out); box-sizing: border-box; }
+.search-input-wrap { position: relative; display: flex; flex: 1; min-width: 0; }
+.search-group input { height: 30px; padding: 0 30px 0 12px; border-radius: var(--radius-md); border: none; min-width: 0; width: 100%; flex: 1; font-size: 13px; background: var(--brand-input-bg); color: #fff; outline: none; transition: background var(--duration-fast) var(--ease-out); box-sizing: border-box; }
 .search-group input::placeholder { color: rgba(255,255,255,0.55); }
 .search-group input:focus { background: var(--brand-input-focus); }
 .search-group button { display: inline-flex; align-items: center; gap: 4px; padding: 7px 14px; border: none; border-radius: var(--radius-md); cursor: pointer; background: var(--accent); color: #fff; font-size: 13px; font-weight: 500; flex-shrink: 0; transition: background var(--duration-fast) var(--ease-out); }
 .search-group button:hover { background: var(--accent-hover); }
-#clearSearchBtn { background: var(--brand-input-bg) !important; }
-#clearSearchBtn:hover { background: var(--brand-input-focus) !important; }
+#clearSearchBtn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent !important; border: none; color: rgba(255,255,255,0.45); font-size: 16px; line-height: 1; cursor: pointer; border-radius: 50%; flex-shrink: 0; }
+#clearSearchBtn:hover { color: #fff; background: rgba(255,255,255,0.12) !important; }
 
 /* Theme toggle */
 .topbar-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
@@ -227,7 +228,7 @@ button svg, .btn svg, a svg {
 /* Sidebar overlay (mobile) */
 .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9; }
 
-.content { display: grid; grid-template-columns: 240px 1fr 0px 0px; flex: 1; min-height: 0; overflow: hidden; width: 100%; }
+.content { display: grid; grid-template-columns: 240px 1fr 0px 0px; grid-template-rows: 1fr; flex: 1; min-height: 0; overflow: hidden; width: 100%; }
 .sidebar {
   background: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
@@ -269,6 +270,7 @@ button svg, .btn svg, a svg {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  height: 100%;
   border-left: 1px solid var(--border-color);
   background: var(--bg-primary);
   transform: translateX(0);
@@ -305,7 +307,7 @@ button svg, .btn svg, a svg {
 }
 .agent-panel-close:hover { background: var(--bg-tertiary); color: var(--text-primary); }
 .xterm-container {
-  flex: 1; overflow: hidden; padding: 0;
+  flex: 1; overflow: hidden; padding: 0; position: relative;
   background: var(--xterm-bg, #1e1e2e);
 }
 /* Agent chat view (OpenClaw backend) */
@@ -376,7 +378,7 @@ button svg, .btn svg, a svg {
 .agent-chat-send-btn:hover { opacity: 0.85; }
 
 /* xterm.js dark theme overrides */
-.xterm { padding: 4px 6px; height: 100%; }
+#xtermContainer .xterm { height: 100%; padding: 4px 6px; }
 .xterm-container.hidden { display: none; }
 .xterm-viewport::-webkit-scrollbar { width: 6px; }
 .xterm-viewport::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
@@ -398,6 +400,7 @@ button svg, .btn svg, a svg {
 @media (max-width: 768px) {
   .agent-panel {
     position: fixed; top: 48px; right: 0; bottom: 0; width: 100vw !important;
+    height: auto; /* override base height:100% — fixed positioning defines height via top+bottom */
     z-index: 11; border-left: none;
   }
   .agent-panel-header {
@@ -557,10 +560,11 @@ button svg, .btn svg, a svg {
 
   /* Search: shrink with screen, stay on same row */
   .search-group { max-width: none; flex: 1 1 0; min-width: 0; order: 0; }
-  .search-group input { min-width: 0; flex: 1 1 0; font-size: 12px; height: 30px; padding: 0 8px; box-sizing: border-box; border-radius: var(--radius-sm); }
+  .search-input-wrap { flex: 1 1 0; min-width: 0; }
+  .search-group input { min-width: 0; flex: 1 1 0; font-size: 12px; height: 30px; padding: 0 26px 0 8px; box-sizing: border-box; border-radius: var(--radius-sm); }
   .search-group button { padding: 0 8px; font-size: 11px; height: 30px; box-sizing: border-box; white-space: nowrap; flex-shrink: 0; border-radius: var(--radius-sm); }
   #searchBtn { display: inline-flex; align-items: center; gap: 3px; padding: 0 10px; height: 30px; border-radius: var(--radius-sm); }
-  #clearSearchBtn { display: none; }
+  #clearSearchBtn { position: absolute; right: 2px; width: 20px; height: 20px; font-size: 14px; }
 
   /* Topbar actions: right-aligned */
   .topbar { justify-content: flex-start; }
@@ -690,10 +694,12 @@ button svg, .btn svg, a svg {
   .topbar { padding: 4px 8px; gap: 4px; height: 48px; min-height: 48px; }
   .brand { font-size: 0; }
   .search-group { flex: 1 1 0; min-width: 0; }
-  .search-group input { min-width: 0; flex: 1 1 0; font-size: 12px; height: 30px; padding: 0 6px; border-radius: var(--radius-sm); }
+  .search-input-wrap { flex: 1 1 0; min-width: 0; }
+  .search-group input { min-width: 0; flex: 1 1 0; font-size: 12px; height: 30px; padding: 0 24px 0 6px; border-radius: var(--radius-sm); }
   .search-group button { display: inline-flex; align-items: center; justify-content: center; gap: 0; height: 30px; padding: 0 6px; font-size: 13px; white-space: nowrap; flex-shrink: 0; min-width: 30px; border-radius: var(--radius-sm); }
   #searchBtn { height: 30px; border-radius: var(--radius-sm); }
   #searchBtn span { display: none; }
+  #clearSearchBtn { position: absolute; right: 1px; width: 22px; height: 22px; font-size: 14px; }
   .topbar-btn { width: 30px; height: 30px; font-size: 13px; }
 
   /* Gallery: still 2 cols but smaller */

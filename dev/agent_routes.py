@@ -259,23 +259,24 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket):
                 except WebSocketDisconnect:
                     break
 
-                # Control messages
+                # Control messages — only {} objects with a "type" key
                 try:
                     msg = json.loads(data)
-                    if msg.get("type") == "resize":
-                        cols = msg.get("cols", 80)
-                        rows = msg.get("rows", 24)
-                        try:
-                            os.set_blocking(sess.master_fd, True)
-                            fcntl.ioctl(sess.master_fd, termios.TIOCSWINSZ,
-                                        struct.pack("HHHH", rows, cols, 0, 0))
-                            os.set_blocking(sess.master_fd, False)
-                        except Exception:
-                            pass
-                        continue
-                    if msg.get("type") == "chdir":
-                        continue
-                except (json.JSONDecodeError, TypeError):
+                    if isinstance(msg, dict):
+                        if msg.get("type") == "resize":
+                            cols = msg.get("cols", 80)
+                            rows = msg.get("rows", 24)
+                            try:
+                                os.set_blocking(sess.master_fd, True)
+                                fcntl.ioctl(sess.master_fd, termios.TIOCSWINSZ,
+                                            struct.pack("HHHH", rows, cols, 0, 0))
+                                os.set_blocking(sess.master_fd, False)
+                            except Exception:
+                                pass
+                            continue
+                        if msg.get("type") == "chdir":
+                            continue
+                except (json.JSONDecodeError, TypeError, AttributeError):
                     pass
 
                 # Raw terminal input
@@ -496,12 +497,12 @@ async def _openclaw_backend(
             except WebSocketDisconnect:
                 break
 
-            # Skip control messages
+            # Skip control messages — only {} objects with a "type" key
             try:
                 ctrl = json.loads(data)
-                if ctrl.get("type") in ("resize", "chdir"):
+                if isinstance(ctrl, dict) and ctrl.get("type") in ("resize", "chdir"):
                     continue
-            except (json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError, AttributeError):
                 pass
 
             # Buffer characters into lines

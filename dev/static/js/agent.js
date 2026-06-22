@@ -23,9 +23,23 @@
   const closeBtn = document.getElementById('btnCloseAgent');
   const toggleBtn = document.getElementById('btnToggleAgent');
 
+  // --- Debug logging ---
+  const XLOG = 'font-weight:bold;color:#14b8a6';
+  function xlog(tag, msg, data) {
+    var args = ['%c[xterm:' + tag + '] %c' + msg, XLOG, 'color:inherit'];
+    if (data !== undefined) args.push(data);
+    console.log.apply(console, args);
+  }
+  function rectJson(el) {
+    if (!el) return null;
+    var r = el.getBoundingClientRect();
+    return { w: Math.round(r.width), h: Math.round(r.height), t: Math.round(r.top), l: Math.round(r.left) };
+  }
+
   // --- State ---
   let term = null;
   let fitAddon = null;
+  let termResizeObserver = null;
   let ws = null;
   let wsUrl = '';
   let panelWidth = 0;
@@ -54,7 +68,7 @@
     const sidebarHidden = sidebar && (sidebar.classList.contains('hidden') || getComputedStyle(sidebar).display === 'none');
     const lW = sidebarHidden ? '0px' : '240px';
     const hidden = panel.classList.contains('hidden');
-    if (!panelWidth) panelWidth = Math.min(Math.floor(window.innerWidth * 0.45), 680);
+    if (!panelWidth) panelWidth = Math.min(Math.floor(window.innerWidth * 0.45), 700);
     if (hidden && !animatingOut && !forceExpand) {
       // Collapsed — no panel visible
       content.style.gridTemplateColumns = lW + ' 1fr 0px 0px';
@@ -85,7 +99,7 @@
     const delta = dragStartX - e.clientX;
     const content = document.querySelector('.content');
     if (!content) return;
-    panelWidth = Math.max(360, Math.min(680, dragStartWidth + delta));
+    panelWidth = Math.max(360, Math.min(700, dragStartWidth + delta));
     const sb = document.getElementById('sidebar');
     const sbHidden = sb && (sb.classList.contains('hidden') || getComputedStyle(sb).display === 'none');
     const lW = sbHidden ? '0px' : '240px';
@@ -118,11 +132,14 @@
 
   // --- xterm.js init (Claude backend) ---
   function createTerminal() {
-    if (term) return;
+    if (term) { xlog('init', 'term already exists, skipping'); return; }
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
     const bg = isDark ? '#111827' : '#f8fafc';
     const fg = isDark ? '#e2e8f0' : '#1e293b';
     const cursor = '#14b8a6';
+
+    xlog('init', 'creating Terminal { fontSize:14, lineHeight:1.4, cols:100, rows:30, scrollback:5000 }');
+    xlog('init', 'theme bg=' + bg + ' fg=' + fg + ' cursor=' + cursor);
 
     term = new Terminal({
       cursorBlink: true, cursorStyle: 'bar',
@@ -135,42 +152,126 @@
     if (typeof FitAddon !== 'undefined') {
       fitAddon = new FitAddon.FitAddon();
       term.loadAddon(fitAddon);
+      xlog('init', 'FitAddon loaded');
+    } else {
+      xlog('init', 'FitAddon NOT available — terminal will NOT auto-resize');
     }
     if (typeof WebglAddon !== 'undefined') {
-      try { term.loadAddon(new WebglAddon.WebglAddon()); } catch (_) {}
+      try { term.loadAddon(new WebglAddon.WebglAddon()); xlog('init', 'WebglAddon loaded'); } catch (_) { xlog('init', 'WebglAddon failed', _); }
     }
 
     term.open(xtermContainer);
+    xlog('init', 'term.open() done — term.element=' + (!!term.element) + ' term.textarea=' + (!!term.textarea));
+    xlog('init', 'xtermContainer rect', JSON.stringify(rectJson(xtermContainer)));
+
+    xlog('init', 'xtermContainer rect', JSON.stringify(rectJson(xtermContainer)));
 
     term.attachCustomKeyEventHandler(function (e) {
       if (e.type === 'keydown') {
+        // Ctrl+C with selection → copy to clipboard (keep default xterm behavior)
+        // Let xterm.js handle paste natively (Ctrl+V) — it flows through
+        // term.onData → ws.send(), keeping the same pipeline as keyboard input.
         if (e.ctrlKey && !e.altKey && !e.metaKey) {
           if (e.key === 'c' && term.hasSelection()) {
             var sel = term.getSelection();
             if (sel && navigator.clipboard && navigator.clipboard.writeText) {
               navigator.clipboard.writeText(sel).catch(function () {});
             }
-            return false;
-          }
-          if (e.key === 'v') {
-            if (navigator.clipboard && navigator.clipboard.readText) {
-              navigator.clipboard.readText().then(function (text) {
-                if (text && ws && ws.readyState === WebSocket.OPEN) { ws.send(text); }
-              }).catch(function () {});
-            }
+            xlog('key', 'Ctrl+C (copy) key=' + e.key + ' composing=' + e.isComposing);
             return false;
           }
         }
+        // IME composition — never suppress, let xterm handle composition events
+        if (e.isComposing || e.key === 'Dead' || e.key === 'Process') {
+          xlog('key', 'IME composing key=' + e.key + ' isComposing=' + e.isComposing);
+          return true;
+        }
+        xlog('key', 'keydown key=' + e.key + ' ctrl=' + e.ctrlKey + ' composing=' + e.isComposing);
       }
       return true;
     });
 
-    if (fitAddon) { setTimeout(function () { try { fitAddon.fit(); } catch (_) {} }, 50); }
+    // --- IME recovery ---
+    // CJK input-method switching can steal focus from xterm's hidden textarea;
+    // clicks on the terminal surface must always restore focus.
+    var termElement = term.element;
+    if (termElement) {
+      termElement.addEventListener('click', function () { xlog('focus', 'click → term.focus()'); term.focus(); });
+      termElement.addEventListener('mousedown', function () { term.focus(); });
+      xlog('init', 'IME click/focus handlers registered on term.element');
+    }
 
+    // After composition ends (IME candidate selected or cancelled), refocus to
+    // guarantee keystrokes keep flowing to the terminal.
+    var textarea = term.textarea;
+    if (textarea) {
+      textarea.addEventListener('compositionstart', function () {
+        xlog('ime', 'compositionstart');
+      });
+      textarea.addEventListener('compositionend', function () {
+        xlog('ime', 'compositionend → refocus');
+        setTimeout(function () { term.focus(); }, 0);
+      });
+      // When IME popup/candidate-window opens, the textarea loses focus with
+      // relatedTarget === null (the IME window is a native OS surface, not a
+      // DOM element).  Pull focus back only in that case.
+      textarea.addEventListener('blur', function (e) {
+        var rtTag = e.relatedTarget ? (e.relatedTarget.tagName || 'unknown') : 'null';
+        xlog('focus', 'textarea blur relatedTarget=' + rtTag + ' panel.hidden=' + panel.classList.contains('hidden'));
+        if (panel.classList.contains('hidden')) return;
+        if (e.relatedTarget === null) {
+          xlog('focus', 'refocus (IME window stole focus)');
+          setTimeout(function () { term.focus(); }, 0);
+        }
+      });
+      textarea.addEventListener('focus', function () {
+        xlog('focus', 'textarea gained focus');
+      });
+      xlog('init', 'IME composition/focus handlers registered on textarea');
+    } else {
+      xlog('init', 'WARNING: term.textarea is null — IME recovery disabled');
+    }
+
+    // --- Fit after layout ---
+    if (fitAddon) {
+      xlog('fit', 'scheduling double-rAF fit...');
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          if (!panel.classList.contains('hidden')) {
+            var before = term ? { rows: term.rows, cols: term.cols } : null;
+            xlog('fit', 'rAF×2 — container=' + JSON.stringify(rectJson(xtermContainer)) + ' before=' + JSON.stringify(before));
+            try { fitAddon.fit(); } catch (e) { xlog('fit', 'ERROR', e); }
+            if (term) {
+              xlog('fit', 'result rows=' + term.rows + ' cols=' + term.cols + ' (Δ rows:' + (term.rows - (before ? before.rows : 0)) + ' cols:' + (term.cols - (before ? before.cols : 0)) + ')');
+            }
+          }
+        });
+      });
+    } else {
+      xlog('fit', 'SKIP — fitAddon is null');
+    }
+
+    // --- ResizeObserver ---
+    if (typeof ResizeObserver !== 'undefined') {
+      if (termResizeObserver) termResizeObserver.disconnect();
+      termResizeObserver = new ResizeObserver(function (entries) {
+        var r = entries[0] && entries[0].contentRect;
+        xlog('resize-observer', 'fired container=' + (r ? Math.round(r.width) + 'x' + Math.round(r.height) : '?') + ' hidden=' + panel.classList.contains('hidden'));
+        if (fitAddon && !panel.classList.contains('hidden')) {
+          try { fitAddon.fit(); } catch (_) {}
+        }
+      });
+      termResizeObserver.observe(xtermContainer);
+      xlog('init', 'ResizeObserver active on xtermContainer');
+    }
+
+    // --- Data / resize forward to WebSocket ---
     term.onData(function (data) {
+      xlog('data', 'len=' + data.length + ' preview=' + JSON.stringify(data.slice(0, 40)) + ' ws=' + (ws ? ws.readyState : 'null'));
       if (ws && ws.readyState === WebSocket.OPEN) { ws.send(data); }
     });
     term.onResize(function (size) {
+      xlog('resize', 'term.onResize cols=' + size.cols + ' rows=' + size.rows);
       if (ws && ws.readyState === WebSocket.OPEN) {
         try { ws.send(JSON.stringify({ type: 'resize', cols: size.cols, rows: size.rows })); } catch (_) {}
       }
@@ -294,9 +395,10 @@
       '?root=' + encodeURIComponent(currentRootId || '') +
       '&agentId=' + encodeURIComponent(currentAgentId || '');
 
-    try { ws = new WebSocket(url); } catch (e) { scheduleReconnect(); return; }
+    try { ws = new WebSocket(url); } catch (e) { xlog('ws', 'constructor failed', e); scheduleReconnect(); return; }
 
     ws.onopen = function () {
+      xlog('ws', 'OPEN');
       reconnectAttempts = 0;
       if (backendMode === 'claude' && term) {
         term.writeln('\x1b[1;36m✓ 已连接 Agent 终端\x1b[0m');
@@ -324,6 +426,7 @@
     };
 
     ws.onclose = function () {
+      xlog('ws', 'CLOSE');
       if (backendMode === 'claude' && term) {
         term.writeln('\r\n\x1b[1;33m⚠ 连接已断开\x1b[0m');
       }
@@ -335,6 +438,7 @@
     };
 
     ws.onerror = function () {
+      xlog('ws', 'ERROR');
       if (backendMode === 'claude' && term) {
         term.writeln('\r\n\x1b[1;31m✕ 连接失败\x1b[0m');
       }
@@ -433,8 +537,15 @@
       reconnectAttempts = 0;
       connectWs();
 
+      // Backup fit — double rAF in createTerminal() should already have fired,
+      // but a 200ms safety net handles slow layout (e.g. WebGL init).
       if (fitAddon) {
-        setTimeout(function () { try { fitAddon.fit(); } catch (_) {} }, 100);
+        setTimeout(function () {
+          var before = term ? { rows: term.rows, cols: term.cols } : null;
+          xlog('fit', '200ms-backup — container=' + JSON.stringify(rectJson(xtermContainer)) + ' before=' + JSON.stringify(before));
+          try { fitAddon.fit(); } catch (e) { xlog('fit', 'backup ERROR', e); }
+          xlog('fit', 'backup result rows=' + term.rows + ' cols=' + term.cols);
+        }, 200);
       }
     },
 
