@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.41 (2026-06-23)
+### 压缩包预览
+- `list_archive()` 支持 zip / tar / tar.gz / tar.bz2 / tar.xz / rar / 7z
+- 预览页树形展开压缩包内容，显示文件/目录数、压缩前后大小
+- 加密压缩包提示、下载按钮
+
+### 文件移动
+- `POST /api/clawmate/move` — 同 root 内移动文件/目录
+
+### 目录面板修复
+- 切换 root 时侧边栏和面包屑现在正确刷新（缓存 key 改为 `rootId:dir` 组合）
+- 面包屑「复制」→「复制目录」，复制内容从相对路径改为绝对路径
+
+### Feedback 存储
+- `feedback.json` → `.feedback.json`，默认隐藏
+- 所有 root 下现有 feedback.json 已重命名
+
 ## v1.40 (2026-06-22)
 ### 响应式策略统一 — Agent 面板打开时渐进隐藏
 - Agent 打开时 `body.agent-open`，CSS 断点自动匹配移动端策略：
