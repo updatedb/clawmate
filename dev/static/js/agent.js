@@ -1,11 +1,11 @@
 // ===== Agent Panel — dual-mode: xterm.js (Claude) + markdown chat (OpenClaw) =====
 //
 // Exposes window.Agent API:
-//   Agent.init({ wsUrl, rootId, agentId, backend })  — one-time setup
-//   Agent.open(rootId, agentId)             — open panel + connect WebSocket
+//   Agent.init({ wsUrl, rootId, dir, agentId, backend })  — one-time setup
+//   Agent.open(rootId, dir)                  — open panel + connect WebSocket
 //   Agent.close()                            — close panel + disconnect
 //   Agent.toggle()                           — toggle panel
-//   Agent.updateRoot(rootId, agentId)        — update current root
+//   Agent.updateRoot(rootId, dir)            — update current root/dir
 
 (function () {
   'use strict';
@@ -46,7 +46,8 @@
   let collapseTimer = null;
   let animatingOut = false; // true during slide-out animation
   let currentRootId = '';
-  let currentAgentId = '';
+  let currentDir = '';
+  let currentAgentId = '';  // kept for OpenClaw backend session routing
   let backendMode = 'claude';
   let reconnectTimer = null;
   let reconnectAttempts = 0;
@@ -393,6 +394,7 @@
 
     var url = wsUrl +
       '?root=' + encodeURIComponent(currentRootId || '') +
+      '&dir=' + encodeURIComponent(currentDir || '') +
       '&agentId=' + encodeURIComponent(currentAgentId || '');
 
     try { ws = new WebSocket(url); } catch (e) { xlog('ws', 'constructor failed', e); scheduleReconnect(); return; }
@@ -492,8 +494,9 @@
   window.Agent = {
     init: function (config) {
       wsUrl = config.wsUrl || '';
-      currentAgentId = config.agentId || '';
       currentRootId = config.rootId || '';
+      currentDir = config.dir || '';
+      currentAgentId = config.agentId || '';
       backendMode = config.backend || 'claude';
       if (badgeEl) badgeEl.textContent = backendMode;
 
@@ -504,9 +507,9 @@
       }
     },
 
-    open: function (rootId, agentId) {
+    open: function (rootId, dir) {
       if (rootId) currentRootId = rootId;
-      if (agentId) currentAgentId = agentId;
+      if (dir !== undefined) currentDir = dir;
 
       animatingOut = false;
       clearTimeout(collapseTimer);
@@ -566,19 +569,19 @@
 
     toggle: function () {
       if (panel.classList.contains('hidden')) {
-        window.Agent.open(currentRootId, currentAgentId);
+        window.Agent.open(currentRootId, currentDir);
         if (toggleBtn) toggleBtn.classList.add('active');
       } else {
         window.Agent.close();
       }
     },
 
-    updateRoot: function (rootId, agentId) {
+    updateRoot: function (rootId, dir) {
       if (rootId) currentRootId = rootId;
-      if (agentId) currentAgentId = agentId;
+      if (dir !== undefined) currentDir = dir;
       if (rootEl) rootEl.textContent = currentRootId || '';
       if (!panel.classList.contains('hidden') && ws && ws.readyState === WebSocket.OPEN) {
-        try { ws.send(JSON.stringify({ type: 'chdir', root: currentRootId, agentId: currentAgentId })); } catch (_) {}
+        try { ws.send(JSON.stringify({ type: 'chdir', root: currentRootId, dir: currentDir })); } catch (_) {}
       }
     },
 

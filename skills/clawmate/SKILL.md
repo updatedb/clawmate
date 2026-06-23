@@ -19,7 +19,7 @@ license: MIT
 
 | 命令 | 功能 | 状态 |
 |------|------|:----:|
-| `clawmate list [agent_id]` | 列出指定 agent （默认当前 agent）下所有项目 | ✅ |
+| `clawmate list [root_id]` | 列出指定 root（默认当前 root）下所有项目 | ✅ |
 | `clawmate link <filename>` | 搜索文件生成可点击预览链接 | ✅ |
 | `clawmate init [root] <project>` | 项目初始化与前期梳理（Phase I-V），默认 root 为 defaultRootId | ✅ |
 | `clawmate plan [root] <project>` | 规划/更新分层项目计划（CLAWLIST） | ✅ |
@@ -723,7 +723,7 @@ curl -s "{CLAWMATE_URL}/api/clawmate/config" 2>/dev/null | python3 -c "
 import json, sys
 cfg = json.load(sys.stdin)
 for root in cfg['roots']:
-    print(f\"{root['id']}|{root['dir']}|{root.get('agent_id','main')}\")
+    print(f\"{root['id']}|{root['dir']}\")
 "
 ```
 
@@ -740,16 +740,11 @@ curl -s "{CLAWMATE_URL}/api/clawmate/search?q=$PROJECT&root=$ROOT" 2>/dev/null
 
 从搜索结果中：
 1. 找到匹配 `{projectname}/` 目录的条目 → 确定 root_id 和相对路径
-2. 使用步骤 1 中已获取的该 root 的 `agent_id`
-3. 拼接绝对路径：`{root_dir}/{projectname}/`
+2. 拼接绝对路径：`{root_dir}/{projectname}/`
 
-**步骤 3：通知目标 agent 主会话切换项目**
+**步骤 3：切换到项目**
 
-分两种情况：
-
-**情况 A：当前 agent 与项目的 agent_id 一致**
-
-直接在当前会话执行 compact 并读取项目文件，通知用户已就绪：
+直接在当前会话执行 compact 并读取项目文件：
 
 ```
 【项目切换】切换到 <projectname> 项目。
@@ -759,23 +754,7 @@ curl -s "{CLAWMATE_URL}/api/clawmate/search?q=$PROJECT&root=$ROOT" 2>/dev/null
 了解项目目标和当前状态后汇报概况。
 ```
 
-**情况 B：当前 agent 与项目的 agent_id 不一致**
-
-提示用户切换到目标 agent 的会话执行 project 命令：
-
-```markdown
-⚠️ 项目 {projectname} 属于 `{agent_id}` agent。
-请在 `agent:{agent_id}` 会话中执行：
-`/clawmate project {projectname}`
-```
-
-**原因**：agentToAgent 跨 agent 消息传递受配置控制，且各 agent 各自管理自己的项目上下文。用户应直接在目标 agent 的会话中操作，work agent 只负责定位和指引。
-
 **步骤 4：输出结果**
-
-根据情况输出不同结果：
-
-**情况 A**（当前 agent 与项目一致）：直接输出项目概况和文件链接：
 
 ```markdown
 ✅ clawmate project <projectname>
@@ -786,44 +765,20 @@ curl -s "{CLAWMATE_URL}/api/clawmate/search?q=$PROJECT&root=$ROOT" 2>/dev/null
 [PROJECT_NOTE.md]({base_url}/clawmate/preview.html?root=<root>&file=<projectname>%2FPROJECT_NOTE.md)
 ```
 
-**情况 B**（当前 agent 与项目不一致）：提示用户切换会话：
-
-```markdown
-✅ clawmate project <projectname>
-
-项目 {projectname} 在 `{agent_id}` agent 下。
-请在 `agent:{agent_id}` 会话中执行 `/clawmate project {projectname}` 切换。
-
-[CLAWLIST.md]({base_url}/clawmate/preview.html?root=<root>&file=<projectname>%2FCLAWLIST.md)
-[PROJECT_NOTE.md]({base_url}/clawmate/preview.html?root=<root>&file=<projectname>%2FPROJECT_NOTE.md)
-```
-
-### 项目 vs Agent 映射
-
-| 项目所在 root | 对应 agent_id | 主会话 key |
-|--------------|--------------|-----------|
-| webprojects / projects | `work` | `agent:work:main` |
-| writer | `writer` | `agent:writer:main` |
-| trip | `travel` | `agent:travel:main` |
-| helper / 3gpp | `helper` | `agent:helper:main` |
-
-> 映射从 config.json roots 动态获取，不硬编码。
-> 当目标 agent_id 与执行者相同时，直接 compact 当前会话并读取项目文件，无需跨会话发送。
-
 ---
 
 ## 7. clawmate list
 
-列出指定 agent 下所有项目。默认列出当前 agent 的项目，可传 agent_id 查其他 agent 的项目。
+列出指定 root 下所有项目。默认列出当前 root 的项目，可传 root_id 查其他 root 的项目。
 
 ### 命令签名
 
 ```
-clawmate list [agent_id]
+clawmate list [root_id]
 ```
 
-- 无参数：列出当前 agent 下的所有项目
-- `clawmate list writer`：列出 writer agent 下的所有项目
+- 无参数：列出当前 root 下的所有项目
+- `clawmate list writer`：列出 writer root 下的所有项目
 
 ### 执行步骤
 
@@ -834,16 +789,15 @@ curl -s "{CLAWMATE_URL}/api/clawmate/config" 2>/dev/null | python3 -c "
 import json, sys
 cfg = json.load(sys.stdin)
 for root in cfg['roots']:
-    agent_id = root.get('agent_id', 'main')
-    print(f\"{root['id']}|{root['dir']}|{agent_id}\")
+    print(f\"{root['id']}|{root['dir']}\")
 "
 ```
 
-**步骤 2：筛选目标 agent 的 roots**
+**步骤 2：筛选目标 root**
 
 根据参数筛选 roots：
-- 无参数：使用当前会话所在 agent 的 id（根据 `MEMORY.md` 或运行时上下文确定）
-- 有参数：筛选 agent_id 匹配的 roots
+- 无参数：使用当前 root
+- 有参数：筛选 root_id 匹配的 root
 
 **步骤 3：列出每个 root 下的一级子目录（即为项目）**
 
@@ -855,14 +809,14 @@ ls -1d {root_dir}/*/
 
 **步骤 4：输出结果**
 
-按 agent 分组输出表格：
+按 root 分组输出表格：
 
 ```markdown
-## {agent_id} 的项目
+## {root_id} 的项目
 
-| 项目 | 所在 root | 路径 | CLAWLIST |
-|------|----------|------|:--------:|
-| project_a | root_id | {root_dir}/project_a/ | [📋]({base_url}/clawmate/preview.html?root=root_id&file=project_a%2FCLAWLIST.md) |
+| 项目 | 路径 | CLAWLIST |
+|------|------|:--------:|
+| project_a | {root_dir}/project_a/ | [📋]({base_url}/clawmate/preview.html?root=root_id&file=project_a%2FCLAWLIST.md) |
 ```
 
 若某个项目目录下没有 CLAWLIST.md，链接标记为 `—`。

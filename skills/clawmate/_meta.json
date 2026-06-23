@@ -34,7 +34,7 @@
     "clawmate link <filename>": "搜索文件并生成可点击的预览链接",
     "clawmate init [root] <project>": "项目初始化与前期梳理（Phase I-V）",
     "clawmate plan [root] <project>": "规划/更新分层项目计划（CLAWLIST）",
-    "clawmate list [agent_id]": "列出指定 agent 下所有项目",
+    "clawmate list [root_id]": "列出指定 root 下所有项目",
     "clawmate feed [status] [filename] [date]": "查询 feedback 列表",
     "clawmate do [feedback_id]": "处理待处理 feedback",
     "clawmate project <projectname>": "为项目创建新会话，切换 workspace 到项目目录，读取顶层介绍"

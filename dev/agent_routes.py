@@ -1,7 +1,7 @@
 """
 Agent WebSocket routes — connects xterm.js to Claude Code (or OpenClaw).
 
-Endpoint:  ws://.../api/clawmate/agent/terminal?root=<root_id>&agentId=<agent_id>
+Endpoint:  ws://.../api/clawmate/agent/terminal?root=<root_id>&dir=<rel_dir>
 Backends:  claude (pty.spawn → claude CLI), openclaw (reserved)
 
 Session persistence: Claude Code processes survive WebSocket disconnects.
@@ -28,6 +28,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from starlette.websockets import WebSocketState
 
 from config import load as load_cfg
+from service import find_project_marker
 
 router = APIRouter()
 
@@ -65,19 +66,40 @@ _sessions: dict[str, _AgentSession] = {}
 _session_lock = asyncio.Lock()
 
 
-def _session_key(root: str, agent_id: str) -> str:
-    return f"{root}:{agent_id}"
+def _session_key(root: str, dir_: str = "") -> str:
+    """构造 session key。根据 dir 查找 .clawmate/ marker，找到则返回 {root}:{project}，否则返回 {root}。"""
+    if not dir_:
+        return root
+    root_path = _resolve_root_dir(root)
+    if root_path:
+        project = find_project_marker(root_path, dir_)
+        if project:
+            return f"{root}:{project}"
+    return root
 
 
-def get_claude_session(root: str, agent_id: str):
-    """Return active Claude Code session for root+agent, or None.
+def _resolve_session_cwd(root: str, dir_: str = "") -> str:
+    """确定 session 的工作目录。有 .clawmate marker → marker 所在目录，无 → root 目录。"""
+    root_path = _resolve_root_dir(root)
+    if not root_path:
+        return os.path.expanduser("~")
+    if dir_:
+        project = find_project_marker(root_path, dir_)
+        if project:
+            return str(root_path / project)
+    return str(root_path)
 
+
+def get_claude_session(root: str, dir_: str = ""):
+    """Return active Claude Code session for root+dir, or None.
+
+    Uses .clawmate/ marker walking to determine session key.
     Only returns session if:
     - It exists and stop_event is not set
     - It has at least one active WebSocket (someone is viewing the terminal)
     - The Claude Code process is still running
     """
-    key = _session_key(root, agent_id)
+    key = _session_key(root, dir_)
     sess = _sessions.get(key)
     if not sess:
         return None
@@ -594,6 +616,7 @@ async def agent_terminal(
     ws: WebSocket,
     root: str = Query(""),
     agentId: str = Query(""),
+    dir: str = Query(""),
 ):
     """
     WebSocket endpoint for xterm.js Agent panel.
@@ -602,6 +625,9 @@ async def agent_terminal(
     - First connect: spawn Claude Code
     - Disconnect/reconnect: reattach to same process
     - Idle 10min with no client: auto-kill
+
+    Session key = {root}:{project} when .clawmate/ marker found,
+    else just {root}. agentId is kept for OpenClaw backend only.
     """
     await ws.accept()
     _ensure_reaper()
@@ -611,10 +637,8 @@ async def agent_terminal(
     agent_cfg = getattr(cfg, "agent", None)
     backend = getattr(agent_cfg, "backend", "claude") if agent_cfg else "claude"
 
-    root_dir = _resolve_root_dir(root)
-    cwd = str(root_dir) if root_dir else os.path.expanduser("~")
-
-    key = _session_key(root, agentId)
+    cwd = _resolve_session_cwd(root, dir)
+    key = _session_key(root, dir)
 
     # Check for existing session
     sess = _sessions.get(key)
@@ -624,6 +648,7 @@ async def agent_terminal(
         await ws.send_text(
             f"\x1b[1;32m⟳ 重新连接到已有会话\x1b[0m\r\n"
             f"\x1b[2m   backend: {backend}  cwd: {cwd}\x1b[0m\r\n"
+            f"\x1b[2m   session: {key}\x1b[0m\r\n"
             f"\x1b[2m   会话已运行 {(time.time() - sess.created_at):.0f}s\x1b[0m\r\n\r\n"
         )
         await _attach_session(sess, ws)

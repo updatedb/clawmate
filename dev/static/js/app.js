@@ -2426,6 +2426,7 @@ function _initAgent() {
       backend: state.agentConfig.backend || "claude",
       wsUrl: state.agentConfig.ws_url || "",
       rootId: state.rootId || "",
+      dir: state.dir || "",
       agentId: curRoot.agent_id || "",
     });
   }

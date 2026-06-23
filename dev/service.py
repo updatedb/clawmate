@@ -139,6 +139,21 @@ def safe_path(root_id: str, rel_path: str) -> Tuple[Path, Path, str]:
     return root_path, target, safe_rel
 
 
+def find_project_marker(root_path: Path, rel_dir: str) -> Optional[str]:
+    """在 rel_dir 的路径链上查找 .clawmate/ 目录。
+
+    从 rel_dir 开始逐级向上（直到 root_path），找到第一个 .clawmate/ 目录，
+    返回该目录名（即 project 名）。未找到返回 None。
+    """
+    target = (root_path / rel_dir).resolve() if rel_dir else root_path
+    for p in [target] + list(target.parents):
+        if root_path not in p.parents and p != root_path:
+            break
+        if (p / ".clawmate").is_dir():
+            return p.name
+    return None
+
+
 def guess_category(path: Path) -> str:
     if path.is_dir():
         return "dir"

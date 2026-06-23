@@ -311,7 +311,8 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
     # ── 优先注入 Claude Code PTY（agent panel 活跃时）──
     try:
         from agent_routes import get_claude_session, inject_to_session
-        sess = get_claude_session(root_id, agent_id)
+        # Use feedback file path to derive project context for session key
+        sess = get_claude_session(root_id, file)
         if sess is not None and items:
             # Build a compact task prompt for PTY injection
             pty_lines = [
