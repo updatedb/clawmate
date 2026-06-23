@@ -157,7 +157,7 @@ stateDiagram
 **关键流程**：
 1. 在预览页选中任意文本 → 浮动「反馈」按钮出现
 2. 点击按钮 → 填写备注 → 提交（可连续选中多个位置，统一提交）
-3. 写入 `feedback.json` → 即时唤醒 Agent
+3. 写入 `.feedback.json` → 即时唤醒 Agent
 4. Agent 读取反馈 → 精确定位选区 → AI 理解备注 → 修改文件
 5. 状态流转：pending → in_progress → done / failed
 
@@ -280,7 +280,7 @@ PTY 终端"]
 
     subgraph Storage["存储层"]
         FS["文件系统"]
-        FB_JSON["feedback.json"]
+        FB_JSON[".feedback.json"]
     end
 
     subgraph External["外部服务"]

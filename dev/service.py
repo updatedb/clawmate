@@ -23,6 +23,13 @@ TEXT_EXTENSIONS = {
     ".ps1", ".sql", ".r", ".go", ".java", ".c", ".cpp", ".h", ".hpp", ".vue", ".srt",
 }
 
+ARCHIVE_EXTENSIONS = {
+    ".zip", ".tar", ".gz", ".tgz", ".bz2", ".tbz2", ".xz", ".txz", ".rar", ".7z",
+}
+
+# Compound extensions that indicate archive even when suffix doesn't match directly
+_ARCHIVE_COMPOUND_SUFFIXES = (".tar.gz", ".tar.bz2", ".tar.xz", ".tgz", ".tbz2", ".txz")
+
 
 def _normalize_rel_path(rel_path: str) -> str:
     rel_path = str(rel_path or "").strip()
@@ -145,6 +152,10 @@ def guess_category(path: Path) -> str:
             return "video"
         if mime.startswith("text/"):
             return "text"
+    # Check archive extensions (including compound .tar.gz etc.)
+    name_lower = path.name.lower()
+    if path.suffix.lower() in ARCHIVE_EXTENSIONS or name_lower.endswith(_ARCHIVE_COMPOUND_SUFFIXES):
+        return "archive"
     if path.suffix.lower() in TEXT_EXTENSIONS:
         return "text"
     # Fallback for extensionless files: sniff content to distinguish text/binary
@@ -163,6 +174,166 @@ def guess_category(path: Path) -> str:
     except (OSError, PermissionError):
         pass
     return "other"
+
+
+def list_archive(path: Path) -> Dict:
+    """List contents of an archive file. Returns entries dict with file tree.
+
+    Supported formats: zip, tar, tar.gz/bz2/xz, rar, 7z.
+    RAR and 7z support requires optional dependencies (rarfile, py7zr).
+    """
+    import datetime
+
+    suffix = path.suffix.lower()
+    name_lower = path.name.lower()
+
+    entries: list = []
+    encrypted = False
+
+    def _make_entry(name: str, is_dir: bool, size: int,
+                    compressed_size: int | None = None,
+                    mtime: float | None = None) -> Dict:
+        return {
+            "name": name,
+            "path": "",
+            "is_dir": is_dir,
+            "size": size,
+            "compressed_size": compressed_size,
+            "mtime": int(mtime) if mtime else None,
+        }
+
+    # ── ZIP ──────────────────────────────────────────────
+    if suffix == ".zip":
+        import zipfile
+        try:
+            with zipfile.ZipFile(path, "r") as zf:
+                for info in zf.infolist():
+                    name = info.filename.rstrip("/")
+                    is_dir = info.is_dir()
+                    size = info.file_size if not is_dir else 0
+                    entries.append(_make_entry(
+                        name=name.split("/")[-1] or name,
+                        is_dir=is_dir,
+                        size=size,
+                        compressed_size=info.compress_size,
+                        mtime=datetime.datetime(*info.date_time).timestamp() if info.date_time != (1980, 1, 1, 0, 0, 0) else None,
+                    ))
+                    # Fix path field
+                    entries[-1]["path"] = info.filename.rstrip("/")
+        except zipfile.BadZipFile:
+            raise ValueError("Invalid or corrupted ZIP file")
+
+    # ── TAR / TAR.GZ / TAR.BZ2 / TAR.XZ ─────────────────
+    elif suffix in (".tar", ".gz", ".bz2", ".xz") or name_lower.endswith(_ARCHIVE_COMPOUND_SUFFIXES):
+        import tarfile
+        try:
+            # Determine compression mode from filename
+            mode = "r"
+            if name_lower.endswith((".gz", ".tgz")):
+                mode = "r:gz"
+            elif name_lower.endswith((".bz2", ".tbz2")):
+                mode = "r:bz2"
+            elif name_lower.endswith((".xz", ".txz")):
+                mode = "r:xz"
+            elif suffix in (".tar",):
+                mode = "r"
+            else:
+                mode = "r:*"  # auto-detect
+
+            with tarfile.open(path, mode) as tf:
+                for member in tf.getmembers():
+                    name = member.name.rstrip("/")
+                    entries.append(_make_entry(
+                        name=name.split("/")[-1] or name,
+                        is_dir=member.isdir(),
+                        size=member.size if not member.isdir() else 0,
+                        mtime=member.mtime,
+                    ))
+                    entries[-1]["path"] = member.name.rstrip("/")
+        except tarfile.TarError:
+            raise ValueError("Invalid or corrupted TAR file")
+
+    # ── RAR ─────────────────────────────────────────────
+    elif suffix == ".rar":
+        try:
+            import rarfile
+        except ImportError:
+            raise ValueError(
+                "RAR format requires the 'rarfile' package. "
+                "Install it with: pip install rarfile"
+            )
+        try:
+            with rarfile.RarFile(path, "r") as rf:
+                # Check if encrypted (any file has encrypted flag)
+                for info in rf.infolist():
+                    if getattr(info, "needs_password", False):
+                        encrypted = True
+                    name = info.filename.rstrip("/")
+                    is_dir = info.is_dir()
+                    size = info.file_size if not is_dir else 0
+                    entries.append(_make_entry(
+                        name=name.split("/")[-1] or name,
+                        is_dir=is_dir,
+                        size=size,
+                        compressed_size=getattr(info, "compress_size", 0) or None,
+                        mtime=info.mtime if hasattr(info, "mtime") else None,
+                    ))
+                    entries[-1]["path"] = info.filename.rstrip("/")
+        except rarfile.BadRarFile:
+            raise ValueError("Invalid or corrupted RAR file")
+        except rarfile.RarCannotExec:
+            raise ValueError(
+                "Cannot extract RAR — 'unrar' tool not found. "
+                "Install unrar: sudo apt install unrar"
+            )
+        except rarfile.PasswordRequired:
+            encrypted = True
+
+    # ── 7z ───────────────────────────────────────────────
+    elif suffix == ".7z":
+        try:
+            import py7zr
+        except ImportError:
+            raise ValueError(
+                "7z format requires the 'py7zr' package. "
+                "Install it with: pip install py7zr"
+            )
+        try:
+            with py7zr.SevenZipFile(path, "r") as szf:
+                if szf.needs_password():
+                    encrypted = True
+                for info in szf.list():
+                    name = info.filename.rstrip("/") if info.filename else ""
+                    is_dir = getattr(info, "is_directory", False) or (info.filename or "").endswith("/")
+                    entries.append(_make_entry(
+                        name=name.split("/")[-1] or name,
+                        is_dir=is_dir,
+                        size=getattr(info, "uncompressed_size", 0) or 0 if not is_dir else 0,
+                        compressed_size=getattr(info, "compressed_size", 0) or None,
+                        mtime=getattr(info, "modification_time", None),
+                    ))
+                    entries[-1]["path"] = (info.filename or "").rstrip("/")
+        except py7zr.Bad7zFile:
+            raise ValueError("Invalid or corrupted 7z file")
+
+    else:
+        raise ValueError(f"Unsupported archive format: {suffix}")
+
+    # Sort: directories first, then by name
+    entries.sort(key=lambda e: (not e["is_dir"], e["name"].lower()))
+
+    total_size = sum(e["size"] for e in entries if not e["is_dir"])
+    file_count = sum(1 for e in entries if not e["is_dir"])
+    dir_count = sum(1 for e in entries if e["is_dir"])
+
+    return {
+        "entries": entries,
+        "total": len(entries),
+        "file_count": file_count,
+        "dir_count": dir_count,
+        "total_size": total_size,
+        "encrypted": encrypted,
+    }
 
 
 def get_public_base_url(request) -> str:
@@ -327,3 +498,162 @@ def upload_file(root_id: str, rel_dir: str, filename: str, content: bytes) -> Pa
         raise PermissionError("Path outside root")
     dest.write_bytes(content)
     return dest
+
+
+def move_file(root_id: str, rel_path: str, dest_dir: str) -> Dict:
+    """Move a file or directory to a new location within the same root.
+
+    Args:
+        root_id: The root identifier.
+        rel_path: Current relative path of the file/directory.
+        dest_dir: Destination directory relative path.
+
+    Returns:
+        {ok: True, newPath: "dest_dir/filename", newName: "filename"}
+    """
+    import shutil
+    root_path, source, safe_src = safe_path(root_id, rel_path)
+    _, dest_dir_path, safe_dest = safe_path(root_id, dest_dir)
+
+    if not source.exists():
+        raise FileNotFoundError("Source file/directory not found")
+    if not dest_dir_path.exists() or not dest_dir_path.is_dir():
+        raise FileNotFoundError("Destination directory not found")
+
+    # Prevent moving a directory into itself or its subdirectories
+    if source.is_dir():
+        try:
+            dest_dir_path.relative_to(source)
+            raise ValueError("Cannot move a directory into itself or its subdirectory")
+        except ValueError:
+            pass  # dest_dir is NOT inside source — OK
+
+    dest = dest_dir_path / source.name
+    if dest.exists():
+        raise FileExistsError(f"'{source.name}' already exists in the destination directory")
+
+    try:
+        shutil.move(str(source), str(dest))
+    except PermissionError:
+        raise PermissionError("Permission denied: filesystem is read-only")
+    except OSError as e:
+        raise OSError(f"Move failed: {e}")
+
+    # Compute new relative path
+    new_safe_rel = str(dest.relative_to(root_path))
+    return {
+        "ok": True,
+        "newName": dest.name,
+        "newPath": new_safe_rel,
+    }
+
+
+def extract_archive(root_id: str, rel_path: str, dest_dir: str) -> Dict:
+    """Extract an archive file to a destination directory within the same root.
+
+    Args:
+        root_id: The root identifier.
+        rel_path: Relative path of the archive file.
+        dest_dir: Destination directory for extracted files.
+
+    Returns:
+        {ok: True, destPath: "dest_dir", count: N}
+    """
+    import shutil
+    root_path, source, safe_src = safe_path(root_id, rel_path)
+    _, dest_dir_path, safe_dest = safe_path(root_id, dest_dir)
+
+    if not source.exists() or source.is_dir():
+        raise FileNotFoundError("Archive file not found")
+    if not dest_dir_path.exists() or not dest_dir_path.is_dir():
+        # Create destination directory if it doesn't exist
+        dest_dir_path.mkdir(parents=True, exist_ok=True)
+
+    suffix = source.suffix.lower()
+    name_lower = source.name.lower()
+
+    count = 0
+
+    # ── ZIP ──────────────────────────────────────────────
+    if suffix == ".zip":
+        import zipfile
+        try:
+            with zipfile.ZipFile(source, "r") as zf:
+                zf.extractall(dest_dir_path)
+                count = len(zf.namelist())
+        except zipfile.BadZipFile:
+            raise ValueError("Invalid or corrupted ZIP file")
+
+    # ── TAR / TAR.GZ / TAR.BZ2 / TAR.XZ ─────────────────
+    elif suffix in (".tar", ".gz", ".bz2", ".xz") or name_lower.endswith((".tar.gz", ".tar.bz2", ".tar.xz", ".tgz", ".tbz2", ".txz")):
+        import tarfile
+        try:
+            mode = "r"
+            if name_lower.endswith((".gz", ".tgz")):
+                mode = "r:gz"
+            elif name_lower.endswith((".bz2", ".tbz2")):
+                mode = "r:bz2"
+            elif name_lower.endswith((".xz", ".txz")):
+                mode = "r:xz"
+            elif suffix in (".tar",):
+                mode = "r"
+            else:
+                mode = "r:*"
+
+            with tarfile.open(source, mode) as tf:
+                tf.extractall(dest_dir_path)
+                count = len(tf.getmembers())
+        except tarfile.TarError:
+            raise ValueError("Invalid or corrupted TAR file")
+
+    # ── RAR ─────────────────────────────────────────────
+    elif suffix == ".rar":
+        try:
+            import rarfile
+        except ImportError:
+            raise ValueError(
+                "RAR format requires the 'rarfile' package. "
+                "Install it with: pip install rarfile"
+            )
+        try:
+            with rarfile.RarFile(source, "r") as rf:
+                rf.extractall(dest_dir_path)
+                count = len(rf.namelist())
+        except rarfile.BadRarFile:
+            raise ValueError("Invalid or corrupted RAR file")
+        except rarfile.RarCannotExec:
+            raise ValueError(
+                "Cannot extract RAR — 'unrar' tool not found. "
+                "Install unrar: sudo apt install unrar"
+            )
+        except rarfile.PasswordRequired:
+            raise ValueError("Cannot extract password-protected RAR file")
+
+    # ── 7z ───────────────────────────────────────────────
+    elif suffix == ".7z":
+        try:
+            import py7zr
+        except ImportError:
+            raise ValueError(
+                "7z format requires the 'py7zr' package. "
+                "Install it with: pip install py7zr"
+            )
+        try:
+            with py7zr.SevenZipFile(source, "r") as szf:
+                if szf.needs_password():
+                    raise ValueError("Cannot extract password-protected 7z file")
+                szf.extractall(dest_dir_path)
+                # Count entries
+                entries = szf.list()
+                count = len(entries) if entries else 0
+        except py7zr.Bad7zFile:
+            raise ValueError("Invalid or corrupted 7z file")
+
+    else:
+        raise ValueError(f"Unsupported archive format: {suffix}")
+
+    return {
+        "ok": True,
+        "destPath": safe_dest,
+        "count": count,
+    }

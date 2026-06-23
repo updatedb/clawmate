@@ -1039,3 +1039,88 @@
       .mobile-fb-submit:active { opacity: 0.85; }
       .mobile-fb-status { font-size: 12px; text-align: center; min-height: 16px; }
     }
+
+    /* ===== Archive Tree View ===== */
+
+    .archive-info-bar {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      padding: 14px 20px; border-bottom: 1px solid var(--border);
+      background: var(--bg-secondary);
+    }
+    .archive-info-icon { font-size: 20px; }
+    .archive-info-name { font-weight: 600; font-size: 15px; color: var(--text-primary); }
+    .archive-info-stats { color: var(--text-muted); font-size: 13px; margin-left: auto; }
+    .archive-info-actions { display: flex; gap: 6px; }
+    .archive-btn {
+      padding: 5px 12px; border: 1px solid var(--border); border-radius: 6px;
+      background: var(--bg); color: var(--text-secondary); font-size: 12px;
+      cursor: pointer; text-decoration: none; white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .archive-btn:hover { background: var(--bg-hover); border-color: var(--accent); color: var(--accent); }
+    .archive-dl-btn { color: var(--accent); border-color: var(--accent); }
+    .archive-dl-btn:hover { background: var(--accent); color: #fff; }
+
+    .archive-encrypted-warn {
+      margin: 12px 20px; padding: 10px 16px;
+      background: #fff3cd; color: #856404; border: 1px solid #ffc107;
+      border-radius: 8px; font-size: 13px; font-weight: 500;
+    }
+
+    .archive-error {
+      margin: 20px; padding: 24px; text-align: center;
+    }
+    .archive-error-msg {
+      color: var(--text-muted); font-size: 14px; line-height: 1.6;
+      padding: 16px; background: var(--bg-secondary); border-radius: 8px;
+    }
+
+    .archive-tree {
+      flex: 1; overflow: auto; padding: 8px 0;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+      font-size: 13px; line-height: 1.8;
+    }
+    .archive-entry {
+      display: flex; align-items: center; position: relative;
+      padding: 1px 20px 1px 12px; cursor: default;
+      transition: background 0.1s;
+    }
+    .archive-entry:hover { background: var(--bg-hover); }
+    .archive-entry.archive-dir { font-weight: 500; }
+    .archive-icon {
+      width: 20px; flex-shrink: 0; text-align: center;
+      font-size: 11px; color: var(--text-muted); user-select: none;
+    }
+    .archive-name {
+      flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      color: var(--text-primary);
+    }
+    .archive-dir .archive-name { color: var(--accent); }
+    .archive-size {
+      flex-shrink: 0; width: 80px; text-align: right;
+      color: var(--text-muted); font-size: 12px; margin-left: 16px;
+    }
+    .archive-mtime {
+      flex-shrink: 0; width: 90px; text-align: right;
+      color: var(--text-muted); font-size: 11px; margin-left: 8px;
+    }
+    .archive-children { }
+    .archive-indent-guide {
+      position: absolute; top: 0; bottom: 0; width: 1px;
+      background: var(--border); opacity: 0.5; pointer-events: none;
+    }
+
+    /* ===== Directory Picker (Move / Extract) ===== */
+    #dirPickerTree {
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .dir-picker-item:hover {
+      background: var(--bg-hover) !important;
+    }
+    /* dir-picker-item active/selected uses accent background — see inline style */
+
+    /* Hide move/extract buttons on mobile */
+    @media (max-width: 768px) {
+      #btnMove, #btnExtract { display: none; }
+    }

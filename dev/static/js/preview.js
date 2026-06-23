@@ -54,6 +54,12 @@
   const isOfficeMode = OFFICE_EXTS.includes(ext);
   const isPdfMode = ext === PDF_EXT;
   const isOfficePdfMode = isOfficeMode || isPdfMode;
+  // Archive: check extension + compound suffixes (.tar.gz etc.)
+  var nameLower = fileName.toLowerCase();
+  var isArchiveMode = (ext && ARCHIVE_EXTS.includes(ext)) ||
+    nameLower.endsWith('.tar.gz') || nameLower.endsWith('.tar.bz2') ||
+    nameLower.endsWith('.tar.xz') || nameLower.endsWith('.tgz') ||
+    nameLower.endsWith('.tbz2') || nameLower.endsWith('.txz');
   // OnlyOffice mode: view or edit (for iframe src)
   // Non-PDF Office documents default to edit mode; PDF stays in view mode
   const isEditableOffice = OFFICE_EXTS.includes(ext) && ext !== 'pdf';
@@ -1235,6 +1241,13 @@
         return;
       }
 
+      // ======== Archive: tree view of compressed file contents ========
+      if (isArchiveMode && data.archive) {
+        renderArchiveView(data.meta, data.archive, data.download_url);
+        removeLoading();
+        return;
+      }
+
       // Truncation notice
       if (data.truncated) {
         const notice = document.createElement('div');
@@ -2280,6 +2293,181 @@
     }, { passive: false });
   }
 
+  // ============ Archive Tree View ============
+  function renderArchiveView(meta, archiveData, downloadUrl) {
+    var container = document.getElementById('previewContent');
+    if (!container) container = document.getElementById('contentBody');
+    if (!container) return;
+    container.innerHTML = '';
+
+    var archiveEntries = archiveData.entries || [];
+    var encrypted = archiveData.encrypted;
+    var error = archiveData.error;
+    var totalFiles = archiveData.file_count || 0;
+    var totalDirs = archiveData.dir_count || 0;
+    var totalSize = archiveData.total_size || 0;
+    var totalCount = archiveData.total || archiveEntries.length;
+
+    // ── Info bar ──
+    var infoBar = document.createElement('div');
+    infoBar.className = 'archive-info-bar';
+    var sizeStr = typeof formatSize === 'function' ? formatSize(totalSize) : (totalSize + ' B');
+    infoBar.innerHTML =
+      '<span class="archive-info-icon">📦</span>' +
+      '<span class="archive-info-name">' + escHtml(meta.name || '') + '</span>' +
+      '<span class="archive-info-stats">' + totalFiles + ' files, ' + totalDirs + ' dirs &middot; ' + escHtml(sizeStr) + '</span>' +
+      '<span class="archive-info-actions">' +
+        '<button class="archive-btn" id="archiveExpandAll">▼ Expand All</button>' +
+        '<button class="archive-btn" id="archiveCollapseAll">▶ Collapse All</button>' +
+        (downloadUrl ? '<a class="archive-btn archive-dl-btn" href="' + escHtml(downloadUrl) + '" download>⬇ Download</a>' : '') +
+      '</span>';
+    container.appendChild(infoBar);
+
+    // ── Encrypted warning ──
+    if (encrypted) {
+      var warn = document.createElement('div');
+      warn.className = 'archive-encrypted-warn';
+      warn.innerHTML = '🔒 This archive is encrypted. Contents may be incomplete.';
+      container.appendChild(warn);
+    }
+
+    // ── Error / unsupported ──
+    if (error) {
+      var err = document.createElement('div');
+      err.className = 'archive-error';
+      err.innerHTML =
+        '<div class="archive-error-msg">' + escHtml(error) + '</div>' +
+        (downloadUrl ? '<a class="preview-unsupported-download-btn" href="' + escHtml(downloadUrl) + '" download style="margin-top:16px;display:inline-flex;">⬇ Download</a>' : '');
+      container.appendChild(err);
+      return;
+    }
+
+    // ── Build tree from flat entries ──
+    var treeRoot = { children: {}, dirs: {}, files: [] };
+
+    archiveEntries.forEach(function(entry) {
+      var parts = (entry.path || entry.name).split('/');
+      var node = treeRoot;
+      for (var i = 0; i < parts.length; i++) {
+        var part = parts[i];
+        if (!part) continue;
+        var isLast = (i === parts.length - 1);
+        if (!node.children[part]) {
+          node.children[part] = { name: part, children: {}, dirs: {}, files: [], isDir: !isLast || entry.is_dir, entry: null };
+        }
+        if (isLast) {
+          node.children[part].isDir = entry.is_dir;
+          node.children[part].entry = entry;
+        }
+        node = node.children[part];
+      }
+    });
+
+    // ── Render tree ──
+    function buildTreeDom(node, depth) {
+      depth = depth || 0;
+      var names = Object.keys(node.children).sort(function(a, b) {
+        var na = node.children[a];
+        var nb = node.children[b];
+        if (na.isDir !== nb.isDir) return na.isDir ? -1 : 1;
+        return a.localeCompare(b);
+      });
+      var frag = document.createDocumentFragment();
+
+      names.forEach(function(name) {
+        var child = node.children[name];
+        var row = document.createElement('div');
+        row.className = 'archive-entry' + (child.isDir ? ' archive-dir' : ' archive-file');
+        row.style.paddingLeft = (depth * 20 + 12) + 'px';
+
+        // Indent guide
+        if (depth > 0) {
+          for (var d = 0; d < depth; d++) {
+            var guide = document.createElement('span');
+            guide.className = 'archive-indent-guide';
+            guide.style.left = (d * 20 + 10) + 'px';
+            row.appendChild(guide);
+          }
+        }
+
+        var icon = document.createElement('span');
+        icon.className = 'archive-icon';
+        if (child.isDir) {
+          icon.textContent = '▶';
+          icon.style.cursor = 'pointer';
+        } else {
+          icon.innerHTML = '&nbsp;&nbsp;';
+        }
+        row.appendChild(icon);
+
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'archive-name';
+        nameSpan.textContent = name + (child.isDir ? '/' : '');
+        row.appendChild(nameSpan);
+
+        if (!child.isDir && child.entry) {
+          var s = child.entry.size;
+          var sizeSpan = document.createElement('span');
+          sizeSpan.className = 'archive-size';
+          sizeSpan.textContent = typeof formatSize === 'function' ? formatSize(s) : (s + ' B');
+          row.appendChild(sizeSpan);
+
+          if (child.entry.mtime) {
+            var mtimeSpan = document.createElement('span');
+            mtimeSpan.className = 'archive-mtime';
+            var d = new Date(child.entry.mtime * 1000);
+            mtimeSpan.textContent = d.toISOString().slice(0, 10);
+            row.appendChild(mtimeSpan);
+          }
+        }
+
+        // Toggle children
+        if (child.isDir && Object.keys(child.children).length > 0) {
+          var childrenWrap = document.createElement('div');
+          childrenWrap.className = 'archive-children';
+          childrenWrap.style.display = 'none';
+          var childDom = buildTreeDom(child, depth + 1);
+          childrenWrap.appendChild(childDom);
+          row.appendChild(childrenWrap);
+
+          icon.addEventListener('click', function() {
+            var isHidden = childrenWrap.style.display === 'none';
+            childrenWrap.style.display = isHidden ? '' : 'none';
+            icon.textContent = isHidden ? '▼' : '▶';
+          });
+        } else if (child.isDir) {
+          // Empty directory
+          icon.textContent = '▶';
+          icon.style.opacity = '0.4';
+        }
+
+        frag.appendChild(row);
+      });
+
+      return frag;
+    }
+
+    var treeDom = buildTreeDom(treeRoot, 0);
+    var treeWrap = document.createElement('div');
+    treeWrap.className = 'archive-tree';
+    treeWrap.appendChild(treeDom);
+    container.appendChild(treeWrap);
+
+    // ── Expand/collapse all buttons ──
+    document.getElementById('archiveExpandAll').addEventListener('click', function() {
+      treeWrap.querySelectorAll('.archive-children').forEach(function(c) { c.style.display = ''; });
+      treeWrap.querySelectorAll('.archive-icon').forEach(function(ic) {
+        if (ic.textContent === '▶') ic.textContent = '▼';
+      });
+    });
+    document.getElementById('archiveCollapseAll').addEventListener('click', function() {
+      treeWrap.querySelectorAll('.archive-children').forEach(function(c) { c.style.display = 'none'; });
+      treeWrap.querySelectorAll('.archive-icon').forEach(function(ic) {
+        if (ic.textContent === '▼') ic.textContent = '▶';
+      });
+    });
+  }
+
   // ============ Media Feedback Panel ============
   function renderMediaFeedbackPanel() {
     const body = document.getElementById('feedbackBody');
@@ -2495,18 +2683,14 @@
     return null;
   }
 
-  async function getAbsolutePath() {
-    const cfg = await getRootsConfig();
-    if (!cfg || !cfg.roots) return null;
-    const root = cfg.roots.find(r => r.id === rootId);
-    if (!root || !root.dir) return null;
-    return root.dir.replace(/\/+$/, '') + '/' + filePath;
+  function getRelativePath() {
+    return filePath || null;
   }
 
   document.getElementById('btnPath').addEventListener('click', async () => {
-    const absPath = await getAbsolutePath();
-    if (absPath) {
-      await copyText(absPath, '✅ 路径已复制');
+    const relPath = getRelativePath();
+    if (relPath) {
+      await copyText(relPath, '✅ 路径已复制');
     } else {
       showToast('无法获取路径', 2000);
     }
@@ -2568,6 +2752,257 @@
     } catch (e) {
       showToast('重命名失败: ' + e.message, 3000);
     }
+  });
+
+  // ============ Directory Picker (shared by Move and Extract) ============
+  var dirPickerCallback = null;
+  var dirPickerSelectedDir = '';
+  var dirPickerMode = ''; // 'move' or 'extract'
+
+  function initDirPicker() {
+    var closeBtn = document.getElementById('dirPickerClose');
+    var cancelBtn = document.getElementById('dirPickerCancel');
+    var confirmBtn = document.getElementById('dirPickerConfirm');
+    var modal = document.getElementById('dirPickerModal');
+    if (!closeBtn || !cancelBtn || !confirmBtn || !modal) return;
+
+    closeBtn.addEventListener('click', closeDirPicker);
+    cancelBtn.addEventListener('click', closeDirPicker);
+    confirmBtn.addEventListener('click', confirmDirPicker);
+
+    // Close on backdrop click
+    modal.addEventListener('click', function(e) {
+      if (e.target === this) closeDirPicker();
+    });
+  }
+
+  function closeDirPicker() {
+    var modal = document.getElementById('dirPickerModal');
+    if (modal) modal.style.display = 'none';
+    dirPickerCallback = null;
+    dirPickerSelectedDir = '';
+    dirPickerMode = '';
+  }
+
+  function confirmDirPicker() {
+    if (dirPickerCallback) {
+      dirPickerCallback(dirPickerSelectedDir);
+    }
+    closeDirPicker();
+  }
+
+  async function openDirPicker(mode, title) {
+    dirPickerMode = mode;
+    dirPickerSelectedDir = parentDir || '';
+    var titleEl = document.getElementById('dirPickerTitle');
+    var modal = document.getElementById('dirPickerModal');
+    var tree = document.getElementById('dirPickerTree');
+    if (!titleEl || !modal || !tree) return;
+
+    titleEl.textContent = title || '选择目标目录';
+    modal.style.display = 'flex';
+
+    // Load directory tree
+    tree.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;">加载中...</div>';
+
+    try {
+      // Fetch all directories under the project root using level-order BFS
+      // with parallel fetches per level for speed (vs sequential per-directory).
+      // Hidden/cache directories (.venv/.git/…) are skipped.
+      var MAX_DEPTH = 10;
+      var SKIP_PREFIXES = ['.', '__pycache__', 'node_modules'];
+      var allDirs = [];
+      var rootDirName = rootId;
+      var skippedCount = 0;
+
+      // Helper: filter out hidden/cache dirs from a list of entries
+      function filterDirs(entries) {
+        var dirs = [];
+        for (var i = 0; i < entries.length; i++) {
+          if (!entries[i].is_dir) continue;
+          var nm = entries[i].name;
+          var skip = false;
+          for (var s = 0; s < SKIP_PREFIXES.length; s++) {
+            if (nm.indexOf(SKIP_PREFIXES[s]) === 0) { skip = true; break; }
+          }
+          if (skip) { skippedCount++; continue; }
+          dirs.push(entries[i].path);
+        }
+        return dirs;
+      }
+
+      // Level 0: root
+      var res = await fetch('/api/clawmate/list?root=' + encodeURIComponent(rootId) + '&dir=&limit=1000');
+      var data = await res.json();
+      if (data.name) rootDirName = data.name;
+      var currentLevel = filterDirs(data.entries || []);
+      allDirs = allDirs.concat(currentLevel);
+
+      // Level 1..MAX_DEPTH: parallel fetches per level
+      for (var depth = 1; depth < MAX_DEPTH && currentLevel.length > 0; depth++) {
+        var results = await Promise.all(currentLevel.map(function(dir) {
+          return fetch('/api/clawmate/list?root=' + encodeURIComponent(rootId) + '&dir=' + encodeURIComponent(dir) + '&limit=1000')
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .catch(function() { return null; });
+        }));
+        var nextLevel = [];
+        for (var j = 0; j < results.length; j++) {
+          if (!results[j]) continue;
+          var subDirs = filterDirs(results[j].entries || []);
+          allDirs = allDirs.concat(subDirs);
+          nextLevel = nextLevel.concat(subDirs);
+        }
+        currentLevel = nextLevel;
+      }
+
+      renderDirTree(tree, allDirs, rootDirName);
+      if (skippedCount > 0) {
+        var note = document.createElement('div');
+        note.style.cssText = 'text-align:center;color:var(--text-muted);font-size:11px;padding:6px 0 2px;';
+        note.textContent = '已跳过 ' + skippedCount + ' 个隐藏/缓存目录';
+        tree.appendChild(note);
+      }
+    } catch (e) {
+      tree.innerHTML = '<div style="text-align:center;color:var(--danger);padding:20px;">加载目录失败: ' + escHtml(e.message) + '</div>';
+    }
+  }
+
+  function renderDirTree(container, dirs, rootDirName) {
+    if (dirs.length === 0) {
+      container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;">没有可用的子目录</div>';
+      return;
+    }
+
+    // Sort dirs by depth, then alphabetically
+    dirs.sort(function(a, b) {
+      var depthA = (a.match(/\//g) || []).length;
+      var depthB = (b.match(/\//g) || []).length;
+      if (depthA !== depthB) return depthA - depthB;
+      return a.localeCompare(b);
+    });
+
+    // Build a tree structure
+    var treeData = {};
+    for (var i = 0; i < dirs.length; i++) {
+      var parts = dirs[i].split('/');
+      var current = treeData;
+      for (var j = 0; j < parts.length; j++) {
+        if (!current[parts[j]]) current[parts[j]] = {};
+        current = current[parts[j]];
+      }
+    }
+
+    var html = '';
+    // SVG icon template
+    var folderSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;flex-shrink:0;"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>';
+
+    var rootLabel = rootDirName || rootId || '';
+    // Root entry
+    html += '<div class="dir-picker-item" data-dir="" style="display:flex;align-items:center;padding:4px 8px;cursor:pointer;border-radius:4px;margin:1px 0;' + (dirPickerSelectedDir === '' ? 'background:var(--accent);color:#fff;' : '') + '">';
+    html += folderSvg;
+    html += '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(rootLabel) + ' (根目录)</span>';
+    html += '</div>';
+
+    function renderTreeLevel(obj, prefix, depth) {
+      var keys = Object.keys(obj).sort();
+      for (var k = 0; k < keys.length; k++) {
+        var fullPath = prefix ? prefix + '/' + keys[k] : keys[k];
+        var isSelected = dirPickerSelectedDir === fullPath;
+        html += '<div class="dir-picker-item" data-dir="' + escHtml(fullPath) + '" style="display:flex;align-items:center;padding:4px 8px 4px ' + (8 + depth * 16) + 'px;cursor:pointer;border-radius:4px;margin:1px 0;' + (isSelected ? 'background:var(--accent);color:#fff;' : '') + '">';
+        html += folderSvg;
+        html += '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(keys[k]) + '</span>';
+        html += '</div>';
+        if (obj[keys[k]]) {
+          renderTreeLevel(obj[keys[k]], fullPath, depth + 1);
+        }
+      }
+    }
+
+    renderTreeLevel(treeData, '', 1);
+    container.innerHTML = html;
+
+    // Event delegation for clicking on directory items
+    container.onclick = function(e) {
+      var item = e.target.closest('.dir-picker-item');
+      if (!item) return;
+      var dir = item.getAttribute('data-dir');
+      dirPickerSelectedDir = dir;
+      // Update selection style
+      var items = container.querySelectorAll('.dir-picker-item');
+      for (var i = 0; i < items.length; i++) {
+        items[i].style.background = '';
+        items[i].style.color = '';
+      }
+      item.style.background = 'var(--accent)';
+      item.style.color = '#fff';
+      // Update footer label
+      var selEl = document.getElementById('dirPickerSelected');
+      if (selEl) selEl.textContent = dir || rootLabel + ' (根目录)';
+    };
+  }
+
+  initDirPicker();
+
+  // ============ Move Button ============
+  document.getElementById('btnMove').addEventListener('click', function() {
+    openDirPicker('move', '移动 "' + fileName + '" 到...');
+    dirPickerCallback = async function(destDir) {
+      if (destDir === parentDir) {
+        showToast('文件已在目标目录中', 2000);
+        return;
+      }
+      try {
+        var res = await fetch('/api/clawmate/move', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ root: rootId, path: filePath, destDir: destDir }),
+        });
+        var data = await res.json();
+        if (data.ok) {
+          showToast('✅ 已移动到 ' + (destDir || '根目录'), 2000);
+          var destForUrl = destDir ? destDir + '/' + data.newName : data.newName;
+          var newUrl = 'preview.html?root=' + encodeURIComponent(rootId) + '&file=' + encodeURIComponent(destForUrl);
+          setTimeout(function() { window.location.href = newUrl; }, 800);
+        } else {
+          showToast('❌ 移动失败: ' + (data.detail || '未知错误'), 3000);
+        }
+      } catch (e) {
+        showToast('❌ 移动失败: ' + e.message, 3000);
+      }
+    };
+  });
+
+  // ============ Extract Button ============
+  var btnExtract = document.getElementById('btnExtract');
+  // Only show extract button for archive files
+  if (isArchiveMode) {
+    btnExtract.style.display = '';
+  } else {
+    btnExtract.style.display = 'none';
+  }
+
+  btnExtract.addEventListener('click', function() {
+    openDirPicker('extract', '解压 "' + fileName + '" 到...');
+    dirPickerCallback = async function(destDir) {
+      try {
+        var res = await fetch('/api/clawmate/extract', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ root: rootId, path: filePath, destDir: destDir }),
+        });
+        var data = await res.json();
+        if (data.ok) {
+          showToast('✅ 解压完成，共 ' + data.count + ' 个文件', 3000);
+          // Redirect to the destination directory
+          var backUrl = '/clawmate/?root=' + encodeURIComponent(rootId) + '&dir=' + encodeURIComponent(destDir);
+          setTimeout(function() { window.location.href = backUrl; }, 800);
+        } else {
+          showToast('❌ 解压失败: ' + (data.detail || '未知错误'), 4000);
+        }
+      } catch (e) {
+        showToast('❌ 解压失败: ' + e.message, 3000);
+      }
+    };
   });
 
   document.getElementById('btnDownload').addEventListener('click', () => {

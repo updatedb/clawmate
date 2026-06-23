@@ -1,5 +1,5 @@
 """
-Feedback API — 标准 feedback.json 增删改查 + 实时唤醒 + cron-tick。
+Feedback API — 标准 .feedback.json 增删改查 + 实时唤醒 + cron-tick。
 
 v1.26: 内部改用 store.* + config.load()，删除全部散装工具函数。
 
@@ -57,7 +57,7 @@ async def feedback_list(
     file: str = Query("", description="文件名模糊匹配"),
     since: str = Query("", description="today 或 YYYY-MM-DD"),
 ):
-    """列出 feedback.json 中的条目。
+    """列出 .feedback.json 中的条目。
 
     两种模式:
     - project 指定: 单项目查询
@@ -118,7 +118,7 @@ async def feedback_list(
             if not entry.is_dir():
                 continue
             proj = entry.name
-            fb_path = entry / "feedback.json"
+            fb_path = entry / ".feedback.json"
             if not fb_path.exists():
                 continue
             try:
@@ -173,7 +173,7 @@ async def feedback_update(request: Request):
     try:
         item = update_item(root_id, project, feedback_id, new_status, result=result_text)
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="feedback.json not found")
+        raise HTTPException(status_code=404, detail=".feedback.json not found")
     except LookupError:
         raise HTTPException(status_code=404, detail=f"Item {feedback_id} not found")
     except ValueError as e:

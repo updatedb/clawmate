@@ -1,5 +1,5 @@
 """
-FeedbackStore — feedback.json CRUD 纯函数集，无状态。
+FeedbackStore — .feedback.json CRUD 纯函数集，无状态。
 
 所有写操作原子化（tmp + os.replace），读不缓存。
 所有函数写 journalctl INFO 日志。
@@ -29,7 +29,7 @@ if not logger.handlers:
 CST = timezone(timedelta(hours=8))
 
 # ── 并发写保护 ─────────────────────────────────────────────────────
-# 所有读-改-写操作共用此锁，防止并发请求导致 feedback.json 数据丢失。
+# 所有读-改-写操作共用此锁，防止并发请求导致 .feedback.json 数据丢失。
 _feedback_write_lock = threading.Lock()
 
 # ── 读缓存 ─────────────────────────────────────────────────────────
@@ -43,22 +43,22 @@ _CACHE_MAX_ENTRIES = 256  # 安全上限，超过则 LRU 淘汰最旧条目
 # ── 读 ─────────────────────────────────────────────────────────
 
 def _get_feedback_path(root_id: str, project: str) -> Path:
-    """构造 feedback.json 完整路径。
+    """构造 .feedback.json 完整路径。
 
-    root_id+project 目录存在 → 返回其下 feedback.json
+    root_id+project 目录存在 → 返回其下 .feedback.json
     root_id+project 目录不存在 → 回退到 root 目录 + 记录错误日志
     """
     cfg = load_config()
     root_dir = cfg.root_dir(root_id)
     project_dir = root_dir / project
     if project_dir.is_dir():
-        return project_dir / "feedback.json"
+        return project_dir / ".feedback.json"
     logger.warning("[feedback] project dir not found, fallback to root: root=%s project=%s", root_id, project)
-    return root_dir / "feedback.json"
+    return root_dir / ".feedback.json"
 
 
 def _read_feedback(path: Path) -> dict:
-    """读取 feedback.json，优先命中内存缓存（基于 mtime_ns 校验）。"""
+    """读取 .feedback.json，优先命中内存缓存（基于 mtime_ns 校验）。"""
     cache_key = str(path)
     _now_ns = path.stat().st_mtime_ns if path.exists() else 0
 
@@ -326,7 +326,7 @@ def update_item(
 
     Raises:
         ValueError: new_status 不合法
-        FileNotFoundError: feedback.json 不存在
+        FileNotFoundError: .feedback.json 不存在
         LookupError: item_id 不存在
     """
     with _feedback_write_lock:
@@ -345,7 +345,7 @@ def _update_item_locked(
 
     path = _get_feedback_path(root_id, project)
     if not path.exists():
-        raise FileNotFoundError(f"feedback.json not found: {path}")
+        raise FileNotFoundError(f".feedback.json not found: {path}")
 
     data = _read_feedback(path)
     items = list(data.get("items", []))
@@ -386,7 +386,7 @@ class ScanResult:
 
 def scan_all() -> ScanResult:
     """
-    扫描所有 root 下所有 project 的 feedback.json。
+    扫描所有 root 下所有 project 的 .feedback.json。
     不抛异常（错误收集到 return.errors）。
     """
     result = ScanResult()
@@ -404,7 +404,7 @@ def scan_all() -> ScanResult:
             for entry in root_dir.iterdir():
                 if not entry.is_dir():
                     continue
-                fb_path = entry / "feedback.json"
+                fb_path = entry / ".feedback.json"
                 if not fb_path.exists():
                     continue
                 result.checked_roots += 1
@@ -466,7 +466,7 @@ def _cleanup_expired(items: list[dict]) -> list[dict]:
 # ── 内部工具 ───────────────────────────────────────────────────────
 
 def _atomic_write(path: Path, root_id: str, project: str, items: list, last_id: int) -> None:
-    """原子写 feedback.json（tmp + os.replace），写入前清理过期条目。"""
+    """原子写 .feedback.json（tmp + os.replace），写入前清理过期条目。"""
     # 清理过期 done/failed/deleted
     items = _cleanup_expired(items)
 
@@ -478,7 +478,7 @@ def _atomic_write(path: Path, root_id: str, project: str, items: list, last_id: 
         "last_id": last_id,
         "items": items,
     }
-    tmp_path = path.with_suffix(".feedback.json.tmp")
+    tmp_path = path.with_name(path.name + ".tmp")
     with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     os.replace(tmp_path, path)

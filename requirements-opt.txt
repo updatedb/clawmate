@@ -1,3 +1,9 @@
 # Optional: subtitle extraction (ML model ~2GB)
 # pip install -r requirements-opt.txt
 faster-whisper>=1.0.0
+
+# Optional: archive preview (RAR/7z formats)
+# RAR support — requires system `unrar` binary: sudo apt install unrar
+rarfile>=4.1
+# 7z support — pure Python
+py7zr>=0.21

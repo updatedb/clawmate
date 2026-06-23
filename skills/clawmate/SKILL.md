@@ -696,7 +696,7 @@ clawmate do FD-CM-042
 该接口逐条处理：读取 feedback → 执行变更 → 标记 done/failed。
 
 **硬约束**：
-- ⚠️ 禁止直接 read feedback.json，必须通过 API 获取结构化数据
+- ⚠️ 禁止直接 read .feedback.json，必须通过 API 获取结构化数据
 - ⚠️ API 返回的 `item.content` 是选区原文（已解析），`item.note` 是用户备注
 
 ---

@@ -16,6 +16,7 @@
   global.OFFICE_EXTS = ['doc','docx','xls','xlsx','ppt','pptx','odt','ods','odp'];
   global.PDF_EXT = 'pdf';
   global.CODE_EXTS = ['py','js','ts','tsx','jsx','html','css','scss','less','sh','bash','zsh','fish','bat','ps1','sql','go','rs','rb','php','c','cpp','h','hpp','java','swift','kt','dart','scala','vue','svelte','astro','ejs','hbs','r','lua','pl','pm','hs'];
+  global.ARCHIVE_EXTS = ['zip','rar','tar','gz','tgz','bz2','tbz2','xz','txz','7z'];
 
   // ── HTML 工具 ──────────────────────────────────────────────────
   global.escHtml = function(str) {

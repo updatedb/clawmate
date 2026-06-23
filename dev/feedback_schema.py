@@ -1,7 +1,7 @@
 """
 Feedback Schema — 标准数据结构定义。
 
-feedback.json 是唯一权威存储，所有 API 层直接透传字段，
+.feedback.json 是唯一权威存储，所有 API 层直接透传字段，
 不做重命名翻译。
 
 Usage:
@@ -19,12 +19,12 @@ from __future__ import annotations
 
 from typing import TypedDict
 
-# ── 标准字段名（feedback.json 唯一权威）────────────────────────────
+# ── 标准字段名（.feedback.json 唯一权威）────────────────────────────
 
 # 顶层字段
 FEEDBACK_TOP_FIELDS = ("root", "project", "updated", "last_id", "items")
 
-# item 级字段（API 响应、cron 模板、feedback.json 全部统一）
+# item 级字段（API 响应、cron 模板、.feedback.json 全部统一）
 FEEDBACK_ITEM_FIELDS = (
     "id",       # FD-{abbr}-{NNNN}
     "status",   # pending | in_progress | done | failed

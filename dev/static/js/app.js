@@ -805,19 +805,20 @@ function renderBreadcrumbs() {
     els.currentPath.classList.add("breadcrumb");
     renderBreadcrumbContainer(els.currentPath);
   }
-  // Add "复制" link after breadcrumb
+  // Add "复制目录" link after breadcrumb
   var container = els.currentPath || els.breadcrumb;
   if (!container) return;
   var existing = container.querySelector('.breadcrumb-copy');
   if (existing) existing.remove();
   var copyLink = document.createElement('a');
   copyLink.className = 'breadcrumb-copy';
-  copyLink.textContent = '复制';
+  copyLink.textContent = '复制目录';
   copyLink.href = '#';
   copyLink.addEventListener('click', function (e) {
     e.preventDefault();
-    var path = state.dir || '';
-    copyText(path || state.rootLabel || '');
+    var root = getRootById(state.rootId);
+    var absPath = root ? (root.dir + (state.dir ? '/' + state.dir : '')) : (state.dir || '');
+    copyText(absPath || state.rootLabel || '');
   });
   container.appendChild(copyLink);
 }
@@ -1328,9 +1329,10 @@ function renderList(markdownEntries, folderEntries, otherEntries) {
 // Cache breadcrumb/sidebar between renders (only rebuild on dir change)
 var _lastRenderedDir = null;
 function render() {
-  var dirChanged = _lastRenderedDir !== state.dir;
+  var currentKey = state.rootId + ':' + state.dir;
+  var dirChanged = _lastRenderedDir !== currentKey;
   if (dirChanged) {
-    _lastRenderedDir = state.dir;
+    _lastRenderedDir = currentKey;
     renderBreadcrumbs();
     renderDirs();
   }
@@ -1703,6 +1705,7 @@ function setView(view) {
     els.viewGrid.classList.remove("active");
     els.viewList.classList.add("active");
   }
+  render();
 }
 
 function setFilterType(value) {
