@@ -415,7 +415,7 @@ openclaw gateway restart
 | `/clawmate link <filename>` | 搜索文件并生成可点击预览链接 |
 | `/clawmate init [root] <project>` | 项目初始化与前期梳理（Phase I-V） |
 | `/clawmate plan [root] <project>` | 规划/更新分层项目计划（CLAWLIST） |
-| `/clawmate list [agent_id]` | 列出指定 agent 下所有项目 |
+| `/clawmate list [root_id]` | 列出指定 root 下所有项目 |
 | `/clawmate feed [status] [filename] [date]` | 查询 feedback 列表 |
 | `/clawmate do [#ID]` | 通过自动修复引擎处理待处理反馈 |
 | `/clawmate project <projectname>` | 为项目切换会话上下文，开始工作 |
