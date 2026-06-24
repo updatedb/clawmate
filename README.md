@@ -118,8 +118,18 @@ pending → in_progress → done / failed
 
 ## 核心能力
 
-### 🔍 预览引擎
-支持 10+ 种文件类型，点击即渲染，无需下载：
+### 🏗️ 项目管理
+
+围绕 AI Agent 工作流设计的项目全生命周期管理：
+
+- **`/clawmate init`** — 一键初始化标准项目结构（CLAWLIST + PROJECT_NOTE + research/prd/dev/test）
+- **`/clawmate plan`** — 五阶段分层计划（需求澄清→信息收集→MRD→PRD），懒加载+归档防过期
+- **`/clawmate project`** — 秒级切换会话上下文，Agent 自动读取项目状态
+- `.clawmate/` marker 自动识别项目边界，实现 session 隔离和多项目并行
+
+### 🔍 全格式预览
+
+点击即渲染，无需下载：
 
 | 类型 | 能力 |
 |------|------|
@@ -128,14 +138,14 @@ pending → in_progress → done / failed
 | Office 文档 | ONLYOFFICE 嵌入预览（编辑/只读） |
 | PDF | pdf.js 预览 |
 | 压缩包 | zip / tar / 7z / rar 树形展开 |
-| 代码文件 | py / js / ts / css / go / rs 等，语法高亮 + 大纲 |
+| 代码文件 | 12 种语言语法高亮 + 函数/类大纲索引 |
 | JSON | pretty-print 格式化 |
 | 图片 | ‹ › 导航切换 |
 | 音视频 | 内嵌播放器 |
 
 ### 💬 反馈闭环 🔑 核心差异化
 
-ClawMate 与其他文件管理器最根本的区别：不只是预览文件，而是将用户的每一个反馈精确送达 Agent，形成闭环修改链路。
+不只是预览文件，而是将用户的每一个反馈精确送达 Agent，形成闭环修改链路。
 
 ```mermaid
 stateDiagram
@@ -152,27 +162,46 @@ stateDiagram
     failed --> [*]
 ```
 
-**关键流程**：
-1. 在预览页选中任意文本 → 浮动「反馈」按钮出现
-2. 点击按钮 → 填写备注 → 提交（可连续选中多个位置，统一提交）
+1. 预览页选中任意文本 → 浮动「反馈」按钮出现
+2. 填写备注提交（可连续选中多个位置，统一提交）
 3. 写入 `.clawmate/feedback.json` → 即时唤醒 Agent
 4. Agent 读取反馈 → 精确定位选区 → AI 理解备注 → 修改文件
-5. 状态流转：pending → in_progress → done / failed
+5. 四态流转（pending → in_progress → done/failed），全程可追溯
 
-**四态追踪**：每步状态可查，可追溯、可检索。
+### 🤖 内置 Agent 面板
+
+ClawMate 右侧面板直接运行 AI Agent，无需切换窗口：
+
+| 后端 | 模式 | 能力 |
+|------|------|------|
+| **Claude Code** | xterm.js 终端 | 完整 CLI 操作（Read/Write/Edit/Bash），60fps PTY 输出 |
+| **OpenClaw** | Markdown 聊天 | chat.send 协议，通过 Gateway 多 Agent 协作 |
+
+反馈任务可直接注入活跃终端处理，无需额外配置 webhook。`config.json` 一键切换后端。
 
 ### 📂 文件管理
-- 多项目白名单目录，root 切换面板
-- 类型过滤（文档/代码/数据/媒体/其他）+ 排序（时间/名称/大小）
-- 搜索、新建目录、重命名、移动、删除（含鉴权+审计日志）
-- 批量下载、拖拽上传、Ctrl+V 剪切板粘贴上传
-- 画廊/列表双视图，响应式布局
 
-### 🔗 Agent 融合
-- 提交 feedback 后通过 webhook 即时唤醒 Agent 处理
-- 支持多任务合并、冲突检查
-- Cron Job 定时兜底扫描，防止遗漏
-- Slash Commands：`/clawmate preview`、`/clawmate list`、`/clawmate link`、`/clawmate do`
+| 操作 | 能力 |
+|------|------|
+| 浏览 | 画廊/列表双视图，类型过滤 + 多字段排序 |
+| 搜索 | 递归搜索，彩色文件类型标签快速识别 |
+| 上传 | 拖拽上传 + Ctrl+V 剪切板粘贴图片 |
+| 组织 | 新建目录、重命名、移动、删除（鉴权+审计日志） |
+| 分享 | 24h 免登录分享链接，Markdown/Mermaid/代码/图片全格式支持 |
+
+### 🔗 Slash Commands
+
+在 OpenClaw 中通过斜杠命令直接操作 ClawMate：
+
+| 命令 | 用途 |
+|------|------|
+| `/clawmate link <filename>` | 搜索文件生成可点击预览链接 |
+| `/clawmate init [root] <project>` | 项目初始化（Phase I-V） |
+| `/clawmate plan [root] <project>` | 规划/更新项目计划 |
+| `/clawmate list [root_id]` | 列出 root 下所有项目 |
+| `/clawmate feed [status] [project]` | 查询 feedback 列表 |
+| `/clawmate do [#ID]` | 处理待处理反馈 |
+| `/clawmate project <projectname>` | 切换会话到指定项目 |
 
 ---
 
@@ -408,19 +437,7 @@ openclaw gateway restart
 
 若返回可点击预览链接，则安装成功。
 
-### Slash Commands
-
-| 命令 | 用途 |
-|------|------|
-| `/clawmate link <filename>` | 搜索文件并生成可点击预览链接 |
-| `/clawmate init [root] <project>` | 项目初始化与前期梳理（Phase I-V） |
-| `/clawmate plan [root] <project>` | 规划/更新分层项目计划（CLAWLIST） |
-| `/clawmate list [root_id]` | 列出指定 root 下所有项目 |
-| `/clawmate feed [status] [filename] [date]` | 查询 feedback 列表 |
-| `/clawmate do [#ID]` | 通过自动修复引擎处理待处理反馈 |
-| `/clawmate project <projectname>` | 为项目切换会话上下文，开始工作 |
-
-> 各命令的详细参数和示例见 `skills/clawmate/SKILL.md`。
+Slash Commands 详见上方 [核心能力 → Slash Commands](#-slash-commands)，完整参数参考 `skills/clawmate/SKILL.md`。
 
 ---
 
