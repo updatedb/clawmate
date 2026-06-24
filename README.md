@@ -17,7 +17,7 @@ ClawMate 是一个面向 AI Agent 工作流的**文件管理 → 预览发现问
 ## 为什么需要 ClawMate？
 
 在使用 OpenClaw 等 AI Agent 的过程中，会产生大量待发布的文稿、待实施的方案、以及大量的代码文件。
-通常 Openclaw 以摘要方式告知用户结果，但详细的文档必须要进行评审。传统的评审方式，你需要拷贝访问 → 修改内容复制粘贴 → 编写改进建议 → 与 Agent 交互澄清做计划，过程繁杂冗长且容易失真。
+通常 OpenClaw 以摘要方式告知用户结果，但详细的文档必须要进行评审。传统的评审方式，你需要拷贝访问 → 修改内容复制粘贴 → 编写改进建议 → 与 Agent 交互澄清做计划，过程繁杂冗长且容易失真。
 
 ClawMate 的解法是：
 
@@ -121,19 +121,17 @@ pending → in_progress → done / failed
 ### 🔍 预览引擎
 支持 10+ 种文件类型，点击即渲染，无需下载：
 
-| 类型 | 桌面端 | 移动端 |
-|------|:------:|:------:|
-| Markdown（Mermaid / KaTeX / 语法高亮） | ✅ | ✅ |
-| Mermaid 图表（支持 Ctrl+滚轮缩放 + 拖拽平移） | ✅ | ✅ |
-| Office 文档（ONLYOFFICE 嵌入预览） | ✅ | ✅ |
-| PDF | ✅（降级 pdf.js） | ✅（ONLYOFFICE） |
-| HTML 源码 | ✅ 渲染/源码切换 | ✅ 语法高亮 |
-| 代码文件：py/js/ts/css/go/rs 等 | ✅ 语法高亮 + 大纲 | ✅ 语法高亮 + 大纲 |
-| JSON | ✅ pretty-print | ✅ pretty-print |
-| 图片（支持 ‹ › 导航） | ✅ | ✅ |
-| 音视频（内嵌播放器） | ✅ | ✅ |
-| SRT 字幕（时间轴同步 + 编辑） | ✅ | ❌ |
-| GPX/KML 轨迹文件 | ✅ 纯文本 | ✅ 纯文本 |
+| 类型 | 能力 |
+|------|------|
+| Markdown | Mermaid / KaTeX / 语法高亮 |
+| Mermaid 图表 | Ctrl+滚轮缩放 + 拖拽平移 |
+| Office 文档 | ONLYOFFICE 嵌入预览（编辑/只读） |
+| PDF | pdf.js 预览 |
+| 压缩包 | zip / tar / 7z / rar 树形展开 |
+| 代码文件 | py / js / ts / css / go / rs 等，语法高亮 + 大纲 |
+| JSON | pretty-print 格式化 |
+| 图片 | ‹ › 导航切换 |
+| 音视频 | 内嵌播放器 |
 
 ### 💬 反馈闭环 🔑 核心差异化
 
@@ -157,7 +155,7 @@ stateDiagram
 **关键流程**：
 1. 在预览页选中任意文本 → 浮动「反馈」按钮出现
 2. 点击按钮 → 填写备注 → 提交（可连续选中多个位置，统一提交）
-3. 写入 `.feedback.json` → 即时唤醒 Agent
+3. 写入 `.clawmate/feedback.json` → 即时唤醒 Agent
 4. Agent 读取反馈 → 精确定位选区 → AI 理解备注 → 修改文件
 5. 状态流转：pending → in_progress → done / failed
 
@@ -166,15 +164,15 @@ stateDiagram
 ### 📂 文件管理
 - 多项目白名单目录，root 切换面板
 - 类型过滤（文档/代码/数据/媒体/其他）+ 排序（时间/名称/大小）
-- 搜索（桌面端递归搜索，移动端输入即搜）
-- 批量下载、拖拽上传、重命名、删除（含鉴权+审计日志）
-- **移动端响应式**：CSS 媒体查询自适应，触控优化
+- 搜索、新建目录、重命名、移动、删除（含鉴权+审计日志）
+- 批量下载、拖拽上传、Ctrl+V 剪切板粘贴上传
+- 画廊/列表双视图，响应式布局
 
-### 🔗 OpenClaw 融合
-- 提交 feedback 后即时通过 webhook 唤醒 OpenClaw Agent
-- 支持多任务合并、冲突检查、功能自扩展
-- ClawMate Cron Job 定时兜底扫描（每 6/24h），防止遗漏
-- Slash Commands：`/clawmate preview`、`/clawmate list`、`/clawmate do`
+### 🔗 Agent 融合
+- 提交 feedback 后通过 webhook 即时唤醒 Agent 处理
+- 支持多任务合并、冲突检查
+- Cron Job 定时兜底扫描，防止遗漏
+- Slash Commands：`/clawmate preview`、`/clawmate list`、`/clawmate link`、`/clawmate do`
 
 ---
 
@@ -209,7 +207,7 @@ npm install -g @anthropic-ai/claude-code
 claude login
 ```
 
-ClawMate 通过 Python `pty.spawn()` 启动 `claude --dangerously-skip-permissions`，工作目录自动设为当前浏览的 root 目录。终端输入直接转发到 Claude Code 进程。
+ClawMate 通过 Python `pty.spawn()` 启动 `claude`，工作目录自动设为当前浏览的 root 目录。
 
 `config.json` 中的 Claude 模式配置：
 
@@ -251,7 +249,6 @@ flowchart TB
     subgraph Browser["浏览器"]
         UI["index.html (含 Agent 面板)
 + preview.html + login.html"]
-        OO["onlyoffice.html (OO 嵌入)"]
     end
 
     subgraph Server["FastAPI Server (5533)"]
@@ -263,11 +260,9 @@ WebSocket 终端/聊天"]
         FEEDBACK["feedback_api
 反馈 CRUD"]
         TASK["task_runner
-自动修复 → PTY 注入"]
+任务执行"]
         AUTH["auth 登录认证"]
-        SUB["subtitle_routes"]
         SHARE["share_routes 分享"]
-        OOAPI["ONLYOFFICE proxy"]
     end
 
     subgraph Backend["Agent 后端"]
@@ -275,21 +270,16 @@ WebSocket 终端/聊天"]
         CLAUDE["Claude Code CLI
 PTY 终端"]
         OC_GW["OpenClaw Gateway
-(chat.send 协议)"]
+chat.send 协议"]
     end
 
     subgraph Storage["存储层"]
         FS["文件系统"]
-        FB_JSON[".feedback.json"]
-    end
-
-    subgraph External["外部服务"]
-        OODS["ONLYOFFICE
-Document Server"]
+        FB_JSON[".clawmate/
+feedback.json"]
     end
 
     UI --> STATIC
-    OO --> OOAPI
     Browser --> API
     Browser --> AGENT_WS
     AGENT_WS --> CLAUDE
@@ -298,40 +288,31 @@ Document Server"]
     API --> FEEDBACK
     API --> TASK
     API --> AUTH
-    API --> SUB
     API --> SHARE
-    API --> OOAPI
+    API --> FS
 
     FEEDBACK --> FB_JSON
     TASK --> FS
-    SUB --> FS
+    TASK --> AGENT_WS
     SHARE --> FS
-    API --> FS
-
-    FEEDBACK --> HOOK
-    HOOK --> AGENT
-    AGENT -->|修改文件| FS
-    CRON -.->|定时扫描| AGENT
 ```
 
-**模块说明**：
+**核心模块**：
 
 | 模块 | 功能 |
 |------|------|
 | `main.py` | FastAPI 应用入口 + 中间件 |
-| `routes.py` | 核心 API：文件 CRUD、搜索、预览、ONLYOFFICE 代理 |
+| `routes.py` | 文件 CRUD、搜索、预览、压缩包、移动、ONLYOFFICE |
 | `feedback_api.py` | 反馈闭环 CRUD + 状态流转 |
-| `task_runner.py` | 自动修复任务执行引擎 |
-| `auth.py` | Session 登录认证 |
-| `config.py` | 配置加载 |
-| `store.py` | 反馈存储引擎 |
-| `subtitle_routes.py` | SRT 字幕提取 API |
+| `agent_routes.py` | Agent WebSocket 终端（Claude Code PTY / OpenClaw 聊天） |
+| `task_runner.py` | 任务执行引擎 + cron 唤醒 |
+| `auth.py` | Session 认证 + local_hosts 白名单 |
+| `config.py` | 类型化配置加载 + TTL 缓存 |
+| `store.py` | 反馈存储引擎（纯函数接口） |
+| `service.py` | 核心服务函数（文件操作、搜索、压缩包） |
 | `share_routes.py` | 分享链接管理 |
 | `validators.py` | 路径安全校验 |
-| `constants.py` | 常量定义 |
-| `css/tokens.css` | 设计 Token（Teal 主题、间距、动效） |
-| `js/icons.js` | Lucide SVG 图标系统（31 个图标） |
-| `asset/` | Logo 及静态资源 |
+| `js/icons.js` | SVG 图标系统 + 彩色类型标签 |
 
 ---
 
@@ -397,58 +378,7 @@ sudo bash install.sh /opt/clawmate      # 安装到指定路径
 - **同主机 CLI**：`gateway_url: http://127.0.0.1:18789`
 - **跨主机**：`gateway_url: http://openclaw.lan:18789`
 
-#### 在 OpenClaw 中配置 `/hooks/agent` 入口
-
-ClawMate 通过 `POST {gateway_url}/hooks/agent` 向 OpenClaw 发送 webhook 唤醒 Agent 处理反馈。
-
-你需要在 OpenClaw 的 `openclaw.json` 中注册该 hook 路由：
-
-```json
-{
-  "hooks": {
-    "agent": {
-      "enabled": true,
-      "token": "",
-      "path": "/hooks",
-      "allowRequestSessionKey": false,
-      "allowedAgentIds": ["main"]
-    }
-  }
-}
-```
-
-> ⚠️ `token` 字段的值必须与 `config.json` 中 `openclaw.hook_token` 的值**完全一致**，否则 webhook 会被 OpenClaw 拒绝。
-
-`gateway_url` + `hook_token` 两者配合使用：
-- `openclaw.json` 中的 `hooks.agent.token` 定义入口鉴权
-- `config.json` 中的 `openclaw.hook_token` 提供调用凭证
-
-> 🔒 请勿将 `hook_token` 提交到公开仓库。生产环境建议通过环境变量 `CLAWMATE_HOOK_TOKEN` 注入。
-
-### 可选：字幕提取
-
-字幕功能需要额外的 ML 模型依赖（~2GB）。启用方式（二选一）：
-
-**config.json**：
-```json
-{
-  "feedback": {
-    "enable_subtitle": true,
-    "tags": [...]
-  }
-}
-```
-
-**docker-compose**：
-```yaml
-environment:
-  - CLAWMATE_ENABLE_SUBTITLE=1
-```
-
-安装依赖：
-```bash
-pip install faster-whisper
-```
+> ClawMate 通过 `POST {gateway_url}/hooks/agent` webhook 唤醒 Agent。需在 OpenClaw 的 `openclaw.json` 中注册 `hooks.agent` 条目（`token` 与 `config.json` 中 `hook_token` 一致）。请勿将 `hook_token` 提交到公开仓库。
 
 ---
 
@@ -512,23 +442,24 @@ openclaw gateway restart
   "port": 5533,
   "public_base_url": "http://clawmate.lan:5533",
   "max_upload_mb": 100,
-  "feedback": {
-    "enable_subtitle": false
-  },
-  "openclaw": {
-    "gateway_url": "http://openclaw.lan:18789",
-    "hook_token": ""
-  },
-  "onlyoffice": {
-    "api_js_url": "http://onlyoffice.lan/web-apps/apps/api/documents/api.js",
-    "jwt_secret": "change-me-in-production",
-    "mode": "edit",
-    "callback_url": "https://clawmate.lan:5533/api/clawmate/onlyoffice/callback"
+  "agent": {
+    "backend": "claude",
+    "openclaw_ws_url": "ws://127.0.0.1:18789",
+    "openclaw_token": ""
   },
   "auth": {
     "username": "admin",
     "password_hash": "",
-    "session_ttl_minutes": 480
+    "session_ttl_minutes": 480,
+    "local_hosts": ["clawmate.lan"]
+  },
+  "feedback": {
+    "enable_subtitle": false,
+    "tags": ["fix", "improve", "question", "bug"]
+  },
+  "openclaw": {
+    "gateway_url": "http://openclaw.lan:18789",
+    "hook_token": ""
   }
 }
 ```
@@ -569,10 +500,7 @@ python3 -c "import bcrypt; print(bcrypt.hashpw(b'你的密码', bcrypt.gensalt()
 }
 ```
 
-启用认证后，所有外部访问需要先登录。`127.0.0.1` 本地访问自动绕过认证。
-
----
-
+启用认证后，所有外部访问需要先登录。`127.0.0.1` 及 `auth.local_hosts` 中的主机名/IP 自动绕过认证。
 
 ---
 
