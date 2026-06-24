@@ -118,7 +118,7 @@ async def feedback_list(
             if not entry.is_dir():
                 continue
             proj = entry.name
-            fb_path = entry / ".feedback.json"
+            fb_path = entry / ".clawmate" / "feedback.json"
             if not fb_path.exists():
                 continue
             try:

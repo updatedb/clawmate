@@ -724,6 +724,158 @@
     return true;
   }
 
+  // ============ PDF Outline (via pdf.js getOutline API) ============
+
+  /** Fetch PDF outline via pdf.js, render in left sidebar.
+   *  Falls back to page-number list when no outline exists. */
+  async function fetchPdfOutline(rawUrl) {
+    var tocBody = document.getElementById('tocBody');
+    if (typeof pdfjsLib === 'undefined') {
+      tocBody.innerHTML = '<div class="preview-toc-empty">PDF.js 未加载</div>';
+      return;
+    }
+    try {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '/clawmate/pdfjs/pdf.worker.min.js';
+      var pdf = await pdfjsLib.getDocument(rawUrl).promise;
+      var outline = await pdf.getOutline();
+      if (!outline || outline.length === 0) {
+        // Fallback: show page number list
+        renderPdfPageList(pdf.numPages);
+        return;
+      }
+      renderPdfOutline(outline, pdf);
+    } catch (e) {
+      console.warn('[pdf-outline] Failed to fetch outline:', e);
+      // Fallback: try to at least show page list if we got the PDF object
+      tocBody.innerHTML = '<div class="preview-toc-empty">无法读取 PDF 大纲</div>';
+    }
+  }
+
+  /** Render a page-number list as TOC fallback when PDF has no outline */
+  function renderPdfPageList(numPages) {
+    var tocBody = document.getElementById('tocBody');
+    var list = document.createElement('ul');
+    list.className = 'preview-toc-list';
+    for (var i = 1; i <= numPages; i++) {
+      var li = document.createElement('li');
+      li.className = 'preview-toc-item toc-h1';
+      var a = document.createElement('a');
+      a.href = '#';
+      a.textContent = '第 ' + i + ' 页';
+      a.style.paddingLeft = '16px';
+      (function(p) {
+        a.addEventListener('click', function(e) {
+          e.preventDefault();
+          if (window.innerWidth < 768) {
+            leftSidebar.classList.add('hidden');
+            btnToggleLeft.classList.remove('active');
+            updateGridColumns();
+          }
+          scrollPdfToPage(p);
+        });
+      })(i);
+      li.appendChild(a);
+      list.appendChild(li);
+    }
+    tocBody.innerHTML = '';
+    tocBody.appendChild(list);
+    // Show left sidebar on desktop
+    if (window.innerWidth >= 768) {
+      leftSidebar.classList.remove('hidden');
+      btnToggleLeft.classList.add('active');
+      updateGridColumns();
+    }
+  }
+
+  /** Render hierarchical PDF outline into #tocBody */
+  function renderPdfOutline(outline, pdf) {
+    var tocBody = document.getElementById('tocBody');
+    var list = document.createElement('ul');
+    list.className = 'preview-toc-list';
+
+    function addItems(items, parentList, depth) {
+      items.forEach(function(item) {
+        var li = document.createElement('li');
+        li.className = 'preview-toc-item';
+        if (depth === 0) li.classList.add('toc-h1');
+
+        var a = document.createElement('a');
+        a.href = '#';
+        a.textContent = item.title || '(无标题)';
+        a.title = item.title || '';
+        // Indent: h1=16px, h2=28px, h3=40px, h4=52px per CSS
+        var pad = 16 + depth * 12;
+        a.style.paddingLeft = pad + 'px';
+        if (depth >= 3) { a.style.fontSize = '12px'; a.style.color = 'var(--text-secondary)'; }
+
+        a.addEventListener('click', function(e) {
+          e.preventDefault();
+          // On mobile, close sidebar after click
+          if (window.innerWidth < 768) {
+            leftSidebar.classList.add('hidden');
+            btnToggleLeft.classList.remove('active');
+            updateGridColumns();
+          }
+          // Resolve destination → page number
+          resolveAndScroll(item.dest, pdf);
+        });
+
+        li.appendChild(a);
+        parentList.appendChild(li);
+
+        if (item.items && item.items.length > 0) {
+          addItems(item.items, parentList, depth + 1);
+        }
+      });
+    }
+
+    addItems(outline, list, 0);
+    tocBody.innerHTML = '';
+    tocBody.appendChild(list);
+
+    // Show left sidebar on desktop when outline is available
+    if (window.innerWidth >= 768) {
+      leftSidebar.classList.remove('hidden');
+      btnToggleLeft.classList.add('active');
+      updateGridColumns();
+    }
+  }
+
+  /** Resolve a PDF destination (named or explicit) to a page index, then scroll */
+  async function resolveAndScroll(dest, pdf) {
+    try {
+      var explicit = await pdf.getDestination(dest);
+      if (explicit) {
+        // explicit is typically [pageRef, {name:'XYZ', ...}]
+        var pageRef = Array.isArray(explicit) ? explicit[0] : explicit;
+        var pageIndex;
+        if (typeof pageRef === 'number') {
+          pageIndex = pageRef;
+        } else {
+          // pageRef is a Ref object — get the page index
+          pageIndex = await pdf.getPageIndex(pageRef);
+        }
+        scrollPdfToPage((typeof pageIndex === 'number' ? pageIndex : 0) + 1);
+        return;
+      }
+    } catch (_) {}
+    // Fallback: try as named destination string
+    try {
+      if (typeof dest === 'string') {
+        var pageIndex = await pdf.getPageIndex(dest);
+        scrollPdfToPage(pageIndex + 1);
+      }
+    } catch (_) {}
+  }
+
+  /** Post scroll-to-page message to pdf.js iframe */
+  function scrollPdfToPage(pageNum) {
+    var iframe = document.getElementById('officeIframe');
+    if (iframe && iframe.contentWindow) {
+      iframe.contentWindow.postMessage({ type: 'scroll-to-page', page: pageNum }, '*');
+    }
+  }
+
   // ============ Source Edit Mode (Markdown / HTML raw) ============
   let isPlainTextEditMode = false;
   let sourceDirty = false;
@@ -1038,6 +1190,14 @@
       clearHL(); hideTooltip();
       _stopSidebarRefresh();
     } else {
+      // Mutual exclusion: close agent panel when opening feedback
+      if (agentPanel && !agentPanel.classList.contains('hidden')) {
+        agentPanel.classList.add('hidden');
+        var agentBtn = document.getElementById('btnToggleAgent');
+        if (agentBtn) agentBtn.classList.remove('active');
+        if (window.Agent) { window.Agent.close(); }
+        updateGridColumns();
+      }
       // Opening sidebar — start auto-refresh and do an immediate load
       _startSidebarRefresh();
       reloadCurrentFeedback();
@@ -1061,6 +1221,7 @@
 
   // ============ Raw Markdown Content (for accurate line number calculation) ============
   let rawContent = '';
+  var _skipFeedbackLoad = false;
 
   // ============ Load & Render Content ============
   async function loadContent() {
@@ -1125,7 +1286,7 @@
         removeLoading();
         setupMediaToolbar();
         renderImageFeedbackPanel();
-        loadCompletedFeedback();
+        if (!_skipFeedbackLoad) loadCompletedFeedback();
 
         function renderImgNav() {
           const hasPrev = nav.prev;
@@ -1169,7 +1330,7 @@
       if (isVideoMode) {
         setupMediaMode('video');
         removeLoading();
-        loadCompletedFeedback();
+        if (!_skipFeedbackLoad) loadCompletedFeedback();
         return;
       }
 
@@ -1185,13 +1346,13 @@
         if (ct.startsWith('video/') || isVideoMode) {
           setupMediaMode('video');
           removeLoading();
-          loadCompletedFeedback();
+          if (!_skipFeedbackLoad) loadCompletedFeedback();
           return;
         }
         if (ct.startsWith('audio/') || isAudioMode) {
           setupMediaMode('audio');
           removeLoading();
-          loadCompletedFeedback();
+          if (!_skipFeedbackLoad) loadCompletedFeedback();
           return;
         }
         // Fallback for unknown binary
@@ -1282,7 +1443,8 @@
         removeLoading();
 
         setupOfficePdfToolbar();
-        loadOfficePdfCompletedFeedback();
+        if (!_skipFeedbackLoad) loadOfficePdfCompletedFeedback();
+        fetchPdfOutline(rawUrl);
         return;
       }
 
@@ -1303,7 +1465,7 @@
         removeLoading();
 
         setupOfficePdfToolbar();
-        loadOfficePdfCompletedFeedback();
+        if (!_skipFeedbackLoad) loadOfficePdfCompletedFeedback();
         return;
       }
 
@@ -1408,7 +1570,7 @@
         try { await renderMermaid(mdDiv, mermaidStore); } catch (e) { console.error('[ClawMate] renderMermaid threw:', e); }
         removeLoading();
         updateMarkdownDynamicButtons();
-        loadCompletedFeedback();
+        if (!_skipFeedbackLoad) loadCompletedFeedback();
         return;
       }
 
@@ -1469,7 +1631,7 @@
 
         removeLoading();
         updateMarkdownDynamicButtons();
-        loadCompletedFeedback();
+        if (!_skipFeedbackLoad) loadCompletedFeedback();
         return;
       }
 
@@ -1536,7 +1698,7 @@
         }
 
       // Load completed feedback items from API
-      loadCompletedFeedback();
+      if (!_skipFeedbackLoad) loadCompletedFeedback();
 
     } catch (e) {
       const loadingEl3 = document.querySelector('.preview-loading');
@@ -1548,6 +1710,7 @@
   // ============ Sidebar Toggle (Grid Adaptive) ============
   const leftSidebar = document.getElementById('leftSidebar');
   const rightSidebar = document.getElementById('rightSidebar');
+  const agentPanel = document.getElementById('previewAgentPanel');
   const threeCol = document.querySelector('.preview-three-col');
 
   // Topbar outline toggle button (must be after sidebar declarations)
@@ -1564,20 +1727,23 @@
 
   // --- Right panel resize ---
   const resizeHandle = document.getElementById('previewResizeHandle');
-  let rightPanelWidth = 380; // default 380px
+  let rightPanelWidth = 380;   // feedback panel default
+  let agentPanelWidth = Math.min(Math.floor(window.innerWidth * 0.45), 700); // agent panel default
   let dragStartX = 0;
   let dragStartWidth = 0;
 
   function updateGridColumns() {
     const lHidden = leftSidebar.classList.contains('hidden');
     const rHidden = rightSidebar.classList.contains('hidden');
+    const agentHidden = agentPanel ? agentPanel.classList.contains('hidden') : true;
     const lW = lHidden ? '0px' : '240px';
-    if (rHidden) {
+    if (rHidden && agentHidden) {
       threeCol.style.gridTemplateColumns = `${lW} 1fr 0px 0px`;
       if (resizeHandle) resizeHandle.classList.add('hidden');
     } else {
       if (resizeHandle) resizeHandle.classList.remove('hidden');
-      threeCol.style.gridTemplateColumns = `${lW} 1fr 5px ${rightPanelWidth}px`;
+      var panelW = !agentHidden ? agentPanelWidth : rightPanelWidth;
+      threeCol.style.gridTemplateColumns = `${lW} 1fr 5px ${panelW}px`;
     }
   }
 
@@ -1585,7 +1751,9 @@
     resizeHandle.addEventListener('mousedown', function (e) {
       e.preventDefault();
       dragStartX = e.clientX;
-      dragStartWidth = rightPanelWidth;
+      // Track which panel is open — set drag width accordingly
+      var agentOpen = agentPanel && !agentPanel.classList.contains('hidden');
+      dragStartWidth = agentOpen ? agentPanelWidth : rightPanelWidth;
       resizeHandle.classList.add('active');
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
@@ -1595,10 +1763,16 @@
 
     function onResizeMove(e) {
       const delta = dragStartX - e.clientX;
-      rightPanelWidth = Math.max(260, Math.min(700, dragStartWidth + delta));
+      var newWidth = Math.max(260, Math.min(800, dragStartWidth + delta));
+      var agentOpen = agentPanel && !agentPanel.classList.contains('hidden');
+      if (agentOpen) {
+        agentPanelWidth = newWidth;
+      } else {
+        rightPanelWidth = newWidth;
+      }
       threeCol.style.gridTemplateColumns =
         (leftSidebar.classList.contains('hidden') ? '0px' : '240px') +
-        ' 1fr 5px ' + rightPanelWidth + 'px';
+        ' 1fr 5px ' + newWidth + 'px';
     }
 
     function onResizeUp() {
@@ -1697,7 +1871,7 @@
     autoLoadSrt();
 
     // Set up media feedback panel
-    loadMediaCompletedFeedback();
+    if (!_skipFeedbackLoad) loadMediaCompletedFeedback();
 
     // Wire subtitle timeupdate
     mediaEl.addEventListener('timeupdate', onMediaTimeUpdate);
@@ -2695,6 +2869,32 @@
       showToast('无法获取路径', 2000);
     }
   });
+
+  // Copy filename button next to docTitle
+  var btnCopyFilename = document.getElementById('btnCopyFilename');
+  if (btnCopyFilename) {
+    btnCopyFilename.addEventListener('click', async function () {
+      var name = fileName || '未命名';
+      await copyText(name, '✅ 文件名已复制');
+      btnCopyFilename.classList.add('copied');
+      setTimeout(function () { btnCopyFilename.classList.remove('copied'); }, 1200);
+    });
+  }
+
+  // Refresh content + outline button (skips feedback & agent panel)
+  var btnRefreshContent = document.getElementById('btnRefreshContent');
+  if (btnRefreshContent) {
+    btnRefreshContent.addEventListener('click', async function () {
+      btnRefreshContent.classList.add('spinning');
+      _skipFeedbackLoad = true;
+      try {
+        await loadContent();
+      } finally {
+        _skipFeedbackLoad = false;
+        btnRefreshContent.classList.remove('spinning');
+      }
+    });
+  }
 
   /** Clear page title before print so browser header omits date/filename, restore after */
   function printWithoutHeaderFooter() {
@@ -4821,5 +5021,144 @@
       });
     }
   })();
+
+  // ============ Agent Overlay (preview page) ============
+  var _agentLibsLoaded = false;
+  var _agentLibsLoading = false;
+  var _agentConfig = { backend: 'claude', wsUrl: '', agentId: '' };
+
+  /** Fetch agent config from getRootsConfig cached data */
+  async function _fetchAgentConfig() {
+    try {
+      var cfg = await getRootsConfig();
+      if (cfg && cfg.agent) {
+        _agentConfig.backend = cfg.agent.backend || 'claude';
+        _agentConfig.wsUrl = cfg.agent.ws_url || '';
+      }
+      if (cfg && cfg.roots) {
+        for (var i = 0; i < cfg.roots.length; i++) {
+          if (cfg.roots[i].id === rootId) {
+            _agentConfig.agentId = cfg.roots[i].agent_id || '';
+            break;
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  /** Lazy-load xterm.js + addons + agent.js (only on first agent open) */
+  function _loadAgentLibs() {
+    return new Promise(function(resolve, reject) {
+      if (_agentLibsLoaded) { resolve(); return; }
+      if (_agentLibsLoading) {
+        var check = setInterval(function() {
+          if (_agentLibsLoaded) { clearInterval(check); resolve(); }
+        }, 100);
+        return;
+      }
+      _agentLibsLoading = true;
+
+      // xterm CSS
+      var cssLink = document.createElement('link');
+      cssLink.rel = 'stylesheet';
+      cssLink.href = 'https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css';
+      document.head.appendChild(cssLink);
+
+      var scripts = [
+        'https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js',
+        './vendor/addon-fit.min.js?v=20260622',
+        './vendor/addon-webgl.min.js?v=20260622',
+        './js/agent.js?v=20260624',
+      ];
+
+      function loadNext(idx) {
+        if (idx >= scripts.length) {
+          _agentLibsLoaded = true;
+          _agentLibsLoading = false;
+          resolve();
+          return;
+        }
+        var script = document.createElement('script');
+        script.src = scripts[idx];
+        script.onload = function() { loadNext(idx + 1); };
+        script.onerror = function() { reject(new Error('Failed to load: ' + scripts[idx])); };
+        document.head.appendChild(script);
+      }
+      loadNext(0);
+    });
+  }
+
+  // Agent toggle button
+  var btnToggleAgent = document.getElementById('btnToggleAgent');
+  if (btnToggleAgent) {
+    btnToggleAgent.addEventListener('click', function() {
+      if (!agentPanel) return;
+
+      var isOpen = !agentPanel.classList.contains('hidden');
+
+      if (!isOpen) {
+        // Mutual exclusion: close feedback sidebar when opening agent
+        if (rightSidebar && !rightSidebar.classList.contains('hidden')) {
+          rightSidebar.classList.add('hidden');
+          document.getElementById('btnToggleRight').classList.remove('active');
+          _stopSidebarRefresh();
+        }
+        // Opening — lazy-load libs then init Agent
+        _fetchAgentConfig().then(function() {
+          return _loadAgentLibs();
+        }).then(function() {
+          agentPanel.classList.remove('hidden');
+          btnToggleAgent.classList.add('active');
+          updateGridColumns();
+
+          if (window.Agent) {
+            // Use the directory of the previewed file as the agent working dir
+            var agentDir = filePath.includes('/') ? filePath.split('/').slice(0, -1).join('/') : '';
+            window.Agent.init({
+              domPrefix: 'preview',  // use #previewXtermContainer etc.
+              backend: _agentConfig.backend,
+              wsUrl: _agentConfig.wsUrl,
+              rootId: rootId,
+              dir: agentDir,
+              agentId: _agentConfig.agentId,
+            });
+            // Wrap Agent.close to sync preview grid columns
+            var _origClose = window.Agent.close;
+            window.Agent.close = function () {
+              _origClose.apply(this, arguments);
+              if (agentPanel) agentPanel.classList.add('hidden');
+              if (btnToggleAgent) btnToggleAgent.classList.remove('active');
+              updateGridColumns();
+            };
+            window.Agent.open(rootId, agentDir);
+          }
+        }).catch(function(err) {
+          console.error('[agent-panel] Failed to load:', err);
+          showToast && showToast('Agent 加载失败', 3000);
+        });
+      } else {
+        // Closing
+        agentPanel.classList.add('hidden');
+        btnToggleAgent.classList.remove('active');
+        updateGridColumns();
+        if (window.Agent) {
+          window.Agent.close();
+        }
+      }
+    });
+  }
+
+  // Close button inside agent panel (also handled by agent.js closeBtn handler after init)
+  var btnClosePreviewAgent = document.getElementById('previewBtnCloseAgent');
+  if (btnClosePreviewAgent) {
+    btnClosePreviewAgent.addEventListener('click', function() {
+      if (agentPanel) agentPanel.classList.add('hidden');
+      if (btnToggleAgent) btnToggleAgent.classList.remove('active');
+      updateGridColumns();
+      if (window.Agent) {
+        window.Agent.close();
+      }
+    });
+  }
 
 })();

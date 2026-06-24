@@ -20,13 +20,24 @@
     <header class="topbar">
       <a class="mobile-back-btn" id="btnBackMobile" href="" title="返回">←</a>
       <span class="brand"><img src="./asset/clawmate-logo.png" alt="" width="28" height="28" style="flex-shrink:0;" />ClawMate</span>
-      <span class="preview-topbar-title" id="docTitle">加载中...</span>
+      <span class="preview-topbar-title-wrap">
+        <span class="preview-topbar-title" id="docTitle">加载中...</span>
+        <button class="preview-copy-filename" id="btnCopyFilename" title="复制文件名">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+        </button>
+        <button class="preview-copy-filename" id="btnRefreshContent" title="刷新大纲和内容">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        </button>
+      </span>
       <div class="topbar-actions">
         <button class="topbar-btn" id="btnToggleLeft" title="切换大纲面板">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
         </button>
         <button class="topbar-btn" id="btnToggleRight" title="切换反馈面板">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </button>
+        <button class="topbar-btn" id="btnToggleAgent" title="Agent 终端">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
         </button>
         <button class="topbar-btn" id="themeToggle" title="切换主题">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
@@ -63,6 +74,24 @@
         <div class="preview-right-header"><span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> 反馈</span><button class="panel-close-btn" id="btnCloseRight" title="关闭面板"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></div>
         <div class="preview-right-body" id="feedbackBody">
           <div class="fb-empty">选中文本后点击「<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg> 加入面板」即可累积</div>
+        </div>
+      </aside>
+
+      <!-- Right: Agent Panel (shares column 4 with feedback, mutually exclusive) -->
+      <aside class="preview-agent-panel hidden" id="previewAgentPanel">
+        <div class="preview-agent-panel-header">
+          <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg> Agent</span>
+          <span class="agent-panel-badge" id="previewAgentBackendBadge"></span>
+          <span class="agent-panel-root" id="previewAgentPanelRoot"></span>
+          <button class="panel-close-btn" id="previewBtnCloseAgent" title="关闭 Agent"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+        </div>
+        <div id="previewXtermContainer" class="xterm-container"></div>
+        <div id="previewAgentChatView" class="agent-chat-view hidden">
+          <div class="agent-chat-messages" id="previewAgentChatMessages"></div>
+          <div class="agent-chat-input-wrap">
+            <textarea id="previewAgentChatInput" class="agent-chat-input" rows="2" placeholder="输入消息，Enter 发送，Shift+Enter 换行"></textarea>
+            <button id="previewAgentChatSend" class="agent-chat-send-btn">发送</button>
+          </div>
         </div>
       </aside>
     </div>
@@ -149,6 +178,8 @@
     </div>
   </div>
 
+  <!-- PDF.js for outline extraction -->
+  <script src="/clawmate/pdfjs/pdf.min.js" defer></script>
   <!-- Vendor scripts (KaTeX/Mermaid loaded conditionally) -->
   <script src="./vendor/purify.min.js" defer></script>
   <script src="./vendor/markdown-it.min.js" defer></script>
@@ -157,7 +188,7 @@
   <script src="./vendor/markdown-it-footnote.min.js" defer></script>
   <script src="./vendor/markdown-it-task-lists.min.js" defer></script>
   <script src="./vendor/highlight.min.js" defer></script>
-  <script src="./js/icons.js?v=20260620a" defer></script>
+  <script src="./js/icons.js?v=20260624" defer></script>
   <script src="./js/preview-common.js" defer></script>
   <script src="./js/preview.js?v=20260623b" defer></script>
 </body>

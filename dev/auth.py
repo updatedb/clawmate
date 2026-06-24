@@ -14,6 +14,7 @@ import asyncio
 import hmac
 import json
 import secrets
+import socket
 import time
 from pathlib import Path
 from typing import Optional
@@ -248,6 +249,28 @@ def _is_whitelisted(path: str) -> bool:
     return False
 
 
+def _is_local_client(client_ip: str) -> bool:
+    """判断请求来源是否为本地客户端（auth bypass）。
+
+    硬编码的 localhost IP 始终有效，此外还会检查 auth.local_hosts 配置的
+    主机名/IP。主机名会通过 DNS 解析后比较 IP 地址。
+    """
+    if client_ip in ("127.0.0.1", "::1", "localhost"):
+        return True
+    from config import load as _cfg
+    local_hosts = _cfg().auth.local_hosts
+    for host in local_hosts:
+        if client_ip == host:
+            return True
+        try:
+            resolved = socket.gethostbyname(host)
+            if client_ip == resolved:
+                return True
+        except socket.gaierror:
+            pass
+    return False
+
+
 class AuthMiddleware(BaseHTTPMiddleware):
     """
     FastAPI middleware that:
@@ -279,8 +302,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # Localhost bypass: 服务器本机进程访问不需要登录
         # request.client.host 在直接连接时有效，代理场景走 x-forwarded-for
+        # 同时支持 auth.local_hosts 配置的 LAN 主机名/IP
         client_host = self._get_client_ip(request)  # already normalizes to IP
-        if client_host in ("127.0.0.1", "::1", "localhost"):
+        if _is_local_client(client_host):
             return await call_next(request)
 
         # Internal token check for feedback/shared API routes (used by OpenClaw agent callbacks)

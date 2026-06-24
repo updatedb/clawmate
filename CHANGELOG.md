@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.42 (2026-06-24)
+### 图标系统重构
+- 新增彩色字母标签：Markdown(M紫)/Python(Py蓝)/Shell($绿)/JSON({}橙)/Text(T灰)/JS(黄)
+- 通用代码文件使用 `file-code` SVG（`<>` 尖括号图标），区别于默认 `file`
+- 图标尺寸参数化：画廊 32px / 列表 22px，字体和圆角按比例自动缩放
+- `_tag()` 辅助函数统一彩色标签生成，消除重复代码
+
+### 侧边栏隐藏 dotfiles
+- 目录树过滤 `.` 开头的隐藏目录（`.git`/`.clawmate`/`.claude` 等不再显示）
+
+### Feedback 存储迁移
+- `feedback.json` 从项目根目录迁移到 `.clawmate/feedback.json`
+- 读取严格依赖 `.clawmate/` marker，无 marker 目录报错而非静默回退
+- `feedback_api.py` + `store.py` 同步更新路径
+
+### 新 API 端点
+- `GET /api/clawmate/link` — 一站式搜索 + 预览链接生成（q/root/ext/limit）
+- `POST /api/clawmate/mkdir` — 在指定目录下创建子目录
+- `GET /api/clawmate/list?marker_filter=true` — 只返回含 `.clawmate/` marker 的项目目录
+
+### Agent 面板增强
+- PTY 输出 60fps 分组刷新，防止输出交错
+- 用户输入后短暂 yield 确保 echo 先于输出到达
+- chdir 时同步 session key 到所有已连接 WebSocket
+
+### Auth 增强
+- `auth.local_hosts` 配置项，支持 LAN 主机名/IP 免登录（`config.json`）
+
 ## v1.41 (2026-06-23)
 ### 压缩包预览
 - `list_archive()` 支持 zip / tar / tar.gz / tar.bz2 / tar.xz / rar / 7z

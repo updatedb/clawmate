@@ -10,18 +10,27 @@
 (function () {
   'use strict';
 
-  // --- DOM refs ---
-  const panel = document.getElementById('agentPanel');
-  const resizeHandle = document.getElementById('agentResizeHandle');
-  const xtermContainer = document.getElementById('xtermContainer');
-  const chatView = document.getElementById('agentChatView');
-  const chatMessages = document.getElementById('agentChatMessages');
-  const chatInput = document.getElementById('agentChatInput');
-  const chatSendBtn = document.getElementById('agentChatSend');
-  const badgeEl = document.getElementById('agentBackendBadge');
-  const rootEl = document.getElementById('agentPanelRoot');
-  const closeBtn = document.getElementById('btnCloseAgent');
-  const toggleBtn = document.getElementById('btnToggleAgent');
+  // --- DOM refs (re-initializable with prefix for reuse in preview page) ---
+  let _domPrefix = '';
+  let panel, resizeHandle, xtermContainer, chatView, chatMessages, chatInput, chatSendBtn, badgeEl, rootEl, closeBtn, toggleBtn;
+
+  function _resolveDom(prefix) {
+    _domPrefix = prefix || '';
+    var p = _domPrefix;
+    // Try prefixed IDs first, fall back to unprefixed (for main page where prefix is '')
+    panel         = document.getElementById(p + 'AgentPanel') || document.getElementById(p + 'agentPanel') || document.getElementById('agentPanel');
+    resizeHandle  = document.getElementById(p + 'agentResizeHandle') || document.getElementById('agentResizeHandle');
+    xtermContainer = document.getElementById(p + 'XtermContainer') || document.getElementById(p + 'xtermContainer') || document.getElementById('xtermContainer');
+    chatView      = document.getElementById(p + 'AgentChatView') || document.getElementById(p + 'agentChatView') || document.getElementById('agentChatView');
+    chatMessages  = document.getElementById(p + 'AgentChatMessages') || document.getElementById(p + 'agentChatMessages') || document.getElementById('agentChatMessages');
+    chatInput     = document.getElementById(p + 'AgentChatInput') || document.getElementById(p + 'agentChatInput') || document.getElementById('agentChatInput');
+    chatSendBtn   = document.getElementById(p + 'AgentChatSend') || document.getElementById(p + 'agentChatSend') || document.getElementById('agentChatSend');
+    badgeEl       = document.getElementById(p + 'AgentBackendBadge') || document.getElementById(p + 'agentBackendBadge') || document.getElementById('agentBackendBadge');
+    rootEl        = document.getElementById(p + 'AgentPanelRoot') || document.getElementById(p + 'agentPanelRoot') || document.getElementById('agentPanelRoot');
+    closeBtn      = document.getElementById(p + 'BtnCloseAgent') || document.getElementById(p + 'btnCloseAgent') || document.getElementById('btnCloseAgent');
+    toggleBtn     = document.getElementById(p + 'BtnToggleAgent') || document.getElementById(p + 'btnToggleAgent') || document.getElementById('btnToggleAgent');
+  }
+  _resolveDom('');  // default: main page IDs
 
   // --- Debug logging ---
   const XLOG = 'font-weight:bold;color:#14b8a6';
@@ -55,6 +64,7 @@
   let chatBuf = '';     // accumulating assistant text
   let chatBufEl = null; // current assistant bubble being built
   let chatStatusEl = null; // reconnection status element
+  let currentSessionKey = '';  // tracks last session key from backend
 
   // --- Grid update ---
   function updateGridColumns(forceExpand) {
@@ -100,7 +110,7 @@
     const delta = dragStartX - e.clientX;
     const content = document.querySelector('.content');
     if (!content) return;
-    panelWidth = Math.max(360, Math.min(700, dragStartWidth + delta));
+    panelWidth = Math.max(360, Math.min(800, dragStartWidth + delta));
     const sb = document.getElementById('sidebar');
     const sbHidden = sb && (sb.classList.contains('hidden') || getComputedStyle(sb).display === 'none');
     const lW = sbHidden ? '0px' : '240px';
@@ -233,21 +243,46 @@
       xlog('init', 'WARNING: term.textarea is null — IME recovery disabled');
     }
 
-    // --- Fit after layout ---
+    // --- Fit after layout (with font-ready guard) ---
+    function doFit(label) {
+      if (panel.classList.contains('hidden') || !fitAddon) return;
+      var before = term ? { rows: term.rows, cols: term.cols } : null;
+      xlog('fit', (label || 'doFit') + ' container=' + JSON.stringify(rectJson(xtermContainer)) + ' before=' + JSON.stringify(before));
+      try { fitAddon.fit(); } catch (e) { xlog('fit', 'ERROR', e); }
+      if (term) {
+        xlog('fit', 'result rows=' + term.rows + ' cols=' + term.cols +
+          ' (Δ rows:' + (term.rows - (before ? before.rows : 0)) +
+          ' cols:' + (term.cols - (before ? before.cols : 0)) + ')');
+        // Refresh WebGL renderer after fit to sync framebuffer dimensions
+        try { term.refresh(0, term.rows - 1); } catch (_) {}
+      }
+    }
+
     if (fitAddon) {
-      xlog('fit', 'scheduling double-rAF fit...');
-      requestAnimationFrame(function () {
-        requestAnimationFrame(function () {
-          if (!panel.classList.contains('hidden')) {
-            var before = term ? { rows: term.rows, cols: term.cols } : null;
-            xlog('fit', 'rAF×2 — container=' + JSON.stringify(rectJson(xtermContainer)) + ' before=' + JSON.stringify(before));
-            try { fitAddon.fit(); } catch (e) { xlog('fit', 'ERROR', e); }
-            if (term) {
-              xlog('fit', 'result rows=' + term.rows + ' cols=' + term.cols + ' (Δ rows:' + (term.rows - (before ? before.rows : 0)) + ' cols:' + (term.cols - (before ? before.cols : 0)) + ')');
-            }
+      xlog('fit', 'waiting for fonts.ready...');
+      var fontFitted = false;
+      var fontTimer = setTimeout(function () {
+        if (!fontFitted) { fontFitted = true; doFit('font-timeout'); }
+      }, 3000);
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(function () {
+          clearTimeout(fontTimer);
+          if (!fontFitted) {
+            fontFitted = true;
+            xlog('fit', 'fonts.ready resolved');
+            // Wait one rAF so the browser applies the font to layout
+            requestAnimationFrame(function () { doFit('fonts-ready'); });
           }
+        }).catch(function () {
+          clearTimeout(fontTimer);
+          if (!fontFitted) { fontFitted = true; requestAnimationFrame(function () { requestAnimationFrame(function () { doFit('fonts-fallback'); }); }); }
         });
-      });
+      } else {
+        // document.fonts not supported — immediate fit
+        clearTimeout(fontTimer);
+        fontFitted = true;
+        requestAnimationFrame(function () { requestAnimationFrame(function () { doFit('rAFx2'); }); });
+      }
     } else {
       xlog('fit', 'SKIP — fitAddon is null');
     }
@@ -267,15 +302,38 @@
     }
 
     // --- Data / resize forward to WebSocket ---
+    var _inputBatch = '';
+    var _inputBatchTimer = null;
+    var INPUT_BATCH_MS = 30;
+    function _flushInputBatch() {
+      var batch = _inputBatch;
+      _inputBatch = '';
+      if (batch && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(batch);
+      }
+    }
     term.onData(function (data) {
       xlog('data', 'len=' + data.length + ' preview=' + JSON.stringify(data.slice(0, 40)) + ' ws=' + (ws ? ws.readyState : 'null'));
-      if (ws && ws.readyState === WebSocket.OPEN) { ws.send(data); }
+      _inputBatch += data;
+      // Send Enter immediately for zero-latency command submission
+      if (data === '\r' || data === '\n') {
+        clearTimeout(_inputBatchTimer);
+        _inputBatchTimer = null;
+        _flushInputBatch();
+        return;
+      }
+      if (_inputBatchTimer) clearTimeout(_inputBatchTimer);
+      _inputBatchTimer = setTimeout(_flushInputBatch, INPUT_BATCH_MS);
     });
+    var _resizeDebounce = null;
     term.onResize(function (size) {
       xlog('resize', 'term.onResize cols=' + size.cols + ' rows=' + size.rows);
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        try { ws.send(JSON.stringify({ type: 'resize', cols: size.cols, rows: size.rows })); } catch (_) {}
-      }
+      if (_resizeDebounce) clearTimeout(_resizeDebounce);
+      _resizeDebounce = setTimeout(function () {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          try { ws.send(JSON.stringify({ type: 'resize', cols: size.cols, rows: size.rows })); } catch (_) {}
+        }
+      }, 150);
     });
   }
 
@@ -322,6 +380,10 @@
     var type = msg.type || '';
 
     if (type === 'info') {
+      // Fallback: extract sessionKey from OpenClaw info message
+      if (msg.sessionKey && rootEl && !rootEl.textContent) {
+        rootEl.textContent = msg.sessionKey;
+      }
       var info = document.createElement('div');
       info.className = 'agent-chat-info';
       info.textContent = msg.text || '';
@@ -404,6 +466,7 @@
       reconnectAttempts = 0;
       if (backendMode === 'claude' && term) {
         term.writeln('\x1b[1;36m✓ 已连接 Agent 终端\x1b[0m');
+        term.writeln('\x1b[2m  ' + term.cols + '×' + term.rows + '  |  调整面板宽度后运行的程序会自动适配新宽度\x1b[0m');
         term.writeln('');
       }
       if (backendMode === 'openclaw') {
@@ -412,6 +475,24 @@
     };
 
     ws.onmessage = function (e) {
+      // Intercept session info messages (works for both backends)
+      try {
+        var msg = JSON.parse(e.data);
+        if (msg.type === 'session' && msg.key) {
+          if (rootEl) rootEl.textContent = msg.key;
+          // Detect session key change — skip initial connection (currentSessionKey empty)
+          if (currentSessionKey && msg.key !== currentSessionKey) {
+            xlog('session', 'key changed: ' + currentSessionKey + ' -> ' + msg.key);
+            currentSessionKey = msg.key;
+            // Defer reconnect so we exit onmessage before old WS is torn down
+            setTimeout(function () { reconnectToNewSession(); }, 0);
+            return;
+          }
+          currentSessionKey = msg.key;
+          return;
+        }
+      } catch (_) {}
+
       if (backendMode === 'claude' && term) {
         term.write(e.data);
         return;
@@ -452,6 +533,7 @@
 
   function disconnectWs() {
     clearReconnect();
+    currentSessionKey = '';
     if (ws) { ws.onclose = null; ws.close(); ws = null; }
     if (term) { term.clear(); term.writeln('\x1b[2m终端已断开。\x1b[0m'); }
     if (chatMessages) { chatMessages.innerHTML = ''; }
@@ -477,6 +559,40 @@
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   }
 
+  // --- Session key change → reconnect to new project ---
+  function reconnectToNewSession() {
+    xlog('session', 'reconnecting to new session...');
+    clearReconnect();
+
+    // Close old WS silently — prevent onclose/onerror from firing
+    if (ws) {
+      ws.onclose = null;
+      ws.onerror = null;
+      try { ws.close(); } catch (_) {}
+      ws = null;
+    }
+
+    // Clear display for clean transition — use reset() instead of clear()
+    // because clear() can leave the WebGL renderer in a broken state
+    if (backendMode === 'claude' && term) {
+      term.reset();
+      term.writeln('\x1b[1;36m⟳ 项目已切换，重新连接...\x1b[0m');
+    }
+    if (backendMode === 'openclaw' && chatMessages) {
+      chatMessages.innerHTML = '';
+      chatBuf = '';
+      chatBufEl = null;
+      chatStatusEl = null;
+    }
+
+    // Reset reconnect counter — this is intentional, not a failure
+    reconnectAttempts = 0;
+
+    // Open new WebSocket — currentRootId/currentDir were already
+    // updated by Agent.updateRoot() before the chdir was sent
+    connectWs();
+  }
+
   // --- Resize handler ---
   window.addEventListener('resize', function () {
     updateGridColumns();
@@ -493,6 +609,8 @@
   // --- Public API ---
   window.Agent = {
     init: function (config) {
+      // Re-resolve DOM if a custom prefix is provided (e.g. 'preview' for preview page)
+      if (config.domPrefix) { _resolveDom(config.domPrefix); }
       wsUrl = config.wsUrl || '';
       currentRootId = config.rootId || '';
       currentDir = config.dir || '';
@@ -519,8 +637,6 @@
       panel.classList.remove('hidden');
       document.body.classList.add('agent-open');
       setTimeout(function () { if (typeof syncSidebarBtn === 'function') syncSidebarBtn(); }, 0);
-      if (rootEl) rootEl.textContent = currentRootId || '';
-
       if (backendMode === 'openclaw') {
         showChatMode();
         chatMessages.innerHTML = '';
@@ -540,15 +656,29 @@
       reconnectAttempts = 0;
       connectWs();
 
-      // Backup fit — double rAF in createTerminal() should already have fired,
-      // but a 200ms safety net handles slow layout (e.g. WebGL init).
+      // Fit after panel slide-in transition completes (instead of 200ms blind timer)
       if (fitAddon) {
+        var transitionFitted = false;
+        var onPanelTransitionEnd = function (e) {
+          if (e.propertyName === 'transform' || e.propertyName === 'all') {
+            panel.removeEventListener('transitionend', onPanelTransitionEnd);
+            if (!transitionFitted) {
+              transitionFitted = true;
+              try { fitAddon.fit(); } catch (_) {}
+              if (term) { try { term.refresh(0, term.rows - 1); } catch (_) {} }
+            }
+          }
+        };
+        panel.addEventListener('transitionend', onPanelTransitionEnd);
+        // Safety net: 500ms regardless
         setTimeout(function () {
-          var before = term ? { rows: term.rows, cols: term.cols } : null;
-          xlog('fit', '200ms-backup — container=' + JSON.stringify(rectJson(xtermContainer)) + ' before=' + JSON.stringify(before));
-          try { fitAddon.fit(); } catch (e) { xlog('fit', 'backup ERROR', e); }
-          xlog('fit', 'backup result rows=' + term.rows + ' cols=' + term.cols);
-        }, 200);
+          panel.removeEventListener('transitionend', onPanelTransitionEnd);
+          if (!transitionFitted) {
+            transitionFitted = true;
+            try { fitAddon.fit(); } catch (_) {}
+            if (term) { try { term.refresh(0, term.rows - 1); } catch (_) {} }
+          }
+        }, 500);
       }
     },
 
@@ -579,7 +709,7 @@
     updateRoot: function (rootId, dir) {
       if (rootId) currentRootId = rootId;
       if (dir !== undefined) currentDir = dir;
-      if (rootEl) rootEl.textContent = currentRootId || '';
+      // session key is updated via backend "session" message in response to chdir
       if (!panel.classList.contains('hidden') && ws && ws.readyState === WebSocket.OPEN) {
         try { ws.send(JSON.stringify({ type: 'chdir', root: currentRootId, dir: currentDir })); } catch (_) {}
       }

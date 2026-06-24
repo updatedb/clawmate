@@ -18,8 +18,10 @@ const ICONS = {
   // Files & Folders
   'folder':        '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
   'folder-open':   '<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>',
+  'folder-project':'<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><path d="M12 10v6"/><path d="M9 13h6"/>',
   'file':          '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
   'file-text':     '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  'file-code':     '<path d="M10 12.5 8 15l2 2.5"/><path d="M14 12.5 16 15l-2 2.5"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>',
   'image':         '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
   'video':         '<path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/>',
   'music':         '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
@@ -69,56 +71,75 @@ function iconSVG(name, size, className) {
 }
 
 /**
+ * Return a colored letter tag (like Office W/X/P) scaled to size.
+ * @param {string} label - text to display
+ * @param {string} bg - background color
+ * @param {string} fg - text color
+ * @param {number} size - box size in px
+ * @param {string} ff - font-family (sans-serif or monospace)
+ * @returns {string} HTML span
+ */
+function _tag(label, bg, fg, size, ff) {
+  var fs = Math.round(size * 0.38);
+  var br = Math.round(size * 0.2);
+  return '<span style="display:inline-flex;align-items:center;justify-content:center;width:' + size + 'px;height:' + size + 'px;background:' + bg + ';border-radius:' + br + 'px;font-size:' + fs + 'px;font-weight:700;color:' + fg + ';font-family:' + (ff || 'sans-serif') + ';letter-spacing:0;flex-shrink:0;">' + label + '</span>';
+}
+
+/**
  * Return an icon SVG for a file entry (replaces emoji-based getFileIcon).
- * Uses styled letter tags for Office files, SVG icons for other types.
+ * Uses styled letter tags for Office/text/code files, SVG icons for other types.
  * @param {object} entry - file entry with .name, .is_dir, .category
+ * @param {number} [size=32] - icon size in px (gallery default 32, list 22)
  * @returns {string} HTML markup (SVG or styled span)
  */
-function fileIconSVG(entry) {
-  if (!entry) return iconSVG('file', 18);
-  if (entry.is_dir) return iconSVG('folder', 18);
+function fileIconSVG(entry, size) {
+  size = size || 32;
+
+  if (!entry) return iconSVG('file', size);
+  if (entry.is_dir) return iconSVG(entry.marker ? 'folder-project' : 'folder', size);
 
   var cat = entry.category;
-  if (cat === 'image') return iconSVG('image', 18);
-  if (cat === 'video') return iconSVG('video', 18);
-  if (cat === 'audio') return iconSVG('music', 18);
+  if (cat === 'image') return iconSVG('image', size);
+  if (cat === 'video') return iconSVG('video', size);
+  if (cat === 'audio') return iconSVG('music', size);
 
-  // Detect extension for Office files and special types
+  // Detect extension for typed tags
   var name = entry.name || '';
   var ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
 
   // Office file styled tags
-  if (ext === 'doc' || ext === 'docx') {
-    return '<span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:#2b5797;border-radius:6px;font-size:11px;font-weight:700;color:#fff;font-family:sans-serif;letter-spacing:0;flex-shrink:0;">W</span>';
-  }
-  if (ext === 'xls' || ext === 'xlsx' || ext === 'csv') {
-    return '<span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:#217346;border-radius:6px;font-size:11px;font-weight:700;color:#fff;font-family:sans-serif;letter-spacing:0;flex-shrink:0;">X</span>';
-  }
-  if (ext === 'ppt' || ext === 'pptx') {
-    return '<span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:#c43e1c;border-radius:6px;font-size:11px;font-weight:700;color:#fff;font-family:sans-serif;letter-spacing:0;flex-shrink:0;">P</span>';
-  }
-  if (ext === 'pdf') return iconSVG('file-text', 18);
-  if (ext === 'md' || ext === 'markdown') return iconSVG('file-text', 18);
+  if (ext === 'doc' || ext === 'docx')  return _tag('W', '#2b5797', '#fff', size);
+  if (ext === 'xls' || ext === 'xlsx' || ext === 'csv') return _tag('X', '#217346', '#fff', size);
+  if (ext === 'ppt' || ext === 'pptx') return _tag('P', '#c43e1c', '#fff', size);
 
-  // Code files
-  var codeExts = ['py','js','ts','tsx','jsx','html','css','scss','less','sh','bash','go','rs','rb','php','java','c','cpp','h','sql','json','yaml','yml','toml','xml'];
-  if (codeExts.indexOf(ext) !== -1) return iconSVG('file', 18);
+  if (ext === 'pdf') return iconSVG('file-text', size);
+
+  // Text/Code file styled tags (high-frequency types)
+  if (ext === 'md' || ext === 'markdown') return _tag('M', '#7b1fa2', '#fff', size);
+  if (ext === 'py')                       return _tag('Py', '#306998', '#fff', size);
+  if (ext === 'sh' || ext === 'bash')     return _tag('$', '#2e7d32', '#fff', size, 'monospace');
+  if (ext === 'json')                     return _tag('{}', '#e65100', '#fff', size, 'monospace');
+  if (ext === 'txt')                      return _tag('T', '#616161', '#fff', size);
+  if (ext === 'js' || ext === 'ts')       return _tag('JS', '#e6a817', '#1a1a1a', size);
+
+  // Generic code files
+  var codeExts = ['html','css','scss','less','tsx','jsx','go','rs','rb','php','java','c','cpp','h','sql','yaml','yml','toml','xml'];
+  if (codeExts.indexOf(ext) !== -1) return iconSVG('file-code', size);
 
   // Archives
   var archiveExts = ['zip','tar','gz','7z','rar','bz2'];
-  if (archiveExts.indexOf(ext) !== -1) return iconSVG('archive', 18);
+  if (archiveExts.indexOf(ext) !== -1) return iconSVG('archive', size);
 
   // Default
-  return iconSVG('file', 18);
+  return iconSVG('file', size);
 }
 
 /**
- * Return an icon SVG element for use in list/gallery thumb areas.
- * Wraps the icon in a 32x32 centered container to match layout expectations.
+ * Gallery thumb wrapper — larger container for card view.
  * @param {object} entry
  * @returns {string} HTML string
  */
 function fileThumbSVG(entry) {
-  var svg = fileIconSVG(entry);
-  return '<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;font-size:18px;flex-shrink:0;">' + svg + '</span>';
+  var svg = fileIconSVG(entry, 32);
+  return '<span style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;font-size:48px;flex-shrink:0;">' + svg + '</span>';
 }

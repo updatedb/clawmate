@@ -83,6 +83,7 @@ class AuthConfig:
     username: str = "admin"
     password_hash: str = ""
     session_ttl_minutes: int = 480
+    local_hosts: list[str] = field(default_factory=list)  # hostnames/IPs that bypass auth (LAN)
 
 
 @dataclass
@@ -239,5 +240,6 @@ def _parse_config(raw: dict) -> AppConfig:
             username=str(ac.get("username", "admin")),
             password_hash=str(ac.get("password_hash", "")),
             session_ttl_minutes=int(ac.get("session_ttl_minutes", 480)),
+            local_hosts=[str(h) for h in (ac.get("local_hosts") or [])],
         ),
     )

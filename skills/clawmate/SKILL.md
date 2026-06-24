@@ -25,7 +25,7 @@ license: MIT
 | `clawmate plan [root] <project>` | 规划/更新分层项目计划（CLAWLIST） | ✅ |
 | `clawmate feed [status] [project] [filename] [date]` | 查询 feedback 列表 | ✅ |
 | `clawmate do [feedback_id]` | 处理待处理 feedback | ✅ |
-| `clawmate project <projectname>` | 为 project 对应 agent 创建新会话，切换 workspace 到项目目录，读取顶层介绍 | ✅ |
+| `clawmate project <projectname>` | 切换 agent 上下文到指定项目，读取顶层介绍 | ✅ |
 
 ---
 
@@ -55,12 +55,12 @@ license: MIT
 OpenClaw 编写文件并保存后，使用 `/clawmate link {filename}` 搜索文件并生成 Markdown 可点击预览链接。
 
 **步骤**：
-1. 搜索文件（使用 exec curl，因为 `web_fetch` 会阻止 localhost）：
+1. 调用 `/api/clawmate/link`（一步完成搜索 + 链接生成）：
    ```bash
-   curl -s "{CLAWMATE_URL}/api/clawmate/search?q={关键词}&root={root}" 2>/dev/null
+   curl -s "{CLAWMATE_URL}/api/clawmate/link?q={关键词}&root={root}&ext={扩展名}" 2>/dev/null
    ```
-   模糊匹配时简化搜索词（如去空格、取核心词）重试
-2. 匹配到文件后，构造预览链接 `{base_url}/clawmate/preview.html?root={root}&file={encoded_path}`
+   如需限定文件类型，传 `ext` 参数（如 `ext=md` 只搜索 Markdown）；模糊匹配时简化搜索词（如去空格、取核心词）重试
+2. 从响应中的 `results[].preview_url` 直接获取完整预览链接
 3. 输出 Markdown 可点击链接 `[filename](url)`
 
 **正确输出**：
@@ -182,15 +182,16 @@ flowchart LR
 
 ```bash
 # 观点收集
-mkdir -p {项目根路径}/{research,collect}
+mkdir -p {项目根路径}/{.clawmate,research,collect}
 
 # 产品方案
-mkdir -p {项目根路径}/{research,collect,prd}
+mkdir -p {项目根路径}/{.clawmate,research,collect,prd}
 
 # 研发需求
-mkdir -p {项目根路径}/{research,collect,prd,dev,test}
-# 或 mkdir -p {项目根路径}/{research,collect,prd,dev,test}
+mkdir -p {项目根路径}/{.clawmate,research,collect,prd,dev,test}
 ```
+
+> **`.clawmate/` marker 作用**：ClawMate 服务通过此目录识别 project 边界，实现 session 隔离和 Agent Panel 项目切换。每个 project 必须包含此目录。
 
 **步骤 2：创建核心文档 + 归档机制**
 
@@ -524,6 +525,7 @@ dist/ build/
 **观点收集**：
 ```
 {项目名}/
+├── .clawmate/               ← marker 目录（session 隔离 & project 识别）
 ├── CLAWLIST.md
 ├── PROJECT_NOTE.md          ← 含「需求澄清记录」+「信息架构规则」
 ├── research/
@@ -534,6 +536,7 @@ dist/ build/
 **产品方案**：
 ```
 {项目名}/
+├── .clawmate/               ← marker 目录（session 隔离 & project 识别）
 ├── CLAWLIST.md
 ├── PROJECT_NOTE.md          ← 含「需求澄清记录」+「信息架构规则」
 ├── research/
@@ -548,6 +551,7 @@ dist/ build/
 **研发需求**：
 ```
 {项目名}/
+├── .clawmate/               ← marker 目录（session 隔离 & project 识别）
 ├── CLAWLIST.md              ← 项目级总览：Phase I-V + 研发/测试/研究进展汇总
 ├── PROJECT_NOTE.md          ← 产品决策唯一来源 + 信息架构规则（顶部「当前焦点」）
 ├── research/                ← 研究目录
@@ -599,6 +603,7 @@ dist/ build/
 **目录结构**：
 ```
 {项目名}/
+├── .clawmate/               ← marker 目录
 ├── CLAWLIST.md              ← 项目级总览
 ├── PROJECT_NOTE.md          ← 产品决策唯一来源 + 信息架构规则
 ├── research/                ← 研究目录
@@ -703,7 +708,7 @@ clawmate do FD-CM-042
 
 ## 6. clawmate project
 
-创建新会话并切换到项目目录。用于在 ClawMate 管理的项目中快速创建工作环境。
+将当前 agent 会话上下文切换到指定项目，读取项目概况。**不是创建项目**（创建用 `clawmate init`），也**不管 session 生命周期**（session 由 ClawMate 服务的 `.clawmate/` marker 自动隔离）。
 
 ### 命令签名
 
@@ -712,6 +717,8 @@ clawmate project <projectname>
 ```
 
 ### 执行步骤
+
+> **前提**：目标项目必须已通过 `clawmate init` 创建，项目根目录下存在 `.clawmate/` marker。
 
 **步骤 1：搜索项目**
 
@@ -799,13 +806,16 @@ for root in cfg['roots']:
 - 无参数：使用当前 root
 - 有参数：筛选 root_id 匹配的 root
 
-**步骤 3：列出每个 root 下的一级子目录（即为项目）**
-
-对每个匹配的 root，列出其目录下的所有子目录（跳过隐藏目录）：
+**步骤 3：通过 API 列出带 .clawmate/ marker 的项目**
 
 ```bash
-ls -1d {root_dir}/*/
-```
+curl -s "{CLAWMATE_URL}/api/clawmate/list?root={root_id}&dir=&marker_filter=true" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for e in data.get('entries', []):
+    if e.get('is_dir') and not e['name'].startswith('.'):
+        print(e['name'])
+"
 
 **步骤 4：输出结果**
 

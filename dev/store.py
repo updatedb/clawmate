@@ -43,18 +43,21 @@ _CACHE_MAX_ENTRIES = 256  # 安全上限，超过则 LRU 淘汰最旧条目
 # ── 读 ─────────────────────────────────────────────────────────
 
 def _get_feedback_path(root_id: str, project: str) -> Path:
-    """构造 .feedback.json 完整路径。
+    """构造 feedback.json 完整路径（存储在 .clawmate/ 目录下）。
 
-    root_id+project 目录存在 → 返回其下 .feedback.json
-    root_id+project 目录不存在 → 回退到 root 目录 + 记录错误日志
+    root_id+project 目录存在且包含 .clawmate/ marker → 返回其下 feedback.json
+    root_id+project 目录存在但缺少 .clawmate/ marker → 抛出 FileNotFoundError
+    root_id+project 目录不存在 → 抛出 FileNotFoundError
     """
     cfg = load_config()
     root_dir = cfg.root_dir(root_id)
     project_dir = root_dir / project
-    if project_dir.is_dir():
-        return project_dir / ".feedback.json"
-    logger.warning("[feedback] project dir not found, fallback to root: root=%s project=%s", root_id, project)
-    return root_dir / ".feedback.json"
+    if not project_dir.is_dir():
+        raise FileNotFoundError(f"项目目录不存在: {project_dir}")
+    marker = project_dir / ".clawmate"
+    if not marker.is_dir():
+        raise FileNotFoundError(f"未找到项目 marker，请先运行 'clawmate init': {marker}")
+    return marker / "feedback.json"
 
 
 def _read_feedback(path: Path) -> dict:
@@ -404,7 +407,7 @@ def scan_all() -> ScanResult:
             for entry in root_dir.iterdir():
                 if not entry.is_dir():
                     continue
-                fb_path = entry / ".feedback.json"
+                fb_path = entry / ".clawmate" / "feedback.json"
                 if not fb_path.exists():
                     continue
                 result.checked_roots += 1
@@ -466,7 +469,9 @@ def _cleanup_expired(items: list[dict]) -> list[dict]:
 # ── 内部工具 ───────────────────────────────────────────────────────
 
 def _atomic_write(path: Path, root_id: str, project: str, items: list, last_id: int) -> None:
-    """原子写 .feedback.json（tmp + os.replace），写入前清理过期条目。"""
+    """原子写 feedback.json（tmp + os.replace），写入前清理过期条目。"""
+    # Ensure parent .clawmate/ directory exists
+    path.parent.mkdir(parents=True, exist_ok=True)
     # 清理过期 done/failed/deleted
     items = _cleanup_expired(items)
 

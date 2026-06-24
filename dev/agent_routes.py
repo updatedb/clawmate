@@ -53,6 +53,7 @@ class _AgentSession:
     ws_set: set = field(default_factory=set)  # currently attached WebSocket(s)
     created_at: float = 0.0
     last_active: float = 0.0
+    last_input_time: float = 0.0  # timestamp of last user keystroke (for output coordination)
 
     def __post_init__(self):
         if not self.created_at:
@@ -257,7 +258,7 @@ async def _spawn_claude(cwd: str) -> _AgentSession | None:
     )
 
 
-async def _attach_session(sess: _AgentSession, ws: WebSocket):
+async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = ""):
     """Bridge a WebSocket to an existing PTY session."""
     sess.ws_set.add(ws)
     sess.last_active = time.time()
@@ -297,6 +298,18 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket):
                                 pass
                             continue
                         if msg.get("type") == "chdir":
+                            new_root = msg.get("root", root)
+                            new_dir = msg.get("dir", "")
+                            new_key = _session_key(new_root, new_dir)
+                            for w in list(sess.ws_set):
+                                try:
+                                    if w.client_state == WebSocketState.CONNECTED:
+                                        await w.send_text(json.dumps({
+                                            "type": "session",
+                                            "key": new_key,
+                                        }, ensure_ascii=False))
+                                except Exception:
+                                    pass
                             continue
                 except (json.JSONDecodeError, TypeError, AttributeError):
                     pass
@@ -306,12 +319,16 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket):
                     os.write(sess.master_fd, data.encode())
                 except (OSError, BlockingIOError):
                     pass
+                sess.last_input_time = time.time()
                 sess.last_active = time.time()
         except Exception:
             pass
 
     async def pty_to_ws():
-        """Forward PTY output → WebSocket + buffer."""
+        """Forward PTY output → WebSocket + buffer (60fps flush to prevent interleaving)."""
+        out_buf = ""
+        last_flush = time.monotonic()
+        FLUSH_INTERVAL = 0.016  # ~60fps, groups tiny reads into smooth chunks
         try:
             while not sess.stop_event.is_set():
                 try:
@@ -320,22 +337,51 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket):
                         break  # PTY closed — Claude Code exited
                     text = data.decode("utf-8", errors="replace")
                     sess.output_buffer.append(text)
-                    # Fan out to all attached WebSockets
-                    for w in list(sess.ws_set):
-                        try:
-                            if w.client_state == WebSocketState.CONNECTED:
-                                await w.send_text(text)
-                        except WebSocketDisconnect:
-                            sess.ws_set.discard(w)
-                        except Exception:
-                            # Transient error (e.g. buffer full) — don't ban the client
-                            pass
+                    out_buf += text
+                    now = time.monotonic()
+                    # Brief yield after user input so echo arrives before output
+                    if sess.last_input_time and (now - sess.last_input_time) < 0.05:
+                        await asyncio.sleep(0.01)
+                    if now - last_flush >= FLUSH_INTERVAL and out_buf:
+                        batch = out_buf
+                        out_buf = ""
+                        last_flush = now
+                        for w in list(sess.ws_set):
+                            try:
+                                if w.client_state == WebSocketState.CONNECTED:
+                                    await w.send_text(batch)
+                            except WebSocketDisconnect:
+                                sess.ws_set.discard(w)
+                            except Exception:
+                                pass
                 except BlockingIOError:
+                    # Flush any pending output on idle
+                    if out_buf:
+                        batch = out_buf
+                        out_buf = ""
+                        last_flush = time.monotonic()
+                        for w in list(sess.ws_set):
+                            try:
+                                if w.client_state == WebSocketState.CONNECTED:
+                                    await w.send_text(batch)
+                            except WebSocketDisconnect:
+                                sess.ws_set.discard(w)
+                            except Exception:
+                                pass
                     await asyncio.sleep(0.01)
                 except OSError:
                     break  # master_fd closed — session is shutting down
         except Exception:
             pass
+        finally:
+            # Final flush
+            if out_buf:
+                for w in list(sess.ws_set):
+                    try:
+                        if w.client_state == WebSocketState.CONNECTED:
+                            await w.send_text(out_buf)
+                    except Exception:
+                        pass
 
     await asyncio.gather(ws_to_pty(), pty_to_ws())
 
@@ -522,8 +568,21 @@ async def _openclaw_backend(
             # Skip control messages — only {} objects with a "type" key
             try:
                 ctrl = json.loads(data)
-                if isinstance(ctrl, dict) and ctrl.get("type") in ("resize", "chdir"):
-                    continue
+                if isinstance(ctrl, dict):
+                    if ctrl.get("type") == "resize":
+                        continue
+                    if ctrl.get("type") == "chdir":
+                        new_root = ctrl.get("root", root)
+                        new_dir = ctrl.get("dir", "")
+                        new_key = _session_key(new_root, new_dir)
+                        try:
+                            await ws.send_text(json.dumps({
+                                "type": "session",
+                                "key": new_key,
+                            }, ensure_ascii=False))
+                        except Exception:
+                            pass
+                        continue
             except (json.JSONDecodeError, TypeError, AttributeError):
                 pass
 
@@ -640,6 +699,12 @@ async def agent_terminal(
     cwd = _resolve_session_cwd(root, dir)
     key = _session_key(root, dir)
 
+    # Send session key to frontend so it can display it
+    await ws.send_text(json.dumps({
+        "type": "session",
+        "key": key,
+    }, ensure_ascii=False))
+
     # Check for existing session
     sess = _sessions.get(key)
 
@@ -651,7 +716,7 @@ async def agent_terminal(
             f"\x1b[2m   session: {key}\x1b[0m\r\n"
             f"\x1b[2m   会话已运行 {(time.time() - sess.created_at):.0f}s\x1b[0m\r\n\r\n"
         )
-        await _attach_session(sess, ws)
+        await _attach_session(sess, ws, root)
         return
 
     # No existing session — send banner
@@ -678,7 +743,7 @@ async def agent_terminal(
             return
         sess.key = key
         _sessions[key] = sess
-        await _attach_session(sess, ws)
+        await _attach_session(sess, ws, root)
     elif backend == "openclaw":
         try:
             await _openclaw_backend(ws, cwd, cfg, root, agentId)

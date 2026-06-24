@@ -383,16 +383,34 @@ def file_info(path: Path, rel_path: str) -> Dict:
     }
 
 
-def list_dir(root_id: str, rel_dir: str = "", offset: int = 0, limit: int = 200) -> Dict:
+def list_dir(root_id: str, rel_dir: str = "", offset: int = 0, limit: int = 200,
+             marker_filter: bool = False) -> Dict:
+    """列出目录内容。
+
+    marker_filter=True 时只返回包含 .clawmate/ marker 的子目录（项目列表），
+    文件和非 marker 目录被过滤掉。
+    """
     root_path, target, _ = safe_path(root_id, rel_dir)
     if not target.exists() or not target.is_dir():
         raise FileNotFoundError("Directory not found")
 
     all_entries: List[Dict] = []
 
+    # marker 模式: 检查 root 自身是否就是一个 project
+    if marker_filter and target == root_path and (root_path / ".clawmate").is_dir():
+        all_entries.append(file_info(root_path, ""))
+
     for entry in sorted(target.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+        # marker 过滤: 仅 clawmate 项目列表使用，跳过非项目（无 .clawmate/ 的目录 + 所有文件）
+        if marker_filter:
+            if not entry.is_dir() or not (entry / ".clawmate").is_dir():
+                continue
         rel_path = str(entry.relative_to(root_path))
-        all_entries.append(file_info(entry, rel_path))
+        info = file_info(entry, rel_path)
+        # 标记 clawmate 项目目录
+        if entry.is_dir():
+            info["marker"] = (entry / ".clawmate").is_dir()
+        all_entries.append(info)
 
     total = len(all_entries)
     entries = all_entries[offset:offset + limit] if limit > 0 else all_entries
@@ -498,6 +516,23 @@ def delete_dir(root_id: str, rel_path: str) -> None:
     if not target.is_dir():
         raise ValueError("Not a directory")
     shutil.rmtree(target)
+
+
+def create_dir(root_id: str, rel_dir: str, name: str) -> Path:
+    """在指定目录下创建子目录，返回创建的目录路径。"""
+    name = name.strip()
+    if not name:
+        raise ValueError("目录名不能为空")
+    if "/" in name or "\\" in name:
+        raise ValueError("目录名不能包含路径分隔符")
+    root_path, target_dir, safe_rel = safe_path(root_id, rel_dir)
+    if not target_dir.exists() or not target_dir.is_dir():
+        raise FileNotFoundError("Directory not found")
+    new_dir = target_dir / name
+    if new_dir.exists():
+        raise FileExistsError(f"目录已存在: {name}")
+    new_dir.mkdir(parents=False)
+    return new_dir
 
 
 def upload_file(root_id: str, rel_dir: str, filename: str, content: bytes) -> Path:

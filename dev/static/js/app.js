@@ -92,6 +92,7 @@ const els = {
   themeToggle: document.getElementById("themeToggle"),
   // Multi-select
   multiSelectToggle: document.getElementById("multiSelectToggle"),
+  btnMkdir: document.getElementById("btnMkdir"),
   batchBar: document.getElementById("batchBar"),
   batchCount: document.getElementById("batchCount"),
   batchSelectAllBtn: document.getElementById("batchSelectAllBtn"),
@@ -395,9 +396,9 @@ function getFileIcon(entry) {
   // fileThumbSVG is defined in icons.js — returns inline SVG wrapped in 32x32 container
   if (typeof fileThumbSVG === 'function') return fileThumbSVG(entry);
   // Fallback if icons.js not loaded
-  if (!entry || !entry.is_dir && !entry.category) return '<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;font-size:18px;flex-shrink:0;">📄</span>';
-  if (entry.is_dir) return '<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;font-size:18px;flex-shrink:0;">📁</span>';
-  return '<span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;font-size:18px;flex-shrink:0;">📄</span>';
+  if (!entry || !entry.is_dir && !entry.category) return '<span style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;font-size:48px;flex-shrink:0;">📄</span>';
+  if (entry.is_dir) return '<span style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;font-size:48px;flex-shrink:0;">' + (entry.marker ? '🦞' : '📁') + '</span>';
+  return '<span style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;font-size:48px;flex-shrink:0;">📄</span>';
 }
 
 function toAbsoluteUrl(url) {
@@ -805,22 +806,24 @@ function renderBreadcrumbs() {
     els.currentPath.classList.add("breadcrumb");
     renderBreadcrumbContainer(els.currentPath);
   }
-  // Add "复制目录" link after breadcrumb
+  // Add copy icon button after breadcrumb
   var container = els.currentPath || els.breadcrumb;
   if (!container) return;
   var existing = container.querySelector('.breadcrumb-copy');
   if (existing) existing.remove();
-  var copyLink = document.createElement('a');
-  copyLink.className = 'breadcrumb-copy';
-  copyLink.textContent = '复制目录';
-  copyLink.href = '#';
-  copyLink.addEventListener('click', function (e) {
+  var copyBtn = document.createElement('button');
+  copyBtn.className = 'breadcrumb-copy';
+  copyBtn.title = '复制目录';
+  copyBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+  copyBtn.addEventListener('click', function (e) {
     e.preventDefault();
     var root = getRootById(state.rootId);
     var absPath = root ? (root.dir + (state.dir ? '/' + state.dir : '')) : (state.dir || '');
     copyText(absPath || state.rootLabel || '');
+    copyBtn.classList.add('copied');
+    setTimeout(function () { copyBtn.classList.remove('copied'); }, 1200);
   });
-  container.appendChild(copyLink);
+  container.appendChild(copyBtn);
 }
 
 // Compute parent directory path from a given dir
@@ -847,7 +850,7 @@ async function loadSidebarParent(dir) {
     const data = await res.json();
     sidebarParentDir = fetchDir;
     sidebarEntries = (data.entries || [])
-      .filter(e => e.is_dir)
+      .filter(e => e.is_dir && !e.name.startsWith("."))
       .map(e => ({
         ...e,
         relPath: e.path || ""
@@ -881,7 +884,8 @@ function renderSidebarTree() {
     li.style.borderRadius = "4px";
 
     const icon = document.createElement("span");
-    icon.innerHTML = typeof iconSVG === 'function' ? iconSVG(entry.relPath === state.dir ? 'folder-open' : 'folder', 14) : (entry.relPath === state.dir ? '📂' : '📁');
+    var icoName = entry.relPath === state.dir ? 'folder-open' : (entry.marker ? 'folder-project' : 'folder');
+    icon.innerHTML = typeof iconSVG === 'function' ? iconSVG(icoName, 14) : (entry.relPath === state.dir ? '📂' : (entry.marker ? '🦞' : '📁'));
     icon.style.flexShrink = "0";
 
     const label = document.createElement("span");
@@ -1295,7 +1299,7 @@ function renderList(markdownEntries, folderEntries, otherEntries) {
       row.appendChild(check);
 
       const icon = document.createElement("span");
-      icon.innerHTML = getFileIcon(entry);
+      icon.innerHTML = typeof fileIconSVG === 'function' ? fileIconSVG(entry, 22) : getFileIcon(entry);
       icon.style.marginRight = "6px";
       icon.style.flexShrink = "0";
       const name = document.createElement("span");
@@ -1579,6 +1583,7 @@ async function loadDir(dir) {
     updateUrl();
     await loadSidebarParent(state.dir);
     render();
+    if (window.Agent) window.Agent.updateRoot(state.rootId, state.dir);
     return;
   }
 
@@ -1596,6 +1601,7 @@ async function loadDir(dir) {
     return;
   }
   const data = await res.json();  state.dir = data.path || "";
+  if (window.Agent) window.Agent.updateRoot(state.rootId, state.dir);
   state.entries = (data.entries || []).map(mapEntry);
   state.total = data.total || 0;
   state.hasMore = state.entries.length < state.total;
@@ -1909,8 +1915,36 @@ btnLogoutMain && btnLogoutMain.addEventListener("click", async function() {
   window.location.href = "/clawmate/login.html";
 });
 
+// Create directory
+async function mkdirCurrent() {
+  if (!state.rootId) { setStatus("请先选择根目录"); return; }
+  var name = prompt("请输入新目录名：");
+  if (!name) return;
+  name = name.trim();
+  if (!name) return;
+  try {
+    var res = await authFetch("/api/clawmate/mkdir", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ root: state.rootId, dir: state.dir, name: name }),
+    });
+    if (res.ok) {
+      setStatus("目录已创建: " + name);
+      invalidateDirCache();
+      loadDir(state.dir);
+    } else {
+      var detail = "";
+      try { var err = await res.json(); detail = err.detail || ""; } catch (_) {}
+      setStatus("创建失败: " + (detail || res.status));
+    }
+  } catch (e) {
+    setStatus("创建出错: " + (e.message || e));
+  }
+}
+
 // Multi-select
 els.multiSelectToggle && els.multiSelectToggle.addEventListener("click", toggleMultiSelect);
+els.btnMkdir && els.btnMkdir.addEventListener("click", mkdirCurrent);
 els.batchSelectAllBtn && els.batchSelectAllBtn.addEventListener("click", selectAll);
 
 // Batch operations
