@@ -816,6 +816,7 @@ for e in data.get('entries', []):
     if e.get('is_dir') and not e['name'].startswith('.'):
         print(e['name'])
 "
+```
 
 **步骤 4：输出结果**
 
