@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.43 (2026-06-25)
+### Mermaid 高度手动调整
+- 每个 mermaid 图表底部新增拖拽手柄，支持鼠标/触摸拖拽调整显示区域高度
+- DOM 结构重构：`.mermaid-inner` 承载滚动内容，handle 和 zoom controls 固定在外层不动
+- 使用 Pointer Events + `setPointerCapture` 确保拖拽不与 mermaid zoom/pan 冲突
+- handle 样式：无边框，12px 高，88px 宽柔色 grip 指示条
+
+### Agent 输入延迟修复
+- xterm 输入从 30ms debounce 改为立即 flush，消除 PTY echo 延迟导致的输入不可见问题
+
 ## v1.42 (2026-06-24)
 ### 图标系统重构
 - 新增彩色字母标签：Markdown(M紫)/Python(Py蓝)/Shell($绿)/JSON({}橙)/Text(T灰)/JS(黄)

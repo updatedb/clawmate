@@ -236,8 +236,13 @@ button svg, .btn svg, a svg {
   flex-direction: column;
   overflow: hidden;
   grid-column: 1;
+  translate: 0;
+  transition: translate var(--duration-slow) var(--ease-out);
 }
-.sidebar.hidden { display: none; }
+.sidebar.hidden {
+  translate: -100%;
+  pointer-events: none;
+}
 .sidebar-section-top { flex-shrink: 0; padding: 18px 14px 8px; }
 .dir-list { flex: 1; overflow-y: auto; padding: 0 14px 14px; list-style: none; margin: 0; }
 .section-title { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
@@ -284,11 +289,11 @@ button svg, .btn svg, a svg {
   height: 100%;
   border-left: 1px solid var(--border-color);
   background: var(--bg-primary);
-  transform: translateX(0);
-  transition: transform var(--duration-slow) var(--ease-out);
+  translate: 0;
+  transition: translate var(--duration-slow) var(--ease-out);
 }
 .agent-panel.hidden {
-  transform: translateX(100%);
+  translate: 100%;
   pointer-events: none;
 }
 .agent-panel-header {
@@ -388,8 +393,13 @@ button svg, .btn svg, a svg {
 }
 .agent-chat-send-btn:hover { opacity: 0.85; }
 
-/* xterm.js dark theme overrides */
-#xtermContainer .xterm { height: 100%; padding: 4px 6px; }
+/* xterm.js — crisp monospace rendering */
+#xtermContainer .xterm {
+  height: 100%; padding: 4px 6px;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
 .xterm-container.hidden { display: none; }
 .xterm-viewport::-webkit-scrollbar { width: 6px; }
 .xterm-viewport::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
@@ -754,6 +764,8 @@ button svg, .btn svg, a svg {
 }
 
 /* Mermaid diagrams */
+/* Before JS wraps content into .mermaid-inner, .mermaid handles scrolling.
+   After wrapping (setupMermaidResizeHandles), .mermaid-inner takes over. */
 .mermaid {
   background: transparent;
   text-align: center;
@@ -761,6 +773,10 @@ button svg, .btn svg, a svg {
   overflow: auto;
   max-height: 70vh;
   min-height: 100px;
+}
+.mermaid-inner {
+  overflow: auto;
+  max-height: 70vh;
 }
 .mermaid svg {
   max-width: 100%;
@@ -782,6 +798,37 @@ button svg, .btn svg, a svg {
   white-space: pre-wrap;
   word-break: break-all;
   margin: 8px 0;
+}
+
+/* Mermaid resize handle — drag to adjust diagram height */
+/* Absolutely positioned so the handle is always at the container's
+   bottom edge regardless of content height or scroll position. */
+.mermaid-resize-handle {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 12px;
+  cursor: ns-resize;
+  background: var(--bg-primary);
+  border: 0;
+  user-select: none;
+  z-index: 5;
+}
+.mermaid-resize-handle::after {
+  content: '';
+  display: block;
+  width: 88px;
+  height: 4px;
+  margin: 3px auto 0;
+  background: var(--text-muted);
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.mermaid:hover .mermaid-resize-handle::after,
+.mermaid-resize-handle.dragging::after {
+  opacity: 0.3;
 }
 
 /* ===== Code Copy Buttons ===== */

@@ -135,6 +135,8 @@
     else currentTheme = 'auto';
     localStorage.setItem('clawmate-theme', currentTheme);
     applyTheme();
+    // Sync xterm terminal theme if agent panel is open
+    if (window.Agent && window.Agent.syncTheme) window.Agent.syncTheme();
   }
 
   document.getElementById('themeToggle').addEventListener('click', cycleTheme);
@@ -339,6 +341,79 @@
     }
   }
 
+  // ── Mermaid resize handles ──
+  function setupMermaidResizeHandles(container) {
+    var blocks = container.querySelectorAll('.mermaid');
+    for (var i = 0; i < blocks.length; i++) {
+      (function(block) {
+        if (block.querySelector('.mermaid-resize-handle')) return;
+
+        // Wrap existing content in an inner scrollable div so the resize
+        // handle (a sibling) never scrolls with the content.
+        var inner = document.createElement('div');
+        inner.className = 'mermaid-inner';
+        while (block.firstChild) {
+          inner.appendChild(block.firstChild);
+        }
+        block.appendChild(inner);
+
+        // Clear outer container constraints — .mermaid-inner handles scrolling now.
+        block.style.overflow = 'visible';
+        block.style.maxHeight = 'none';
+
+        // Pull zoom controls back to the outer container so they stay
+        // visible (fixed at top-right) when the inner content scrolls.
+        var zoomControls = inner.querySelector('.mermaid-zoom-controls');
+        if (zoomControls) block.appendChild(zoomControls);
+
+        // Create the resize handle — always pinned to the outer bottom edge.
+        var handle = document.createElement('div');
+        handle.className = 'mermaid-resize-handle';
+        handle.style.touchAction = 'none';
+        block.appendChild(handle);
+
+        var dragging = false, startY, startHeight, pointerId;
+
+        function onPointerDown(e) {
+          if (e.target.closest('.mermaid-zoom-controls')) return;
+          dragging = true;
+          pointerId = e.pointerId;
+          startY = e.clientY;
+          startHeight = inner.getBoundingClientRect().height;
+          handle.classList.add('dragging');
+          handle.setPointerCapture(e.pointerId);
+          document.body.style.userSelect = 'none';
+          document.body.style.cursor = 'ns-resize';
+          e.preventDefault();
+          e.stopPropagation();
+        }
+
+        function onPointerMove(e) {
+          if (!dragging) return;
+          var delta = e.clientY - startY;
+          var newH = Math.max(100, Math.min(window.innerHeight * 0.9, startHeight + delta));
+          inner.style.maxHeight = 'none';
+          inner.style.height = newH + 'px';
+          inner.style.overflow = 'auto';
+        }
+
+        function onPointerUp(e) {
+          if (!dragging) return;
+          dragging = false;
+          handle.classList.remove('dragging');
+          handle.releasePointerCapture(pointerId);
+          document.body.style.userSelect = '';
+          document.body.style.cursor = '';
+        }
+
+        handle.addEventListener('pointerdown', onPointerDown);
+        handle.addEventListener('pointermove', onPointerMove);
+        handle.addEventListener('pointerup', onPointerUp);
+        handle.addEventListener('pointercancel', onPointerUp);
+      })(blocks[i]);
+    }
+  }
+
   // ── Mermaid zoom (desktop: mouse wheel + buttons) ──
   function setupMermaidZoomDesktop(svg) {
     var container = svg.parentElement;
@@ -424,16 +499,12 @@
     const headings = div.querySelectorAll('h1, h2, h3, h4');
     if (headings.length < 2) {
       // No meaningful TOC — collapse left sidebar
-      leftSidebar.classList.add('hidden');
-      btnToggleLeft.classList.remove('active');
-      updateGridColumns();
+      closeLeftSidebar();
       return;
     }
     // Show sidebar and build TOC (on mobile: keep hidden, user opens via topbar)
     if (window.innerWidth >= 768) {
-      leftSidebar.classList.remove('hidden');
-      btnToggleLeft.classList.add('active');
-      updateGridColumns();
+      openLeftSidebar();
     }
     headings.forEach((h, i) => { if (!h.id) h.id = `heading-${i}`; });
 
@@ -781,9 +852,7 @@
     tocBody.appendChild(list);
     // Show left sidebar on desktop
     if (window.innerWidth >= 768) {
-      leftSidebar.classList.remove('hidden');
-      btnToggleLeft.classList.add('active');
-      updateGridColumns();
+      openLeftSidebar();
     }
   }
 
@@ -835,9 +904,7 @@
 
     // Show left sidebar on desktop when outline is available
     if (window.innerWidth >= 768) {
-      leftSidebar.classList.remove('hidden');
-      btnToggleLeft.classList.add('active');
-      updateGridColumns();
+      openLeftSidebar();
     }
   }
 
@@ -1181,42 +1248,28 @@
 
   // Toggle right (feedback) panel
   document.getElementById('btnToggleRight').addEventListener('click', () => {
-    const wasHidden = rightSidebar.classList.contains('hidden');
-    rightSidebar.classList.toggle('hidden');
-    updateGridColumns();
-    document.getElementById('btnToggleRight').classList.toggle('active', !rightSidebar.classList.contains('hidden'));
-    if (!wasHidden) {
-      // Closing sidebar
-      clearHL(); hideTooltip();
-      _stopSidebarRefresh();
-    } else {
-      // Mutual exclusion: close agent panel when opening feedback
-      if (agentPanel && !agentPanel.classList.contains('hidden')) {
-        agentPanel.classList.add('hidden');
-        var agentBtn = document.getElementById('btnToggleAgent');
-        if (agentBtn) agentBtn.classList.remove('active');
-        if (window.Agent) { window.Agent.close(); }
-        updateGridColumns();
-      }
+    if (rightSidebar.classList.contains('hidden')) {
       // Opening sidebar — start auto-refresh and do an immediate load
       _startSidebarRefresh();
       reloadCurrentFeedback();
+      openRightSidebar();
+    } else {
+      // Closing sidebar
+      clearHL(); hideTooltip();
+      _stopSidebarRefresh();
+      closeRightSidebar();
     }
   });
 
   // Close buttons on panel headers
   document.getElementById('btnCloseLeft').addEventListener('click', () => {
-    leftSidebar.classList.add('hidden');
-    updateGridColumns();
-    btnToggleLeft.classList.remove('active');
+    closeLeftSidebar();
   });
   document.getElementById('btnCloseRight').addEventListener('click', () => {
     clearHL();
     hideTooltip();
-    rightSidebar.classList.add('hidden');
-    updateGridColumns();
-    document.getElementById('btnToggleRight').classList.remove('active');
     _stopSidebarRefresh();
+    closeRightSidebar();
   });
 
   // ============ Raw Markdown Content (for accurate line number calculation) ============
@@ -1568,6 +1621,7 @@
 
         // DEBUG:  About to call renderMermaid, mermaidStore has ' + mermaidStore.length + ' entries');
         try { await renderMermaid(mdDiv, mermaidStore); } catch (e) { console.error('[ClawMate] renderMermaid threw:', e); }
+        setupMermaidResizeHandles(mdDiv);
         removeLoading();
         updateMarkdownDynamicButtons();
         if (!_skipFeedbackLoad) loadCompletedFeedback();
@@ -1689,9 +1743,7 @@
           if (codeOutlineItems.length >= 2) {
             renderCodeOutline(codeOutlineItems);
             if (window.innerWidth >= 768) {
-              leftSidebar.classList.remove('hidden');
-              btnToggleLeft.classList.add('active');
-              updateGridColumns();
+              openLeftSidebar();
             }
           }
           updatePlainTextDynamicButtons();
@@ -1716,9 +1768,11 @@
   // Topbar outline toggle button (must be after sidebar declarations)
   const btnToggleLeft = document.getElementById('btnToggleLeft');
   btnToggleLeft.addEventListener('click', () => {
-    leftSidebar.classList.toggle('hidden');
-    updateGridColumns();
-    btnToggleLeft.classList.toggle('active', !leftSidebar.classList.contains('hidden'));
+    if (leftSidebar.classList.contains('hidden')) {
+      openLeftSidebar();
+    } else {
+      closeLeftSidebar();
+    }
     if (isMarkdownMode) updateMarkdownDynamicButtons();
     if (isPlainTextMode && codeOutlineItems.length >= 2) updatePlainTextDynamicButtons();
   });
@@ -1745,6 +1799,75 @@
       var panelW = !agentHidden ? agentPanelWidth : rightPanelWidth;
       threeCol.style.gridTemplateColumns = `${lW} 1fr 5px ${panelW}px`;
     }
+  }
+
+  // ── Animated panel open/close helpers ──
+  // All side panels use a uniform slide animation:
+  //   left  panels → translateX(-100%) ⇄ translateX(0)
+  //   right panels → translateX(100%)  ⇄ translateX(0)
+  // transition: transform var(--duration-slow) var(--ease-out)  (300 ms)
+  //
+  // Pattern: temporarily override global .hidden { display:none }
+  // with inline display:flex so the CSS transition can render.
+
+  var _leftCloseTimer = null;
+  var _rightCloseTimer = null;
+
+  function openLeftSidebar() {
+    if (!leftSidebar.classList.contains('hidden')) return;
+    clearTimeout(_leftCloseTimer);
+    leftSidebar.style.display = 'flex';        // override global .hidden
+    // Expand grid column directly while panel is still "hidden"
+    var gridParts = (threeCol.style.gridTemplateColumns || '240px 1fr 0px 0px').split(' ');
+    gridParts[0] = '240px';
+    threeCol.style.gridTemplateColumns = gridParts.join(' ');
+    leftSidebar.offsetHeight;                   // reflow: w=240, translateX(-240px)
+    leftSidebar.classList.remove('hidden');     // slide-in: -100% → 0
+    leftSidebar.style.display = '';             // let CSS handle display
+    btnToggleLeft.classList.add('active');
+  }
+
+  function closeLeftSidebar() {
+    if (leftSidebar.classList.contains('hidden')) return;
+    clearTimeout(_leftCloseTimer);
+    leftSidebar.style.display = 'flex';         // override global .hidden
+    leftSidebar.classList.add('hidden');        // slide-out: 0 → -100%
+    btnToggleLeft.classList.remove('active');
+    _leftCloseTimer = setTimeout(function () {
+      leftSidebar.style.display = '';           // let global .hidden take over
+      updateGridColumns();                      // grid column → 0px
+    }, 300);
+  }
+
+  function openRightSidebar() {
+    if (!rightSidebar.classList.contains('hidden')) return;
+    clearTimeout(_rightCloseTimer);
+    // Mutual exclusion: close agent panel if open
+    if (agentPanel && !agentPanel.classList.contains('hidden')) {
+      if (window.Agent) window.Agent.close();
+    }
+    rightSidebar.style.display = 'flex';        // override global .hidden
+    // Expand grid column directly while panel is still "hidden"
+    var gridParts = (threeCol.style.gridTemplateColumns || '240px 1fr 0px 0px').split(' ');
+    gridParts[2] = '5px';
+    gridParts[3] = rightPanelWidth + 'px';
+    threeCol.style.gridTemplateColumns = gridParts.join(' ');
+    rightSidebar.offsetHeight;                  // reflow: w=panelW, translateX(100%)
+    rightSidebar.classList.remove('hidden');    // slide-in: 100% → 0
+    rightSidebar.style.display = '';            // let CSS handle display
+    document.getElementById('btnToggleRight').classList.add('active');
+  }
+
+  function closeRightSidebar() {
+    if (rightSidebar.classList.contains('hidden')) return;
+    clearTimeout(_rightCloseTimer);
+    rightSidebar.style.display = 'flex';        // override global .hidden
+    rightSidebar.classList.add('hidden');       // slide-out: 0 → 100%
+    document.getElementById('btnToggleRight').classList.remove('active');
+    _rightCloseTimer = setTimeout(function () {
+      rightSidebar.style.display = '';          // let global .hidden take over
+      updateGridColumns();                      // grid column → 0px
+    }, 300);
   }
 
   if (resizeHandle) {
@@ -3601,8 +3724,7 @@
           setTimeout(function() { card.remove(); }, 400);
           // Auto-open right sidebar
           if (rightSidebar.classList.contains('hidden')) {
-            rightSidebar.classList.remove('hidden');
-            updateGridColumns();
+            openRightSidebar();
             document.getElementById('btnToggleRight').classList.add('active');
           }
           // Start polling with returned IDs
@@ -3937,9 +4059,7 @@
         if (reloadFn) await reloadFn();
         // Auto-open right sidebar if it was hidden
         if (rightSidebar.classList.contains('hidden')) {
-          rightSidebar.classList.remove('hidden');
-          updateGridColumns();
-          document.getElementById('btnToggleRight').classList.add('active');
+          openRightSidebar();
         }
         _startSidebarRefresh();
       } else {
@@ -4028,9 +4148,7 @@
         hideTooltip();
         // Auto-open right sidebar
         if (rightSidebar.classList.contains('hidden')) {
-          rightSidebar.classList.remove('hidden');
-          updateGridColumns();
-          document.getElementById('btnToggleRight').classList.add('active');
+          openRightSidebar();
         }
         _startSidebarRefresh();
         renderFeedbackPanel();
@@ -4099,9 +4217,7 @@
         hideTooltip();
         // Auto-open right sidebar
         if (rightSidebar.classList.contains('hidden')) {
-          rightSidebar.classList.remove('hidden');
-          updateGridColumns();
-          document.getElementById('btnToggleRight').classList.add('active');
+          openRightSidebar();
         }
         _startSidebarRefresh();
         renderFeedbackPanel();
@@ -4545,11 +4661,8 @@
     document.getElementById('pstNote').rows = 1;
 
     // Open right sidebar if not already
-    const wasRightHidden = rightSidebar.classList.contains('hidden');
-    rightSidebar.classList.remove('hidden');
-    if (wasRightHidden) {
-      updateGridColumns();
-      document.getElementById('btnToggleRight').classList.add('active');
+    if (rightSidebar.classList.contains('hidden')) {
+      openRightSidebar();
     }
 
     renderFeedbackPanel();
@@ -4575,11 +4688,8 @@
     st.className = 'pst-status pst-status-loading';
 
     // Open right sidebar if not already
-    const wasRightHidden2 = rightSidebar.classList.contains('hidden');
-    rightSidebar.classList.remove('hidden');
-    if (wasRightHidden2) {
-      updateGridColumns();
-      document.getElementById('btnToggleRight').classList.add('active');
+    if (rightSidebar.classList.contains('hidden')) {
+      openRightSidebar();
     }
     document.getElementById('pstNote').value = '';
 
@@ -4629,9 +4739,7 @@
         hideTooltip();
         // Auto-open right sidebar
         if (rightSidebar.classList.contains('hidden')) {
-          rightSidebar.classList.remove('hidden');
-          updateGridColumns();
-          document.getElementById('btnToggleRight').classList.add('active');
+          openRightSidebar();
         }
         // Start polling with returned IDs
         var ids = data.ids || [];
@@ -5002,9 +5110,7 @@
             setTimeout(function() { hidePanel(false); }, 600);
             // Auto-open right sidebar so user can track feedback status
             if (rightSidebar.classList.contains('hidden')) {
-              rightSidebar.classList.remove('hidden');
-              updateGridColumns();
-              document.getElementById('btnToggleRight').classList.add('active');
+              openRightSidebar();
             }
             // Start sidebar auto-refresh + immediate load
             reloadCurrentFeedback();
@@ -5099,9 +5205,8 @@
       if (!isOpen) {
         // Mutual exclusion: close feedback sidebar when opening agent
         if (rightSidebar && !rightSidebar.classList.contains('hidden')) {
-          rightSidebar.classList.add('hidden');
-          document.getElementById('btnToggleRight').classList.remove('active');
           _stopSidebarRefresh();
+          closeRightSidebar();
         }
         // Opening — lazy-load libs then init Agent
         _fetchAgentConfig().then(function() {

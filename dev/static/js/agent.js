@@ -13,6 +13,9 @@
   // --- DOM refs (re-initializable with prefix for reuse in preview page) ---
   let _domPrefix = '';
   let panel, resizeHandle, xtermContainer, chatView, chatMessages, chatInput, chatSendBtn, badgeEl, rootEl, closeBtn, toggleBtn;
+  // Resize tracking shared between createTerminal & disconnectWs
+  var _lastResizeSent = { cols: 0, rows: 0 };
+  var _pendingResize = null;
 
   function _resolveDom(prefix) {
     _domPrefix = prefix || '';
@@ -124,6 +127,8 @@
     document.body.style.userSelect = '';
     document.removeEventListener('mousemove', onResizeMouseMove);
     document.removeEventListener('mouseup', onResizeMouseUp);
+    // Flush final resize dimensions to backend
+    _flushResize();
   }
 
   if (resizeHandle) {
@@ -145,20 +150,60 @@
   function createTerminal() {
     if (term) { xlog('init', 'term already exists, skipping'); return; }
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-    const bg = isDark ? '#111827' : '#f8fafc';
-    const fg = isDark ? '#e2e8f0' : '#1e293b';
+    var bg, fg, selBg, selFg, selInactiveBg;
+    if (isDark) {
+      bg = '#111827';
+      fg = '#e2e8f0';
+      selBg = '#1e3a5f';
+      selFg = '#f0f9ff';
+      selInactiveBg = '#1a2332';
+    } else {
+      bg = '#ffffff';
+      fg = '#1e293b';
+      selBg = '#bfdbfe';
+      selFg = '#1e293b';
+      selInactiveBg = '#e2e8f0';
+    }
     const cursor = '#14b8a6';
 
-    xlog('init', 'creating Terminal { fontSize:14, lineHeight:1.4, cols:100, rows:30, scrollback:5000 }');
+    // ── Estimate cols/rows from container before Terminal creation ──
+    // This avoids the hardcoded 100×30 → fit mismatch that garbles initial output.
+    var CHAR_W = 8.4;   // approximate for JetBrains Mono 14px
+    var CHAR_H = 19.6;  // fontSize * lineHeight = 14 * 1.4
+    var containerW = xtermContainer.clientWidth || 600;
+    var containerH = xtermContainer.clientHeight || 400;
+    // Subtract CSS padding (4px+6px=10px horizontal ×2, 4px+0=4px vertical ×2)
+    // and scrollbar reserve (6px)
+    var usableW = Math.max(100, containerW - 12 - 6);
+    var usableH = Math.max(100, containerH - 8);
+    var estimatedCols = Math.max(40, Math.floor(usableW / CHAR_W));
+    var estimatedRows = Math.max(10, Math.floor(usableH / CHAR_H));
+
+    xlog('init', 'container=' + containerW + 'x' + containerH +
+      ' usable=' + Math.round(usableW) + 'x' + Math.round(usableH) +
+      ' estimated cols=' + estimatedCols + ' rows=' + estimatedRows);
     xlog('init', 'theme bg=' + bg + ' fg=' + fg + ' cursor=' + cursor);
 
     term = new Terminal({
       cursorBlink: true, cursorStyle: 'bar',
-      fontSize: 14, fontFamily: '"JetBrains Mono", "Cascadia Code", "Fira Code", monospace',
+      fontSize: 14, fontFamily: '"JetBrains Mono", "Cascadia Code", "Fira Code", "Consolas", "SF Mono", "DejaVu Sans Mono", monospace',
       letterSpacing: 0, lineHeight: 1.4,
-      theme: { background: bg, foreground: fg, cursor: cursor },
-      allowProposedApi: true, scrollback: 5000, cols: 100, rows: 30,
+      allowTransparency: false,
+      drawBoldTextInBrightColors: false,
+      theme: {
+        background: bg,
+        foreground: fg,
+        cursor: cursor,
+        selectionBackground: selBg,
+        selectionForeground: selFg,
+        selectionInactiveBackground: selInactiveBg,
+      },
+      allowProposedApi: true, scrollback: 5000, cols: estimatedCols, rows: estimatedRows,
     });
+
+    // Store estimated dimensions so connectWs() can pass them to the backend
+    window._agentInitCols = estimatedCols;
+    window._agentInitRows = estimatedRows;
 
     if (typeof FitAddon !== 'undefined') {
       fitAddon = new FitAddon.FitAddon();
@@ -172,6 +217,11 @@
     }
 
     term.open(xtermContainer);
+    // Immediate rough fit — refined later when fonts load
+    if (fitAddon) {
+      try { fitAddon.fit(); } catch (_) {}
+      if (term) { try { term.refresh(0, term.rows - 1); } catch (_) {} }
+    }
     xlog('init', 'term.open() done — term.element=' + (!!term.element) + ' term.textarea=' + (!!term.textarea));
     xlog('init', 'xtermContainer rect', JSON.stringify(rectJson(xtermContainer)));
 
@@ -250,11 +300,21 @@
       xlog('fit', (label || 'doFit') + ' container=' + JSON.stringify(rectJson(xtermContainer)) + ' before=' + JSON.stringify(before));
       try { fitAddon.fit(); } catch (e) { xlog('fit', 'ERROR', e); }
       if (term) {
+        var deltaCols = term.cols - (before ? before.cols : 0);
         xlog('fit', 'result rows=' + term.rows + ' cols=' + term.cols +
           ' (Δ rows:' + (term.rows - (before ? before.rows : 0)) +
-          ' cols:' + (term.cols - (before ? before.cols : 0)) + ')');
-        // Refresh WebGL renderer after fit to sync framebuffer dimensions
+          ' cols:' + deltaCols + ')');
+        // Significant column change (> 5): reset display so old
+        // content doesn't show broken wrapping at the new width.
+        if (before && Math.abs(deltaCols) > 5) {
+          term.reset();
+        }
+        // Refresh WebGL renderer; double-rAF ensures the framebuffer
+        // reallocates at the new character-grid dimensions.
         try { term.refresh(0, term.rows - 1); } catch (_) {}
+        requestAnimationFrame(function () {
+          try { term.refresh(0, term.rows - 1); } catch (_) {}
+        });
       }
     }
 
@@ -263,7 +323,7 @@
       var fontFitted = false;
       var fontTimer = setTimeout(function () {
         if (!fontFitted) { fontFitted = true; doFit('font-timeout'); }
-      }, 3000);
+      }, 1000);
       if (document.fonts && document.fonts.ready) {
         document.fonts.ready.then(function () {
           clearTimeout(fontTimer);
@@ -322,19 +382,44 @@
         _flushInputBatch();
         return;
       }
-      if (_inputBatchTimer) clearTimeout(_inputBatchTimer);
-      _inputBatchTimer = setTimeout(_flushInputBatch, INPUT_BATCH_MS);
+      // Flush immediately so that PTY echo arrives without avoidable delay.
+      // The user sees characters only after the server echoes them back,
+      // so any batching here directly adds to perceived input lag.
+      _flushInputBatch();
     });
-    var _resizeDebounce = null;
+    // ── Resize strategy: first immediate, then throttle 50ms, skip dupes ──
     term.onResize(function (size) {
       xlog('resize', 'term.onResize cols=' + size.cols + ' rows=' + size.rows);
-      if (_resizeDebounce) clearTimeout(_resizeDebounce);
-      _resizeDebounce = setTimeout(function () {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          try { ws.send(JSON.stringify({ type: 'resize', cols: size.cols, rows: size.rows })); } catch (_) {}
-        }
-      }, 150);
+      _scheduleResize(size.cols, size.rows);
     });
+
+    function _scheduleResize(cols, rows) {
+      // Send immediately if this is the very first resize (initial sync)
+      if (_lastResizeSent.cols === 0 && _lastResizeSent.rows === 0) {
+        _sendResize(cols, rows);
+        return;
+      }
+      // Throttle rapid consecutive resizes to 50ms
+      if (_pendingResize) clearTimeout(_pendingResize);
+      _pendingResize = setTimeout(function () {
+        _pendingResize = null;
+        _sendResize(cols, rows);
+      }, 50);
+    }
+
+    function _sendResize(cols, rows) {
+      if (cols === _lastResizeSent.cols && rows === _lastResizeSent.rows) return;
+      _lastResizeSent = { cols: cols, rows: rows };
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        try { ws.send(JSON.stringify({ type: 'resize', cols: cols, rows: rows })); } catch (_) {}
+      }
+    }
+
+    // Flush pending resize on drag end
+    function _flushResize() {
+      if (_pendingResize) { clearTimeout(_pendingResize); _pendingResize = null; }
+      if (term) { _sendResize(term.cols, term.rows); }
+    }
   }
 
   // --- Chat view (OpenClaw backend) ---
@@ -454,10 +539,16 @@
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
     if (!wsUrl) return;
 
+    // Pass current terminal dimensions so the backend PTY starts at the right size
+    var initCols = (term && term.cols) || window._agentInitCols || 80;
+    var initRows = (term && term.rows) || window._agentInitRows || 24;
+
     var url = wsUrl +
       '?root=' + encodeURIComponent(currentRootId || '') +
       '&dir=' + encodeURIComponent(currentDir || '') +
-      '&agentId=' + encodeURIComponent(currentAgentId || '');
+      '&agentId=' + encodeURIComponent(currentAgentId || '') +
+      '&cols=' + initCols +
+      '&rows=' + initRows;
 
     try { ws = new WebSocket(url); } catch (e) { xlog('ws', 'constructor failed', e); scheduleReconnect(); return; }
 
@@ -465,6 +556,14 @@
       xlog('ws', 'OPEN');
       reconnectAttempts = 0;
       if (backendMode === 'claude' && term) {
+        // Send current dimensions immediately so backend PTY output is
+        // formatted at the correct column width from the very first byte.
+        try {
+          ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+        } catch (_) {}
+        // Now show the connection banner — the backend already has the
+        // correct dimensions, and fit() has already run once.
+        term.clear();
         term.writeln('\x1b[1;36m✓ 已连接 Agent 终端\x1b[0m');
         term.writeln('\x1b[2m  ' + term.cols + '×' + term.rows + '  |  调整面板宽度后运行的程序会自动适配新宽度\x1b[0m');
         term.writeln('');
@@ -538,6 +637,9 @@
     if (term) { term.clear(); term.writeln('\x1b[2m终端已断开。\x1b[0m'); }
     if (chatMessages) { chatMessages.innerHTML = ''; }
     chatBuf = ''; chatBufEl = null; chatStatusEl = null;
+    // Reset resize tracking so next connection sends dimensions immediately
+    _lastResizeSent = { cols: 0, rows: 0 };
+    if (_pendingResize) { clearTimeout(_pendingResize); _pendingResize = null; }
   }
 
   function scheduleReconnect() {
@@ -631,10 +733,15 @@
 
       animatingOut = false;
       clearTimeout(collapseTimer);
+      // Temporarily override display:none so the panel is rendered
+      // (off-screen via translateX(100%)) before the slide-in transition.
+      panel.style.display = 'flex';
       // Force grid expansion before removing hidden for slide-in
       updateGridColumns(true);
-      panel.offsetHeight; // force reflow
+      panel.offsetHeight; // force reflow (sync layout)
       panel.classList.remove('hidden');
+      // Let CSS .agent-panel handle display from now on
+      panel.style.display = '';
       document.body.classList.add('agent-open');
       setTimeout(function () { if (typeof syncSidebarBtn === 'function') syncSidebarBtn(); }, 0);
       if (backendMode === 'openclaw') {
@@ -644,13 +751,7 @@
       } else {
         showXtermMode();
         createTerminal();
-        if (term) {
-          term.clear();
-          term.writeln('\x1b[1;36m╔══════════════════════════════════════╗\x1b[0m');
-          term.writeln('\x1b[1;36m║     ClawMate Agent Terminal         ║\x1b[0m');
-          term.writeln('\x1b[1;36m╚══════════════════════════════════════╝\x1b[0m');
-          term.writeln('');
-        }
+        // Banner is now shown in ws.onopen after initial resize sync
       }
 
       reconnectAttempts = 0;
@@ -685,6 +786,9 @@
     close: function () {
       disconnectWs();
       animatingOut = true;
+      // Override global .hidden display:none so the slide-out
+      // transition (translateX(0) → translateX(100%)) actually plays.
+      panel.style.display = 'flex';
       panel.classList.add('hidden');
       document.body.classList.remove('agent-open');
       setTimeout(function () { if (typeof syncSidebarBtn === 'function') syncSidebarBtn(); }, 0);
@@ -692,6 +796,7 @@
       clearTimeout(collapseTimer);
       collapseTimer = setTimeout(function () {
         animatingOut = false;
+        panel.style.display = ''; // let CSS .hidden handle display again
         updateGridColumns(); // collapse to 0px
       }, 300);
       if (toggleBtn) toggleBtn.classList.remove('active');
@@ -721,6 +826,29 @@
 
     /** Recompute grid columns (called externally on sidebar toggle) */
     updateGrid: function () { updateGridColumns(); },
+
+    /** Re-theme the xterm terminal to match current app theme */
+    syncTheme: function () {
+      if (!term) return;
+      var isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+      var bg, fg, selBg, selFg, selInactiveBg;
+      if (isDark) {
+        bg = '#111827'; fg = '#e2e8f0';
+        selBg = '#1e3a5f'; selFg = '#f0f9ff'; selInactiveBg = '#1a2332';
+      } else {
+        bg = '#ffffff'; fg = '#1e293b';
+        selBg = '#bfdbfe'; selFg = '#1e293b'; selInactiveBg = '#e2e8f0';
+      }
+      term.options.theme = {
+        background: bg, foreground: fg, cursor: '#14b8a6',
+        selectionBackground: selBg, selectionForeground: selFg,
+        selectionInactiveBackground: selInactiveBg,
+      };
+      try { term.refresh(0, term.rows - 1); } catch (_) {}
+      if (xtermContainer) {
+        xtermContainer.style.setProperty('--xterm-bg', bg);
+      }
+    },
   };
 
 })();

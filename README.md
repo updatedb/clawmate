@@ -134,7 +134,7 @@ pending → in_progress → done / failed
 | 类型 | 能力 |
 |------|------|
 | Markdown | Mermaid / KaTeX / 语法高亮 |
-| Mermaid 图表 | Ctrl+滚轮缩放 + 拖拽平移 |
+| Mermaid 图表 | Ctrl+滚轮缩放 + 拖拽平移 + 底部手柄调高度 |
 | Office 文档 | ONLYOFFICE 嵌入预览（编辑/只读） |
 | PDF | pdf.js 预览 |
 | 压缩包 | zip / tar / 7z / rar 树形展开 |

@@ -140,6 +140,8 @@ function cycleTheme() {
   else currentTheme = 'auto';
   localStorage.setItem('clawmate-theme', currentTheme);
   applyTheme();
+  // Sync xterm terminal theme if agent panel is open
+  if (window.Agent && window.Agent.syncTheme) window.Agent.syncTheme();
 }
 
 // Initialize theme on load
@@ -166,7 +168,10 @@ function initTheme() {
   applyTheme();
   // Listen for system theme changes when in auto mode
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-    if (currentTheme === 'auto') applyTheme();
+    if (currentTheme === 'auto') {
+      applyTheme();
+      if (window.Agent && window.Agent.syncTheme) window.Agent.syncTheme();
+    }
   });
 }
 
@@ -707,6 +712,75 @@ async function renderMermaid(div, mermaidStore) {
   } finally {
     div.classList.remove(scopeClass);
   }
+}
+
+// ── Mermaid resize handles ──
+function setupMermaidResizeHandles(container) {
+  const blocks = container.querySelectorAll('.mermaid');
+  blocks.forEach(block => {
+    if (block.querySelector('.mermaid-resize-handle')) return;
+
+    // Wrap existing content in an inner scrollable div so the resize
+    // handle (a sibling) never scrolls with the content.
+    const inner = document.createElement('div');
+    inner.className = 'mermaid-inner';
+    while (block.firstChild) {
+      inner.appendChild(block.firstChild);
+    }
+    block.appendChild(inner);
+
+    // Clear outer container constraints — .mermaid-inner handles scrolling now.
+    block.style.overflow = 'visible';
+    block.style.maxHeight = 'none';
+
+    // Pull zoom controls back to the outer container so they stay visible.
+    const zoomControls = inner.querySelector('.mermaid-zoom-controls');
+    if (zoomControls) block.appendChild(zoomControls);
+
+    const handle = document.createElement('div');
+    handle.className = 'mermaid-resize-handle';
+    handle.style.touchAction = 'none';
+    block.appendChild(handle);
+
+    let dragging = false, startY, startHeight, pointerId;
+
+    const onPointerDown = (e) => {
+      if (e.target.closest('.mermaid-zoom-controls')) return;
+      dragging = true;
+      pointerId = e.pointerId;
+      startY = e.clientY;
+      startHeight = inner.getBoundingClientRect().height;
+      handle.classList.add('dragging');
+      handle.setPointerCapture(e.pointerId);
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'ns-resize';
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const onPointerMove = (e) => {
+      if (!dragging) return;
+      const delta = e.clientY - startY;
+      const newH = Math.max(100, Math.min(window.innerHeight * 0.9, startHeight + delta));
+      inner.style.maxHeight = 'none';
+      inner.style.height = newH + 'px';
+      inner.style.overflow = 'auto';
+    };
+
+    const onPointerUp = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      handle.classList.remove('dragging');
+      handle.releasePointerCapture(pointerId);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+
+    handle.addEventListener('pointerdown', onPointerDown);
+    handle.addEventListener('pointermove', onPointerMove);
+    handle.addEventListener('pointerup', onPointerUp);
+    handle.addEventListener('pointercancel', onPointerUp);
+  });
 }
 
 // ===== Render Markdown =====
@@ -1860,16 +1934,32 @@ if (btnToggleSidebar) {
       if (cssHidden && sidebar.classList.contains("hidden")) {
         if (window.Agent) window.Agent.close();
       }
-      // Toggle hidden class + grid
+      // Toggle with slide animation
       const isHidden = sidebar.classList.contains("hidden");
       if (isHidden) {
-        sidebar.classList.remove("hidden");
-        btnToggleSidebar.classList.add("active");
+        // ── Open: slide from left ──
+        sidebar.style.display = 'flex';           // override global .hidden display:none
+        // Expand grid column directly while sidebar is still "hidden"
+        // (bypass _updateContentGrid which would keep column at 0px)
+        var _contentEl = document.querySelector('.content');
+        var gridParts = (_contentEl.style.gridTemplateColumns || '240px 1fr 0px 0px').split(' ');
+        gridParts[0] = '240px';
+        _contentEl.style.gridTemplateColumns = gridParts.join(' ');
+        sidebar.offsetHeight;                     // force reflow: w=240, translateX(-240px)
+        sidebar.classList.remove('hidden');       // slide-in: translateX(-240px) → 0
+        sidebar.style.display = '';               // let CSS .sidebar handle display
+        btnToggleSidebar.classList.add('active');
       } else {
-        sidebar.classList.add("hidden");
-        btnToggleSidebar.classList.remove("active");
+        // ── Close: slide to left ──
+        sidebar.style.display = 'flex';           // override global .hidden display:none
+        sidebar.classList.add('hidden');          // slide-out: translateX(0) → translateX(-100%)
+        btnToggleSidebar.classList.remove('active');
+        // Grid stays expanded during slide-out; collapse after animation
+        setTimeout(function () {
+          sidebar.style.display = '';             // let global .hidden handle display
+          _updateContentGrid();                   // grid column → 0px
+        }, 300);
       }
-      _updateContentGrid();
     }
     syncSidebarBtn();
   });
