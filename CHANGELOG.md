@@ -1,5 +1,42 @@
 # Changelog
 
+## v1.44 (2026-06-26)
+### Codex Agent 后端
+- 新增 Codex 作为第三 Agent 后端（与 claude/openclaw 并列）
+- session key 格式重构为 `{backend}:{root}[:{project}]`，确保不同后端会话隔离
+- `get_claude_session` → `get_agent_session`，自动遍历所有 PTY 后端查找活跃会话
+- 新增 `max_sessions` 上限（默认 10）+ `agent.env` 环境变量透传
+- 新增 `CLAWMATE_AGENT_BACKEND` 环境变量覆盖配置，`config.example.json` 同步更新
+
+### 画廊卡片菜单重构
+- 卡片操作从底部 card-actions 迁移到右上角 ⋯ 菜单按钮（Dropdown 浮层）
+- 复选框移入 thumb 内部，使用自定义无依赖样式（appearance:none + 对勾 ::after）
+- 移动端菜单按钮尺寸调大（26px 触摸目标），dropdown 最小宽度 130px
+- 列表视图新增行内复制按钮（.list-copy-btn）
+
+### 文件移动 + 目录选择器
+- 新增 `POST /api/clawmate/move` 端点 + `service.move_file()` 实现
+- 安全校验：禁止目录移入自身/子目录、目标同名冲突检测
+- 前端：目录选择器 Modal（树形展开 + 导航 + 确认），画廊 ⋯ 菜单集成
+- `icons.js` 新增 `move` 图标（十字箭头）
+
+### 面板 translate 动画
+- 左右面板隐藏改用 `translate` 替代 `width/opacity` 过渡（GPU 合成层加速）
+- 统一 `.preview-left/.preview-right/.preview-agent-panel` 三处动画模式
+- share-view TOC 面板同步改为 translate 动效，新增 `hideTocInstant()` 无动画即时隐藏
+
+### xterm.js 流控（输入延迟修复后续）
+- 接入 `onFlowControlPause/Resume`：写入缓冲超限时丢弃帧而非无限堆积
+- 终端断连时 `term.blur()` 暂停光标闪烁定时器，避免后台消耗主线程
+- 重连时主动 `unobserve → observe` 避免 Firefox `InvalidStateError`
+- 面板关闭时断开 `ResizeObserver`，减少后台回调竞争
+
+### 其他
+- 面包屑新增刷新按钮（带旋转 CSS 动画）
+- deps: +websockets>=12.0, -aiofiles
+- `.gitignore` 增加 `.claude/` 本地 IDE 配置排除
+
+
 ## v1.43 (2026-06-25)
 ### Mermaid 高度手动调整
 - 每个 mermaid 图表底部新增拖拽手柄，支持鼠标/触摸拖拽调整显示区域高度

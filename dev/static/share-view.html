@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./css/style.css?v=20260620a" />
+  <link rel="stylesheet" href="./css/style.css?v=20260625a" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="highlight-theme-css" />
   <link rel="stylesheet" href="./vendor/github-markdown-dark.min.css" id="github-markdown-css" />
   <link rel="stylesheet" href="./vendor/katex.min.css" />
@@ -44,9 +44,10 @@
       border-right: 1px solid var(--border-color);
       background: var(--bg-secondary);
       display: flex; flex-direction: column; overflow: hidden;
-      transition: width 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
+      translate: 0;
+      transition: translate var(--duration-slow, 0.3s) ease;
     }
-    .share-left.hidden { width: 0; padding: 0; opacity: 0; overflow: hidden; border: none; }
+    .share-left.hidden { translate: -100%; pointer-events: none; }
     .share-left-header {
       padding: 12px 16px 8px; border-bottom: 1px solid var(--border-color);
       flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--text-secondary);
@@ -115,12 +116,13 @@
       .share-three-col { grid-template-columns: 0px 1fr 0px !important; }
       .share-center { grid-column: 2 !important; }
       .share-center-body { padding: 12px; }
-      .share-left { transition: none !important; width: 0 !important; min-width: 0 !important; padding: 0 !important; border-width: 0 !important; overflow: hidden !important; opacity: 0 !important; pointer-events: none !important; }
+      .share-left { transition: none !important; translate: -100% !important; pointer-events: none !important; width: 0 !important; min-width: 0 !important; padding: 0 !important; border-width: 0 !important; overflow: hidden !important; }
       .share-left:not(.hidden) {
         position: fixed; top: 0; bottom: 0; left: 0; z-index: 7;
         display: flex; width: min(260px, 70vw) !important; min-width: 240px !important;
         padding: 48px 0 0 0 !important; border-right: 1px solid var(--border-color) !important;
-        opacity: 1 !important; pointer-events: auto !important; overflow-y: auto !important;
+        translate: 0 !important;
+        pointer-events: auto !important; overflow-y: auto !important;
         box-shadow: 0 4px 24px rgba(0,0,0,0.25);
       }
     }
@@ -226,19 +228,63 @@
       applyTheme();
     });
 
+    // ── Slide animation helpers ──
+    var _tocTransitioning = false;
+    function _onTocTransitionEnd(e) {
+      if (e.propertyName !== 'translate') return;
+      shareLeft.removeEventListener('transitionend', _onTocTransitionEnd);
+      _tocTransitioning = false;
+      if (shareLeft.classList.contains('hidden')) {
+        shareLeft.style.display = '';             // let global .hidden take over
+        updateGrid();                             // grid column → 0px
+      }
+    }
+    function hideTocInstant() {
+      // Clean up any in-progress transition and hide immediately (no animation).
+      // Used for non-markdown content and mobile heading clicks where a slide-out
+      // animation is unnecessary.
+      shareLeft.removeEventListener('transitionend', _onTocTransitionEnd);
+      _tocTransitioning = false;
+      shareLeft.style.display = '';
+      shareLeft.classList.add('hidden');
+      updateGrid();
+      tocBtn.classList.remove('active');
+    }
+    function openToc() {
+      if (!shareLeft.classList.contains('hidden') && !_tocTransitioning) return;
+      // Clean up any in-progress close transition
+      shareLeft.removeEventListener('transitionend', _onTocTransitionEnd);
+      _tocTransitioning = false;
+      shareLeft.style.display = 'flex';           // override global .hidden display:none
+      // Expand grid column directly while panel is still "hidden"
+      threeCol.style.gridTemplateColumns = '240px 1fr 0px';
+      shareLeft.offsetHeight;                     // reflow: w=240, translateX(-240px)
+      shareLeft.classList.remove('hidden');       // slide-in: -100% → 0
+      shareLeft.style.display = '';
+      tocBtn.classList.add('active');
+    }
+    function closeToc() {
+      if (shareLeft.classList.contains('hidden') && !_tocTransitioning) return;
+      shareLeft.style.display = 'flex';           // override global .hidden display:none
+      shareLeft.addEventListener('transitionend', _onTocTransitionEnd);
+      _tocTransitioning = true;
+      shareLeft.classList.add('hidden');          // slide-out: 0 → -100%
+      tocBtn.classList.remove('active');
+    }
+
     // ── TOC toggle ──
     tocBtn.addEventListener('click', function() {
-      shareLeft.classList.toggle('hidden');
-      updateGrid();
-      tocBtn.classList.toggle('active', !shareLeft.classList.contains('hidden'));
+      if (shareLeft.classList.contains('hidden')) {
+        openToc();
+      } else {
+        closeToc();
+      }
     });
     tocBtn.classList.toggle('active', !shareLeft.classList.contains('hidden'));
 
     // ── TOC close button ──
     document.getElementById('btnCloseToc').addEventListener('click', function() {
-      shareLeft.classList.add('hidden');
-      updateGrid();
-      tocBtn.classList.remove('active');
+      closeToc();
     });
 
     // ── Markdown renderer ──
@@ -306,13 +352,12 @@
     function buildTOC(mdDiv) {
       var headings = mdDiv.querySelectorAll('h1,h2,h3,h4');
       if (headings.length < 2) {
-        shareLeft.classList.add('hidden'); updateGrid();
-        tocBtn.classList.remove('active');
+        closeToc();
         return;
       }
       // Keep hidden by default on mobile
       if (window.innerWidth >= 768) {
-        shareLeft.classList.remove('hidden'); updateGrid();
+        openToc();
         tocBtn.classList.add('active');
       }
       headings.forEach(function(heading, i) { if (!heading.id) heading.id = 'share-h-' + i; });
@@ -327,7 +372,7 @@
         a.textContent = heading.textContent;
         a.addEventListener('click', function(ev) {
           ev.preventDefault();
-          if (window.innerWidth < 768) { shareLeft.classList.add('hidden'); updateGrid(); tocBtn.classList.remove('active'); }
+          if (window.innerWidth < 768) { hideTocInstant(); }
           var ct = document.getElementById('contentBody');
           var hTop = heading.getBoundingClientRect().top;
           var cTop = ct.getBoundingClientRect().top;
@@ -425,30 +470,28 @@
         var DOC = ['doc','docx','xls','xlsx','ppt','pptx','odt','ods','odp','pdf'];
 
         if (IMG.includes(ext)) {
-          shareLeft.classList.add('hidden'); updateGrid(); tocBtn.classList.remove('active');
+          hideTocInstant();
           body.innerHTML = '<div class="share-media"><div class="share-media-title">' + data.name + '</div><img src="' + API_BASE + '/share/' + TOKEN + '/raw" alt="' + data.name + '" /></div>';
         } else if (AUD.includes(ext)) {
-          shareLeft.classList.add('hidden'); updateGrid(); tocBtn.classList.remove('active');
+          hideTocInstant();
           body.innerHTML = '<div class="share-media"><div class="share-media-title">' + data.name + '</div><audio src="' + API_BASE + '/share/' + TOKEN + '/raw" controls preload="metadata" style="width:100%;max-width:600px;"></audio></div>';
         } else if (VID.includes(ext)) {
-          shareLeft.classList.add('hidden'); updateGrid(); tocBtn.classList.remove('active');
+          hideTocInstant();
           body.innerHTML = '<div class="share-media"><div class="share-media-title">' + data.name + '</div><video src="' + API_BASE + '/share/' + TOKEN + '/raw" controls preload="metadata" style="width:100%;max-height:60vh;border-radius:8px;background:#000;"></video></div>';
         } else if (DOC.includes(ext)) {
-          shareLeft.classList.add('hidden'); updateGrid(); tocBtn.classList.remove('active');
+          hideTocInstant();
           body.innerHTML = '<div class="share-media" style="gap:16px;"><div style="font-size:48px;opacity:0.5;">📄</div><div class="share-media-title">' + data.name + '</div><div style="font-size:13px;color:var(--text-muted);">桌面版可预览 Office/PDF 文件</div></div>';
         } else if (ext === 'md' || ext === 'markdown') {
           renderMarkdown(data.content || '');
         } else if (ext === 'html' || ext === 'htm') {
-          shareLeft.classList.add('hidden'); updateGrid();
-          tocBtn.classList.remove('active');
+          hideTocInstant();
           var iframe = document.createElement('iframe');
           iframe.style.cssText = 'width:100%;height:100%;border:none;background:#fff;';
           iframe.srcdoc = data.content || '';
           body.innerHTML = '';
           body.appendChild(iframe);
         } else {
-          shareLeft.classList.add('hidden'); updateGrid();
-          tocBtn.classList.remove('active');
+          hideTocInstant();
           renderPlainText(data.content || '');
         }
       } catch(e) {

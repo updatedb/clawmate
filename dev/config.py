@@ -43,11 +43,13 @@ class OpenClawConfig:
 
 @dataclass
 class AgentConfig:
-    backend: str = "claude"          # "claude" | "openclaw"
+    backend: str = "claude"          # "claude" | "openclaw" | "codex"
     openclaw_ws_url: str = ""        # wss://ai.updatedb.online:18443
     openclaw_token: str = ""         # gateway auth token
     openclaw_device_secret: str = "" # HMAC secret for device pairing
     openclaw_device_token: str = ""  # device token from Gateway (saved after pairing)
+    max_sessions: int = 10           # max concurrent Claude sessions
+    env: dict[str, str] = field(default_factory=dict)  # extra env vars passed to agent subprocess
 
 
 @dataclass
@@ -206,6 +208,7 @@ def _parse_config(raw: dict) -> AppConfig:
     env_max_upload = os.getenv("CLAWMATE_MAX_UPLOAD_MB")
     env_onlyoffice_js_url = os.getenv("CLAWMATE_ONLYOFFICE_URL")
     env_onlyoffice_jwt = os.getenv("CLAWMATE_ONLYOFFICE_JWT_SECRET")
+    env_agent_backend = os.getenv("CLAWMATE_AGENT_BACKEND")
 
     return AppConfig(
         roots=roots,
@@ -224,11 +227,13 @@ def _parse_config(raw: dict) -> AppConfig:
 
         ),
         agent=AgentConfig(
-            backend=str(ag.get("backend", "claude")),
+            backend=env_agent_backend or str(ag.get("backend", "claude")),
             openclaw_ws_url=str(ag.get("openclaw_ws_url", "")),
             openclaw_token=str(ag.get("openclaw_token", "")),
             openclaw_device_secret=str(ag.get("openclaw_device_secret", "")),
             openclaw_device_token=str(ag.get("openclaw_device_token", "")),
+            max_sessions=int(ag.get("max_sessions", 10)),
+            env=dict(ag.get("env") or {}),
         ),
         onlyoffice=OnlyOfficeConfig(
             api_js_url=env_onlyoffice_js_url or str(oo.get("api_js_url", "")),

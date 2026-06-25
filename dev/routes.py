@@ -28,6 +28,7 @@ from service import (
     delete_dir,
     create_dir,
     list_archive,
+    move_file,
 )
 from validators import VALIDATORS
 from feedback_api import router as feedback_router
@@ -546,6 +547,43 @@ async def clawmate_rename(request: Request):
         "newName": new_name,
         "newPath": new_safe_rel,
     })
+
+
+@router.post("/api/clawmate/move")
+async def clawmate_move(request: Request):
+    """Move a file or directory to a new location.
+
+    Request body: {root, path, dest}
+    Returns: {ok: true, newPath: "dest/filename"}
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    root_id = str(body.get("root") or request.query_params.get("root", "")).strip()
+    rel_path = str(body.get("path") or request.query_params.get("path", "")).strip()
+    dest_dir = str(body.get("dest") or request.query_params.get("dest", "")).strip()
+
+    if not root_id or not rel_path:
+        raise HTTPException(status_code=422, detail="Missing root/path")
+    if not dest_dir:
+        raise HTTPException(status_code=422, detail="Missing dest directory")
+
+    try:
+        result = move_file(root_id, rel_path, dest_dir)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except FileExistsError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Move failed: {e}")
+
+    return JSONResponse(content=result)
+
 
 
 @router.post("/api/clawmate/mkdir")

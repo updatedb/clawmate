@@ -56,3 +56,6 @@ agent-zindex-fix.png
 mobile-agent-topbar-test.png
 mobile-layout-test.png
 openclaw-*-test.png
+
+# Local IDE/agent config
+.claude/

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./css/style.css?v=20260622a" />
+  <link rel="stylesheet" href="./css/style.css?v=20260625c" />
   <link rel="stylesheet" href="./vendor/github-markdown-dark.min.css" id="github-markdown-css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css" />
 </head>
@@ -159,7 +159,27 @@
   <script src="./vendor/addon-fit.min.js?v=20260622" defer></script>
   <script src="./vendor/addon-webgl.min.js?v=20260622" defer></script>
   <script src="./js/icons.js?v=20260624" defer></script>
-  <script src="./js/agent.js?v=20260622a" defer></script>
-  <script src="./js/app.js?v=20260623" defer></script>
+  <script src="./js/agent.js?v=20260625d" defer></script>
+  <script src="./js/app.js?v=20260625b" defer></script>
+
+  <!-- Directory picker modal (move) -->
+  <div id="dirPickerModal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.45);align-items:center;justify-content:center;">
+    <div style="background:var(--bg-secondary,#fff);border:1px solid var(--border-color,#ddd);border-radius:12px;padding:0;min-width:380px;max-width:520px;max-height:70vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.2);font-family:inherit;">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border-color,#e5e7eb);display:flex;align-items:center;justify-content:space-between;">
+        <span id="dirPickerTitle" style="font-size:15px;font-weight:600;color:var(--text-primary);">选择目标目录</span>
+        <button id="dirPickerClose" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;" title="关闭">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <div id="dirPickerTree" style="padding:12px 16px;overflow-y:auto;flex:1;min-height:200px;max-height:40vh;">
+        <div style="text-align:center;color:var(--text-muted);padding:20px;">加载中...</div>
+      </div>
+      <div style="padding:12px 16px;border-top:1px solid var(--border-color,#e5e7eb);display:flex;align-items:center;gap:8px;">
+        <span id="dirPickerSelected" style="flex:1;font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">当前目录</span>
+        <button id="dirPickerCancel" style="padding:6px 14px;border-radius:6px;border:1px solid var(--border-color,#d1d5db);background:var(--btn-bg,#f3f4f6);color:var(--btn-text,#374151);cursor:pointer;font-size:13px;">取消</button>
+        <button id="dirPickerConfirm" style="padding:6px 18px;border-radius:6px;border:none;background:var(--accent,#6366f1);color:#fff;cursor:pointer;font-size:13px;">确定</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

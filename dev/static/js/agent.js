@@ -61,6 +61,10 @@
   let currentDir = '';
   let currentAgentId = '';  // kept for OpenClaw backend session routing
   let backendMode = 'claude';
+
+  function isPtyBackend() {
+    return backendMode === 'claude' || backendMode === 'codex';
+  }
   let reconnectTimer = null;
   let reconnectAttempts = 0;
   const MAX_RECONNECT_ATTEMPTS = 10;
@@ -68,6 +72,7 @@
   let chatBufEl = null; // current assistant bubble being built
   let chatStatusEl = null; // reconnection status element
   let currentSessionKey = '';  // tracks last session key from backend
+  let flowPaused = false;    // xterm.js flow control: true when write buffer > HIGH watermark
 
   // --- Grid update ---
   function updateGridColumns(forceExpand) {
@@ -420,6 +425,27 @@
       if (_pendingResize) { clearTimeout(_pendingResize); _pendingResize = null; }
       if (term) { _sendResize(term.cols, term.rows); }
     }
+
+    // ── Flow control: prevent xterm.js write buffer from growing unbounded ──
+    // xterm.js processes ALL terminal output (including echoes) on the main thread
+    // with a ~12ms per-frame budget. When the write buffer exceeds the HIGH
+    // watermark we stop feeding data — xterm.js already buffers internally, so
+    // additional external buffering would only create a ping-pong effect where
+    // the resume dump immediately re-triggers flow-pause.
+    // Data arriving during flow-pause is dropped; this is intentional — the
+    // terminal renderer is the bottleneck, and dropping frames is the standard
+    // approach for real-time output streams.
+    if (term.onFlowControlPause) {
+      term.onFlowControlPause(function () {
+        flowPaused = true;
+        xlog('flow', 'PAUSE — write buffer full, pausing terminal writes');
+      });
+      term.onFlowControlResume(function () {
+        flowPaused = false;
+        xlog('flow', 'RESUME — accepting data again');
+      });
+      xlog('init', 'Flow control handlers registered');
+    }
   }
 
   // --- Chat view (OpenClaw backend) ---
@@ -555,7 +581,7 @@
     ws.onopen = function () {
       xlog('ws', 'OPEN');
       reconnectAttempts = 0;
-      if (backendMode === 'claude' && term) {
+      if (isPtyBackend() && term) {
         // Send current dimensions immediately so backend PTY output is
         // formatted at the correct column width from the very first byte.
         try {
@@ -592,7 +618,13 @@
         }
       } catch (_) {}
 
-      if (backendMode === 'claude' && term) {
+      if (isPtyBackend() && term) {
+        // Respect xterm.js flow control: if the internal write buffer is
+        // over the HIGH watermark, drop incoming data. xterm.js already
+        // buffers internally, so an external buffer just creates a ping-pong
+        // effect on resume. Dropping frames is the standard approach for
+        // real-time terminal output that can't keep up with rendering.
+        if (flowPaused) { return; }
         term.write(e.data);
         return;
       }
@@ -609,7 +641,7 @@
 
     ws.onclose = function () {
       xlog('ws', 'CLOSE');
-      if (backendMode === 'claude' && term) {
+      if (isPtyBackend() && term) {
         term.writeln('\r\n\x1b[1;33m⚠ 连接已断开\x1b[0m');
       }
       if (backendMode === 'openclaw') {
@@ -621,7 +653,7 @@
 
     ws.onerror = function () {
       xlog('ws', 'ERROR');
-      if (backendMode === 'claude' && term) {
+      if (isPtyBackend() && term) {
         term.writeln('\r\n\x1b[1;31m✕ 连接失败\x1b[0m');
       }
       if (backendMode === 'openclaw') {
@@ -634,12 +666,19 @@
     clearReconnect();
     currentSessionKey = '';
     if (ws) { ws.onclose = null; ws.close(); ws = null; }
-    if (term) { term.clear(); term.writeln('\x1b[2m终端已断开。\x1b[0m'); }
+    if (term) {
+      // Suspend cursor blink timer — hidden terminals that keep blinking
+      // waste main-thread time every ~500ms competing with active UI.
+      try { term.blur(); } catch (_) {}
+      term.clear(); term.writeln('\x1b[2m终端已断开。\x1b[0m');
+    }
     if (chatMessages) { chatMessages.innerHTML = ''; }
     chatBuf = ''; chatBufEl = null; chatStatusEl = null;
     // Reset resize tracking so next connection sends dimensions immediately
     _lastResizeSent = { cols: 0, rows: 0 };
     if (_pendingResize) { clearTimeout(_pendingResize); _pendingResize = null; }
+    // Reset flow control state for clean reconnection
+    flowPaused = false;
   }
 
   function scheduleReconnect() {
@@ -676,7 +715,7 @@
 
     // Clear display for clean transition — use reset() instead of clear()
     // because clear() can leave the WebGL renderer in a broken state
-    if (backendMode === 'claude' && term) {
+    if (isPtyBackend() && term) {
       term.reset();
       term.writeln('\x1b[1;36m⟳ 项目已切换，重新连接...\x1b[0m');
     }
@@ -757,6 +796,14 @@
       reconnectAttempts = 0;
       connectWs();
 
+      // Reconnect ResizeObserver if it was disconnected on close.
+      // unobserve first to avoid InvalidStateError on Firefox when the
+      // element is already being observed (e.g. rapid open→close→open).
+      if (termResizeObserver && xtermContainer) {
+        try { termResizeObserver.unobserve(xtermContainer); } catch (_) {}
+        try { termResizeObserver.observe(xtermContainer); xlog('init', 'ResizeObserver reconnected'); } catch (_) {}
+      }
+
       // Fit after panel slide-in transition completes (instead of 200ms blind timer)
       if (fitAddon) {
         var transitionFitted = false;
@@ -786,6 +833,11 @@
     close: function () {
       disconnectWs();
       animatingOut = true;
+      // Disconnect ResizeObserver while panel is hidden — avoids wasted
+      // callbacks competing for main-thread time with visible UI elements.
+      if (termResizeObserver) {
+        try { termResizeObserver.disconnect(); } catch (_) {}
+      }
       // Override global .hidden display:none so the slide-out
       // transition (translateX(0) → translateX(100%)) actually plays.
       panel.style.display = 'flex';
@@ -798,6 +850,7 @@
         animatingOut = false;
         panel.style.display = ''; // let CSS .hidden handle display again
         updateGridColumns(); // collapse to 0px
+        // Cursor blink timer is now fully stopped after slide-out completes.
       }, 300);
       if (toggleBtn) toggleBtn.classList.remove('active');
     },

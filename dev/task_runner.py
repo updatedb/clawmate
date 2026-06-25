@@ -10,6 +10,7 @@ Routes:
 from __future__ import annotations
 
 import logging
+import shlex
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, HTTPException, Request
@@ -310,9 +311,9 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
 
     # ── 优先注入 Claude Code PTY（agent panel 活跃时）──
     try:
-        from agent_routes import get_claude_session, inject_to_session
+        from agent_routes import get_agent_session, inject_to_session
         # Use feedback file path to derive project context for session key
-        sess = get_claude_session(root_id, file)
+        sess = get_agent_session(root_id, file)
         if sess is not None and items:
             # Build a compact task prompt for PTY injection
             pty_lines = [
@@ -339,7 +340,7 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
             pty_lines.append("1. 先标记 in_progress:\r\n")
             pty_lines.append(
                 f'   curl -s -X POST http://127.0.0.1:5533/api/clawmate/feedback/batch-update '
-                f'-H "X-Internal-Token: {hook_token}" '
+                f'-H "X-Internal-Token: {shlex.quote(hook_token)}" '
                 f'-H "Content-Type: application/json" '
                 f'-d \'{{"root":"{root_id}","project":"{project}","items":['
                 f'{{"id":"{items[0].get("id","?")}","status":"in_progress"}}]}}\'\r\n'

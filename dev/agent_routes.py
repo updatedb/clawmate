@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import fcntl
 import json
+import logging
 import os
 import pty
 import signal
@@ -31,6 +32,7 @@ from config import load as load_cfg
 from service import find_project_marker
 
 router = APIRouter()
+logger = logging.getLogger("clawmate.agent")
 
 # --- Session manager ---
 
@@ -67,16 +69,16 @@ _sessions: dict[str, _AgentSession] = {}
 _session_lock = asyncio.Lock()
 
 
-def _session_key(root: str, dir_: str = "") -> str:
-    """构造 session key。根据 dir 查找 .clawmate/ marker，找到则返回 {root}:{project}，否则返回 {root}。"""
-    if not dir_:
-        return root
-    root_path = _resolve_root_dir(root)
-    if root_path:
-        project = find_project_marker(root_path, dir_)
-        if project:
-            return f"{root}:{project}"
-    return root
+def _session_key(root: str, dir_: str = "", backend: str = "claude") -> str:
+    """构造 session key。格式为 {backend}:{root}[:{project}] 以确保不同后端会话隔离。"""
+    base = root
+    if dir_:
+        root_path = _resolve_root_dir(root)
+        if root_path:
+            project = find_project_marker(root_path, dir_)
+            if project:
+                base = f"{root}:{project}"
+    return f"{backend}:{base}"
 
 
 def _resolve_session_cwd(root: str, dir_: str = "") -> str:
@@ -91,26 +93,31 @@ def _resolve_session_cwd(root: str, dir_: str = "") -> str:
     return str(root_path)
 
 
-def get_claude_session(root: str, dir_: str = ""):
-    """Return active Claude Code session for root+dir, or None.
+def get_agent_session(root: str, dir_: str = "", backend: str = ""):
+    """Return active agent session for root+dir, or None.
 
     Uses .clawmate/ marker walking to determine session key.
+    If backend is specified, only searches that backend.
+    If not, searches all PTY backends (claude, codex).
     Only returns session if:
     - It exists and stop_event is not set
     - It has at least one active WebSocket (someone is viewing the terminal)
-    - The Claude Code process is still running
+    - The agent process is still running
     """
-    key = _session_key(root, dir_)
-    sess = _sessions.get(key)
-    if not sess:
-        return None
-    if sess.stop_event.is_set():
-        return None
-    if not sess.ws_set:
-        return None
-    if sess.proc and hasattr(sess.proc, "returncode") and sess.proc.returncode is not None:
-        return None
-    return sess
+    backends = [backend] if backend else ["claude", "codex"]
+    for bk in backends:
+        key = _session_key(root, dir_, bk)
+        sess = _sessions.get(key)
+        if not sess:
+            continue
+        if sess.stop_event.is_set():
+            continue
+        if not sess.ws_set:
+            continue
+        if sess.proc and hasattr(sess.proc, "returncode") and sess.proc.returncode is not None:
+            continue
+        return sess
+    return None
 
 
 def inject_to_session(sess, text: str):
@@ -138,6 +145,8 @@ def _cleanup_dead_sessions():
                 pass
         except KeyError:
             pass
+    if dead:
+        logger.debug("cleaned %d dead sessions, %d remain", len(dead), len(_sessions))
 
 
 async def _idle_reaper():
@@ -164,8 +173,17 @@ async def _idle_reaper():
                 sess.stop_event.set()
                 try:
                     os.killpg(os.getpgid(sess.proc.pid), signal.SIGTERM)
+                    idle_sec = now - sess.last_active
+                    lifetime_sec = now - sess.created_at
+                    logger.info(
+                        "reaper killed session key=%s pid=%d idle=%.0fs lifetime=%.0fs (%d sessions remain)",
+                        key, sess.proc.pid, idle_sec, lifetime_sec, len(_sessions),
+                    )
                 except (ProcessLookupError, OSError):
-                    pass
+                    logger.info(
+                        "reaper cleaned dead session key=%s pid=%d (process already gone)",
+                        key, sess.proc.pid,
+                    )
                 try:
                     os.close(sess.master_fd)
                 except OSError:
@@ -199,47 +217,64 @@ def _resolve_root_dir(root_id: str) -> Path | None:
         return None
 
 
+def _find_binary(name: str, candidates: list[str]) -> str:
+    """Find a CLI binary from a list of candidate paths, falling back to PATH."""
+    for candidate in candidates:
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    import shutil
+    found = shutil.which(name)
+    if found:
+        return found
+    raise RuntimeError(f"{name} CLI not found in PATH")
+
 def _find_claude_binary() -> str:
     """Find the claude CLI binary."""
-    for candidate in [
+    return _find_binary("claude", [
         "/usr/local/bin/claude",
         "/usr/bin/claude",
         os.path.expanduser("~/.npm-global/bin/claude"),
         os.path.expanduser("~/.local/bin/claude"),
-    ]:
-        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-            return candidate
-    import shutil
-    found = shutil.which("claude")
-    if found:
-        return found
-    raise RuntimeError("claude CLI not found in PATH")
+    ])
+
+def _find_codex_binary() -> str:
+    """Find the codex CLI binary."""
+    return _find_binary("codex", [
+        "/usr/local/bin/codex",
+        "/usr/bin/codex",
+        os.path.expanduser("~/.npm-global/bin/codex"),
+        os.path.expanduser("~/.local/bin/codex"),
+    ])
 
 
-# --- Claude Code backend ---
+# --- PTY agent backends (Claude, Codex) ---
 
-async def _spawn_claude(cwd: str) -> _AgentSession | None:
-    """Spawn a new Claude Code PTY process. Returns session or None on failure."""
-    try:
-        claude_bin = _find_claude_binary()
-    except RuntimeError:
-        return None
-
+async def _spawn_pt(cwd: str, cols: int, rows: int, binary: str,
+                     extra_args: list[str] | None = None,
+                     extra_env: dict[str, str] | None = None) -> _AgentSession | None:
+    """Spawn a new agent PTY process. Returns session or None on failure."""
     master_fd, slave_fd = pty.openpty()
-    try:
-        wsize = os.get_terminal_size()
-    except OSError:
-        wsize = os.terminal_size((80, 24))
+    if cols > 0 and rows > 0:
+        wsize = os.terminal_size((cols, rows))
+    else:
+        try:
+            wsize = os.get_terminal_size()
+        except OSError:
+            wsize = os.terminal_size((80, 24))
     fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", wsize.lines, wsize.columns, 0, 0))
     os.set_blocking(master_fd, False)
 
     env = os.environ.copy()
     env["TERM"] = "xterm-256color"
-    env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
+    if extra_env:
+        env.update(extra_env)
+
+    args = [binary]
+    if extra_args:
+        args.extend(extra_args)
 
     proc = await asyncio.create_subprocess_exec(
-        claude_bin,
-        "--dangerously-skip-permissions",
+        *args,
         cwd=cwd,
         stdin=slave_fd,
         stdout=slave_fd,
@@ -256,6 +291,29 @@ async def _spawn_claude(cwd: str) -> _AgentSession | None:
         master_fd=master_fd,
         stop_event=asyncio.Event(),
     )
+
+async def _spawn_claude(cwd: str, cols: int = 0, rows: int = 0,
+                        extra_env: dict[str, str] | None = None) -> _AgentSession | None:
+    """Spawn a new Claude Code PTY process."""
+    try:
+        binary = _find_claude_binary()
+    except RuntimeError:
+        return None
+    base_env = {"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"}
+    if extra_env:
+        base_env.update(extra_env)
+    return await _spawn_pt(cwd, cols, rows, binary,
+                           extra_args=["--dangerously-skip-permissions"],
+                           extra_env=base_env)
+
+async def _spawn_codex(cwd: str, cols: int = 0, rows: int = 0,
+                       extra_env: dict[str, str] | None = None) -> _AgentSession | None:
+    """Spawn a new Codex agent PTY process."""
+    try:
+        binary = _find_codex_binary()
+    except RuntimeError:
+        return None
+    return await _spawn_pt(cwd, cols, rows, binary, extra_env=extra_env)
 
 
 async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = ""):
@@ -300,7 +358,8 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = ""):
                         if msg.get("type") == "chdir":
                             new_root = msg.get("root", root)
                             new_dir = msg.get("dir", "")
-                            new_key = _session_key(new_root, new_dir)
+                            _bk = sess.key.split(":")[0] if sess.key and ":" in sess.key else "claude"
+                            new_key = _session_key(new_root, new_dir, _bk)
                             for w in list(sess.ws_set):
                                 try:
                                     if w.client_state == WebSocketState.CONNECTED:
@@ -574,7 +633,7 @@ async def _openclaw_backend(
                     if ctrl.get("type") == "chdir":
                         new_root = ctrl.get("root", root)
                         new_dir = ctrl.get("dir", "")
-                        new_key = _session_key(new_root, new_dir)
+                        new_key = _session_key(new_root, new_dir, "openclaw")
                         try:
                             await ws.send_text(json.dumps({
                                 "type": "session",
@@ -676,6 +735,8 @@ async def agent_terminal(
     root: str = Query(""),
     agentId: str = Query(""),
     dir: str = Query(""),
+    cols: int = Query(0),
+    rows: int = Query(0),
 ):
     """
     WebSocket endpoint for xterm.js Agent panel.
@@ -697,7 +758,7 @@ async def agent_terminal(
     backend = getattr(agent_cfg, "backend", "claude") if agent_cfg else "claude"
 
     cwd = _resolve_session_cwd(root, dir)
-    key = _session_key(root, dir)
+    key = _session_key(root, dir, backend)
 
     # Send session key to frontend so it can display it
     await ws.send_text(json.dumps({
@@ -736,13 +797,38 @@ async def agent_terminal(
             f"\x1b[1;36m╚══════════════════════════════════════╝\x1b[0m\r\n\r\n"
         )
 
-    if backend == "claude":
-        sess = await _spawn_claude(cwd)
-        if sess is None:
-            await ws.send_text("\x1b[1;31m✕ Claude CLI not found\x1b[0m\r\n")
+    if backend in ("claude", "codex"):
+        # Enforce session limit to prevent process accumulation.
+        # Only count active sessions (with attached WebSocket) -- idle sessions
+        # without clients don't consume resources and will be reaped shortly.
+        max_sessions = cfg.agent.max_sessions
+        active_count = sum(1 for s in _sessions.values() if s.ws_set)
+        if active_count >= max_sessions:
+            logger.warning(
+                "session limit reached: %d active sessions (max %d), rejecting new connection for key=%s",
+                active_count, max_sessions, key,
+            )
+            await ws.send_text(
+                "\x1b[1;31m✕ 会话数已达上限 (%d)，请关闭其他终端后重试\x1b[0m\r\n" % max_sessions
+            )
+            await ws.close()
             return
+        if backend == "codex":
+            sess = await _spawn_codex(cwd, cols=cols, rows=rows, extra_env=cfg.agent.env)
+            if sess is None:
+                await ws.send_text("\x1b[1;31m✕ Codex CLI not found\x1b[0m\r\n")
+                return
+        else:
+            sess = await _spawn_claude(cwd, cols=cols, rows=rows, extra_env=cfg.agent.env)
+            if sess is None:
+                await ws.send_text("\x1b[1;31m✕ Claude CLI not found\x1b[0m\r\n")
+                return
         sess.key = key
         _sessions[key] = sess
+        logger.info(
+            "session created key=%s pid=%d cols=%d rows=%d (%d total sessions)",
+            key, sess.proc.pid, cols or 0, rows or 0, len(_sessions),
+        )
         await _attach_session(sess, ws, root)
     elif backend == "openclaw":
         try:

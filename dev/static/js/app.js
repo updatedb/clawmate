@@ -880,11 +880,13 @@ function renderBreadcrumbs() {
     els.currentPath.classList.add("breadcrumb");
     renderBreadcrumbContainer(els.currentPath);
   }
-  // Add copy icon button after breadcrumb
+  // Add action buttons after breadcrumb
   var container = els.currentPath || els.breadcrumb;
   if (!container) return;
-  var existing = container.querySelector('.breadcrumb-copy');
-  if (existing) existing.remove();
+  // Remove existing action buttons
+  var existing = container.querySelectorAll('.breadcrumb-copy,.breadcrumb-refresh');
+  for (var i = 0; i < existing.length; i++) existing[i].remove();
+  // Copy directory button
   var copyBtn = document.createElement('button');
   copyBtn.className = 'breadcrumb-copy';
   copyBtn.title = '复制目录';
@@ -898,6 +900,18 @@ function renderBreadcrumbs() {
     setTimeout(function () { copyBtn.classList.remove('copied'); }, 1200);
   });
   container.appendChild(copyBtn);
+  // Refresh directory button
+  var refreshBtn = document.createElement('button');
+  refreshBtn.className = 'breadcrumb-copy breadcrumb-refresh';
+  refreshBtn.title = '刷新当前目录';
+  refreshBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>';
+  refreshBtn.addEventListener('click', function (e) {
+    e.preventDefault();
+    invalidateDirCache();
+    if (state.rootId) loadDir(state.dir);
+    else loadConfig();
+  });
+  container.appendChild(refreshBtn);
 }
 
 // Compute parent directory path from a given dir
@@ -1029,7 +1043,11 @@ function selectAll() {
   paged.forEach(function (entry) { state.selectedPaths.add(entry.relPath); });
   // Lightweight: just toggle classes on all visible cards
   document.querySelectorAll('.card, .list-item').forEach(function (el) {
-    if (state.selectedPaths.has(el.dataset.path)) el.classList.add('selected');
+    if (state.selectedPaths.has(el.dataset.path)) {
+      el.classList.add('selected');
+      var cb = el.querySelector('.card-check, .list-check');
+      if (cb) cb.checked = true;
+    }
   });
   updateBatchBar();
 }
@@ -1039,6 +1057,11 @@ function deselectAll() {
   // Lightweight: just remove selected class from all cards
   document.querySelectorAll('.card.selected, .list-item.selected').forEach(function (el) {
     el.classList.remove('selected');
+    var cb = el.querySelector('.card-check, .list-check');
+    if (cb) cb.checked = false;
+  });
+  document.querySelectorAll('.card .card-check:checked, .list-item .list-check:checked').forEach(function (cb) {
+    cb.checked = false;
   });
   updateBatchBar();
 }
@@ -1201,7 +1224,6 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
         e.stopPropagation();
         toggleSelect(entry.relPath, check.checked);
       });
-      card.appendChild(check);
 
       const thumb = document.createElement("div");
       thumb.className = "thumb";
@@ -1212,6 +1234,8 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
       } else {
         thumb.innerHTML = getFileIcon(entry);
       }
+      // Append checkbox inside thumb
+      thumb.appendChild(check);
 
       const title = document.createElement("div");
       title.className = "title";
@@ -1225,100 +1249,86 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
       card.appendChild(title);
       card.appendChild(meta);
 
-      // Card actions — at card bottom
-      const actions = document.createElement("div");
-      actions.className = "card-actions";
-
-      if (entry.is_dir) {
-        const actionsLeft = document.createElement("div");
-        actionsLeft.className = "card-actions-left";
-
-        const batchBtn = document.createElement("button");
-        batchBtn.type = "button";
-        batchBtn.textContent = "下载";
-        batchBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const folderName = entry.name;
-          const url = buildBatchDownloadLink(entry.relPath);
-          triggerBatchDownload(url, folderName);
+      // ── ⋯ Menu button (overlaid on thumb) ──
+      var menuBtn = document.createElement("button");
+      menuBtn.className = "card-menu-btn";
+      menuBtn.innerHTML = iconSVG('menu', 15);
+      menuBtn.title = "操作";
+      menuBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        // Toggle: if this menu is already open, close it
+        if (menuBtn._dropdown) {
+          menuBtn._dropdown.remove();
+          menuBtn._dropdown = null;
+          return;
+        }
+        // Close any other open menu first
+        var existing = document.querySelector('.card-menu-dropdown');
+        if (existing) existing.remove();
+        // Build dropdown
+        var dropdown = document.createElement("div");
+        dropdown.className = "card-menu-dropdown";
+        menuBtn._dropdown = dropdown;
+        function addItem(iconName, label, onClick) {
+          var item = document.createElement("div");
+          item.className = "card-menu-item";
+          item.innerHTML = iconSVG(iconName, 13) + '<span>' + label + '</span>';
+          item.addEventListener("click", function (ev) {
+            ev.stopPropagation();
+            dropdown.remove();
+            menuBtn._dropdown = null;
+            onClick();
+          });
+          dropdown.appendChild(item);
+        }
+        addItem('copy', '复制文件名', function () {
+          copyText(entry.name, "已复制文件名");
         });
-        actionsLeft.appendChild(batchBtn);
-
-        const renameDirBtn = document.createElement("button");
-        renameDirBtn.type = "button";
-        renameDirBtn.textContent = "重命名";
-        renameDirBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const newName = prompt("请输入新名称：", entry.name);
+        addItem('move', '移动到...', function () {
+          openDirPicker('选择目标目录 — ' + entry.name);
+          dirPickerCallback = function (destDir) {
+            authFetch('/api/clawmate/move', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ root: state.rootId, path: entry.relPath, dest: destDir })
+            })
+              .then(function (r) { return r.json(); })
+              .then(function (data) {
+                if (data.ok) { state.page = 1; state.searchResults = null; invalidateDirCache(); if (state.rootId) loadDir(state.dir); else loadConfig(); }
+                else { alert('移动失败：' + (data.detail || data.error || '未知错误')); }
+              })
+              .catch(function () { alert('移动失败'); });
+          };
+        });
+        if (entry.is_dir) {
+          addItem('download', '下载', function () {
+            triggerBatchDownload(buildBatchDownloadLink(entry.relPath), entry.name);
+          });
+        } else {
+          addItem('download', '下载', function () {
+            triggerDownload(buildDownloadLink(entry.relPath));
+          });
+        }
+        addItem('pencil', '重命名', function () {
+          var newName = prompt("请输入新名称：", entry.name);
           if (newName && newName !== entry.name) {
-            authFetch(`/api/clawmate/rename?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}&new_name=${encodeURIComponent(newName)}`, { method: 'POST' })
-              .then(r => r.json())
-              .then(data => { if (data.ok) { state.page = 1; state.searchResults = null; invalidateDirCache(); if (state.rootId) loadDir(state.dir); else loadConfig(); } else { alert('重命名失败：' + (data.detail || data.error || '未知错误')); } })
-              .catch(() => alert('重命名失败'));
+            authFetch('/api/clawmate/rename?root=' + encodeURIComponent(state.rootId) + '&path=' + encodeURIComponent(entry.relPath) + '&new_name=' + encodeURIComponent(newName), { method: 'POST' })
+              .then(function (r) { return r.json(); })
+              .then(function (data) { if (data.ok) { state.page = 1; state.searchResults = null; invalidateDirCache(); if (state.rootId) loadDir(state.dir); else loadConfig(); } else { alert('重命名失败：' + (data.detail || data.error || '未知错误')); } })
+              .catch(function () { alert('重命名失败'); });
           }
         });
-        actionsLeft.appendChild(renameDirBtn);
-
-        const actionsRight = document.createElement("div");
-        actionsRight.className = "card-actions-right";
-
-        const deleteDirBtn = document.createElement("button");
-        deleteDirBtn.type = "button";
-        deleteDirBtn.textContent = "删除";
-        deleteDirBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          deleteEntry(entry);
-        });
-        actionsRight.appendChild(deleteDirBtn);
-
-        actions.appendChild(actionsLeft);
-        actions.appendChild(actionsRight);
-      } else {
-        const actionsLeft = document.createElement("div");
-        actionsLeft.className = "card-actions-left";
-
-        const downloadBtn = document.createElement("button");
-        downloadBtn.type = "button";
-        downloadBtn.textContent = "下载";
-        downloadBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          triggerDownload(buildDownloadLink(entry.relPath));
-        });
-
-        const renameBtn = document.createElement("button");
-        renameBtn.type = "button";
-        renameBtn.textContent = "重命名";
-        renameBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const newName = prompt("请输入新名称：", entry.name);
-          if (newName && newName !== entry.name) {
-            authFetch(`/api/clawmate/rename?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}&new_name=${encodeURIComponent(newName)}`, { method: 'POST' })
-              .then(r => r.json())
-              .then(data => { if (data.ok) { state.page = 1; state.searchResults = null; invalidateDirCache(); if (state.rootId) loadDir(state.dir); else loadConfig(); } else { alert('重命名失败：' + (data.detail || data.error || '未知错误')); } })
-              .catch(() => alert('重命名失败'));
-          }
-        });
-
-        actionsLeft.appendChild(downloadBtn);
-        actionsLeft.appendChild(renameBtn);
-
-        const actionsRight = document.createElement("div");
-        actionsRight.className = "card-actions-right";
-
-        const deleteBtn = document.createElement("button");
-        deleteBtn.type = "button";
-        deleteBtn.textContent = "删除";
-        deleteBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          deleteEntry(entry);
-        });
-        actionsRight.appendChild(deleteBtn);
-
-        actions.appendChild(actionsLeft);
-        actions.appendChild(actionsRight);
-      }
-
-      card.appendChild(actions);
+        addItem('trash-2', '删除', function () { deleteEntry(entry); });
+        // Position dropdown relative to the menu button (viewport-relative)
+        // so it floats above all cards, never clipped.
+        var btnRect = menuBtn.getBoundingClientRect();
+        dropdown.style.position = 'fixed';
+        dropdown.style.top = (btnRect.bottom + 4) + 'px';
+        dropdown.style.left = (btnRect.right - 140) + 'px';
+        dropdown.style.zIndex = '9999';
+        document.body.appendChild(dropdown);
+      });
+      thumb.appendChild(menuBtn);
 
       card.onclick = () => handleEntryClick(entry);
       frag.appendChild(card);
@@ -1377,10 +1387,23 @@ function renderList(markdownEntries, folderEntries, otherEntries) {
       icon.style.marginRight = "6px";
       icon.style.flexShrink = "0";
       const name = document.createElement("span");
-      name.textContent = entry.name;
       name.style.display = "flex";
       name.style.alignItems = "center";
-      name.prepend(icon);
+      name.style.minWidth = "0";
+      name.appendChild(icon);
+      name.appendChild(document.createTextNode(entry.name));
+      // Copy filename button — always visible, after filename
+      const copyBtn = document.createElement("button");
+      copyBtn.className = "list-copy-btn";
+      copyBtn.innerHTML = iconSVG('copy', 12);
+      copyBtn.title = "复制文件名";
+      copyBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        copyText(entry.name, "已复制文件名");
+        copyBtn.classList.add("copied");
+        setTimeout(function () { copyBtn.classList.remove("copied"); }, 1200);
+      });
+      name.appendChild(copyBtn);
       const type = document.createElement("span");
       type.textContent = entry.is_dir ? "目录" : entry.category;
       const size = document.createElement("span");
@@ -2506,6 +2529,7 @@ async function init() {
   // Sync sort select with state default
   updateSortPills();
   setupDragDrop(); // Activate drag-and-drop upload
+  initDirPicker(); // Directory picker (for move operations)
   // Pre-check ONLYOFFICE availability in background
   checkOnlyofficeAvailable();
 
@@ -2598,6 +2622,208 @@ let _resizeTimer;
 window.addEventListener("resize", () => {
   clearTimeout(_resizeTimer);
   _resizeTimer = setTimeout(applyResponsiveView, 250);
+});
+
+// ── Directory Picker (for move operations) ─────────────────────────────
+
+var dirPickerCallback = null;
+var dirPickerSelectedDir = '';
+var dirPickerMode = ''; // 'move'
+
+function initDirPicker() {
+  var closeBtn = document.getElementById('dirPickerClose');
+  var cancelBtn = document.getElementById('dirPickerCancel');
+  var confirmBtn = document.getElementById('dirPickerConfirm');
+  var modal = document.getElementById('dirPickerModal');
+  if (!closeBtn || !cancelBtn || !confirmBtn || !modal) return;
+
+  closeBtn.addEventListener('click', closeDirPicker);
+  cancelBtn.addEventListener('click', closeDirPicker);
+  confirmBtn.addEventListener('click', confirmDirPicker);
+
+  // Close on backdrop click
+  modal.addEventListener('click', function(e) {
+    if (e.target === this) closeDirPicker();
+  });
+}
+
+function closeDirPicker() {
+  var modal = document.getElementById('dirPickerModal');
+  if (modal) modal.style.display = 'none';
+  dirPickerCallback = null;
+  dirPickerSelectedDir = '';
+  dirPickerMode = '';
+}
+
+function confirmDirPicker() {
+  if (dirPickerCallback) {
+    dirPickerCallback(dirPickerSelectedDir);
+  }
+  closeDirPicker();
+}
+
+function openDirPicker(title) {
+  dirPickerMode = 'move';
+  dirPickerSelectedDir = state.dir || '';
+  var titleEl = document.getElementById('dirPickerTitle');
+  var modal = document.getElementById('dirPickerModal');
+  var tree = document.getElementById('dirPickerTree');
+  var selLabel = document.getElementById('dirPickerSelected');
+  if (!titleEl || !modal || !tree) return;
+
+  titleEl.textContent = title || '选择目标目录';
+  if (selLabel) selLabel.textContent = dirPickerSelectedDir || '(根目录)';
+  modal.style.display = 'flex';
+
+  // Load directory tree (mirrors preview.js logic)
+  tree.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;">加载中...</div>';
+
+  (async function () {
+    try {
+      var MAX_DEPTH = 10;
+      var SKIP_PREFIXES = ['.', '__pycache__', 'node_modules'];
+      var allDirs = [];
+      var rootDirName = state.rootId;
+      var skippedCount = 0;
+
+      function filterDirs(entries) {
+        var dirs = [];
+        for (var i = 0; i < entries.length; i++) {
+          if (!entries[i].is_dir) continue;
+          var nm = entries[i].name;
+          var skip = false;
+          for (var s = 0; s < SKIP_PREFIXES.length; s++) {
+            if (nm.indexOf(SKIP_PREFIXES[s]) === 0) { skip = true; break; }
+          }
+          if (skip) { skippedCount++; continue; }
+          dirs.push(entries[i].path);
+        }
+        return dirs;
+      }
+
+      // Level 0: root
+      var res = await authFetch('/api/clawmate/list?root=' + encodeURIComponent(state.rootId) + '&dir=&limit=1000');
+      var data = await res.json();
+      if (data.name) rootDirName = data.name;
+      var currentLevel = filterDirs(data.entries || []);
+      allDirs = allDirs.concat(currentLevel);
+
+      // Level 1..MAX_DEPTH: parallel fetches per level
+      for (var depth = 1; depth < MAX_DEPTH && currentLevel.length > 0; depth++) {
+        var results = await Promise.all(currentLevel.map(function(dir) {
+          return authFetch('/api/clawmate/list?root=' + encodeURIComponent(state.rootId) + '&dir=' + encodeURIComponent(dir) + '&limit=1000')
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .catch(function() { return null; });
+        }));
+        var nextLevel = [];
+        for (var j = 0; j < results.length; j++) {
+          if (!results[j]) continue;
+          var subDirs = filterDirs(results[j].entries || []);
+          allDirs = allDirs.concat(subDirs);
+          nextLevel = nextLevel.concat(subDirs);
+        }
+        currentLevel = nextLevel;
+      }
+
+      // Render tree
+      _renderDirPickerTree(tree, allDirs, rootDirName);
+      if (skippedCount > 0) {
+        var note = document.createElement('div');
+        note.style.cssText = 'text-align:center;color:var(--text-muted);font-size:11px;padding:6px 0 2px;';
+        note.textContent = '已跳过 ' + skippedCount + ' 个隐藏/缓存目录';
+        tree.appendChild(note);
+      }
+    } catch (e) {
+      tree.innerHTML = '<div style="text-align:center;color:var(--danger);padding:20px;">加载目录失败: ' + escHtml(e.message) + '</div>';
+    }
+  })();
+}
+
+function _renderDirPickerTree(container, dirs, rootDirName) {
+  if (dirs.length === 0) {
+    container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;">没有可用的子目录</div>';
+    return;
+  }
+
+  // Sort dirs by depth, then alphabetically
+  dirs.sort(function(a, b) {
+    var depthA = (a.match(/\//g) || []).length;
+    var depthB = (b.match(/\//g) || []).length;
+    if (depthA !== depthB) return depthA - depthB;
+    return a.localeCompare(b);
+  });
+
+  // Build tree structure
+  var treeData = {};
+  for (var i = 0; i < dirs.length; i++) {
+    var parts = dirs[i].split('/');
+    var current = treeData;
+    for (var j = 0; j < parts.length; j++) {
+      if (!current[parts[j]]) current[parts[j]] = {};
+      current = current[parts[j]];
+    }
+  }
+
+  var html = '';
+  var folderSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;flex-shrink:0;"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>';
+
+  var rootLabel = rootDirName || state.rootId || '';
+  // Root entry
+  html += '<div class="dir-picker-item" data-dir="" style="display:flex;align-items:center;padding:4px 8px;cursor:pointer;border-radius:4px;margin:1px 0;' + (dirPickerSelectedDir === '' ? 'background:var(--accent);color:#fff;' : '') + '">';
+  html += folderSvg;
+  html += '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(rootLabel) + ' (根目录)</span>';
+  html += '</div>';
+
+  function renderTreeLevel(obj, prefix, depth) {
+    var keys = Object.keys(obj).sort();
+    for (var k = 0; k < keys.length; k++) {
+      var fullPath = prefix ? prefix + '/' + keys[k] : keys[k];
+      var isSelected = dirPickerSelectedDir === fullPath;
+      html += '<div class="dir-picker-item" data-dir="' + escHtml(fullPath) + '" style="display:flex;align-items:center;padding:4px 8px 4px ' + (8 + depth * 16) + 'px;cursor:pointer;border-radius:4px;margin:1px 0;' + (isSelected ? 'background:var(--accent);color:#fff;' : '') + '">';
+      html += folderSvg;
+      html += '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(keys[k]) + '</span>';
+      html += '</div>';
+      if (obj[keys[k]]) {
+        renderTreeLevel(obj[keys[k]], fullPath, depth + 1);
+      }
+    }
+  }
+
+  renderTreeLevel(treeData, '', 1);
+  container.innerHTML = html;
+
+  // Click handler: update selection
+  container.onclick = function(e) {
+    var item = e.target.closest('.dir-picker-item');
+    if (!item) return;
+    var dir = item.getAttribute('data-dir');
+    dirPickerSelectedDir = dir;
+    var items = container.querySelectorAll('.dir-picker-item');
+    for (var i = 0; i < items.length; i++) {
+      items[i].style.background = '';
+      items[i].style.color = '';
+    }
+    item.style.background = 'var(--accent)';
+    item.style.color = '#fff';
+    var selLabel = document.getElementById('dirPickerSelected');
+    if (selLabel) selLabel.textContent = dir || rootLabel + ' (根目录)';
+  };
+}
+
+// Close any open card menu dropdown when clicking outside
+document.addEventListener('click', function (e) {
+  var open = document.querySelector('.card-menu-dropdown');
+  if (open && !e.target.closest('.card-menu-btn') && !e.target.closest('.card-menu-dropdown')) {
+    // Clear reference on the owning button
+    var allBtns = document.querySelectorAll('.card-menu-btn');
+    for (var i = 0; i < allBtns.length; i++) {
+      if (allBtns[i]._dropdown === open) {
+        allBtns[i]._dropdown = null;
+        break;
+      }
+    }
+    open.remove();
+  }
 });
 
 init();

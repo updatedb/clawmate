@@ -147,7 +147,7 @@ def find_project_marker(root_path: Path, rel_dir: str) -> Optional[str]:
     """
     target = (root_path / rel_dir).resolve() if rel_dir else root_path
     for p in [target] + list(target.parents):
-        if root_path not in p.parents and p != root_path:
+        if p == root_path:
             break
         if (p / ".clawmate").is_dir():
             return p.name

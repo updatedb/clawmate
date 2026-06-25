@@ -266,14 +266,16 @@ button svg, .btn svg, a svg {
   width: 28px; height: 28px;
   display: inline-flex; align-items: center; justify-content: center;
   background: none; border: none; border-radius: 4px;
-  color: var(--brand-text);
+  color: var(--text-secondary);
   opacity: 0.6;
   cursor: pointer;
   transition: opacity 0.15s, background 0.15s;
   margin-left: 4px;
 }
-.breadcrumb-copy:hover { opacity: 1; background: rgba(255,255,255,0.12); }
+.breadcrumb-copy:hover { opacity: 1; background: var(--bg-tertiary); }
 .breadcrumb-copy.copied { color: var(--accent); opacity: 1; }
+.breadcrumb-refresh:active svg { animation: spin 0.6s ease; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* Sidebar tree */
 .dir-list li { padding: 7px 10px; margin-bottom: 2px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; color: var(--text-primary); display: flex; align-items: center; gap: 6px; transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out); }
@@ -490,8 +492,34 @@ button svg, .btn svg, a svg {
 .card { background: var(--card-bg); padding: 12px; border-radius: var(--radius-lg); border: 1px solid var(--border-color); cursor: pointer; display: flex; flex-direction: column; gap: 10px; position: relative; overflow: hidden; transition: transform var(--duration-base) var(--ease-out), box-shadow var(--duration-base) var(--ease-out), border-color var(--duration-base) var(--ease-out); box-shadow: var(--card-shadow); }
 .card:hover { transform: translateY(-3px); box-shadow: var(--card-shadow-hover); border-color: var(--accent); }
 .card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), var(--card-shadow-hover); }
-.card .card-check { position: absolute; top: 8px; left: 8px; z-index: 2; width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); }
-.card .thumb { height: 78px; background: var(--bg-tertiary); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; font-size: 28px; color: var(--text-muted); overflow: hidden; flex-shrink: 0; }
+.thumb .card-check {
+  position: absolute; top: 8px; left: 8px; z-index: 2;
+  width: 22px; height: 22px;
+  cursor: pointer; margin: 0;
+  appearance: none; -webkit-appearance: none;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+.thumb .card-check:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--text-muted);
+}
+.thumb .card-check:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.thumb .card-check:checked::after {
+  content: "";
+  display: block;
+  width: 5px; height: 9px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) translateY(-1px);
+}
+.card .thumb { height: 78px; background: var(--bg-tertiary); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; font-size: 28px; color: var(--text-muted); overflow: hidden; flex-shrink: 0; position: relative; }
 .card img { max-width: 100%; max-height: 78px; object-fit: cover; border-radius: var(--radius-sm); }
 .card .title { font-size: 13px; font-weight: 500; word-break: break-all; color: var(--text-primary); line-height: 1.4; }
 .card .meta { font-size: 11px; color: var(--text-secondary); display: flex; justify-content: space-between; margin-top: auto; padding-top: 4px; }
@@ -504,6 +532,32 @@ button svg, .btn svg, a svg {
 .card-actions button:hover, .card-actions-left button:hover, .card-actions-right button:hover { background: var(--bg-tertiary); border-color: var(--text-muted); }
 .card-actions button.danger, .card-actions-left button.danger, .card-actions-right button.danger { color: var(--danger); border-color: var(--danger-border); }
 .card-actions button.danger:hover, .card-actions-left button.danger:hover, .card-actions-right button.danger:hover { background: var(--danger-bg); border-color: var(--danger); }
+/* Card menu button — overlaid on thumb, top-right */
+.card { position: relative; }
+.card-menu-btn {
+  position: absolute; top: 8px; right: 8px;
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--card-bg); border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm); color: var(--text-secondary);
+  cursor: pointer; opacity: 1; transition: background 0.15s;
+  z-index: 2;
+}
+.card-menu-btn:hover { background: var(--bg-tertiary); border-color: var(--text-muted); }
+/* Dropdown — appended to body, positioned via JS */
+.card-menu-dropdown {
+  background: var(--card-bg); border: 1px solid var(--border-color);
+  border-radius: var(--radius-md); box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  min-width: 140px; padding: 4px;
+}
+.card-menu-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-radius: var(--radius-sm);
+  cursor: pointer; font-size: 12px; color: var(--text-primary);
+  transition: background 0.1s;
+}
+.card-menu-item:hover { background: var(--bg-tertiary); }
+.card-menu-item span { white-space: nowrap; }
 
 /* ===== Entry Group Headers ===== */
 .entry-group-header { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 0 4px; margin-top: 8px; grid-column: 1 / -1; border-bottom: 1px solid var(--border-color); }
@@ -529,6 +583,9 @@ button svg, .btn svg, a svg {
 .list-item .list-check { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); justify-self: center; }
 .list-item > :nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list-item span { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+.list-copy-btn { flex-shrink: 0; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; border-radius: 3px; color: var(--text-secondary); opacity: 0.55; cursor: pointer; padding: 0; margin-left: 6px; transition: opacity 0.15s, background 0.15s, color 0.15s; }
+.list-copy-btn:hover { opacity: 1; background: var(--bg-tertiary); }
+.list-copy-btn.copied { color: var(--accent); opacity: 1; }
 .list-item > :nth-child(3),
 .list-item > :nth-child(4),
 .list-item > :nth-child(5) { text-align: right; flex-shrink: 0; }
@@ -641,10 +698,9 @@ button svg, .btn svg, a svg {
   .card .title { font-size: 12px; }
   .card .meta { font-size: 10px; }
 
-  /* Card actions: icon-only + compact */
-  .card-actions { gap: 3px; }
-  .card-actions button { padding: 3px 5px; font-size: 10px; }
-  .card-actions button span.btn-icon-label { display: none; }
+  /* Card menu button: always visible on mobile, larger touch target */
+  .card-menu-btn { width: 26px; height: 26px; }
+  .card-menu-dropdown { min-width: 130px; }
 
   /* List view: card-style rows instead of horizontal-scroll table */
   .list { display: flex; flex-direction: column; gap: 6px; overflow-x: visible; }
@@ -708,6 +764,9 @@ button svg, .btn svg, a svg {
 
   /* Status text */
   .status { font-size: 11px; }
+
+  /* Ensure .hidden always wins over .list/.gallery in responsive mode */
+  .gallery.hidden, .list.hidden { display: none; }
 }
 
 @media (max-width: 480px) {
