@@ -78,7 +78,6 @@
     var btn = document.getElementById('btnToggleAgent');
     if (btn) btn.click();
   };
-})();
 
   // ── Theme helpers (for page-specific use like Mermaid theme) ──
   window._topbarResolvedTheme = function () {
@@ -88,3 +87,4 @@
     return currentTheme;
   };
   window._topbarGetTheme = function () { return currentTheme; };
+})();
