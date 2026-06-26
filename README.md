@@ -220,7 +220,7 @@ ClawMate 右侧面板直接运行 AI Agent，无需切换窗口：
 
 ## 截图
 
-### 文件管理
+### 文件管理（clawmate 项目）
 
 ![文件管理](assets/cm-desktop-file-browser.png)
 
@@ -236,17 +236,13 @@ ClawMate 右侧面板直接运行 AI Agent，无需切换窗口：
 
 ![Agent 面板](assets/cm-desktop-agent-panel.png)
 
-*右侧内嵌 xterm.js PTY 终端（Claude Code / Codex），直接对话修改文件*
+*右侧内嵌 xterm.js PTY 终端（Claude Code / Codex），预览中直接对话修改文件*
 
 ### 移动端
 
-![移动端文件管理](assets/cm-mobile-file-browser.png)
+![移动端](assets/cm-mobile-combined.png)
 
-*移动端文件管理：上传 + 搜索 + 批量操作*
-
-![移动端文件预览](assets/cm-mobile-preview.png)
-
-*移动端适配：文件预览 + 反馈提交*
+*左：文件管理（上传/搜索/批量操作） 右：Markdown 预览 + 反馈提交*
 
 ## Agent 面板（三后端）
 
