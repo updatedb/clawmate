@@ -1404,7 +1404,7 @@
             prevBtn.id = 'imgNavPrev';
             prevBtn.innerHTML = '‹';
             prevBtn.className = 'img-nav-btn';
-            prevBtn.style.left = '4px';
+            prevBtn.style.left = '20px';
             prevBtn.title = '上一张';
             const p = nav.prev.path || nav.prev.relPath || nav.prev.name;
             prevBtn.addEventListener('click', () => { window.location.href = 'preview.html?root=' + encodeURIComponent(rootId) + '&file=' + encodeURIComponent(p); });
@@ -1417,7 +1417,7 @@
             nextBtn.id = 'imgNavNext';
             nextBtn.innerHTML = '›';
             nextBtn.className = 'img-nav-btn';
-            nextBtn.style.right = '4px';
+            nextBtn.style.right = '20px';
             nextBtn.title = '下一张';
             const n = nav.next.path || nav.next.relPath || nav.next.name;
             nextBtn.addEventListener('click', () => { window.location.href = 'preview.html?root=' + encodeURIComponent(rootId) + '&file=' + encodeURIComponent(n); });
@@ -1976,7 +1976,7 @@
   updateGridColumns();
 
   // ============ Image Mode Detection ============
-  const isImageMode = ['png', 'jpg', 'jpeg', 'svg'].includes(ext);
+  const isImageMode = ['png', 'jpg', 'jpeg', 'svg', 'webp', 'gif', 'bmp', 'ico'].includes(ext);
 
   // ============ Image / Media Mode Toolbar Setup ============
   function setupMediaToolbar() {
