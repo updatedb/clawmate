@@ -404,7 +404,7 @@
     // Zoom controls
     var controls = document.createElement('div');
     controls.className = 'mermaid-zoom-controls';
-    controls.innerHTML = '<button class="mermaid-zoom-btn" data-zoom="out">−</button><button class="mermaid-zoom-btn" data-zoom="reset">⊙</button><button class="mermaid-zoom-btn" data-zoom="in">+</button><button class="mermaid-zoom-btn mermaid-expand-btn" data-zoom="expand" title="Expand diagram"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>';
+    controls.innerHTML = '<button class="mermaid-zoom-btn" data-zoom="out">−</button><button class="mermaid-zoom-btn" data-zoom="reset">⊙</button><button class="mermaid-zoom-btn" data-zoom="in">+</button><button class="mermaid-zoom-btn mermaid-expand-btn" data-zoom="expand" title="Expand diagram"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>';
     container.appendChild(controls);
 
     function applyZoom() {
@@ -526,14 +526,14 @@
       overlay.classList.add('active');
     });
 
-    // ── Dialog-internal zoom & pan ──
+    // ── Dialog-internal zoom & pan (centered) ──
     var dScale = 1;
-    var dOriginX = 0, dOriginY = 0;
+    var dPanX = 0, dPanY = 0;
     var dPanning = false, dPanStartX = 0, dPanStartY = 0;
 
     function applyDialogZoom() {
-      clonedSvg.style.transformOrigin = '0 0';
-      clonedSvg.style.transform = 'translate(' + dOriginX + 'px, ' + dOriginY + 'px) scale(' + dScale + ')';
+      clonedSvg.style.transformOrigin = 'center center';
+      clonedSvg.style.transform = 'translate(' + dPanX + 'px, ' + dPanY + 'px) scale(' + dScale + ')';
     }
 
     zoomGroup.addEventListener('click', function(e) {
@@ -541,11 +541,11 @@
       if (!btn) return;
       if (btn.dataset.dzoom === 'in') { dScale = Math.min(5, dScale + 0.5); }
       else if (btn.dataset.dzoom === 'out') { dScale = Math.max(0.3, dScale - 0.5); }
-      else { dScale = 1; dOriginX = 0; dOriginY = 0; }
+      else { dScale = 1; dPanX = 0; dPanY = 0; }
       applyDialogZoom();
     });
 
-    // Mouse wheel zoom (Ctrl+Wheel)
+    // Mouse wheel zoom (Ctrl+Wheel) — zoom toward cursor
     body.addEventListener('wheel', function(e) {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
@@ -553,10 +553,12 @@
         var oldScale = dScale;
         dScale = Math.max(0.3, Math.min(5, dScale + delta));
         var rect = body.getBoundingClientRect();
-        var mx = e.clientX - rect.left;
-        var my = e.clientY - rect.top;
-        dOriginX = mx - (mx - dOriginX) * dScale / oldScale;
-        dOriginY = my - (my - dOriginY) * dScale / oldScale;
+        // Cursor position relative to body center
+        var cx = e.clientX - rect.left - rect.width / 2;
+        var cy = e.clientY - rect.top - rect.height / 2;
+        var ratio = dScale / oldScale;
+        dPanX = cx + (dPanX - cx) * ratio;
+        dPanY = cy + (dPanY - cy) * ratio;
         applyDialogZoom();
       }
     }, { passive: false });
@@ -565,16 +567,16 @@
     body.addEventListener('mousedown', function(e) {
       if (e.button !== 0 || e.ctrlKey || e.metaKey) return;
       dPanning = true;
-      dPanStartX = e.clientX - dOriginX;
-      dPanStartY = e.clientY - dOriginY;
+      dPanStartX = e.clientX - dPanX;
+      dPanStartY = e.clientY - dPanY;
       body.style.cursor = 'grabbing';
       clonedSvg.style.cursor = 'grabbing';
     });
 
     document.addEventListener('mousemove', function(e) {
       if (!dPanning) return;
-      dOriginX = e.clientX - dPanStartX;
-      dOriginY = e.clientY - dPanStartY;
+      dPanX = e.clientX - dPanStartX;
+      dPanY = e.clientY - dPanStartY;
       applyDialogZoom();
     });
 
@@ -588,7 +590,7 @@
 
     // Double-click to reset
     body.addEventListener('dblclick', function() {
-      dScale = 1; dOriginX = 0; dOriginY = 0;
+      dScale = 1; dPanX = 0; dPanY = 0;
       applyDialogZoom();
     });
     // ── End zoom & pan ──
