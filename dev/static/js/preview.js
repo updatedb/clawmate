@@ -78,17 +78,19 @@
   const btnBackMobile = document.getElementById('btnBackMobile');
   if (btnBackMobile) btnBackMobile.href = backHref;
 
-  // ============ Theme ============
-  let currentTheme = localStorage.getItem('clawmate-theme') || 'auto';
-
-  function getResolvedTheme() {
-    if (currentTheme === 'auto') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  // Theme change hook — called by topbar.js after theme cycles
+  window._onThemeChange = function (resolved) {
+    if (resolved === 'dark') {
+      document.body.classList.add('dark');
+    } else {
+      document.body.classList.remove('dark');
     }
-    return currentTheme;
-  }
+    applyPreviewTheme(resolved);
+    // Sync xterm terminal theme
+    if (window.Agent && window.Agent.syncTheme) window.Agent.syncTheme();
+  };
 
-  function switchThemeCSS(resolved) {
+  function applyPreviewTheme(resolved) {
     const hlCss = document.getElementById('highlight-theme-css');
     if (resolved === 'dark') {
       hlCss.href = './vendor/github-dark.min.css';
@@ -109,49 +111,7 @@
     } else {
       varsEl.textContent = '[data-theme=light] .markdown-body { color:#1f2328; background-color:#ffffff; font-family:' + _mdFontStack + '; } [data-theme=light] .markdown-body table tr { background-color:#ffffff; border-top:1px solid #d1d9e0b3; } [data-theme=light] .markdown-body table td,[data-theme=light] .markdown-body table th { border:1px solid #d1d9e0; } [data-theme=light] .markdown-body code { background:rgba(175,184,193,0.2); color:#d73a49; } [data-theme=light] .markdown-body pre { background:#f6f8fa; color:#1f2328; } [data-theme=light] .markdown-body pre code { background:transparent; color:#1f2328; } [data-theme=light] .markdown-body blockquote { color:#656d76; border-left-color:#d0d7de; }';
     }
-  }
-
-  function applyTheme() {
-    const resolved = getResolvedTheme();
-    if (resolved === 'dark') {
-      document.documentElement.setAttribute('data-theme', 'dark');
-      document.body.classList.add('dark');
-    } else {
-      document.documentElement.setAttribute('data-theme', 'light');
-      document.body.classList.remove('dark');
-    }
-    switchThemeCSS(resolved);
-    const btn = document.getElementById('themeToggle');
-    if (btn) {
-      var iconName = currentTheme === 'auto' ? 'sun-moon' : currentTheme === 'light' ? 'sun' : 'moon';
-      btn.title = '主题: ' + (currentTheme === 'auto' ? '自动' : currentTheme === 'light' ? '浅色' : '深色');
-      if (typeof iconSVG === 'function') btn.innerHTML = iconSVG(iconName, 16);
-    }
-  }
-
-  function cycleTheme() {
-    if (currentTheme === 'auto') currentTheme = 'light';
-    else if (currentTheme === 'light') currentTheme = 'dark';
-    else currentTheme = 'auto';
-    localStorage.setItem('clawmate-theme', currentTheme);
-    applyTheme();
-    // Sync xterm terminal theme if agent panel is open
-    if (window.Agent && window.Agent.syncTheme) window.Agent.syncTheme();
-  }
-
-  document.getElementById('themeToggle').addEventListener('click', cycleTheme);
-  applyTheme();
-
-  // Logout
-  document.getElementById('btnLogout').addEventListener('click', async () => {
-    if (!confirm('确定要退出登录吗？')) return;
-    try {
-      await fetch('/api/clawmate/auth/logout', { method: 'POST' });
-    } catch (_) {}
-    window.location.href = '/clawmate/login.html';
-  });
-
-  // escHtml / formatSize / copyText / showToast: defined in preview-common.js
+  }  // escHtml / formatSize / copyText / showToast: defined in preview-common.js
 
   function buildDownloadLink(path) {
     return `/api/clawmate/download?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(path)}`;

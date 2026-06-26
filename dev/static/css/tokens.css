@@ -21,10 +21,12 @@
   --border-color:   #e2e8f0;  /* slate-200 */
 
   /* ── Brand chrome (topbar / bottombar) ── */
-  --brand-bg:       #042f2e;  /* teal-950 — matches txt-logo #006060 */
-  --brand-text:     #f0fdfa;  /* teal-50 */
-  --brand-input-bg: rgba(255,255,255,0.10);
-  --brand-input-focus: rgba(255,255,255,0.18);
+  --brand-bg:       #ffffff;  /* white — clean light topbar */
+  --brand-text:     #0f172a;  /* slate-900 */
+  --brand-input-bg: #f1f5f9;  /* slate-100 */
+  --brand-input-focus: #e2e8f0;  /* slate-200 */
+  --brand-btn-border: #e2e8f0;
+  --brand-btn-hover: #f1f5f9;
 
   /* ── Buttons ── */
   --btn-bg:         #f8fafc;
@@ -125,6 +127,8 @@
   --brand-text:     #f8fafc;
   --brand-input-bg: rgba(255,255,255,0.08);
   --brand-input-focus: rgba(255,255,255,0.14);
+  --brand-btn-border: rgba(255,255,255,0.2);
+  --brand-btn-hover: rgba(255,255,255,0.12);
 
   /* ── Buttons ── */
   --btn-bg:         #334155;

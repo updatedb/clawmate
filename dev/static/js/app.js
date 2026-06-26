@@ -60,9 +60,6 @@ const state = {
 let sidebarParentDir = "";
 let sidebarEntries = [];
 
-// Theme state
-let currentTheme = localStorage.getItem('clawmate-theme') || 'auto';
-
 const els = {
   breadcrumb: document.getElementById("breadcrumb"),
   dirList: document.getElementById("dirList"),
@@ -89,7 +86,6 @@ const els = {
   loadMoreBtn: document.getElementById("loadMoreBtn"),
   rootSelect: document.getElementById("rootSelect"),
   batchDownloadBtn: document.getElementById("batchDownloadBtn"),
-  themeToggle: document.getElementById("themeToggle"),
   // Multi-select
   multiSelectToggle: document.getElementById("multiSelectToggle"),
   btnMkdir: document.getElementById("btnMkdir"),
@@ -101,47 +97,12 @@ const els = {
   batchClearBtn: document.getElementById("batchClearBtn"),
 };
 
-// ===== Theme System =====
 function getResolvedTheme() {
-  if (currentTheme === 'auto') {
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  }
-  return currentTheme;
+  return window._topbarResolvedTheme ? window._topbarResolvedTheme() : 'light';
 }
 
 function getMermaidTheme() {
   return getResolvedTheme() === 'dark' ? 'dark' : 'default';
-}
-
-function applyTheme() {
-  const resolved = getResolvedTheme();
-  const html = document.documentElement;
-
-  if (resolved === 'dark') {
-    html.setAttribute('data-theme', 'dark');
-  } else {
-    html.setAttribute('data-theme', 'light');
-  }
-
-  // Update theme button icon
-  if (els.themeToggle) {
-    var iconName = currentTheme === 'auto' ? 'sun-moon' : currentTheme === 'light' ? 'sun' : 'moon';
-    var title = '主题: ' + (currentTheme === 'auto' ? '自动' : currentTheme === 'light' ? '浅色' : '深色');
-    els.themeToggle.title = title;
-    if (typeof iconSVG === 'function') {
-      els.themeToggle.innerHTML = iconSVG(iconName, 16);
-    }
-  }
-}
-
-function cycleTheme() {
-  if (currentTheme === 'auto') currentTheme = 'light';
-  else if (currentTheme === 'light') currentTheme = 'dark';
-  else currentTheme = 'auto';
-  localStorage.setItem('clawmate-theme', currentTheme);
-  applyTheme();
-  // Sync xterm terminal theme if agent panel is open
-  if (window.Agent && window.Agent.syncTheme) window.Agent.syncTheme();
 }
 
 // Initialize theme on load
@@ -1460,8 +1421,20 @@ function render() {
   updateLoadMoreBtn();
   updateBatchBar();
 
-  const baseCount = entries.length;
-  const filteredCount = filtered.length;
+  // Empty state toggling
+  var emptyStateEl = document.getElementById('emptyState');
+  var emptySearchEl = document.getElementById('emptySearch');
+  if (emptyStateEl) emptyStateEl.classList.add('hidden');
+  if (emptySearchEl) emptySearchEl.classList.add('hidden');
+
+  var baseCount = entries.length;
+  var filteredCount = filtered.length;
+  var isSearch = !!state.searchResults;
+  if (isSearch && baseCount === 0) {
+    if (emptySearchEl) emptySearchEl.classList.remove('hidden');
+  } else if (baseCount === 0) {
+    if (emptyStateEl) emptyStateEl.classList.remove('hidden');
+  }
   if (!state.searchResults && baseCount === 0) {
     setStatus("目录为空");
   } else {

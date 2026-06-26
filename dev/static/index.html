@@ -25,7 +25,7 @@
           <button id="clearSearchBtn" aria-label="清除搜索">&times;</button>
         </span>
         <button id="searchBtn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
           <span>搜索</span>
         </button>
       </div>
@@ -96,6 +96,17 @@
           <div id="status" class="status"></div>
         </div>
         <div class="main-scroll">
+          <div id="emptyState" class="empty-state hidden">
+            <div class="empty-state-icon">📂</div>
+            <h3>此目录为空</h3>
+            <p>拖拽文件到此处上传，或使用 <code>Ctrl+V</code> 粘贴剪贴板中的图片</p>
+            <p class="empty-hint">也可以通过 Agent 命令让 AI 生成文件到当前目录</p>
+          </div>
+          <div id="emptySearch" class="empty-state hidden">
+            <div class="empty-state-icon">🔍</div>
+            <h3>未找到匹配文件</h3>
+            <p>尝试其他关键词，或清除搜索查看全部文件</p>
+          </div>
           <div id="gallery" class="gallery"></div>
           <div id="list" class="list hidden"></div>
           <div class="pagination">
@@ -159,25 +170,26 @@
   <script src="./vendor/addon-fit.min.js?v=20260622" defer></script>
   <script src="./vendor/addon-webgl.min.js?v=20260622" defer></script>
   <script src="./js/icons.js?v=20260624" defer></script>
+  <script src="./js/topbar.js?v=20260626" defer></script>
   <script src="./js/agent.js?v=20260625d" defer></script>
   <script src="./js/app.js?v=20260625b" defer></script>
 
   <!-- Directory picker modal (move) -->
-  <div id="dirPickerModal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.45);align-items:center;justify-content:center;">
-    <div style="background:var(--bg-secondary,#fff);border:1px solid var(--border-color,#ddd);border-radius:12px;padding:0;min-width:380px;max-width:520px;max-height:70vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.2);font-family:inherit;">
-      <div style="padding:16px 20px;border-bottom:1px solid var(--border-color,#e5e7eb);display:flex;align-items:center;justify-content:space-between;">
-        <span id="dirPickerTitle" style="font-size:15px;font-weight:600;color:var(--text-primary);">选择目标目录</span>
-        <button id="dirPickerClose" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;" title="关闭">
+  <div id="dirPickerModal" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-title" id="dirPickerTitle">选择目标目录</span>
+        <button class="modal-close" id="dirPickerClose" title="关闭">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
         </button>
       </div>
-      <div id="dirPickerTree" style="padding:12px 16px;overflow-y:auto;flex:1;min-height:200px;max-height:40vh;">
+      <div class="modal-body" id="dirPickerTree">
         <div style="text-align:center;color:var(--text-muted);padding:20px;">加载中...</div>
       </div>
-      <div style="padding:12px 16px;border-top:1px solid var(--border-color,#e5e7eb);display:flex;align-items:center;gap:8px;">
+      <div class="modal-footer">
         <span id="dirPickerSelected" style="flex:1;font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">当前目录</span>
-        <button id="dirPickerCancel" style="padding:6px 14px;border-radius:6px;border:1px solid var(--border-color,#d1d5db);background:var(--btn-bg,#f3f4f6);color:var(--btn-text,#374151);cursor:pointer;font-size:13px;">取消</button>
-        <button id="dirPickerConfirm" style="padding:6px 18px;border-radius:6px;border:none;background:var(--accent,#6366f1);color:#fff;cursor:pointer;font-size:13px;">确定</button>
+        <button id="dirPickerCancel" class="btn btn-secondary">取消</button>
+        <button id="dirPickerConfirm" class="btn btn-primary">确定</button>
       </div>
     </div>
   </div>

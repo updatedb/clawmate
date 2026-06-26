@@ -302,14 +302,14 @@
       padding: 0 20px;
       flex-shrink: 0;
       z-index: 10;
-      box-shadow: 0 -2px 12px rgba(0,0,0,0.2);
+      border-top: 1px solid var(--border-color);
     }
     .preview-bottom-btn {
       height: 36px;
       padding: 0 12px;
       border-radius: var(--radius-sm);
-      border: 1px solid rgba(255,255,255,0.15);
-      background: rgba(255,255,255,0.08);
+      border: 1px solid var(--brand-btn-border, var(--border-color));
+      background: var(--brand-btn-hover, var(--bg-tertiary));
       color: var(--brand-text);
       cursor: pointer;
       font-size: 12px;
@@ -322,10 +322,10 @@
       white-space: nowrap;
       box-sizing: border-box;
     }
-    .preview-bottom-btn:hover { background: rgba(255,255,255,0.16); }
+    .preview-bottom-btn:hover { background: var(--bg-secondary); border-color: var(--text-muted); }
     .preview-bottom-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
     .preview-bottom-btn.danger:hover { background: rgba(220,38,38,0.3); border-color: rgba(220,38,38,0.5); }
-    .preview-bottom-divider { width: 1px; height: 20px; background: transparent; margin: 0 4px; flex-shrink: 0; }
+    .preview-bottom-divider { width: 1px; height: 20px; background: var(--border-color); margin: 0 4px; flex-shrink: 0; }
     .preview-btn-group { display: flex; align-items: center; gap: 4px; }
   /* preview-btn-group stays visible on all sizes (file-action buttons hidden on mobile via #btnPdf etc.) */
 
