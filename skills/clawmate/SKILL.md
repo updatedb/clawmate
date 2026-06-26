@@ -46,6 +46,8 @@ license: MIT
 | **全部** | 任务管理 | `clawlist` | 树形 TODO + 进度跟踪 |
 | **全部** | 知识沉淀 | `memory` / `wiki-maintainer` | 经验归档、知识库更新 |
 
+> ⚠️ **可用性说明**：上表中部分 Skill（如 `academic-deep-research`、`cto-advisor`、`business-writing`、`prd-writer`、`healthcheck`、`clawlist`、`wiki-maintainer` 等）为推荐搭配但需单独安装，使用前请先确认已在环境中可用（`openclaw skills list`）。`mermaid-diagrams` 对应内置 `mermaid:*` 系列 Skill。
+>
 > **调用原则**：每个阶段优先使用对应 skill，不重复造轮子。skill 调用后需将结论写回 PROJECT_NOTE.md。
 
 ---
@@ -117,7 +119,7 @@ clawmate plan [root] <project>
 ### 功能说明
 
 1. 读取项目根目录的 CLAWLIST.md（如不存在则创建模板）
-2. 使用 `curl -s "{CLAWMATE_URL}/api/clawmate/search?q={project}&root={root}"` 确认项目路径
+2. 使用 `curl -s "{CLAWMATE_URL}/api/clawmate/list?root={root}&marker_filter=true"` 列出项目，确认目标项目是否存在
 3. 读取 PROJECT_NOTE.md 了解当前阶段
 4. 更新 CLAWLIST.md：
    - 检查当前阶段，标记已完成项
@@ -199,7 +201,7 @@ mkdir -p {项目根路径}/{.clawmate,research,collect,prd,dev,test}
 > 
 > **硬性规则**：每次保存文档到磁盘后，必须生成 ClawMate 可点击预览链接并回复给用户。
 > 链接格式：`[文件名]({base_url}/clawmate/preview.html?root={root}&file={relative_path})`
-> 使用 `curl -s "{CLAWMATE_URL}/api/clawmate/search?q={关键词}&root={root}"` 搜索确认文件后构造链接。
+> 使用 `curl -s "{CLAWMATE_URL}/api/clawmate/link?q={关键词}&root={root}"` 一步完成搜索 + 链接生成，从响应的 `results[].preview_url` 获取完整链接。
 
 **活跃文档（始终加载）**：
 - **CLAWLIST.md**（项目级 — 总览）— 管理所有非研发、测试的项目进展（Phase I-V），并包含研发级/测试级/研究级 CLAWLIST 的整体进展简要汇总（分组体现）
@@ -393,7 +395,7 @@ mkdir -p {项目根路径}/{.clawmate,research,collect,prd,dev,test}
 - archive/ 目录独立，默认不加载
 - 大文件（> 100KB）拆分为子文件，按需读取
 
-**PROJECT_NOTE.md 模板**（更新版，顶部增加「当前焦点」）：
+**PROJECT_NOTE.md 模板**：
 ```markdown
 # {项目名} 产品笔记
 
@@ -402,11 +404,6 @@ mkdir -p {项目根路径}/{.clawmate,research,collect,prd,dev,test}
 - **本周目标**: {一句话}
 - **阻塞项**: {如有}
 - **关键决策**: {最近 3 条}
-
-## 项目方向（只写一次，变更时更新）
-...
-```markdown
-# {项目名} 产品笔记
 
 ## 项目简介
 {项目描述}
@@ -734,19 +731,23 @@ for root in cfg['roots']:
 "
 ```
 
-对每个 root 搜索项目路径：
+对每个 root 列出项目（带 `.clawmate/` marker 的目录）：
 ```bash
-PROJECT="<projectname>"
-ROOT="<root_id>"
-curl -s "{CLAWMATE_URL}/api/clawmate/search?q=$PROJECT&root=$ROOT" 2>/dev/null
+curl -s "{CLAWMATE_URL}/api/clawmate/list?root=<root_id>&marker_filter=true" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for e in data.get('entries', []):
+    if e.get('is_dir') and not e['name'].startswith('.'):
+        print(e['name'])
+"
 ```
 
-若所有 root 都未找到匹配，提示用户项目未找到。
+若所有 root 的列表中都未找到 `<projectname>`，提示用户项目未找到。
 
 **步骤 2：确定项目位置与 agent**
 
-从搜索结果中：
-1. 找到匹配 `{projectname}/` 目录的条目 → 确定 root_id 和相对路径
+从列表结果中：
+1. 确认 `<projectname>` 在目标 root 的项目列表中
 2. 拼接绝对路径：`{root_dir}/{projectname}/`
 
 **步骤 3：切换到项目**
@@ -867,7 +868,7 @@ for e in data.get('entries', []):
 
 ## 9. 归档机制与懒加载（核心设计原则）
 
-### 6.1 为什么需要归档
+### 9.1 为什么需要归档
 
 > **经验规律**：项目推进 3 个月后，未归档的文档量通常膨胀 3-5 倍，导致模型加载大量过期信息，干扰当前决策。
 
@@ -876,7 +877,7 @@ for e in data.get('entries', []):
 - 历史信息可检索，但不默认加载
 - 减少模型上下文中的干扰项
 
-### 6.2 归档触发条件（明确边界）
+### 9.2 归档触发条件（明确边界）
 
 | 场景 | 归档源 | 归档目标 | 触发条件 |
 |------|--------|---------|---------|
@@ -889,7 +890,7 @@ for e in data.get('entries', []):
 **归档检查点**：
 - 超过 2 周未更新的文档 → 标记「待审查」→ 确认归档或更新
 
-### 6.3 懒加载机制（信息分层）
+### 9.3 懒加载机制（信息分层）
 
 **第一层：会话初始化（必须加载，≤ 30 行）**
 ```
@@ -916,7 +917,7 @@ for e in data.get('entries', []):
 - 大文件拆分：PRD > 100KB 时拆为 `PRD-core.md` + `sub_prd/`
 - 摘要前置：每个大文件顶部 20 行必须是「快速理解摘要」
 
-### 6.4 归档命名规范
+### 9.4 归档命名规范
 
 ```
 archive/
@@ -934,7 +935,7 @@ archive/
 
 > ⚠️ **严禁**在 `prd/`、`research/`、`dev/` 等子目录中创建 `archive/` 或 `done/` 子目录。所有归档统一在根目录 `archive/` 下。
 
-### 6.5 文档同步检查清单
+### 9.5 文档同步检查清单
 
 每次开发迭代结束后执行：
 
