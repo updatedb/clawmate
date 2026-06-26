@@ -90,6 +90,12 @@
     if (window.Agent && window.Agent.syncTheme) window.Agent.syncTheme();
   };
 
+  // Initial theme — apply immediately (topbar.js already set data-theme before this script ran)
+  var _initResolved = window._topbarResolvedTheme
+    ? window._topbarResolvedTheme()
+    : (document.documentElement.getAttribute('data-theme') || 'light');
+  window._onThemeChange(_initResolved);
+
   function applyPreviewTheme(resolved) {
     const hlCss = document.getElementById('highlight-theme-css');
     if (resolved === 'dark') {
