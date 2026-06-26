@@ -125,17 +125,6 @@ function updateSortPills() {
   });
 }
 
-function initTheme() {
-  applyTheme();
-  // Listen for system theme changes when in auto mode
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-    if (currentTheme === 'auto') {
-      applyTheme();
-      if (window.Agent && window.Agent.syncTheme) window.Agent.syncTheme();
-    }
-  });
-}
-
 // ===== Utilities =====
 function formatSize(bytes) {
   if (bytes === 0 || bytes == null) return "-";
@@ -2498,7 +2487,6 @@ function clearActiveFeedbackPanel() {
 
 async function init() {
   await loadConfig();
-  initTheme(); // Apply theme before render
   // Sync sort select with state default
   updateSortPills();
   setupDragDrop(); // Activate drag-and-drop upload

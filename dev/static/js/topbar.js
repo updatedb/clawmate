@@ -42,6 +42,15 @@
   if (currentTheme === 'dark') applyTheme('dark');
   else applyTheme('light');
   updateThemeButton();
+
+  // Listen for system theme changes when in auto mode
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+    if (currentTheme === 'auto') {
+      var r = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      applyTheme(r);
+      if (typeof window._onThemeChange === 'function') window._onThemeChange(r);
+    }
+  });
   var themeBtn = document.getElementById('themeToggle');
   if (themeBtn) themeBtn.addEventListener('click', cycleTheme);
 
