@@ -248,36 +248,32 @@
     .fb-card .fb-btn-submit { margin-left: auto; }
 
     /* ── Shared feedback action buttons ── */
-    .fb-btn-submit {
+    .fb-btn-submit,
+    .fb-btn-submit-all {
       display: inline-flex; align-items: center; justify-content: center;
+      flex: 1;
       padding: 5px 12px;
       border-radius: var(--radius-sm);
-      border: 1px solid var(--accent);
-      background: var(--accent);
       cursor: pointer;
       font-size: 12px;
-      color: #fff;
       font-weight: 500;
       font-family: inherit;
-      transition: opacity var(--duration-fast) var(--ease-out);
       white-space: nowrap;
+      height: 30px;
+      box-sizing: border-box;
+    }
+    .fb-btn-submit {
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: #fff;
     }
     .fb-btn-submit:hover { opacity: 0.9; }
     .fb-btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
 
     .fb-btn-submit-all {
-      display: inline-flex; align-items: center; justify-content: center;
-      padding: 5px 12px;
-      border-radius: var(--radius-sm);
       border: 1px solid var(--border-color);
       background: var(--btn-bg);
-      cursor: pointer;
-      font-size: 12px;
       color: var(--btn-text);
-      font-weight: 500;
-      font-family: inherit;
-      transition: opacity var(--duration-fast) var(--ease-out);
-      white-space: nowrap;
     }
     .fb-btn-submit-all:hover { border-color: var(--text-muted); }
     .fb-btn-submit-all:disabled { opacity: 0.5; cursor: not-allowed; }

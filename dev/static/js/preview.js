@@ -3599,7 +3599,7 @@
       });
     } else {
       submitAllBtn.className = 'fb-btn-submit-all';
-      submitAllBtn.textContent = '加入待办';
+      submitAllBtn.textContent = '全部提交';
       submitAllBtn.disabled = true;
     }
     topBar.appendChild(submitAllBtn);
