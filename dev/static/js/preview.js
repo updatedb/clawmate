@@ -3608,7 +3608,7 @@
         var wrapper = document.createElement('div');
         wrapper.style.cssText = 'position:relative;';
         var dot = document.createElement('div');
-        dot.className = 'fb-timeline-dot pending';
+        dot.className = 'fb-timeline-dot';
         wrapper.appendChild(dot);
         wrapper.appendChild(createFeedbackCard(item));
         timeline.appendChild(wrapper);
@@ -3624,7 +3624,7 @@
         var wrapper = document.createElement('div');
         wrapper.style.cssText = 'position:relative;';
         var dot = document.createElement('div');
-        dot.className = 'fb-timeline-dot ' + (item.status || 'pending');
+        dot.className = 'fb-timeline-dot';
         wrapper.appendChild(dot);
         wrapper.appendChild(renderCompletedFeedbackCard(item));
         timeline.appendChild(wrapper);

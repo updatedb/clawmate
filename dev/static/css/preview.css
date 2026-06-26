@@ -317,10 +317,7 @@
       border: 2px solid var(--bg-secondary);
       z-index: 1;
     }
-    .fb-timeline-dot.pending    { background: #f59e0b; }
-    .fb-timeline-dot.in_progress { background: #3b82f6; }
-    .fb-timeline-dot.done       { background: #22c55e; }
-    .fb-timeline-dot.failed     { background: #ef4444; }
+    .fb-timeline-dot { background: var(--border-color); }
 
     /* ── Status Pills ── */
     .fb-status-pill {
