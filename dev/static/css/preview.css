@@ -307,18 +307,6 @@
       background: var(--border-color);
       border-radius: 1px;
     }
-    .fb-timeline-dot {
-      position: absolute;
-      left: -2px;
-      top: 12px;
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      border: 2px solid var(--bg-secondary);
-      z-index: 1;
-    }
-    .fb-timeline-dot { background: var(--border-color); }
-
     /* ── Status Pills ── */
     .fb-status-pill {
       display: inline-block;

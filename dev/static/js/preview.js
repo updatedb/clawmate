@@ -3607,9 +3607,6 @@
       [...pendingItems].reverse().forEach(function (item) {
         var wrapper = document.createElement('div');
         wrapper.style.cssText = 'position:relative;';
-        var dot = document.createElement('div');
-        dot.className = 'fb-timeline-dot';
-        wrapper.appendChild(dot);
         wrapper.appendChild(createFeedbackCard(item));
         timeline.appendChild(wrapper);
       });
@@ -3623,9 +3620,6 @@
       completedItems.forEach(function (item) {
         var wrapper = document.createElement('div');
         wrapper.style.cssText = 'position:relative;';
-        var dot = document.createElement('div');
-        dot.className = 'fb-timeline-dot';
-        wrapper.appendChild(dot);
         wrapper.appendChild(renderCompletedFeedbackCard(item));
         timeline.appendChild(wrapper);
       });
