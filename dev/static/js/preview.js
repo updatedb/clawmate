@@ -404,7 +404,7 @@
     // Zoom controls
     var controls = document.createElement('div');
     controls.className = 'mermaid-zoom-controls';
-    controls.innerHTML = '<button class="mermaid-zoom-btn" data-zoom="out">−</button><button class="mermaid-zoom-btn" data-zoom="reset">⊙</button><button class="mermaid-zoom-btn" data-zoom="in">+</button><button class="mermaid-zoom-btn mermaid-expand-btn" data-zoom="expand" title="Expand diagram">' + (typeof iconSVG === 'function' ? iconSVG('maximize', 14) : '⛶') + '</button>';
+    controls.innerHTML = '<button class="mermaid-zoom-btn" data-zoom="out">−</button><button class="mermaid-zoom-btn" data-zoom="reset">⊙</button><button class="mermaid-zoom-btn" data-zoom="in">+</button><button class="mermaid-zoom-btn mermaid-expand-btn" data-zoom="expand" title="Expand diagram">□</button>';
     container.appendChild(controls);
 
     function applyZoom() {

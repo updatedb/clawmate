@@ -1666,11 +1666,6 @@ pre:hover .code-copy-btn,
   user-select: none;
   flex-shrink: 0;
 }
-.mermaid-zoom-btn svg {
-  display: block;
-  flex-shrink: 0;
-  overflow: hidden;
-}
 .mermaid-zoom-btn:hover {
   background: rgba(0,0,0,0.1);
 }

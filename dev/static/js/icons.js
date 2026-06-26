@@ -49,9 +49,6 @@ const ICONS = {
   'book-open':     '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
   'file-output':   '<path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M4 7V4a2 2 0 0 1 2-2h8.5L20 7.5V20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/><path d="M4 14h6"/><path d="m7 11-3 3 3 3"/>',
 
-  // Mermaid expand
-  'maximize':      '<path d="M5 3h14v18H5z"/><path d="M9 3v6H3"/><path d="M15 21v-6h6"/>',
-
   // Brand
   'lobster':       '<circle cx="12" cy="12" r="10"/><path d="M12 6v12"/><path d="M6 12h12"/>',  // placeholder
 };
