@@ -2737,11 +2737,10 @@
     body.innerHTML = '';
 
     // Top row: Add feedback + Submit all
-    topBar.style.cssText = 'display:flex;gap:6px;padding:0 0 8px 0;flex-shrink:0;';
+
 
     const addBtn = document.createElement('button');
     addBtn.className = 'fb-btn-submit';
-    addBtn.style.cssText = 'flex:1;padding:4px 8px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;font-size:13px;font-weight:600;';
     addBtn.textContent = '+ 添加反馈';
     addBtn.addEventListener('click', () => {
       const currentTime = mediaEl ? formatTimestamp(mediaEl.currentTime) : '00:00:00';
@@ -2844,11 +2843,10 @@
     body.innerHTML = '';
 
     // Top row: Add feedback + Submit all
-    topBar.style.cssText = 'display:flex;gap:6px;padding:0 0 8px 0;flex-shrink:0;';
+
 
     const addBtn = document.createElement('button');
     addBtn.className = 'fb-btn-submit';
-    addBtn.style.cssText = 'flex:1;padding:4px 8px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;font-size:13px;font-weight:600;';
     addBtn.textContent = '+ 添加反馈';
     addBtn.addEventListener('click', () => {
       const EXCEL_EXTS = ['xlsx', 'xls'];
@@ -3558,11 +3556,10 @@
     body.appendChild(cardList);
 
     // === Unified top row: always show "+ 添加反馈" + "✅ 全部提交" ===
-    topBar.style.cssText = 'display:flex;gap:6px;padding:0 0 8px 0;flex-shrink:0;';
+
 
     const addBtn = document.createElement('button');
     addBtn.className = 'fb-btn-submit';
-    addBtn.style.cssText = 'flex:1;padding:4px 8px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;font-size:13px;font-weight:600;';
     addBtn.textContent = '+ 添加反馈';
     addBtn.addEventListener('click', () => {
       // Create a pending item and render it as a card in the pending section
@@ -3892,11 +3889,10 @@
     body.innerHTML = '';
 
     // Top row: Add feedback + Submit all
-    topBar.style.cssText = 'display:flex;gap:6px;padding:0 0 8px 0;flex-shrink:0;';
+
 
     const addBtn = document.createElement('button');
     addBtn.className = 'fb-btn-submit';
-    addBtn.style.cssText = 'flex:1;padding:4px 8px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;font-size:13px;font-weight:600;';
     addBtn.textContent = '+ 添加反馈';
     addBtn.addEventListener('click', () => {
       const item = { id: ++idCounter, text: '', startLine: 0, endLine: 0, note: '', type: 'image', position: '' };
