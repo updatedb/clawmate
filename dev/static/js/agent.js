@@ -2,7 +2,7 @@
 //
 // Exposes window.Agent API:
 //   Agent.init({ wsUrl, rootId, dir, agentId, backend })  — one-time setup
-//   Agent.open(rootId, dir)                  — open panel + connect WebSocket
+//   Agent.open(rootId, dir, fileContext)     — open panel + connect WebSocket, optionally with file context
 //   Agent.close()                            — close panel + disconnect
 //   Agent.toggle()                           — toggle panel
 //   Agent.updateRoot(rootId, dir)            — update current root/dir
@@ -61,6 +61,7 @@
   let currentDir = '';
   let currentAgentId = '';  // kept for OpenClaw backend session routing
   let backendMode = 'claude';
+  let _pendingFileContext = null;  // {path, content} — sent on next ws.onopen
 
   function isPtyBackend() {
     return backendMode === 'claude' || backendMode === 'codex';
@@ -593,6 +594,17 @@
         term.writeln('\x1b[1;36m✓ 已连接 Agent 终端\x1b[0m');
         term.writeln('\x1b[2m  ' + term.cols + '×' + term.rows + '  |  调整面板宽度后运行的程序会自动适配新宽度\x1b[0m');
         term.writeln('');
+        // Send file context if preview page opened agent with a file
+        if (_pendingFileContext) {
+          try {
+            ws.send(JSON.stringify({
+              type: 'file_context',
+              path: _pendingFileContext.path || '',
+              content: _pendingFileContext.content || '',
+            }));
+          } catch (_) {}
+          _pendingFileContext = null;
+        }
       }
       if (backendMode === 'openclaw') {
         clearChatStatus();
@@ -766,9 +778,10 @@
       }
     },
 
-    open: function (rootId, dir) {
+    open: function (rootId, dir, fileContext) {
       if (rootId) currentRootId = rootId;
       if (dir !== undefined) currentDir = dir;
+      if (fileContext) _pendingFileContext = fileContext;
 
       animatingOut = false;
       clearTimeout(collapseTimer);
@@ -790,6 +803,7 @@
       } else {
         showXtermMode();
         createTerminal();
+        if (term) { term.focus(); }
         // Banner is now shown in ws.onopen after initial resize sync
       }
 
@@ -875,6 +889,15 @@
 
     isOpen: function () {
       return !panel.classList.contains('hidden');
+    },
+
+    /** Focus terminal or chat input so keyboard input goes to the right place */
+    focus: function () {
+      if (term) {
+        term.focus();
+      } else if (chatInput && !chatView.classList.contains('hidden')) {
+        chatInput.focus();
+      }
     },
 
     /** Recompute grid columns (called externally on sidebar toggle) */

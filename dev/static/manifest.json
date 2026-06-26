@@ -1,0 +1,21 @@
+{
+  "name": "ClawMate — AI 文档评审助手",
+  "short_name": "ClawMate",
+  "description": "Agent 产出的每一个文件，点击即预览，选中即反馈",
+  "start_url": "/clawmate/",
+  "scope": "/clawmate/",
+  "display": "standalone",
+  "background_color": "#042f2e",
+  "theme_color": "#0d9488",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/clawmate/asset/clawmate-logo.png",
+      "sizes": "84x84",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "developer tools"],
+  "lang": "zh-CN"
+}

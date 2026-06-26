@@ -38,9 +38,12 @@
     }
   }
 
-  // Init
-  if (currentTheme === 'dark') applyTheme('dark');
-  else applyTheme('light');
+  // Init — respect the theme already set by the anti-flash <script> in <head>.
+  // The sync script handles dark & auto-dark; for light, no attribute is needed.
+  var resolvedInit = currentTheme === 'dark' ? 'dark'
+    : currentTheme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : 'light';
+  applyTheme(resolvedInit);
   updateThemeButton();
 
   // Listen for system theme changes when in auto mode

@@ -3,7 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="icon" href="./asset/clawmate-logo.png" />
+  <link rel="icon" type="image/png" sizes="32x32" href="./asset/clawmate-logo.png" />
+  <link rel="apple-touch-icon" href="./asset/clawmate-logo.png" />
+  <meta name="theme-color" content="#0d9488" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#042f2e" media="(prefers-color-scheme: dark)" />
+  <link rel="manifest" href="./manifest.json" />
+  <!-- Anti-flash: apply theme BEFORE first paint -->
+  <script>
+    (function(){try{var t=localStorage.getItem('clawmate-theme')||'auto';if(t==='dark'){document.documentElement.setAttribute('data-theme','dark');}else if(t==='auto'){if(window.matchMedia('(prefers-color-scheme:dark)').matches){document.documentElement.setAttribute('data-theme','dark');}}}catch(e){}})();
+  </script>
   <title>ClawMate</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -109,6 +117,8 @@
           </div>
           <div id="gallery" class="gallery"></div>
           <div id="list" class="list hidden"></div>
+          <!-- IntersectionObserver sentinel for infinite scroll -->
+          <div id="scrollSentinel" style="height:1px;"></div>
           <div class="pagination">
             <button id="prevPage">上一页</button>
             <span id="pageInfo"></span>
@@ -173,6 +183,12 @@
   <script src="./js/topbar.js?v=20260626" defer></script>
   <script src="./js/agent.js?v=20260625d" defer></script>
   <script src="./js/app.js?v=20260625b" defer></script>
+  <!-- Service Worker registration for PWA -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/clawmate/sw.js').catch(function() {});
+    }
+  </script>
 
   <!-- Directory picker modal (move) -->
   <div id="dirPickerModal" class="modal-overlay" style="display:none;">

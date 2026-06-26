@@ -56,6 +56,7 @@ class _AgentSession:
     created_at: float = 0.0
     last_active: float = 0.0
     last_input_time: float = 0.0  # timestamp of last user keystroke (for output coordination)
+    last_injected_file: str = ""   # path of the last file_context injected (avoid dupes on reconnect)
 
     def __post_init__(self):
         if not self.created_at:
@@ -369,6 +370,36 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = ""):
                                         }, ensure_ascii=False))
                                 except Exception:
                                     pass
+                            continue
+                        if msg.get("type") == "file_context":
+                            # When the user opens the Agent panel while previewing a
+                            # file, auto-inject a prompt asking the agent to read and
+                            # analyze it, then output 3 actionable suggestions.
+                            # Skip if we already injected for this exact file (e.g. on
+                            # WebSocket reconnect — don't re-trigger the same prompt).
+                            _path = msg.get("path", "")
+                            if _path and sess.master_fd is not None and sess.last_injected_file != _path:
+                                sess.last_injected_file = _path
+                                _prompt = (
+                                    f"\r\n"
+                                    f"我正在预览文件 \"{_path}\"。"
+                                    f"请读取这个文件，分析其内容，然后给我3个"
+                                    f"我可能想要推进的具体问题或建议。"
+                                    f"用简洁的编号列表输出，每条不超过一行。\r\n"
+                                )
+                                _banner = (
+                                    f"\r\n\x1b[1;36m"
+                                    f"📄 自动分析预览文件: {_path}"
+                                    f"\x1b[0m\r\n"
+                                )
+                                async def _inject_analysis():
+                                    await asyncio.sleep(2.5)
+                                    try:
+                                        os.write(sess.master_fd, _banner.encode())
+                                        os.write(sess.master_fd, _prompt.encode())
+                                    except (OSError, BlockingIOError):
+                                        pass
+                                asyncio.create_task(_inject_analysis())
                             continue
                 except (json.JSONDecodeError, TypeError, AttributeError):
                     pass

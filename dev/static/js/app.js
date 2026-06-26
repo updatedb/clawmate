@@ -1180,6 +1180,8 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
       if (entry.category === "image") {
         const img = document.createElement("img");
         img.src = `/api/clawmate/preview?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}`;
+        img.loading = "lazy";
+        img.decoding = "async";
         thumb.appendChild(img);
       } else {
         thumb.innerHTML = getFileIcon(entry);
@@ -1711,6 +1713,25 @@ function updateLoadMoreBtn() {
   }
 }
 
+// ── Infinite scroll via IntersectionObserver ─────────────────────────
+let _scrollObserver = null;
+
+function setupInfiniteScroll() {
+  teardownInfiniteScroll();
+  const sentinel = document.getElementById('scrollSentinel');
+  if (!sentinel) return;
+  _scrollObserver = new IntersectionObserver(function (entries) {
+    if (entries[0] && entries[0].isIntersecting && state.hasMore && !state.loadingMore && !state.searchResults) {
+      loadMore();
+    }
+  }, { rootMargin: '200px' });
+  _scrollObserver.observe(sentinel);
+}
+
+function teardownInfiniteScroll() {
+  if (_scrollObserver) { _scrollObserver.disconnect(); _scrollObserver = null; }
+}
+
 async function search() {
   if (!state.rootId) {
     setStatus("请先选择根目录");
@@ -1976,6 +1997,7 @@ btnToggleAgent && btnToggleAgent.addEventListener("click", function () {
     window.Agent.toggle();
     if (window.Agent.isOpen()) {
       btnToggleAgent.classList.add("active");
+      window.Agent.focus();
     } else {
       btnToggleAgent.classList.remove("active");
     }
@@ -2491,6 +2513,7 @@ async function init() {
   updateSortPills();
   setupDragDrop(); // Activate drag-and-drop upload
   initDirPicker(); // Directory picker (for move operations)
+  setupInfiniteScroll(); // IntersectionObserver for auto-loading more items
   // Pre-check ONLYOFFICE availability in background
   checkOnlyofficeAvailable();
 

@@ -3,6 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Anti-flash: apply theme BEFORE first paint -->
+  <script>
+    (function(){try{var t=localStorage.getItem('clawmate-theme')||'auto';if(t==='dark'){document.documentElement.setAttribute('data-theme','dark');}else if(t==='auto'){if(window.matchMedia('(prefers-color-scheme:dark)').matches){document.documentElement.setAttribute('data-theme','dark');}}}catch(e){}})();
+  </script>
+  <link rel="icon" type="image/png" sizes="32x32" href="./asset/clawmate-logo.png" />
+  <link rel="apple-touch-icon" href="./asset/clawmate-logo.png" />
   <title>ONLYOFFICE 预览</title>
   <style>
     html, body {
