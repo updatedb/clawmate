@@ -10,11 +10,7 @@
 
   function applyTheme(theme) {
     var html = document.documentElement;
-    if (theme === 'dark') {
-      html.setAttribute('data-theme', 'dark');
-    } else {
-      html.removeAttribute('data-theme'); // light = default (no attribute)
-    }
+    html.setAttribute('data-theme', theme);
   }
 
   function cycleTheme() {
