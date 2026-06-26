@@ -220,39 +220,33 @@ ClawMate 右侧面板直接运行 AI Agent，无需切换窗口：
 
 ## 截图
 
-### 协作界面
+### 文件管理
 
-![ClawMate 协作界面](assets/cm-feedback-loop.png)
+![文件管理](assets/cm-desktop-file-browser.png)
 
-*左侧：Agent 对话生成内容 → 右侧：ClawMate 预览 + 选中文本提交反馈 + 一键执行修复*
+*画廊/列表双视图 + 搜索 + 类型过滤 + 多 root 切换*
 
-### 桌面端
+### Markdown 预览 + 反馈面板
 
-![文件管理](assets/cm-desktop-file-manage.jpg)
+![预览反馈](assets/cm-desktop-preview-feedback.png)
 
-*文件管理：画廊/列表双视图 + 搜索 + 类型过滤*
+*左侧 Markdown 渲染 → 右侧 feedback timeline（选中文本 → 浮层 → 提交 → 追溯）*
 
-![预览反馈](assets/cm-desktop-preview-feedback.jpg)
+### 内置 Agent 终端
 
-*Markdown 预览 + 选中文本弹出反馈浮层*
+![Agent 面板](assets/cm-desktop-agent-panel.png)
 
-![创建反馈](assets/cm-desktop-create-feed.png)
-
-*填写备注 → 提交反馈 → 进入 timeline 追溯*
-
-![字幕纠错](assets/cm-desktop-srt-correct.png)
-
-*AI 字幕纠错：音视频播放 + SRT 字幕编辑面板*
+*右侧内嵌 xterm.js PTY 终端（Claude Code / Codex），直接对话修改文件*
 
 ### 移动端
 
-![移动端文件预览](assets/cm-mobile-file-preview.jpg)
-
-*移动端适配：文件预览 + Agent 面板*
-
-![移动端文件管理](assets/cm-mobile-file-manage.jpg)
+![移动端文件管理](assets/cm-mobile-file-browser.png)
 
 *移动端文件管理：上传 + 搜索 + 批量操作*
+
+![移动端文件预览](assets/cm-mobile-preview.png)
+
+*移动端适配：文件预览 + 反馈提交*
 
 ## Agent 面板（三后端）
 
