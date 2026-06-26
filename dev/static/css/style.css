@@ -1717,7 +1717,7 @@ pre:hover .code-copy-btn,
 .mermaid-expand-header {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
@@ -1746,7 +1746,7 @@ pre:hover .code-copy-btn,
   overflow: auto;
   padding: 24px;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
 }
 
