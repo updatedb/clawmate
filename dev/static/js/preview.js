@@ -3573,11 +3573,11 @@
     submitAllBtn.className = 'fb-btn-submit-all';
     const hasPending = pendingItems.length > 0;
     submitAllBtn.style.cssText = `flex:1;padding:4px 8px;border-radius:6px;border:1px solid var(--border-color);background:var(--btn-bg);color:var(--btn-text);cursor:${hasPending ? 'pointer' : 'not-allowed'};font-size:13px;font-weight:600;opacity:${hasPending ? '1' : '0.5'};`;
-    submitAllBtn.textContent = hasPending ? `✅ 全部提交（${pendingItems.length} 条）` : '✅ 全部提交';
-    submitAllBtn.disabled = !hasPending;
     if (hasPending) {
-      submitAllBtn.addEventListener('click', () => {
-        // Validate: each pending item must have a note
+      submitAllBtn.className = 'fb-btn-submit';
+      submitAllBtn.textContent = '全部提交（' + pendingItems.length + '）';
+      submitAllBtn.disabled = false;
+      submitAllBtn.addEventListener('click', function () {
         var missing = pendingItems.filter(function (i) { return !i.action; });
         if (missing.length > 0) {
           missing.forEach(function (m) {
@@ -3597,6 +3597,10 @@
         }
         submitAllItems(submitAllBtn, { itemType: 'text' });
       });
+    } else {
+      submitAllBtn.className = 'fb-btn-submit-all';
+      submitAllBtn.textContent = '加入待办';
+      submitAllBtn.disabled = true;
     }
     topBar.appendChild(submitAllBtn);
 

@@ -176,6 +176,8 @@
     .fb-topbar {
       padding: 8px;
       flex-shrink: 0;
+      display: flex;
+      gap: 6px;
     }
     .fb-card-list {
       flex: 1;
@@ -243,6 +245,7 @@
       transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
     }
     .fb-card .fb-btn-delete:hover { background: var(--bg-tertiary); color: var(--danger); }
+    .fb-card .fb-btn-submit { margin-left: auto; }
 
     /* ── Shared feedback action buttons ── */
     .fb-btn-submit {
