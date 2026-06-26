@@ -88,7 +88,7 @@
     const sidebarHidden = sidebar && (sidebar.classList.contains('hidden') || getComputedStyle(sidebar).display === 'none');
     const lW = sidebarHidden ? '0px' : '240px';
     const hidden = panel.classList.contains('hidden');
-    if (!panelWidth) panelWidth = Math.min(Math.floor(window.innerWidth * 0.45), 700);
+    if (!panelWidth) panelWidth = Math.min(Math.floor(window.innerWidth * 0.45), 800);
     if (hidden && !animatingOut && !forceExpand) {
       // Collapsed — no panel visible
       content.style.gridTemplateColumns = lW + ' 1fr 0px 0px';
@@ -119,7 +119,7 @@
     const delta = dragStartX - e.clientX;
     const content = document.querySelector('.content');
     if (!content) return;
-    panelWidth = Math.max(360, Math.min(800, dragStartWidth + delta));
+    panelWidth = Math.max(360, Math.min(900, dragStartWidth + delta));
     const sb = document.getElementById('sidebar');
     const sbHidden = sb && (sb.classList.contains('hidden') || getComputedStyle(sb).display === 'none');
     const lW = sbHidden ? '0px' : '240px';
