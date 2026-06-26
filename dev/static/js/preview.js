@@ -3579,9 +3579,21 @@
     if (hasPending) {
       submitAllBtn.addEventListener('click', () => {
         // Validate: each pending item must have a note
-        const missing = pendingItems.filter(i => !i.action);
+        var missing = pendingItems.filter(function (i) { return !i.action; });
         if (missing.length > 0) {
-          showToast('请选择操作类型后再提交', 2000);
+          missing.forEach(function (m) {
+            var card = document.querySelector('.fb-card[data-id="' + (m.id || '') + '"]');
+            if (card) {
+              var existing = card.querySelector('.fb-card-error');
+              if (existing) existing.remove();
+              var err = document.createElement('div');
+              err.className = 'fb-card-error';
+              err.textContent = '请选择操作类型';
+              card.appendChild(err);
+              setTimeout(function () { if (err.parentNode) err.remove(); }, 5000);
+            }
+          });
+          showToast('有 ' + missing.length + ' 条未选择操作类型', 3000);
           return;
         }
         submitAllItems(submitAllBtn, { itemType: 'text' });
@@ -4084,7 +4096,18 @@
 
   async function submitSingleItem(item) {
     if (!item.action) {
-      showToast('请选择操作类型', 2000);
+      // Show inline error on the card (not a disappearing toast)
+      var card = document.querySelector('.fb-card[data-id="' + (item.id || '') + '"]');
+      if (card) {
+        var existing = card.querySelector('.fb-card-error');
+        if (existing) existing.remove();
+        var err = document.createElement('div');
+        err.className = 'fb-card-error';
+        err.textContent = '请先选择操作类型（修改/删除/扩展/简化/执行）';
+        card.appendChild(err);
+        // Remove after card re-render or 5s
+        setTimeout(function () { if (err.parentNode) err.remove(); }, 5000);
+      }
       return;
     }
     try {
