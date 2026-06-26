@@ -3355,9 +3355,15 @@
   // Unified factory for creating pending feedback cards.
   // Used by: tooltip "加入待办", panel "+ 添加反馈", and renderFeedbackPanel.
   function createFeedbackCard(item) {
-    const card = document.createElement('div');
-    card.className = 'fb-card' + (item.id === selectedPendingId ? ' selected' : '');
+    var card = document.createElement('div');
+    var extraClass = (item.id === selectedPendingId ? ' selected' : '');
+    if (item._isNew) { extraClass += ' fb-card-new'; }
+    card.className = 'fb-card' + extraClass;
     card.dataset.id = item.id;
+    if (item._isNew) {
+      card.addEventListener('animationend', function () { card.classList.remove('fb-card-new'); });
+      item._isNew = false;
+    }
 
     // Determine item type (default to 'text' for line-number based positioning)
     const itemType = item.type || 'text';
@@ -3555,11 +3561,11 @@
     addBtn.textContent = '+ 添加反馈';
     addBtn.addEventListener('click', () => {
       // Create a pending item and render it as a card in the pending section
-      const item = { id: ++idCounter, text: '', startLine: 0, endLine: 0, note: '', type: 'text' };
+      const item = { id: ++idCounter, text: '', startLine: 0, endLine: 0, note: '', type: 'text', _isNew: true };
       pendingItems.push(item);
       renderFeedbackPanel();
       // Scroll to the newly added card
-      const newCard = document.querySelector(`.fb-card[data-id="${item.id}"]`);
+      var newCard = document.querySelector('.fb-card[data-id="' + item.id + '"]');
       if (newCard) newCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
     topRow.appendChild(addBtn);
@@ -3596,22 +3602,34 @@
 
     // Pending section
     if (pendingItems.length > 0) {
-      [...pendingItems].reverse().forEach(item => {
-        body.appendChild(createFeedbackCard(item));
+      var timeline = document.createElement('div');
+      timeline.className = 'fb-timeline';
+      [...pendingItems].reverse().forEach(function (item) {
+        var wrapper = document.createElement('div');
+        wrapper.style.cssText = 'position:relative;';
+        var dot = document.createElement('div');
+        dot.className = 'fb-timeline-dot pending';
+        wrapper.appendChild(dot);
+        wrapper.appendChild(createFeedbackCard(item));
+        timeline.appendChild(wrapper);
       });
+      body.appendChild(timeline);
     }
 
     // Completed section
     if (completedItems.length > 0) {
-      const sep = document.createElement('div');
-      sep.className = 'fb-section-sep';
-      sep.innerHTML = '<span>✅ 已提交</span>';
-      body.appendChild(sep);
-
-      completedItems.forEach(item => {
-        const c = renderCompletedFeedbackCard(item);
-        body.appendChild(c);
+      var timeline = document.createElement('div');
+      timeline.className = 'fb-timeline';
+      completedItems.forEach(function (item) {
+        var wrapper = document.createElement('div');
+        wrapper.style.cssText = 'position:relative;';
+        var dot = document.createElement('div');
+        dot.className = 'fb-timeline-dot ' + (item.status || 'pending');
+        wrapper.appendChild(dot);
+        wrapper.appendChild(renderCompletedFeedbackCard(item));
+        timeline.appendChild(wrapper);
       });
+      body.appendChild(timeline);
     }
   }
 
@@ -3723,10 +3741,11 @@
 
   // ============ Unified Completed Feedback Card Renderer ============
   function renderCompletedFeedbackCard(item) {
-    const statusIcon =
-      item.status === 'done' ? '✅' :
-      item.status === 'in_progress' ? '🔄' :
-      item.status === 'failed' ? '❌' : '⏳';
+    var statusLabel =
+      item.status === 'done'       ? 'DONE' :
+      item.status === 'in_progress' ? 'IN PROGRESS' :
+      item.status === 'failed'     ? 'FAILED' : 'PENDING';
+    var statusIcon = '<span class="fb-status-pill ' + (item.status || 'pending') + '">' + statusLabel + '</span>';
 
     // Truncate selection display at 80 chars
     const selText = item.selection_content || item.text || '';
