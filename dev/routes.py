@@ -930,6 +930,7 @@ async def clawmate_onlyoffice_config(request: Request, root: str = "", path: str
     # NOTE: hideRightMenu can be overridden by browser localStorage if the
     # user has ever toggled the right panel manually. To reset: DevTools →
     # Application → Local Storage → clear ONLYOFFICE entries → reload.
+    theme = request.query_params.get("theme", "light")
     customization = {
         "compactHeader":     True,
         "compactToolbar":    True,
@@ -940,6 +941,7 @@ async def clawmate_onlyoffice_config(request: Request, root: str = "", path: str
         "comments":          False,
         "help":              False,
         "plugins":           False,
+        "uiTheme":           "theme-" + theme,
     }
 
     oo_config = {

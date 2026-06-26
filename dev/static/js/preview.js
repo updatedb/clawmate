@@ -88,6 +88,14 @@
     applyPreviewTheme(resolved);
     // Sync xterm terminal theme
     if (window.Agent && window.Agent.syncTheme) window.Agent.syncTheme();
+    // Reload ONLYOFFICE iframe with new theme (if active)
+    var ooIframe = document.querySelector('iframe[src*="onlyoffice.html"]');
+    if (ooIframe) {
+      var src = ooIframe.src;
+      src = src.replace(/[?&]theme=[^&]*/, '&theme=' + resolved);
+      if (src.indexOf('&theme=') === -1) src += '&theme=' + resolved;
+      ooIframe.src = src;
+    }
   };
 
   // Initial theme — apply immediately (topbar.js already set data-theme before this script ran)
@@ -1475,7 +1483,8 @@
 
         const iframe = document.createElement('iframe');
         iframe.id = 'officeIframe';
-        iframe.src = `./onlyoffice.html?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}&mode=${encodeURIComponent(onlyofficeMode)}`;
+              var ooTheme = document.documentElement.getAttribute('data-theme') || 'light';
+      iframe.src = './onlyoffice.html?root=' + encodeURIComponent(rootId) + '&path=' + encodeURIComponent(filePath) + '&mode=' + encodeURIComponent(onlyofficeMode) + '&theme=' + ooTheme;
         iframe.style.cssText = 'width:100%;height:100%;border:none;overflow:hidden;';
         wrap.appendChild(iframe);
 
@@ -2835,7 +2844,8 @@
   function reloadOfficeIframe() {
     const iframe = document.getElementById('officeIframe');
     if (!iframe) return;
-    iframe.src = `./onlyoffice.html?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}&mode=${encodeURIComponent(onlyofficeMode)}`;
+          var ooTheme = document.documentElement.getAttribute('data-theme') || 'light';
+      iframe.src = './onlyoffice.html?root=' + encodeURIComponent(rootId) + '&path=' + encodeURIComponent(filePath) + '&mode=' + encodeURIComponent(onlyofficeMode) + '&theme=' + ooTheme;
   }
 
   function renderOfficePdfFeedbackPanel() {

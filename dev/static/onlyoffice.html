@@ -117,7 +117,8 @@
 
       const downloadUrl = `/api/clawmate/download?root=${encodeURIComponent(root)}&path=${encodeURIComponent(path)}`;
       fallbackDownloadUrl = downloadUrl;
-      const url = `/api/clawmate/onlyoffice/config?root=${encodeURIComponent(root)}&path=${encodeURIComponent(path)}&mode=${encodeURIComponent(mode)}`;
+            const theme = params.get('theme') || 'light';
+      const url = `/api/clawmate/onlyoffice/config?root=${encodeURIComponent(root)}&path=${encodeURIComponent(path)}&mode=${encodeURIComponent(mode)}&theme=${encodeURIComponent(theme)}`;
       const res = await fetch(url);
       if (!res.ok) {
         showFallback("无法获取 ONLYOFFICE 配置，请使用原始预览或下载。", downloadUrl);
