@@ -3614,28 +3614,16 @@
 
     // Pending section
     if (pendingItems.length > 0) {
-      var timeline = document.createElement('div');
-      timeline.className = 'fb-timeline';
       [...pendingItems].reverse().forEach(function (item) {
-        var wrapper = document.createElement('div');
-        wrapper.style.cssText = 'position:relative;';
-        wrapper.appendChild(createFeedbackCard(item));
-        timeline.appendChild(wrapper);
+        body.appendChild(createFeedbackCard(item));
       });
-      body.appendChild(timeline);
     }
 
     // Completed section
     if (completedItems.length > 0) {
-      var timeline = document.createElement('div');
-      timeline.className = 'fb-timeline';
       completedItems.forEach(function (item) {
-        var wrapper = document.createElement('div');
-        wrapper.style.cssText = 'position:relative;';
-        wrapper.appendChild(renderCompletedFeedbackCard(item));
-        timeline.appendChild(wrapper);
+        body.appendChild(renderCompletedFeedbackCard(item));
       });
-      body.appendChild(timeline);
     }
   }
 

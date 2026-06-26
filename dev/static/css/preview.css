@@ -292,11 +292,6 @@
     }
 
     /* ── Feedback Timeline ── */
-    .fb-timeline {
-      position: relative;
-      padding-left: 20px;
-      margin: 4px 0 0 4px;
-    }
     /* ── Status Pills ── */
     .fb-status-pill {
       display: inline-block;
