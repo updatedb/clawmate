@@ -2737,8 +2737,7 @@
     body.innerHTML = '';
 
     // Top row: Add feedback + Submit all
-    const topRow = document.createElement('div');
-    topRow.style.cssText = 'display:flex;gap:6px;margin-bottom:8px;';
+    topBar.style.cssText = 'display:flex;gap:6px;padding:0 0 8px 0;flex-shrink:0;';
 
     const addBtn = document.createElement('button');
     addBtn.className = 'fb-btn-submit';
@@ -2753,7 +2752,7 @@
       const newCard = body.querySelector(`.fb-card[data-id="${item.id}"]`);
       if (newCard) newCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
-    topRow.appendChild(addBtn);
+    topBar.appendChild(addBtn);
 
     const submitAllBtn = document.createElement('button');
     submitAllBtn.className = 'fb-btn-submit-all';
@@ -2775,8 +2774,7 @@
         });
       });
     }
-    topRow.appendChild(submitAllBtn);
-    body.appendChild(topRow);
+    topBar.appendChild(submitAllBtn);
 
     // Empty state
     if (mediaPendingItems.length === 0 && mediaCompletedItems.length === 0) {
@@ -2784,7 +2782,7 @@
       empty.className = 'fb-empty';
       empty.style.marginTop = '12px';
       empty.textContent = '点击「+ 添加反馈」开始';
-      body.appendChild(empty);
+      cardList.appendChild(empty);
       return;
     }
 
@@ -2846,8 +2844,7 @@
     body.innerHTML = '';
 
     // Top row: Add feedback + Submit all
-    const topRow = document.createElement('div');
-    topRow.style.cssText = 'display:flex;gap:6px;margin-bottom:8px;';
+    topBar.style.cssText = 'display:flex;gap:6px;padding:0 0 8px 0;flex-shrink:0;';
 
     const addBtn = document.createElement('button');
     addBtn.className = 'fb-btn-submit';
@@ -2863,7 +2860,7 @@
       const newCard = body.querySelector(`.fb-card[data-id="${item.id}"]`);
       if (newCard) newCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
-    topRow.appendChild(addBtn);
+    topBar.appendChild(addBtn);
 
     const submitAllBtn = document.createElement('button');
     submitAllBtn.className = 'fb-btn-submit-all';
@@ -2885,8 +2882,7 @@
         });
       });
     }
-    topRow.appendChild(submitAllBtn);
-    body.appendChild(topRow);
+    topBar.appendChild(submitAllBtn);
 
     // Empty state
     if (officePdfPendingItems.length === 0 && officePdfCompletedItems.length === 0) {
@@ -2894,7 +2890,7 @@
       empty.className = 'fb-empty';
       empty.style.marginTop = '12px';
       empty.textContent = '点击「+ 添加反馈」开始';
-      body.appendChild(empty);
+      cardList.appendChild(empty);
       return;
     }
 
@@ -3548,12 +3544,21 @@
   }
 
   function renderFeedbackPanel() {
-    const body = document.getElementById('feedbackBody');
+    var body = document.getElementById('feedbackBody');
     body.innerHTML = '';
 
+    // Fixed top row: buttons stay at top
+    var topBar = document.createElement('div');
+    topBar.className = 'fb-topbar';
+    body.appendChild(topBar);
+
+    // Scrollable card list
+    var cardList = document.createElement('div');
+    cardList.className = 'fb-card-list';
+    body.appendChild(cardList);
+
     // === Unified top row: always show "+ 添加反馈" + "✅ 全部提交" ===
-    const topRow = document.createElement('div');
-    topRow.style.cssText = 'display:flex;gap:6px;margin-bottom:8px;';
+    topBar.style.cssText = 'display:flex;gap:6px;padding:0 0 8px 0;flex-shrink:0;';
 
     const addBtn = document.createElement('button');
     addBtn.className = 'fb-btn-submit';
@@ -3564,11 +3569,8 @@
       const item = { id: ++idCounter, text: '', startLine: 0, endLine: 0, note: '', type: 'text', _isNew: true };
       pendingItems.push(item);
       renderFeedbackPanel();
-      // Scroll to the newly added card
-      var newCard = document.querySelector('.fb-card[data-id="' + item.id + '"]');
-      if (newCard) newCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
-    topRow.appendChild(addBtn);
+    topBar.appendChild(addBtn);
 
     const submitAllBtn = document.createElement('button');
     submitAllBtn.className = 'fb-btn-submit-all';
@@ -3599,8 +3601,7 @@
         submitAllItems(submitAllBtn, { itemType: 'text' });
       });
     }
-    topRow.appendChild(submitAllBtn);
-    body.appendChild(topRow);
+    topBar.appendChild(submitAllBtn);
 
     // Empty state: only top row + hint
     if (pendingItems.length === 0 && completedItems.length === 0) {
@@ -3608,21 +3609,21 @@
       empty.className = 'fb-empty';
       empty.style.marginTop = '12px';
       empty.textContent = '选中文本后点击「📋 加入待办」即可累积';
-      body.appendChild(empty);
+      cardList.appendChild(empty);
       return;
     }
 
     // Pending section
     if (pendingItems.length > 0) {
       [...pendingItems].reverse().forEach(function (item) {
-        body.appendChild(createFeedbackCard(item));
+        cardList.appendChild(createFeedbackCard(item));
       });
     }
 
     // Completed section
     if (completedItems.length > 0) {
       completedItems.forEach(function (item) {
-        body.appendChild(renderCompletedFeedbackCard(item));
+        cardList.appendChild(renderCompletedFeedbackCard(item));
       });
     }
   }
@@ -3891,8 +3892,7 @@
     body.innerHTML = '';
 
     // Top row: Add feedback + Submit all
-    const topRow = document.createElement('div');
-    topRow.style.cssText = 'display:flex;gap:6px;margin-bottom:8px;';
+    topBar.style.cssText = 'display:flex;gap:6px;padding:0 0 8px 0;flex-shrink:0;';
 
     const addBtn = document.createElement('button');
     addBtn.className = 'fb-btn-submit';
@@ -3905,7 +3905,7 @@
       const newCard = body.querySelector(`.fb-card[data-id="${item.id}"]`);
       if (newCard) newCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
-    topRow.appendChild(addBtn);
+    topBar.appendChild(addBtn);
 
     const submitAllBtn = document.createElement('button');
     submitAllBtn.className = 'fb-btn-submit-all';
@@ -3927,8 +3927,7 @@
         });
       });
     }
-    topRow.appendChild(submitAllBtn);
-    body.appendChild(topRow);
+    topBar.appendChild(submitAllBtn);
 
     // Empty state
     if (imagePendingItems.length === 0 && imageCompletedItems.length === 0) {
@@ -3936,7 +3935,7 @@
       empty.className = 'fb-empty';
       empty.style.marginTop = '12px';
       empty.textContent = '点击「+ 添加反馈」开始';
-      body.appendChild(empty);
+      cardList.appendChild(empty);
       return;
     }
 

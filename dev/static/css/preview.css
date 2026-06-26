@@ -168,8 +168,19 @@
     .panel-close-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
     .preview-right-body {
       flex: 1;
-      overflow-y: auto;
+      overflow: hidden;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .fb-topbar {
       padding: 8px;
+      flex-shrink: 0;
+    }
+    .fb-card-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 8px 8px;
       display: flex;
       flex-direction: column;
       gap: 6px;
