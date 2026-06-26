@@ -260,7 +260,7 @@
     }
 
     try {
-      var resolvedTheme = getResolvedTheme();
+      var resolvedTheme = window._topbarResolvedTheme ? window._topbarResolvedTheme() : 'light';
       var mermaidTheme = resolvedTheme === 'dark' ? 'dark' : 'default';
 
       window.mermaid.initialize({
@@ -404,7 +404,7 @@
     // Zoom controls
     var controls = document.createElement('div');
     controls.className = 'mermaid-zoom-controls';
-    controls.innerHTML = '<button class="mermaid-zoom-btn" data-zoom="out">−</button><button class="mermaid-zoom-btn" data-zoom="reset">⊙</button><button class="mermaid-zoom-btn" data-zoom="in">+</button>';
+    controls.innerHTML = '<button class="mermaid-zoom-btn" data-zoom="out">−</button><button class="mermaid-zoom-btn" data-zoom="reset">⊙</button><button class="mermaid-zoom-btn" data-zoom="in">+</button><button class="mermaid-zoom-btn mermaid-expand-btn" data-zoom="expand" title="Expand diagram"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>';
     container.appendChild(controls);
 
     function applyZoom() {
@@ -417,6 +417,7 @@
     controls.addEventListener('click', function(e) {
       var btn = e.target.closest('.mermaid-zoom-btn');
       if (!btn) return;
+      if (btn.dataset.zoom === 'expand') { openMermaidDialog(svg); return; }
       if (btn.dataset.zoom === 'in') { scale = Math.min(5, scale + 0.5); }
       else if (btn.dataset.zoom === 'out') { scale = Math.max(0.3, scale - 0.5); }
       else { scale = 1; originX = 0; originY = 0; }
@@ -467,6 +468,84 @@
       scale = 1; originX = 0; originY = 0;
       applyZoom();
     });
+  }
+
+  function openMermaidDialog(svg) {
+    // Remove any existing dialog
+    var existing = document.querySelector('.mermaid-expand-overlay');
+    if (existing) existing.remove();
+
+    // Overlay
+    var overlay = document.createElement('div');
+    overlay.className = 'mermaid-expand-overlay';
+
+    // Dialog panel
+    var dialog = document.createElement('div');
+    dialog.className = 'mermaid-expand-dialog';
+
+    // Header with close button
+    var header = document.createElement('div');
+    header.className = 'mermaid-expand-header';
+
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'mermaid-expand-close';
+    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+    header.appendChild(closeBtn);
+
+    // Scrollable body
+    var body = document.createElement('div');
+    body.className = 'mermaid-expand-body';
+
+    // Deep-clone the SVG and clear any inline zoom transforms
+    var clonedSvg = svg.cloneNode(true);
+    clonedSvg.style.transform = '';
+    clonedSvg.style.transformOrigin = '';
+    body.appendChild(clonedSvg);
+
+    // Assemble
+    dialog.appendChild(header);
+    dialog.appendChild(body);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    // Prevent background scroll
+    document.body.style.overflow = 'hidden';
+
+    // Animate in
+    requestAnimationFrame(function() {
+      overlay.classList.add('active');
+    });
+
+    // Close function
+    function closeDialog() {
+      overlay.classList.remove('active');
+      document.body.style.overflow = '';
+      overlay.addEventListener('transitionend', function() {
+        if (overlay.parentNode) overlay.remove();
+      }, { once: true });
+      // Fallback cleanup
+      setTimeout(function() {
+        if (overlay.parentNode) overlay.remove();
+      }, 350);
+    }
+
+    // Close via X button
+    closeBtn.addEventListener('click', closeDialog);
+
+    // Close via overlay backdrop click
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) closeDialog();
+    });
+
+    // Close via ESC key
+    var escHandler = function(e) {
+      if (e.key === 'Escape') {
+        closeDialog();
+        document.removeEventListener('keydown', escHandler);
+      }
+    };
+    document.addEventListener('keydown', escHandler);
   }
 
   function buildTOC(div) {
@@ -5234,7 +5313,13 @@
               if (btnToggleAgent) btnToggleAgent.classList.remove('active');
               updateGridColumns();
             };
-            window.Agent.open(rootId, agentDir);
+            // Pass current file context so Agent can auto-read the previewed content
+            var fileCtx = filePath ? {
+              path: filePath,
+              content: rawContent || '',
+            } : null;
+            window.Agent.open(rootId, agentDir, fileCtx);
+            if (window.Agent.focus) window.Agent.focus();
           }
         }).catch(function(err) {
           console.error('[agent-panel] Failed to load:', err);

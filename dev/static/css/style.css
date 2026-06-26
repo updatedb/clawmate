@@ -1680,3 +1680,77 @@ pre:hover .code-copy-btn,
 [data-theme="dark"] .mermaid-zoom-btn:hover {
   background: rgba(255,255,255,0.15);
 }
+
+/* ── Mermaid Expand Dialog ── */
+.mermaid-expand-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity var(--duration-base) var(--ease-out);
+}
+.mermaid-expand-overlay.active {
+  opacity: 1;
+}
+
+.mermaid-expand-dialog {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-modal);
+  width: 90vw;
+  height: 90vh;
+  display: flex;
+  flex-direction: column;
+  transform: scale(0.95);
+  transition: transform var(--duration-base) var(--ease-out);
+}
+.mermaid-expand-overlay.active .mermaid-expand-dialog {
+  transform: scale(1);
+}
+
+.mermaid-expand-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.mermaid-expand-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+.mermaid-expand-close:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.mermaid-expand-body {
+  flex: 1;
+  overflow: auto;
+  padding: 24px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.mermaid-expand-body svg {
+  max-width: none;
+  height: auto;
+}
