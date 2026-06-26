@@ -545,22 +545,20 @@
       applyDialogZoom();
     });
 
-    // Mouse wheel zoom (Ctrl+Wheel) — zoom toward cursor
+    // Mouse wheel — zoom over the SVG, native scroll elsewhere
     body.addEventListener('wheel', function(e) {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-        var delta = e.deltaY > 0 ? -0.2 : 0.2;
-        var oldScale = dScale;
-        dScale = Math.max(0.3, Math.min(5, dScale + delta));
-        var rect = body.getBoundingClientRect();
-        // Cursor position relative to body center
-        var cx = e.clientX - rect.left - rect.width / 2;
-        var cy = e.clientY - rect.top - rect.height / 2;
-        var ratio = dScale / oldScale;
-        dPanX = cx + (dPanX - cx) * ratio;
-        dPanY = cy + (dPanY - cy) * ratio;
-        applyDialogZoom();
-      }
+      if (!clonedSvg.contains(e.target) && e.target !== clonedSvg) return;
+      e.preventDefault();
+      var delta = e.deltaY > 0 ? -0.2 : 0.2;
+      var oldScale = dScale;
+      dScale = Math.max(0.3, Math.min(5, dScale + delta));
+      var rect = body.getBoundingClientRect();
+      var cx = e.clientX - rect.left - rect.width / 2;
+      var cy = e.clientY - rect.top - rect.height / 2;
+      var ratio = dScale / oldScale;
+      dPanX = cx + (dPanX - cx) * ratio;
+      dPanY = cy + (dPanY - cy) * ratio;
+      applyDialogZoom();
     }, { passive: false });
 
     // Pan (drag)
