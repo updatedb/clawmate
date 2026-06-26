@@ -297,16 +297,6 @@
       padding-left: 20px;
       margin: 4px 0 0 4px;
     }
-    .fb-timeline::before {
-      content: '';
-      position: absolute;
-      left: 5px;
-      top: 8px;
-      bottom: 8px;
-      width: 2px;
-      background: var(--border-color);
-      border-radius: 1px;
-    }
     /* ── Status Pills ── */
     .fb-status-pill {
       display: inline-block;
