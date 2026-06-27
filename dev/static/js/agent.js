@@ -119,7 +119,7 @@
     const delta = dragStartX - e.clientX;
     const content = document.querySelector('.content');
     if (!content) return;
-    panelWidth = Math.max(360, Math.min(900, dragStartWidth + delta));
+    panelWidth = Math.max(420, Math.min(900, dragStartWidth + delta));
     const sb = document.getElementById('sidebar');
     const sbHidden = sb && (sb.classList.contains('hidden') || getComputedStyle(sb).display === 'none');
     const lW = sbHidden ? '0px' : '240px';
@@ -174,12 +174,18 @@
 
     // ── Estimate cols/rows from container before Terminal creation ──
     // This avoids the hardcoded 100×30 → fit mismatch that garbles initial output.
-    var CHAR_W = 8.4;   // approximate for JetBrains Mono 14px
+    // Measure actual character width instead of hardcoded 8.4px
+    var fontFamily = '"JetBrains Mono", "Cascadia Code", "Fira Code", "Consolas", "SF Mono", "DejaVu Sans Mono", monospace';
+    var _measureSpan = document.createElement('span');
+    _measureSpan.style.cssText = 'position:absolute;visibility:hidden;font-family:' + fontFamily + ';font-size:14px;white-space:pre;';
+    _measureSpan.textContent = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    document.body.appendChild(_measureSpan);
+    var CHAR_W = _measureSpan.offsetWidth / 62;
+    document.body.removeChild(_measureSpan);
+    if (!(CHAR_W > 4 && CHAR_W < 16)) CHAR_W = 8.4; // fallback if measurement fails
     var CHAR_H = 19.6;  // fontSize * lineHeight = 14 * 1.4
     var containerW = xtermContainer.clientWidth || 600;
     var containerH = xtermContainer.clientHeight || 400;
-    // Subtract CSS padding (4px+6px=10px horizontal ×2, 4px+0=4px vertical ×2)
-    // and scrollbar reserve (6px)
     var usableW = Math.max(100, containerW - 12 - 6);
     var usableH = Math.max(100, containerH - 8);
     var estimatedCols = Math.max(40, Math.floor(usableW / CHAR_W));
@@ -310,11 +316,6 @@
         xlog('fit', 'result rows=' + term.rows + ' cols=' + term.cols +
           ' (Δ rows:' + (term.rows - (before ? before.rows : 0)) +
           ' cols:' + deltaCols + ')');
-        // Significant column change (> 5): reset display so old
-        // content doesn't show broken wrapping at the new width.
-        if (before && Math.abs(deltaCols) > 5) {
-          term.reset();
-        }
         // Refresh WebGL renderer; double-rAF ensures the framebuffer
         // reallocates at the new character-grid dimensions.
         try { term.refresh(0, term.rows - 1); } catch (_) {}
@@ -353,18 +354,23 @@
       xlog('fit', 'SKIP — fitAddon is null');
     }
 
-    // --- ResizeObserver ---
+    // --- ResizeObserver (debounced 200ms) ---
     if (typeof ResizeObserver !== 'undefined') {
       if (termResizeObserver) termResizeObserver.disconnect();
+      var _roDebounce = null;
       termResizeObserver = new ResizeObserver(function (entries) {
-        var r = entries[0] && entries[0].contentRect;
-        xlog('resize-observer', 'fired container=' + (r ? Math.round(r.width) + 'x' + Math.round(r.height) : '?') + ' hidden=' + panel.classList.contains('hidden'));
-        if (fitAddon && !panel.classList.contains('hidden')) {
-          try { fitAddon.fit(); } catch (_) {}
-        }
+        if (_roDebounce) clearTimeout(_roDebounce);
+        _roDebounce = setTimeout(function () {
+          _roDebounce = null;
+          var r = entries[0] && entries[0].contentRect;
+          xlog('resize-observer', 'fired container=' + (r ? Math.round(r.width) + 'x' + Math.round(r.height) : '?') + ' hidden=' + panel.classList.contains('hidden'));
+          if (fitAddon && !panel.classList.contains('hidden')) {
+            try { fitAddon.fit(); } catch (_) {}
+          }
+        }, 200);
       });
       termResizeObserver.observe(xtermContainer);
-      xlog('init', 'ResizeObserver active on xtermContainer');
+      xlog('init', 'ResizeObserver active on xtermContainer (200ms debounce)');
     }
 
     // --- Data / resize forward to WebSocket ---
@@ -746,12 +752,17 @@
     connectWs();
   }
 
-  // --- Resize handler ---
+  // --- Resize handler (debounced 200ms) ---
+  var _winResizeDebounce = null;
   window.addEventListener('resize', function () {
     updateGridColumns();
-    if (fitAddon && !panel.classList.contains('hidden')) {
-      try { fitAddon.fit(); } catch (_) {}
-    }
+    if (_winResizeDebounce) clearTimeout(_winResizeDebounce);
+    _winResizeDebounce = setTimeout(function () {
+      _winResizeDebounce = null;
+      if (fitAddon && !panel.classList.contains('hidden')) {
+        try { fitAddon.fit(); } catch (_) {}
+      }
+    }, 200);
   });
 
   // --- Close button ---

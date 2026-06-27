@@ -2032,7 +2032,7 @@
 
     function onResizeMove(e) {
       const delta = dragStartX - e.clientX;
-      var newWidth = Math.max(260, Math.min(800, dragStartWidth + delta));
+      var newWidth = Math.max(360, Math.min(800, dragStartWidth + delta));
       var agentOpen = agentPanel && !agentPanel.classList.contains('hidden');
       if (agentOpen) {
         agentPanelWidth = newWidth;
