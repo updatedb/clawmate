@@ -90,12 +90,10 @@
         <div class="preview-agent-panel-header">
           <span class="agent-panel-badge" id="previewAgentBackendBadge"></span>
           <span class="agent-panel-title" id="previewAgentTitle">Agent</span>
-          <button id="previewBtnAgentMode" class="agent-mode-btn" title="切换渲染模式">DOM</button>
+          <span class="agent-panel-root" id="previewAgentPanelRoot"></span>
           <button class="panel-close-btn" id="previewBtnCloseAgent" title="关闭 Agent"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
         </div>
-        <div id="previewDomTermOutput" class="dom-terminal"></div>
-        <textarea id="previewDomTermInput" class="dom-terminal-input" placeholder="输入命令，Enter 发送…" rows="1"></textarea>
-        <div id="previewXtermContainer" class="xterm-container hidden"></div>
+        <div id="previewXtermContainer" class="xterm-container"></div>
         <div id="previewAgentChatView" class="agent-chat-view hidden">
           <div class="agent-chat-messages" id="previewAgentChatMessages"></div>
           <div class="agent-chat-input-wrap">
