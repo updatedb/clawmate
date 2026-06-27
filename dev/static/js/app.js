@@ -938,7 +938,14 @@ function renderSidebarTree() {
       li.style.color = "var(--accent, #4a9eff)";
       li.style.cursor = "default";
     } else {
-      li.addEventListener("click", () => loadDir(entry.relPath));
+      li.addEventListener("click", () => {
+        loadDir(entry.relPath);
+        if (window.innerWidth < 768) {
+          els.sidebar.classList.add('hidden');
+          btnToggleSidebar.classList.remove('active');
+          if (els.sidebarOverlay) els.sidebarOverlay.style.display = 'none';
+        }
+      });
     }
 
     li.appendChild(icon);
@@ -1625,6 +1632,15 @@ async function loadDir(dir) {
     setStatus("请先选择根目录");
     return;
   }
+  // Mobile: auto-close directory panel after navigation
+  if (window.innerWidth < 768) {
+    var sidebar = els.sidebar;
+    if (sidebar && !sidebar.classList.contains('hidden')) {
+      sidebar.classList.add('hidden');
+      if (btnToggleSidebar) btnToggleSidebar.classList.remove('active');
+      if (els.sidebarOverlay) els.sidebarOverlay.style.display = 'none';
+    }
+  }
   const safeDir = sanitizeDir(dir);
   if (dir && safeDir !== dir) {
     setStatus("非法目录，已回退到根目录");
@@ -1873,16 +1889,22 @@ els.viewList.addEventListener("click", () => setView("list"));
 
 // Hamburger menu (mobile)
 els.hamburgerBtn && els.hamburgerBtn.addEventListener("click", () => {
-  els.sidebar && els.sidebar.classList.toggle("open");
+  if (!els.sidebar) return;
+  const isHidden = els.sidebar.classList.contains('hidden');
+  if (isHidden) {
+    els.sidebar.classList.remove('hidden');
+  } else {
+    els.sidebar.classList.add('hidden');
+  }
   if (els.sidebarOverlay) {
-    els.sidebarOverlay.style.display = els.sidebar.classList.contains("open") ? "block" : "none";
+    els.sidebarOverlay.style.display = isHidden ? 'block' : 'none';
   }
   // Sync sidebar toggle button state
-  const btn = document.getElementById("btnToggleSidebar");
-  if (btn) btn.classList.toggle("active", els.sidebar && els.sidebar.classList.contains("open"));
+  const btn = document.getElementById('btnToggleSidebar');
+  if (btn) btn.classList.toggle('active', isHidden);
 });
 els.sidebarOverlay && els.sidebarOverlay.addEventListener("click", () => {
-  els.sidebar && els.sidebar.classList.remove("open");
+  els.sidebar && els.sidebar.classList.add('hidden');
   if (els.sidebarOverlay) els.sidebarOverlay.style.display = "none";
   // Sync sidebar toggle button state
   const btn = document.getElementById("btnToggleSidebar");
@@ -1915,23 +1937,23 @@ if (btnToggleSidebar) {
     const sidebar = els.sidebar;
     if (!sidebar) return;
     if (window.innerWidth < 768) {
-      // Mobile: close agent overlay first if showing
+      // Mobile: close agent overlay first if showing (mutual exclusion)
       const agentPanel = document.getElementById("agentPanel");
-      if (agentPanel && !agentPanel.classList.contains("hidden")) {
+      if (agentPanel && !agentPanel.classList.contains('hidden')) {
         if (window.Agent) window.Agent.close();
       }
-      // Toggle overlay (open class)
-      const isOpen = sidebar.classList.contains("open");
-      if (isOpen) {
-        sidebar.classList.remove("open");
-        btnToggleSidebar.classList.remove("active");
+      // Toggle overlay — uses .hidden class consistent with preview panels
+      const isHidden = sidebar.classList.contains('hidden');
+      if (isHidden) {
+        sidebar.classList.remove('hidden');
+        btnToggleSidebar.classList.add('active');
       } else {
-        sidebar.classList.add("open");
-        btnToggleSidebar.classList.add("active");
+        sidebar.classList.add('hidden');
+        btnToggleSidebar.classList.remove('active');
       }
       // Toggle overlay
       if (els.sidebarOverlay) {
-        els.sidebarOverlay.style.display = isOpen ? "none" : "block";
+        els.sidebarOverlay.style.display = isHidden ? 'block' : 'none';
       }
     } else {
       // Desktop: if CSS auto-hides sidebar (agent-open + narrow), close agent first
@@ -1986,12 +2008,22 @@ els.themeToggle && els.themeToggle.addEventListener("click", cycleTheme);
 const btnToggleAgent = document.getElementById("btnToggleAgent");
 btnToggleAgent && btnToggleAgent.addEventListener("click", function () {
   if (window.Agent) {
-    // If opening agent at narrow width, hide sidebar first
-    if (!window.Agent.isOpen() && window.innerWidth <= 1500 && window.innerWidth >= 768) {
-      if (els.sidebar && !els.sidebar.classList.contains("hidden")) {
-        els.sidebar.classList.add("hidden");
-        syncSidebarBtn();
-        _updateContentGrid();
+    // If opening agent, close sidebar first (mutual exclusion)
+    if (!window.Agent.isOpen()) {
+      if (window.innerWidth < 768) {
+        // Mobile: close sidebar overlay
+        if (els.sidebar && !els.sidebar.classList.contains('hidden')) {
+          els.sidebar.classList.add('hidden');
+          syncSidebarBtn();
+          if (els.sidebarOverlay) els.sidebarOverlay.style.display = 'none';
+        }
+      } else if (window.innerWidth <= 1500) {
+        // Desktop narrow: hide sidebar
+        if (els.sidebar && !els.sidebar.classList.contains('hidden')) {
+          els.sidebar.classList.add('hidden');
+          syncSidebarBtn();
+          _updateContentGrid();
+        }
       }
     }
     window.Agent.toggle();
@@ -2587,7 +2619,7 @@ function syncSidebarBtn() {
   // Desktop: check actual visibility (CSS may have auto-hidden it)
   const visible = getComputedStyle(sidebar).display !== 'none' && !sidebar.classList.contains('hidden');
   if (window.innerWidth < 768) {
-    btn.classList.toggle("active", sidebar.classList.contains("open"));
+    btn.classList.toggle("active", !sidebar.classList.contains("hidden"));
   } else {
     btn.classList.toggle("active", visible);
   }

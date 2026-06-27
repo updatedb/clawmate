@@ -914,6 +914,11 @@
       a.textContent = item.text;
       a.addEventListener('click', function(e) {
         e.preventDefault();
+        if (window.innerWidth < 768) {
+          leftSidebar.classList.add('hidden');
+          btnToggleLeft.classList.remove('active');
+          updateGridColumns();
+        }
         scrollToCodeLine(item.line);
       });
       li.appendChild(a);
@@ -1946,6 +1951,14 @@
   function openLeftSidebar() {
     if (!leftSidebar.classList.contains('hidden')) return;
     clearTimeout(_leftCloseTimer);
+    // Mutual exclusion: close other panels
+    if (rightSidebar && !rightSidebar.classList.contains('hidden')) {
+      _stopSidebarRefresh();
+      closeRightSidebar();
+    }
+    if (agentPanel && !agentPanel.classList.contains('hidden')) {
+      if (window.Agent) window.Agent.close();
+    }
     leftSidebar.style.display = 'flex';        // override global .hidden
     // Expand grid column directly while panel is still "hidden"
     var gridParts = (threeCol.style.gridTemplateColumns || '240px 1fr 0px 0px').split(' ');
@@ -1972,7 +1985,10 @@
   function openRightSidebar() {
     if (!rightSidebar.classList.contains('hidden')) return;
     clearTimeout(_rightCloseTimer);
-    // Mutual exclusion: close agent panel if open
+    // Mutual exclusion: close other panels
+    if (leftSidebar && !leftSidebar.classList.contains('hidden')) {
+      closeLeftSidebar();
+    }
     if (agentPanel && !agentPanel.classList.contains('hidden')) {
       if (window.Agent) window.Agent.close();
     }
@@ -5357,7 +5373,10 @@
       var isOpen = !agentPanel.classList.contains('hidden');
 
       if (!isOpen) {
-        // Mutual exclusion: close feedback sidebar when opening agent
+        // Mutual exclusion: close other panels when opening agent
+        if (leftSidebar && !leftSidebar.classList.contains('hidden')) {
+          closeLeftSidebar();
+        }
         if (rightSidebar && !rightSidebar.classList.contains('hidden')) {
           _stopSidebarRefresh();
           closeRightSidebar();
