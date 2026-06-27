@@ -1,7 +1,8 @@
 @import url('./tokens.css');
 
 * { box-sizing: border-box; }
-body { margin: 0; font-family: var(--font-ui); color: var(--text-primary); background: var(--bg-primary); }
+html, body { overflow: hidden; height: 100%; margin: 0; padding: 0; }
+body { font-family: var(--font-ui); color: var(--text-primary); background: var(--bg-primary); }
 
 /* ═══════════════════════════════════════════════════════
    Design tokens are in tokens.css (Amber + Slate).
