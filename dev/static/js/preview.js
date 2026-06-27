@@ -5637,11 +5637,11 @@
       cssLink.href = XTERM_CDN + '/css/xterm.min.css';
       document.head.appendChild(cssLink);
 
+      // agent.js is now loaded via <script defer> in preview.html
       var scripts = [
         XTERM_CDN + '/lib/xterm.min.js',
         './vendor/addon-fit.min.js?v=20260622',
         './vendor/addon-webgl.min.js?v=20260622',
-        './js/agent.js?v=20260628b',
       ];
 
       function loadNext(idx) {
