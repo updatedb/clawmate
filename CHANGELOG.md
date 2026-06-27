@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.45 (2026-06-28)
+### Agent Panel 空白修复（grid-column 错位）
+- 根因：`.agent-panel` 无显式 grid-column，auto-placement 在 sidebar/resize-handle 都 `display:none` 时把面板放到第 2 列（1fr≈25px→4px）
+- 修复：`.agent-panel { grid-column: 4; }` 始终占第 4 列（750px）
+- `createTerminal()` 容器尺寸检测加固：`clientWidth < 50px` 时用 600px 回退（4px 是 truthy 会绕过 `||600`）
+- CSS transition 动画期间跳过 `fitAddon.fit()`（`doFit()` 守卫），ResizeObserver/win-resize 统一走 `doFit()`
+- `connectWs()` 优先用预估算的 `_agentInitCols` 而非可能缩水后的 `term.cols`
+
+### OpenClaw 输入框提示
+- placeholder 添加 `/clawmate project` 切换项目提示
+
+### README 业务架构图
+- 用 `flowchart LR` 业务架构图替换技术实现图（去掉文件名、协议、端口）
+- 结构：入口（skill/API）→ 功能域（filesystem/project/feedback）→ 后端（openclaw/codex/claude）
+- 明确功能域与后端是正交维度，连线表示主要侧重而非绑定
+
 ## v1.44 (2026-06-26)
 ### Codex Agent 后端
 - 新增 Codex 作为第三 Agent 后端（与 claude/openclaw 并列）
