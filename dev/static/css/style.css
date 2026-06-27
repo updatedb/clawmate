@@ -514,19 +514,34 @@ button svg, .btn svg, a svg {
 }
 .agent-resize-handle.hidden { display: none; }
 
-/* Agent panel: mobile overlay */
+/* Agent panel: mobile overlay — collapse when hidden, full-width fixed overlay when open */
 @media (max-width: 768px) {
   .agent-panel {
-    position: fixed; top: 48px; right: 0; bottom: 0; width: 100vw !important;
-    height: auto; /* override base height:100% — fixed positioning defines height via top+bottom */
-    z-index: 11; border-left: none;
+    transition: none !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    border-width: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+  }
+  .agent-panel:not(.hidden) {
+    position: fixed;
+    top: 0; bottom: 0; right: 0;
+    z-index: 7;
+    display: flex;
+    width: 100vw !important;
+    padding: 48px 0 0 0 !important;
+    border-left: 1px solid var(--border-color) !important;
+    overflow-y: auto !important;
+    pointer-events: auto !important;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.25);
   }
   .agent-panel-header {
     height: auto; min-height: 40px; flex-wrap: wrap;
     gap: 4px; padding-left: 10px; padding-right: 10px;
   }
   .agent-panel-root { display: none; }
-  .agent-panel.hidden { display: none; }
 }
 
 /* Main area */
@@ -744,21 +759,31 @@ button svg, .btn svg, a svg {
   .topbar-actions { gap: 4px; margin-left: auto; }
   .topbar-btn { width: 30px; height: 30px; font-size: 13px; }
 
-  /* Sidebar: slide-in drawer */
+  /* Sidebar: collapse when hidden, full-width fixed overlay when open (matches preview) */
   .sidebar-overlay { display: none; }
   .content { display: grid; grid-template-columns: 0px 1fr 0px 0px !important; flex: 1; min-height: 0; overflow: hidden; width: 100%; }
   .sidebar {
-    position: fixed;
-    top: 48px; left: 0; bottom: 0;
-    width: var(--sidebar-w);
-    z-index: 10;
-    transform: translateX(-100%);
-    transition: transform var(--duration-slow) var(--ease-out);
-    box-shadow: 4px 0 24px rgba(0,0,0,0.15);
-    pointer-events: none;
+    transition: none !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    border-width: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+    translate: 0 !important;
   }
-  .sidebar.open { transform: translateX(0); pointer-events: auto; }
-  .sidebar.open ~ .sidebar-overlay { display: block; }
+  .sidebar:not(.hidden) {
+    position: fixed;
+    top: 0; bottom: 0; left: 0;
+    z-index: 7;
+    display: flex;
+    width: 100vw !important;
+    padding: 48px 0 0 0 !important;
+    border-right: 1px solid var(--border-color) !important;
+    overflow-y: auto !important;
+    pointer-events: auto !important;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+  }
   .main { min-height: 0; display: flex; flex-direction: column; overflow: hidden; grid-column: 2 !important; }
 
   /* Breadcrumb: prevent overflow */
