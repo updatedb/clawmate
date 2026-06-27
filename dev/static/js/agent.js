@@ -13,6 +13,8 @@
   // --- DOM refs (re-initializable with prefix for reuse in preview page) ---
   let _domPrefix = '';
   let panel, resizeHandle, xtermContainer, chatView, chatMessages, chatInput, chatSendBtn, badgeEl, rootEl, closeBtn, toggleBtn;
+  let modeBtn, domTermOutput, domTermInput;
+  var domTermId, domInputId, modeBtnId;
   // Resize tracking shared between createTerminal & disconnectWs
   var _lastResizeSent = { cols: 0, rows: 0 };
   var _pendingResize = null;
@@ -32,6 +34,13 @@
     rootEl        = document.getElementById(p + 'AgentPanelRoot') || document.getElementById(p + 'agentPanelRoot') || document.getElementById('agentPanelRoot');
     closeBtn      = document.getElementById(p + 'BtnCloseAgent') || document.getElementById(p + 'btnCloseAgent') || document.getElementById('btnCloseAgent');
     toggleBtn     = document.getElementById(p + 'BtnToggleAgent') || document.getElementById(p + 'btnToggleAgent') || document.getElementById('btnToggleAgent');
+    modeBtn       = document.getElementById(p + 'BtnAgentMode') || document.getElementById(p + 'btnAgentMode') || document.getElementById('btnAgentMode');
+    domTermOutput = document.getElementById(p + 'DomTermOutput') || document.getElementById(p + 'domTermOutput') || document.getElementById('domTermOutput');
+    domTermInput  = document.getElementById(p + 'DomTermInput') || document.getElementById(p + 'domTermInput') || document.getElementById('domTermInput');
+    // Update ID strings for DOM terminal functions
+    domTermId = domTermOutput ? domTermOutput.id : (p + 'DomTermOutput');
+    domInputId = domTermInput ? domTermInput.id : (p + 'DomTermInput');
+    modeBtnId = modeBtn ? modeBtn.id : (p + 'BtnAgentMode');
   }
   _resolveDom('');  // default: main page IDs
 
@@ -62,6 +71,13 @@
   let currentAgentId = '';  // kept for OpenClaw backend session routing
   let backendMode = 'claude';
   let _pendingFileContext = null;  // {path, content} — sent on next ws.onopen
+
+  // ── DOM renderer state ──
+  let _renderMode = 'dom'; // 'dom' | 'xterm'
+  let _domOutput = null;
+  let _domInput = null;
+  let _ansiUp = null;
+  let _domLines = [''];
 
   function isPtyBackend() {
     return backendMode === 'claude' || backendMode === 'codex';
@@ -155,6 +171,103 @@
   // --- xterm.js init (Claude backend) ---
   function createTerminal() {
     if (term) { xlog('init', 'term already exists, skipping'); return; }
+    if (_renderMode === 'dom') { _createDomTerminal(); return; }
+    _createXterm();
+  }
+
+  // ── DOM terminal (ansi-up) ──
+  function _createDomTerminal() {
+    // Load ansi-up if needed
+    if (!window.AnsiUp && typeof AnsiUp === 'undefined') {
+      var s = document.createElement('script');
+      s.src = './vendor/ansi-up.min.js';
+      s.onload = function () { _initDomTerminal(); };
+      document.head.appendChild(s);
+    } else {
+      _initDomTerminal();
+    }
+  }
+
+  function _initDomTerminal() {
+    _domOutput = document.getElementById(domTermId);
+    _domInput = document.getElementById(domInputId);
+    if (!_domOutput || !_domInput) return;
+
+    _domOutput.classList.remove('hidden');
+    _domInput.classList.remove('hidden');
+    xtermContainer.classList.add('hidden');
+
+    _domOutput.innerHTML = '';
+    _domLines = [''];
+    _ansiUp = new (window.AnsiUp || AnsiUp)();
+    _ansiUp.use_classes = true;
+
+    _domInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        var text = _domInput.value;
+        _domInput.value = '';
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(text + '\r');
+        }
+      }
+    });
+
+    _addDomLine('\x1b[1;36m✓ DOM 终端已连接\x1b[0m');
+    _addDomLine('\x1b[2m  ' + _domOutput.clientWidth + 'px  |  输入命令后按 Enter 发送\x1b[0m');
+  }
+
+  function _addDomLine(html) {
+    var div = document.createElement('div');
+    div.className = 'dom-line';
+    div.innerHTML = html;
+    _domOutput.appendChild(div);
+    _domOutput.scrollTop = _domOutput.scrollHeight;
+  }
+
+  function _domWrite(data) {
+    if (!_domOutput || !_ansiUp) return;
+    var html = _ansiUp.ansi_to_html(data);
+    if (!html) return;
+    // Split by newlines, update last line or append new lines
+    var parts = html.split('\n');
+    for (var i = 0; i < parts.length; i++) {
+      if (i === 0 && _domLines.length > 0) {
+        // Append to last line
+        var last = _domOutput.lastElementChild;
+        if (last && last.classList.contains('dom-line')) {
+          last.innerHTML += parts[i];
+        } else {
+          _addDomLine(parts[i]);
+        }
+      } else {
+        _addDomLine(parts[i]);
+      }
+    }
+    _domLines = [parts[parts.length - 1]];
+  }
+
+  function _toggleAgentMode() {
+    if (!term && _renderMode === 'xterm') return; // xterm not created yet
+    var modeBtn = document.getElementById(modeBtnId);
+    if (_renderMode === 'dom') {
+      _renderMode = 'xterm';
+      if (!term) _createXterm();
+      if (modeBtn) modeBtn.textContent = 'TERM';
+      if (_domOutput) _domOutput.classList.add('hidden');
+      if (_domInput) _domInput.classList.add('hidden');
+      xtermContainer.classList.remove('hidden');
+    } else {
+      _renderMode = 'dom';
+      if (modeBtn) modeBtn.textContent = 'DOM';
+      xtermContainer.classList.add('hidden');
+      if (_domOutput) _domOutput.classList.remove('hidden');
+      if (_domInput) _domInput.classList.remove('hidden');
+    }
+  }
+
+  // ── xterm terminal (original) ──
+  function _createXterm() {
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
     var bg, fg, selBg, selFg, selInactiveBg;
     if (isDark) {
@@ -636,14 +749,16 @@
         }
       } catch (_) {}
 
-      if (isPtyBackend() && term) {
-        // Respect xterm.js flow control: if the internal write buffer is
-        // over the HIGH watermark, drop incoming data. xterm.js already
-        // buffers internally, so an external buffer just creates a ping-pong
-        // effect on resume. Dropping frames is the standard approach for
-        // real-time terminal output that can't keep up with rendering.
-        if (flowPaused) { return; }
-        term.write(e.data);
+      if (isPtyBackend()) {
+        if (_renderMode === 'dom' && _domOutput) {
+          _domWrite(e.data);
+          return;
+        }
+        if (term) {
+          // Respect xterm.js flow control
+          if (flowPaused) { return; }
+          term.write(e.data);
+        }
         return;
       }
       // OpenClaw chat mode: parse JSON messages
@@ -684,7 +799,10 @@
     clearReconnect();
     currentSessionKey = '';
     if (ws) { ws.onclose = null; ws.close(); ws = null; }
-    if (term) {
+    if (_renderMode === 'dom' && domTermOutput) {
+      _addDomLine('\x1b[2m终端已断开。\x1b[0m');
+    }
+    if (_renderMode === 'xterm' && term) {
       // Suspend cursor blink timer — hidden terminals that keep blinking
       // waste main-thread time every ~500ms competing with active UI.
       try { term.blur(); } catch (_) {}
@@ -768,6 +886,11 @@
   // --- Close button ---
   if (closeBtn) {
     closeBtn.addEventListener('click', function () { window.Agent.close(); });
+  }
+
+  // --- Mode switch button ---
+  if (modeBtn) {
+    modeBtn.addEventListener('click', function () { _toggleAgentMode(); });
   }
 
   // --- Public API ---

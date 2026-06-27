@@ -88,12 +88,14 @@
       <!-- Right: Agent Panel (shares column 4 with feedback, mutually exclusive) -->
       <aside class="preview-agent-panel hidden" id="previewAgentPanel">
         <div class="preview-agent-panel-header">
-          <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg> Agent</span>
           <span class="agent-panel-badge" id="previewAgentBackendBadge"></span>
-          <span class="agent-panel-root" id="previewAgentPanelRoot"></span>
+          <span class="agent-panel-title" id="previewAgentTitle">Agent</span>
+          <button id="previewBtnAgentMode" class="agent-mode-btn" title="切换渲染模式">DOM</button>
           <button class="panel-close-btn" id="previewBtnCloseAgent" title="关闭 Agent"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
         </div>
-        <div id="previewXtermContainer" class="xterm-container"></div>
+        <div id="previewDomTermOutput" class="dom-terminal"></div>
+        <textarea id="previewDomTermInput" class="dom-terminal-input" placeholder="输入命令，Enter 发送…" rows="1"></textarea>
+        <div id="previewXtermContainer" class="xterm-container hidden"></div>
         <div id="previewAgentChatView" class="agent-chat-view hidden">
           <div class="agent-chat-messages" id="previewAgentChatMessages"></div>
           <div class="agent-chat-input-wrap">
