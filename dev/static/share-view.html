@@ -32,7 +32,7 @@
       background: var(--brand-bg); color: var(--brand-text);
       flex-shrink: 0; z-index: 10; border-bottom: 1px solid var(--border-color);
     }
-    .topbar .brand { font-weight: 700; font-size: 14px; flex-shrink: 0; opacity: 0.85; }
+    .topbar .brand { font-weight: 700; font-size: var(--font-size-lg); flex-shrink: 0; line-height: 1; height: 34px; display: inline-flex; align-items: center; gap: 8px; }
     .topbar .share-title {
       flex: 1; font-size: 14px; font-weight: 500;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -125,7 +125,7 @@
       .share-left { transition: none !important; translate: -100% !important; pointer-events: none !important; width: 0 !important; min-width: 0 !important; padding: 0 !important; border-width: 0 !important; overflow: hidden !important; }
       .share-left:not(.hidden) {
         position: fixed; top: 0; bottom: 0; left: 0; z-index: 7;
-        display: flex; width: min(260px, 70vw) !important; min-width: 240px !important;
+        display: flex; width: 100vw !important;
         padding: 48px 0 0 0 !important; border-right: 1px solid var(--border-color) !important;
         translate: 0 !important;
         pointer-events: auto !important; overflow-y: auto !important;
@@ -138,18 +138,22 @@
   <div class="share-app">
     <!-- Topbar -->
     <header class="topbar">
-      <span class="brand"><img src="./asset/clawmate-logo.png" alt="" width="24" height="24" style="flex-shrink:0;vertical-align:middle;" />ClawMate</span>
+      <span class="brand"><img src="./asset/clawmate-logo.png" alt="" width="28" height="28" style="flex-shrink:0;" />ClawMate</span>
       <span class="share-title" id="shareTitle">📄 加载中...</span>
       <div class="topbar-actions">
-        <button class="topbar-btn" id="btnToggleToc" title="切换大纲">📑</button>
-        <button class="topbar-btn" id="themeToggle" title="切换主题">🌓</button>
+        <button class="topbar-btn" id="btnToggleToc" title="切换大纲">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
+        </button>
+        <button class="topbar-btn" id="themeToggle" title="切换主题">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+        </button>
       </div>
     </header>
 
     <!-- Three-column -->
     <div class="share-three-col" id="shareThreeCol">
       <aside class="share-left hidden" id="shareLeft">
-        <div class="share-left-header"><span>📑 大纲</span><button class="share-left-close" id="btnCloseToc" title="关闭大纲">✕</button></div>
+        <div class="share-left-header"><span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg> 大纲</span><button class="share-left-close" id="btnCloseToc" title="关闭大纲"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></div>
         <div class="share-left-body" id="tocBody">
           <div class="share-toc-empty">非 Markdown，无大纲</div>
         </div>
@@ -177,6 +181,8 @@
   <script src="./vendor/katex.min.js"></script>
   <script src="./vendor/auto-render.min.js"></script>
   <script src="./vendor/mermaid-v11.min.js"></script>
+  <script src="./js/icons.js"></script>
+  <script src="./js/topbar.js"></script>
   <script src="./js/preview-common.js"></script>
   <script>
   (function() {
@@ -203,36 +209,23 @@
       threeCol.style.gridTemplateColumns = (hidden ? '0px' : '240px') + ' 1fr 0px';
     }
 
-    // ── Theme ──
-    var theme = localStorage.getItem('clawmate-theme') || 'auto';
-    function getResolvedTheme() {
-      if (theme === 'auto') return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      return theme;
-    }
-    function applyTheme() {
-      var resolved = getResolvedTheme();
-      document.documentElement.setAttribute('data-theme', resolved);
+    // ── Theme (icon + cycle handled by topbar.js; CSS updates via _onThemeChange) ──
+    function _updateThemeAssets(resolved) {
       document.body.classList.toggle('dark', resolved === 'dark');
-      // Highlight.js theme
       document.getElementById('highlight-theme-css').href = resolved === 'dark'
         ? 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css'
         : 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css';
-      // Markdown CSS
       document.getElementById('github-markdown-css').href = resolved === 'dark'
         ? './vendor/github-markdown-dark.min.css'
         : './vendor/github-markdown-light.min.css';
-      // Button icon
-      var btn = document.getElementById('themeToggle');
-      if (btn) btn.textContent = theme === 'auto' ? '🌓' : theme === 'light' ? '☀️' : '🌙';
     }
-    applyTheme();
-    document.getElementById('themeToggle').addEventListener('click', function() {
-      if (theme === 'auto') theme = 'light';
-      else if (theme === 'light') theme = 'dark';
-      else theme = 'auto';
-      localStorage.setItem('clawmate-theme', theme);
-      applyTheme();
-    });
+    // Initial asset setup (topbar.js already applied data-theme before this script runs)
+    var _initResolved = document.documentElement.getAttribute('data-theme') || 'light';
+    _updateThemeAssets(_initResolved);
+    // Hook for subsequent theme changes (topbar.js calls this on cycle/system-change)
+    window._onThemeChange = function(resolved) {
+      _updateThemeAssets(resolved);
+    };
 
     // ── Slide animation helpers ──
     var _tocTransitioning = false;
@@ -422,7 +415,7 @@
             var id = b.getAttribute('data-mermaid-id');
             if (id != null && mermaidStore[id]) b.textContent = mermaidStore[id];
           });
-          window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: getResolvedTheme() === 'dark' ? 'dark' : 'default' });
+          window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: (window._topbarResolvedTheme && window._topbarResolvedTheme()) === 'dark' ? 'dark' : 'default' });
           window.mermaid.run({ querySelector: '.share-center .mermaid' }).catch(function(){});
         } catch(e) {}
       }
