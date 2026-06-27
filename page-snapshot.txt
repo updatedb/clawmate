@@ -1,0 +1,77 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]: ClawMate
+    - generic [ref=e5]:
+      - generic [ref=e6]: README.md
+      - button "复制文件名" [ref=e7] [cursor=pointer]:
+        - img [ref=e8]
+      - button "刷新大纲和内容" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e16]:
+      - button "切换大纲面板" [ref=e17] [cursor=pointer]:
+        - img [ref=e18]
+      - button "切换反馈面板" [ref=e19] [cursor=pointer]:
+        - img [ref=e20]
+      - button "Agent 终端" [ref=e22] [cursor=pointer]:
+        - img [ref=e23]
+      - button "深色模式" [ref=e26] [cursor=pointer]:
+        - img [ref=e27]
+      - button "退出登录" [ref=e29] [cursor=pointer]:
+        - img [ref=e30]
+  - generic [ref=e33]:
+    - complementary [ref=e34]:
+      - generic [ref=e35]:
+        - generic [ref=e36]:
+          - img [ref=e37]
+          - text: 大纲
+        - button "关闭面板" [ref=e38] [cursor=pointer]:
+          - img [ref=e39]
+      - generic [ref=e43]: 非 Markdown，无大纲
+    - main [ref=e44]:
+      - generic [ref=e46]: 无法加载文件 (403)
+    - complementary:
+      - generic:
+        - generic:
+          - img
+          - text: 反馈
+        - button "关闭面板":
+          - img
+      - generic:
+        - generic:
+          - text: 选中文本后点击「
+          - img
+          - text: 加入面板」即可累积
+    - complementary:
+      - generic:
+        - combobox:
+          - option "Claude" [selected]
+          - option "Codex"
+          - option "OpenClaw"
+        - generic: Agent
+        - button "清屏":
+          - img
+        - button "关闭 Agent":
+          - img
+  - generic [ref=e47]:
+    - generic [ref=e48]:
+      - button "路径" [ref=e49] [cursor=pointer]:
+        - img [ref=e50]
+        - text: 路径
+      - button "导出" [ref=e52] [cursor=pointer]:
+        - img [ref=e53]
+        - text: 导出
+      - button "下载" [ref=e57] [cursor=pointer]:
+        - img [ref=e58]
+        - text: 下载
+      - button "重命名" [ref=e61] [cursor=pointer]:
+        - img [ref=e62]
+        - text: 重命名
+      - button "移动" [ref=e65] [cursor=pointer]:
+        - img [ref=e66]
+        - text: 移动
+      - button "分享" [ref=e71] [cursor=pointer]:
+        - img [ref=e72]
+        - text: 分享
+    - button "删除" [ref=e76] [cursor=pointer]:
+      - img [ref=e77]
+      - text: 删除

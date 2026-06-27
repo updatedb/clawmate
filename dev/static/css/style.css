@@ -404,13 +404,15 @@ button svg, .btn svg, a svg {
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-secondary);
 }
-.agent-panel-title { font-size: 13px; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
-.agent-panel-badge {
-  font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px;
-  background: var(--accent-light); color: var(--accent); text-transform: uppercase;
-  white-space: nowrap; cursor: pointer; user-select: none;
+.agent-panel-title { font-size: 13px; font-weight: 600; color: var(--text-primary); white-space: nowrap; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.agent-backend-select {
+  font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 6px;
+  background: var(--bg-tertiary); color: var(--text-primary);
+  border: 1px solid var(--border-color); cursor: pointer; outline: none;
+  font-family: inherit; max-width: 100px;
 }
-.agent-panel-badge:hover { background: var(--accent); color: #fff; }
+.agent-backend-select:focus { border-color: var(--accent); }
+.agent-backend-select option { background: var(--bg); color: var(--text-primary); }
 .agent-clear-btn {
   background: none; border: none; color: var(--text-muted); cursor: pointer;
   font-size: 14px; padding: 2px 6px; border-radius: var(--radius-sm); line-height: 1;
@@ -420,7 +422,7 @@ button svg, .btn svg, a svg {
 .agent-panel-close {
   background: none; border: none; color: var(--text-muted); cursor: pointer;
   font-size: 16px; padding: 2px 6px; border-radius: var(--radius-sm); line-height: 1;
-  flex-shrink: 0; margin-left: auto;
+  flex-shrink: 0;
 }
 .agent-panel-close:hover { background: var(--bg-tertiary); color: var(--text-primary); }
 .xterm-container {
@@ -535,17 +537,26 @@ button svg, .btn svg, a svg {
     z-index: 8;
     display: flex;
     width: 100vw !important;
+    max-width: 100vw;
     padding: 48px 0 0 0 !important;
     border-left: 1px solid var(--border-color) !important;
     overflow-y: auto !important;
+    overflow-x: hidden;
     pointer-events: auto !important;
     box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+    box-sizing: border-box;
   }
   .agent-panel-header {
     height: auto; min-height: 40px;
     gap: 4px; padding-left: 10px; padding-right: 10px;
+    flex-wrap: wrap;
   }
   .agent-panel-title { font-size: 11px; }
+  .agent-backend-select { font-size: 10px; max-width: 70px; }
+  /* Ensure chat messages don't force horizontal scroll */
+  .agent-chat-msg { max-width: 85%; word-break: break-word; }
+  .agent-chat-input-wrap { flex-shrink: 0; }
+  .agent-chat-input { font-size: 16px; }
 }
 
 /* Main area */
@@ -1638,7 +1649,7 @@ pre:hover .code-copy-btn,
 
 /* ── Image navigation buttons ── */
 .img-nav-btn {
-  position: fixed;
+  position: absolute;
   top: 50%;
   transform: translateY(-50%);
   z-index: 10;

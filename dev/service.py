@@ -384,7 +384,7 @@ def file_info(path: Path, rel_path: str) -> Dict:
 
 
 def list_dir(root_id: str, rel_dir: str = "", offset: int = 0, limit: int = 200,
-             marker_filter: bool = False) -> Dict:
+             marker_filter: bool = False, sort_key: str = "name", sort_dir: str = "asc") -> Dict:
     """列出目录内容。
 
     marker_filter=True 时只返回包含 .clawmate/ marker 的子目录（项目列表），
@@ -400,7 +400,18 @@ def list_dir(root_id: str, rel_dir: str = "", offset: int = 0, limit: int = 200,
     if marker_filter and target == root_path and (root_path / ".clawmate").is_dir():
         all_entries.append(file_info(root_path, ""))
 
-    for entry in sorted(target.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+    # 根据 sort_key / sort_dir 排序，目录始终优先
+    reverse = sort_dir == "desc"
+    if sort_key == "time":
+        entries_iter = sorted(target.iterdir(), key=lambda p: p.stat().st_mtime, reverse=reverse)
+    elif sort_key == "size":
+        entries_iter = sorted(target.iterdir(), key=lambda p: p.stat().st_size, reverse=reverse)
+    else:  # name
+        entries_iter = sorted(target.iterdir(), key=lambda p: p.name.lower(), reverse=reverse)
+    # 二次稳定排序保证目录优先
+    entries_iter = sorted(entries_iter, key=lambda p: not p.is_dir())
+
+    for entry in entries_iter:
         # marker 过滤: 仅 clawmate 项目列表使用，跳过非项目（无 .clawmate/ 的目录 + 所有文件）
         if marker_filter:
             if not entry.is_dir() or not (entry / ".clawmate").is_dir():

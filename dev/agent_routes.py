@@ -316,13 +316,37 @@ async def _spawn_codex(cwd: str, cols: int = 0, rows: int = 0,
         binary = _find_codex_binary()
     except RuntimeError:
         return None
+    # Detect if codex is the same binary as claude (symlink / wrapper)
+    try:
+        claude_bin = _find_claude_binary()
+        if os.path.samefile(binary, claude_bin):
+            logger.warning("codex binary (%s) is the same file as claude (%s) — refusing to spawn", binary, claude_bin)
+            return None
+    except (RuntimeError, OSError):
+        pass  # claude not found or paths on different filesystems — proceed
     return await _spawn_pt(cwd, cols, rows, binary, extra_env=extra_env)
 
 
-async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = ""):
-    """Bridge a WebSocket to an existing PTY session."""
+async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
+                          cols: int = 0, rows: int = 0):
+    """Bridge a WebSocket to an existing PTY session.
+
+    If cols/rows are provided (>0), applies TIOCSWINSZ BEFORE replaying
+    buffered output so that history aligns with the new client dimensions.
+    """
     sess.ws_set.add(ws)
     sess.last_active = time.time()
+
+    # Apply new dimensions BEFORE replaying buffer and sending output,
+    # so everything the new client sees matches its current viewport.
+    if cols > 0 and rows > 0:
+        try:
+            os.set_blocking(sess.master_fd, True)
+            fcntl.ioctl(sess.master_fd, termios.TIOCSWINSZ,
+                        struct.pack("HHHH", rows, cols, 0, 0))
+            os.set_blocking(sess.master_fd, False)
+        except Exception:
+            pass
 
     # Replay buffered output so the new client sees history
     for chunk in list(sess.output_buffer):
@@ -352,6 +376,9 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = ""):
                             rows = msg.get("rows", 24)
                             try:
                                 os.set_blocking(sess.master_fd, True)
+                                # TIOCSWINSZ → SIGWINCH.  All modern TUI programs
+                                # (Claude Code, Codex, etc.) use ioctl(TIOCGWINSZ),
+                                # not $COLUMNS/$LINES, so no env-var injection needed.
                                 fcntl.ioctl(sess.master_fd, termios.TIOCSWINSZ,
                                             struct.pack("HHHH", rows, cols, 0, 0))
                                 os.set_blocking(sess.master_fd, False)
@@ -382,22 +409,15 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = ""):
                             _path = msg.get("path", "")
                             if _path and sess.master_fd is not None and sess.last_injected_file != _path:
                                 sess.last_injected_file = _path
+                                # 带 ANSI 青色的提示，回显即显示，同时作为 Claude 的输入
                                 _prompt = (
-                                    f"\r\n"
-                                    f"我正在预览文件 \"{_path}\"。"
-                                    f"请读取这个文件，分析其内容，然后给我3个"
-                                    f"我可能想要推进的具体问题或建议。"
-                                    f"用简洁的编号列表输出，每条不超过一行。\r\n"
-                                )
-                                _banner = (
-                                    f"\r\n\x1b[1;36m"
-                                    f"📄 自动分析预览文件: {_path}"
-                                    f"\x1b[0m\r\n"
+                                    f"\x1b[1;36m分析文件: {_path}\x1b[0m\r\n"
+                                    f"\x1b[2m1. 摘要（≤100字）\x1b[0m\r\n"
+                                    f"\x1b[2m2. 问题与待办（≤3条）\x1b[0m\r\n"
                                 )
                                 async def _inject_analysis():
                                     await asyncio.sleep(2.5)
                                     try:
-                                        os.write(sess.master_fd, _banner.encode())
                                         os.write(sess.master_fd, _prompt.encode())
                                     except (OSError, BlockingIOError):
                                         pass
@@ -511,33 +531,98 @@ async def _openclaw_backend(
         )
         return
 
-    # Device identity for pairing
-    # Configured URL first, local Gateway default as fallback
-    try_urls = [oc_url] if oc_url else []
-    fallback = "ws://127.0.0.1:18789"
-    if fallback not in try_urls:
-        try_urls.append(fallback)
+    # Try URLs in order — localhost first (Gateway trusts it, grants full scopes),
+    # then configured URL as fallback.  Each URL is tried for BOTH connection
+    # AND authentication; if auth fails we try the next URL instead of giving up.
+    try_urls = []
+    # Always try localhost first — Gateway auto-grants scopes to local clients
+    local_url = "ws://127.0.0.1:18789"
+    if oc_url != local_url:
+        try_urls.append(local_url)
+    try_urls.append(oc_url)
 
     oc_ws = None
     req_id = 0
     line_buf = ""
+    last_auth_error = None
 
     for url in try_urls:
+        # Close previous failed attempt
+        if oc_ws is not None:
+            try: await oc_ws.close()
+            except Exception: pass
+            oc_ws = None
+
+        # --- Connect ---
         try:
             oc_ws = await asyncio.wait_for(
                 websockets.connect(url, ping_interval=30, ping_timeout=60),
                 timeout=5,
             )
-            conn_url = url
-            break
         except Exception:
             continue
+
+        # --- Handshake ---
+        try:
+            raw = await asyncio.wait_for(oc_ws.recv(), timeout=5)
+            challenge = json.loads(raw)
+            if challenge.get("event") != "connect.challenge":
+                last_auth_error = "Unexpected OpenClaw handshake"
+                continue
+        except Exception as e:
+            last_auth_error = f"Handshake failed: {e}"
+            continue
+
+        # --- Authenticate ---
+        req_id += 1
+        await oc_ws.send(json.dumps({
+            "type": "req", "id": str(req_id), "method": "connect",
+            "params": {
+                "minProtocol": 4, "maxProtocol": 4,
+                "client": {"id": "gateway-client", "version": "1.0.0", "platform": "linux", "mode": "backend"},
+                "role": "operator",
+                "scopes": ["operator.read", "operator.write", "operator.admin"],
+                "auth": {"token": oc_token},
+                "locale": "en-US",
+                "userAgent": "clawmate-agent/1.0.0",
+            },
+        }))
+
+        try:
+            hello_raw = await asyncio.wait_for(oc_ws.recv(), timeout=5)
+            hello = json.loads(hello_raw)
+        except Exception as e:
+            last_auth_error = f"Auth response failed: {e}"
+            continue
+
+        if hello.get("ok"):
+            conn_url = url
+            last_auth_error = None
+            break  # success
+
+        err = hello.get("error", {}).get("message", "unknown")
+        last_auth_error = err
+        # If scope error on localhost, unlikely but try next URL
+        # If on remote URL, localhost might work — continue loop
 
     if oc_ws is None:
         await ws.send_text(
             f"\x1b[1;31m✕ Cannot connect to OpenClaw gateway\x1b[0m\r\n"
             f"\x1b[2m  Tried: {', '.join(try_urls)}\x1b[0m\r\n"
         )
+        return
+
+    if last_auth_error is not None:
+        await ws.send_text(json.dumps({
+            "type": "error",
+            "text": (
+                f"✕ OpenClaw 鉴权失败: {last_auth_error}\r\n"
+                f"  已尝试 {', '.join(try_urls)}，均未通过鉴权。\r\n"
+                f"  请确认 openclaw_token 有效，且 Gateway 已授予 operator.write 权限。"
+            ),
+        }, ensure_ascii=False))
+        try: await oc_ws.close()
+        except Exception: pass
         return
 
     async def oc_send(method, params=None):
@@ -551,30 +636,6 @@ async def _openclaw_backend(
         return req_id
 
     try:
-        # Step 1: receive challenge
-        raw = await asyncio.wait_for(oc_ws.recv(), timeout=5)
-        challenge = json.loads(raw)
-        if challenge.get("event") != "connect.challenge":
-            await ws.send_text(json.dumps({"type": "error", "text": "Unexpected OpenClaw handshake"}, ensure_ascii=False))
-            return
-
-        # Step 2: authenticate
-        await oc_send("connect", {
-            "minProtocol": 4, "maxProtocol": 4,
-            "client": {"id": "gateway-client", "version": "1.0.0", "platform": "linux", "mode": "backend"},
-            "role": "operator",
-            "scopes": ["operator.read", "operator.write", "operator.admin"],
-            "auth": {"token": oc_token},
-            "locale": "en-US",
-            "userAgent": "clawmate-agent/1.0.0",
-        })
-
-        hello_raw = await asyncio.wait_for(oc_ws.recv(), timeout=5)
-        hello = json.loads(hello_raw)
-        if not hello.get("ok"):
-            err = hello.get("error", {}).get("message", "unknown")
-            await ws.send_text(json.dumps({"type": "error", "text": f"OpenClaw auth failed: {err}"}, ensure_ascii=False))
-            return
 
         # Save device token if returned (pairing approved)
         new_device_token = hello.get("payload", {}).get("auth", {}).get("deviceToken", "")
@@ -602,34 +663,50 @@ async def _openclaw_backend(
         }, ensure_ascii=False))
 
         # Step 3: load history (if any) — drain response before bridge
-        await oc_send("chat.history", {
+        history_req_id = await oc_send("chat.history", {
             "sessionKey": f"agent:{agent_id or 'default'}:main",
             "limit": 20,
         })
-        # Drain chat.history response + any pending events
+        # Drain gateway messages until we find the matching res for chat.history.
+        # Other events (health, tick, etc.) are skipped.  Max ~10s total wait.
         await ws.send_text(json.dumps({"type": "info", "text": "Loading history..."}, ensure_ascii=False))
         try:
-            for _ in range(20):
+            for _ in range(40):
                 raw = await asyncio.wait_for(oc_ws.recv(), timeout=0.5)
                 evt = json.loads(raw)
-                if evt.get("event") == "chat" and evt.get("payload", {}).get("state") == "history":
-                    entries = evt.get("payload", {}).get("entries", [])
-                    if entries:
-                        for entry in entries[-5:]:
-                            role = entry.get("role", "")
-                            content = entry.get("message", {}).get("content", "")
-                            if isinstance(content, list):
-                                content = " ".join(
-                                    c.get("text", "") for c in content
+                if evt.get("type") == "res" and evt.get("id") == str(history_req_id):
+                    messages = evt.get("payload", {}).get("messages", [])
+                    if messages:
+                        for msg in messages[-10:]:
+                            role = msg.get("role", "")
+                            # content is [{type: "text", text: "..."}, ...]
+                            content_blocks = msg.get("content", [])
+                            if isinstance(content_blocks, list):
+                                text = " ".join(
+                                    c.get("text", "") for c in content_blocks
                                     if isinstance(c, dict) and c.get("type") == "text"
                                 )
-                            content = str(content)[:300]
-                            if content.strip():
-                                await ws.send_text(json.dumps({
-                                    "type": "assistant" if role == "assistant" else "user",
-                                    "text": content,
-                                    "final": True,
-                                }, ensure_ascii=False))
+                            else:
+                                text = str(content_blocks)
+                            text = text.strip()
+                            if not text:
+                                continue
+                            # Map roles to frontend message types
+                            if role == "assistant":
+                                msg_type = "assistant"
+                            elif role == "toolResult":
+                                # Show tool results as a compact system note
+                                tool_name = msg.get("toolName", "")
+                                label = f"[{tool_name}]" if tool_name else "[tool]"
+                                text = f"{label} {text[:500]}"
+                                msg_type = "assistant"
+                            else:
+                                msg_type = "user"
+                            await ws.send_text(json.dumps({
+                                "type": msg_type,
+                                "text": text[:2000],
+                                "final": True,
+                            }, ensure_ascii=False))
                     break
         except (asyncio.TimeoutError, Exception):
             pass
@@ -809,14 +886,27 @@ async def agent_terminal(
     sess = _sessions.get(key)
 
     if sess and not sess.stop_event.is_set():
-        # Existing session — reattach
+        # Existing session — apply new dimensions BEFORE sending any output.
+        # Without this, the reconnected banner and buffered history would be
+        # formatted for the OLD PTY dimensions, causing misalignment with the
+        # agent panel's current viewport.
+        if cols > 0 and rows > 0:
+            try:
+                os.set_blocking(sess.master_fd, True)
+                fcntl.ioctl(sess.master_fd, termios.TIOCSWINSZ,
+                            struct.pack("HHHH", rows, cols, 0, 0))
+                os.set_blocking(sess.master_fd, False)
+            except Exception:
+                pass
+
         await ws.send_text(
             f"\x1b[1;32m⟳ 重新连接到已有会话\x1b[0m\r\n"
             f"\x1b[2m   backend: {backend}  cwd: {cwd}\x1b[0m\r\n"
             f"\x1b[2m   session: {key}\x1b[0m\r\n"
-            f"\x1b[2m   会话已运行 {(time.time() - sess.created_at):.0f}s\x1b[0m\r\n\r\n"
+            f"\x1b[2m   会话已运行 {(time.time() - sess.created_at):.0f}s\x1b[0m\r\n"
+            f"\x1b[2m   term: {cols}×{rows}\x1b[0m\r\n\r\n"
         )
-        await _attach_session(sess, ws, root)
+        await _attach_session(sess, ws, root, cols, rows)
         return
 
     # No existing session — send banner
@@ -868,7 +958,7 @@ async def agent_terminal(
             "session created key=%s pid=%d cols=%d rows=%d (%d total sessions)",
             key, sess.proc.pid, cols or 0, rows or 0, len(_sessions),
         )
-        await _attach_session(sess, ws, root)
+        await _attach_session(sess, ws, root, cols, rows)
     elif backend == "openclaw":
         try:
             await _openclaw_backend(ws, cwd, cfg, root, agentId)

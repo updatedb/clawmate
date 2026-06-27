@@ -21,7 +21,7 @@
     }
   } catch(_) { filePath = filePathRaw; }
   const sessionKey = params.get('session') || '';
-  const fileName = filePath.split('/').pop() || '未命名';
+  let fileName = filePath.split('/').pop() || '未命名';
   const ext = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '';
   // isMarkdown defined above
   const AUDIO_EXTS = window.AUDIO_EXTS;
@@ -30,6 +30,7 @@
   const MARKDOWN_EXTS = window.MARKDOWN_EXTS;
   const HTML_EXTS = window.HTML_EXTS;
   const OFFICE_EXTS = window.OFFICE_EXTS;
+  const ARCHIVE_EXTS = window.ARCHIVE_EXTS;
   const PDF_EXT = 'pdf';
 
   // ── Auth session expiry handler ──────────────────────────────
@@ -64,7 +65,16 @@
   // Non-PDF Office documents default to edit mode; PDF stays in view mode
   const isEditableOffice = OFFICE_EXTS.includes(ext) && ext !== 'pdf';
   let onlyofficeMode = isEditableOffice ? 'edit' : 'view';
-  const project = filePath.includes('/') ? filePath.split('/')[0] : (rootId || '');
+  let project = filePath.includes('/') ? filePath.split('/')[0] : (rootId || '');
+
+  // ── Image sort state (server-side sort, client displays in returned order) ──
+  var imgNav = { prev: null, next: null, idx: 0, total: 0 };
+  var imgNavAll = [];   // full sorted sibling images for thumbnail outline
+  var imgWrapEl = null;
+  var imgSortKey = 'time';
+  var imgSortDir = 'desc';
+  var IMAGE_EXTS = ['png','jpg','jpeg','svg','webp','gif','bmp','ico'];
+  const isImageMode = IMAGE_EXTS.includes(ext);
 
   // Update page title
   document.title = `${fileName} — ClawMate`;
@@ -1410,6 +1420,275 @@
   let rawContent = '';
   var _skipFeedbackLoad = false;
 
+  // ============ Image Sort ============
+  // ── Client-side image navigation (no full page reload) ──────
+  function navigateToImage(newFilePath) {
+    if (newFilePath === filePath) return;
+
+    // Update module-level path state
+    filePath = newFilePath;
+    fileName = newFilePath.split('/').pop() || '未命名';
+    project = newFilePath.includes('/') ? newFilePath.split('/')[0] : (rootId || '');
+
+    // Update browser URL without reload
+    var newUrl = 'preview.html?root=' + encodeURIComponent(rootId) + '&file=' + encodeURIComponent(newFilePath);
+    history.replaceState(null, '', newUrl);
+
+    // Update document title and topbar
+    document.title = fileName + ' — ClawMate';
+    document.getElementById('docTitle').textContent = fileName;
+
+    // Update the image in-place
+    var imgEl = document.getElementById('previewImage');
+    if (imgEl) {
+      imgEl.src = '/api/clawmate/preview?root=' + encodeURIComponent(rootId) + '&path=' + encodeURIComponent(newFilePath);
+      imgEl.style.display = '';
+      // Remove any lingering error message from a previous failed image
+      var errDiv = imgEl.parentElement ? imgEl.parentElement.querySelector('.preview-error') : null;
+      if (errDiv) errDiv.remove();
+    }
+
+    // Reset feedback state for the new image
+    imagePendingItems = [];
+    imageCompletedItems = [];
+    _skipFeedbackLoad = false;
+    renderImageFeedbackPanel();
+    loadImageCompletedFeedback();
+
+    // Re-fetch nav data from API, skip outline rebuild (just update highlight)
+    imgNav = { prev: null, next: null, idx: 0, total: 0 };
+    fetchImageNav({ skipOutlineRebuild: true });
+  }
+
+  // Reusable: fetch sibling images from the API with current sort params,
+  // filter to images, update imgNav, then re-render prev/next buttons.
+  // Pass { skipOutlineRebuild: true } to only update the highlight.
+  async function fetchImageNav(opts) {
+    opts = opts || {};
+    const parentDir = filePath.split('/').slice(0, -1).join('/');
+    try {
+      const listRes = await fetch(
+        `/api/clawmate/list?root=${encodeURIComponent(rootId)}&dir=${encodeURIComponent(parentDir)}&sort_key=${imgSortKey}&sort_dir=${imgSortDir}`
+      );
+      const listData = await listRes.json();
+      const allEntries = listData.entries || [];
+      const images = allEntries.filter(e => IMAGE_EXTS.includes((e.name.split('.').pop() || '').toLowerCase()));
+      imgNav.total = images.length;
+      imgNavAll = images;   // store full sorted list for thumbnail outline
+      const curIdx = images.findIndex(e => (e.path || e.relPath || e.name) === filePath);
+      if (curIdx >= 0) {
+        imgNav.idx = curIdx + 1;
+        imgNav.prev = curIdx > 0 ? images[curIdx - 1] : null;
+        imgNav.next = curIdx < images.length - 1 ? images[curIdx + 1] : null;
+      }
+    } catch (_) {}
+    if (opts.skipOutlineRebuild) {
+      updateImageOutlineHighlight();
+    } else {
+      buildImageOutline();
+    }
+    renderImgNav();
+  }
+
+  // Render prev/next overlay buttons on the image. Uses module-level imgNav
+  // and imgWrapEl so sort-change re-fetches can refresh the buttons in place.
+  function renderImgNav() {
+    if (!imgWrapEl) return;
+    const hasPrev = imgNav.prev;
+    const hasNext = imgNav.next;
+
+    // Remove old buttons (supports re-render on sort change)
+    const oldPrev = document.getElementById('imgNavPrev');
+    if (oldPrev) oldPrev.remove();
+    const oldNext = document.getElementById('imgNavNext');
+    if (oldNext) oldNext.remove();
+
+    if (hasPrev) {
+      const prevBtn = document.createElement('button');
+      prevBtn.id = 'imgNavPrev';
+      prevBtn.innerHTML = '‹';
+      prevBtn.className = 'img-nav-btn';
+      prevBtn.style.left = '20px';
+      prevBtn.title = '上一张';
+      const p = imgNav.prev.path || imgNav.prev.relPath || imgNav.prev.name;
+      prevBtn.addEventListener('click', function() { navigateToImage(p); });
+      imgWrapEl.appendChild(prevBtn);
+    }
+    if (hasNext) {
+      const nextBtn = document.createElement('button');
+      nextBtn.id = 'imgNavNext';
+      nextBtn.innerHTML = '›';
+      nextBtn.className = 'img-nav-btn';
+      nextBtn.style.right = '20px';
+      nextBtn.title = '下一张';
+      const n = imgNav.next.path || imgNav.next.relPath || imgNav.next.name;
+      nextBtn.addEventListener('click', function() { navigateToImage(n); });
+      imgWrapEl.appendChild(nextBtn);
+    }
+
+    const infoEl = document.getElementById('imgNavInfo');
+    if (infoEl && imgNav.total > 0) {
+      infoEl.textContent = fileName + ' (' + imgNav.idx + '/' + imgNav.total + ')';
+    }
+  }
+
+  // Build thumbnail outline in the left sidebar for image mode.
+  // Uses imgNavAll (populated by fetchImageNav) sorted by current imgSortKey/imgSortDir.
+  function buildImageOutline() {
+    const tocBody = document.getElementById('tocBody');
+    if (!tocBody) return;
+
+    // Only build outline in image mode
+    if (!isImageMode) return;
+
+    // Update sidebar header: show count
+    const headerSpan = document.querySelector('.preview-left-header span');
+    if (headerSpan) {
+      headerSpan.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> 图片 (' + imgNavAll.length + ')';
+    }
+
+    tocBody.innerHTML = '';
+
+    if (imgNavAll.length === 0) {
+      tocBody.innerHTML = '<div class="preview-toc-empty">目录中没有图片</div>';
+      return;
+    }
+
+    const list = document.createElement('ul');
+    list.className = 'preview-toc-list';
+
+    imgNavAll.forEach(function(imgEntry) {
+      const li = document.createElement('li');
+      li.className = 'preview-toc-item';
+
+      const a = document.createElement('a');
+      a.href = '#';
+      const imgPath = imgEntry.path || imgEntry.relPath || imgEntry.name;
+      a.dataset.file = imgPath;
+      const isCurrent = imgPath === filePath;
+      if (isCurrent) {
+        a.classList.add('toc-active');
+      }
+
+      // Thumbnail only (no filename)
+      a.style.cssText = 'display:flex;align-items:center;justify-content:center;padding:4px 8px;';
+
+      const thumb = document.createElement('img');
+      thumb.src = '/api/clawmate/preview?root=' + encodeURIComponent(rootId) + '&path=' + encodeURIComponent(imgPath);
+      thumb.style.cssText = 'max-width:100%;max-height:80px;object-fit:contain;border-radius:4px;flex-shrink:0;border:1px solid var(--border-color);';
+      thumb.loading = 'lazy';
+      thumb.alt = imgEntry.name;
+      thumb.title = imgEntry.name;
+      a.appendChild(thumb);
+
+      a.addEventListener('click', function(e) {
+        e.preventDefault();
+        navigateToImage(imgPath);
+      });
+
+      li.appendChild(a);
+      list.appendChild(li);
+    });
+
+    tocBody.appendChild(list);
+
+    // Scroll current image into view
+    var activeLink = tocBody.querySelector('.toc-active');
+    if (activeLink) {
+      setTimeout(function() {
+        activeLink.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }, 100);
+    }
+  }
+
+  // Update the active highlight in the image outline without rebuilding the DOM.
+  // Relies on data-file attributes set by buildImageOutline().
+  function updateImageOutlineHighlight() {
+    const tocBody = document.getElementById('tocBody');
+    if (!tocBody) return;
+
+    // Remove existing active highlight
+    const oldActive = tocBody.querySelector('.toc-active');
+    if (oldActive) oldActive.classList.remove('toc-active');
+
+    // Find and highlight the new current image
+    const allLinks = tocBody.querySelectorAll('a[data-file]');
+    for (var i = 0; i < allLinks.length; i++) {
+      if (allLinks[i].dataset.file === filePath) {
+        allLinks[i].classList.add('toc-active');
+        setTimeout(function() {
+          allLinks[i].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }, 100);
+        break;
+      }
+    }
+
+    // Refresh the sidebar header count
+    var headerSpan = document.querySelector('.preview-left-header span');
+    if (headerSpan) {
+      headerSpan.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> 图片 (' + imgNavAll.length + ')';
+    }
+  }
+
+  // Build sort-pill buttons in the bottom toolbar
+  function buildImageSortPills() {
+    const dyn = document.getElementById('bottombarDynamic');
+    if (!dyn) return;
+    dyn.innerHTML = '';
+
+    const pills = [
+      { key: 'time', desc: '↓ 最新', asc: '↑ 最早' },
+      { key: 'name', desc: '↓ Z→A', asc: '↑ A→Z' },
+      { key: 'size', desc: '↓ 最大', asc: '↑ 最小' },
+    ];
+
+    pills.forEach(function(p) {
+      const btn = document.createElement('button');
+      btn.className = 'sort-pill';
+      btn.dataset.key = p.key;
+      if (imgSortKey === p.key) {
+        btn.classList.add('active');
+        const isDesc = imgSortDir === 'desc';
+        btn.textContent = isDesc ? p.desc : p.asc;
+        btn.dataset.dir = imgSortDir;
+      } else {
+        btn.textContent = p.desc;
+      }
+      btn.addEventListener('click', function() { handleImageSortPill(btn); });
+      dyn.appendChild(btn);
+    });
+  }
+
+  function handleImageSortPill(btn) {
+    const key = btn.dataset.key;
+    if (imgSortKey === key) {
+      imgSortDir = imgSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      imgSortKey = key;
+    }
+    updateImageSortPills();
+    fetchImageNav();
+  }
+
+  function updateImageSortPills() {
+    const pills = document.querySelectorAll('#bottombarDynamic .sort-pill');
+    const labels = {
+      time: { desc: '↓ 最新', asc: '↑ 最早' },
+      name: { desc: '↓ Z→A', asc: '↑ A→Z' },
+      size: { desc: '↓ 最大', asc: '↑ 最小' },
+    };
+    pills.forEach(function(btn) {
+      const key = btn.dataset.key;
+      const active = imgSortKey === key;
+      btn.classList.toggle('active', active);
+      if (active) {
+        const isDesc = imgSortDir === 'desc';
+        btn.textContent = isDesc ? labels[key].desc : labels[key].asc;
+        btn.dataset.dir = imgSortDir;
+      }
+    });
+  }
+
   // ============ Load & Render Content ============
   async function loadContent() {
     // Clean up Office/PDF mode class from body (will be re-added if needed)
@@ -1422,25 +1701,9 @@
         contentBody.innerHTML = '';
         contentBody.style.cssText = 'display:flex;align-items:center;justify-content:center;position:relative;padding:12px;';
 
-        // Fetch directory listing for prev/next
-        const parentDir = filePath.split('/').slice(0, -1).join('/');
-        const nav = { prev: null, next: null, idx: 0, total: 0 };
-        (async () => {
-          try {
-            const listRes = await fetch(`/api/clawmate/list?root=${encodeURIComponent(rootId)}&dir=${encodeURIComponent(parentDir)}`);
-            const listData = await listRes.json();
-            const allEntries = listData.entries || [];
-            const images = allEntries.filter(e => ['png','jpg','jpeg','svg','webp','gif','bmp','ico'].includes((e.name.split('.').pop() || '').toLowerCase()));
-            nav.total = images.length;
-            const curIdx = images.findIndex(e => (e.path || e.relPath || e.name) === filePath);
-            if (curIdx >= 0) {
-              nav.idx = curIdx + 1;
-              if (curIdx > 0) nav.prev = images[curIdx - 1];
-              if (curIdx < images.length - 1) nav.next = images[curIdx + 1];
-            }
-          } catch (_) {}
-          renderImgNav();
-        })();
+        // Reset nav state and fetch sorted directory listing for prev/next
+        imgNav = { prev: null, next: null, idx: 0, total: 0 };
+        fetchImageNav();
 
         // Image and counter wrapper
         const wrap = document.createElement('div');
@@ -1448,6 +1711,7 @@
 
         const imgWrap = document.createElement('div');
         imgWrap.style.cssText = 'display:flex;align-items:center;justify-content:center;position:relative;width:100%;';
+        imgWrapEl = imgWrap;
 
         const img = document.createElement('img');
         img.id = 'previewImage';
@@ -1472,45 +1736,10 @@
         contentBody.appendChild(wrap);
         removeLoading();
         setupMediaToolbar();
+        buildImageSortPills();
         renderImageFeedbackPanel();
         if (!_skipFeedbackLoad) loadCompletedFeedback();
 
-        function renderImgNav() {
-          const hasPrev = nav.prev;
-          const hasNext = nav.next;
-
-          // Create prev if needed
-          if (hasPrev && !document.getElementById('imgNavPrev')) {
-            const prevBtn = document.createElement('button');
-            prevBtn.id = 'imgNavPrev';
-            prevBtn.innerHTML = '‹';
-            prevBtn.className = 'img-nav-btn';
-            prevBtn.style.left = '20px';
-            prevBtn.title = '上一张';
-            const p = nav.prev.path || nav.prev.relPath || nav.prev.name;
-            prevBtn.addEventListener('click', () => { window.location.href = 'preview.html?root=' + encodeURIComponent(rootId) + '&file=' + encodeURIComponent(p); });
-            imgWrap.appendChild(prevBtn);
-          }
-
-          // Create next if needed
-          if (hasNext && !document.getElementById('imgNavNext')) {
-            const nextBtn = document.createElement('button');
-            nextBtn.id = 'imgNavNext';
-            nextBtn.innerHTML = '›';
-            nextBtn.className = 'img-nav-btn';
-            nextBtn.style.right = '20px';
-            nextBtn.title = '下一张';
-            const n = nav.next.path || nav.next.relPath || nav.next.name;
-            nextBtn.addEventListener('click', () => { window.location.href = 'preview.html?root=' + encodeURIComponent(rootId) + '&file=' + encodeURIComponent(n); });
-            imgWrap.appendChild(nextBtn);
-          }
-
-          // Update counter
-          const infoEl = document.getElementById('imgNavInfo');
-          if (infoEl && nav.total > 0) {
-            infoEl.textContent = fileName + ' (' + nav.idx + '/' + nav.total + ')';
-          }
-        }
         return;
       }
 
@@ -1922,7 +2151,13 @@
   let dragStartWidth = 0;
 
   function updateGridColumns() {
-    const lHidden = leftSidebar.classList.contains('hidden');
+    var lHidden = leftSidebar.classList.contains('hidden');
+    // Also account for CSS-driven hide at narrow width (≤1500px + panel open)
+    if (!lHidden && window.innerWidth <= 1500) {
+      var rightOpen = rightSidebar && !rightSidebar.classList.contains('hidden');
+      var agentOpen = agentPanel && !agentPanel.classList.contains('hidden');
+      if (rightOpen || agentOpen) lHidden = true;
+    }
     const rHidden = rightSidebar.classList.contains('hidden');
     const agentHidden = agentPanel ? agentPanel.classList.contains('hidden') : true;
     const lW = lHidden ? '0px' : '240px';
@@ -1951,14 +2186,6 @@
   function openLeftSidebar() {
     if (!leftSidebar.classList.contains('hidden')) return;
     clearTimeout(_leftCloseTimer);
-    // Mutual exclusion: close other panels
-    if (rightSidebar && !rightSidebar.classList.contains('hidden')) {
-      _stopSidebarRefresh();
-      closeRightSidebar();
-    }
-    if (agentPanel && !agentPanel.classList.contains('hidden')) {
-      if (window.Agent) window.Agent.close();
-    }
     leftSidebar.style.display = 'flex';        // override global .hidden
     // Expand grid column directly while panel is still "hidden"
     var gridParts = (threeCol.style.gridTemplateColumns || '240px 1fr 0px 0px').split(' ');
@@ -1985,8 +2212,8 @@
   function openRightSidebar() {
     if (!rightSidebar.classList.contains('hidden')) return;
     clearTimeout(_rightCloseTimer);
-    // Mutual exclusion: close other panels
-    if (leftSidebar && !leftSidebar.classList.contains('hidden')) {
+    // Mutual exclusion: close left sidebar only on narrow screens
+    if (window.innerWidth <= 1500 && leftSidebar && !leftSidebar.classList.contains('hidden')) {
       closeLeftSidebar();
     }
     if (agentPanel && !agentPanel.classList.contains('hidden')) {
@@ -2002,6 +2229,7 @@
     rightSidebar.classList.remove('hidden');    // slide-in: 100% → 0
     rightSidebar.style.display = '';            // let CSS handle display
     document.getElementById('btnToggleRight').classList.add('active');
+    _syncPanelOpenClass();
   }
 
   function closeRightSidebar() {
@@ -2013,6 +2241,7 @@
     _rightCloseTimer = setTimeout(function () {
       rightSidebar.style.display = '';          // let global .hidden take over
       updateGridColumns();                      // grid column → 0px
+      _syncPanelOpenClass();
     }, 300);
   }
 
@@ -2053,10 +2282,10 @@
     }
   }
 
-  // Left sidebar: markdown shows it (via buildTOC), non-markdown hides it
+  // Left sidebar: markdown & image show it, other modes hide it
   // On mobile: always start hidden, user toggles via topbar
   const isMobileViewport = window.innerWidth < 768;
-  if (isMobileViewport || !isMarkdownMode) {
+  if (isMobileViewport || (!isMarkdownMode && !isImageMode)) {
     leftSidebar.classList.add('hidden');
     btnToggleLeft.classList.remove('active');
   } else {
@@ -2067,13 +2296,39 @@
   rightSidebar.classList.add('hidden');
   updateGridColumns();
 
-  // ============ Image Mode Detection ============
-  const isImageMode = ['png', 'jpg', 'jpeg', 'svg', 'webp', 'gif', 'bmp', 'ico'].includes(ext);
+  // Track body class for CSS-driven left sidebar auto-hide at narrow widths
+  function _syncPanelOpenClass() {
+    var rightOpen = rightSidebar && !rightSidebar.classList.contains('hidden');
+    var agentOpen = agentPanel && !agentPanel.classList.contains('hidden');
+    document.body.classList.toggle('preview-panel-open', rightOpen || agentOpen);
+  }
+
+  // Watch for CSS-driven left sidebar auto-hide at ≤1500px (same as index logic)
+  if (window.matchMedia) {
+    window.matchMedia('(max-width: 1500px)').addEventListener('change', function (e) {
+      if (!e.matches) {
+        // Window widened beyond 1500px — restore outline if it was auto-hidden
+        if (leftSidebar.classList.contains('hidden')) {
+          var rightOpen = rightSidebar && !rightSidebar.classList.contains('hidden');
+          var agentOpen = agentPanel && !agentPanel.classList.contains('hidden');
+          if (rightOpen || agentOpen) {
+            openLeftSidebar();
+            return;
+          }
+        }
+      }
+      // Recalculate grid to shrink/expand the left column
+      updateGridColumns();
+      // Sync button state
+      var lHidden = leftSidebar.classList.contains('hidden');
+      btnToggleLeft.classList.toggle('active', !lHidden);
+    });
+  }
 
   // ============ Image / Media Mode Toolbar Setup ============
   function setupMediaToolbar() {
-    // Hide left sidebar in media mode (no TOC for media)
-    leftSidebar.classList.add('hidden');
+    // Image mode keeps the left sidebar for thumbnail outline.
+    // Media mode (audio/video) callers hide the sidebar in setupMediaMode().
     updateGridColumns();
 
     const dyn = document.getElementById('bottombarDynamic');
@@ -2093,6 +2348,9 @@
   function setupMediaMode(type) {
     currentMediaType = type;
     setupMediaToolbar();
+    // Media mode has no outline — hide the left sidebar
+    leftSidebar.classList.add('hidden');
+    updateGridColumns();
 
     const contentBody = document.getElementById('contentBody');
     contentBody.innerHTML = '';
@@ -2916,6 +3174,14 @@
     const body = document.getElementById('feedbackBody');
     body.innerHTML = '';
 
+    var topBar = document.createElement('div');
+    topBar.className = 'fb-topbar';
+    body.appendChild(topBar);
+
+    var cardList = document.createElement('div');
+    cardList.className = 'fb-card-list';
+    body.appendChild(cardList);
+
     // Top row: Add feedback + Submit all
 
 
@@ -2967,7 +3233,7 @@
 
     // Pending items
     if (mediaPendingItems.length > 0) {
-      [...mediaPendingItems].reverse().forEach(item => body.appendChild(createFeedbackCard(item)));
+      [...mediaPendingItems].reverse().forEach(item => cardList.appendChild(createFeedbackCard(item)));
     }
 
     // Completed items — split pending/in_progress vs done/failed
@@ -2977,19 +3243,21 @@
       const sep = document.createElement('div');
       sep.className = 'fb-section-sep';
       sep.innerHTML = '<span>⏳ 处理中</span>';
-      body.appendChild(sep);
-      pendingOrProgress.forEach(item => body.appendChild(renderCompletedFeedbackCard(item)));
+      cardList.appendChild(sep);
+      pendingOrProgress.forEach(item => cardList.appendChild(renderCompletedFeedbackCard(item)));
     }
     if (doneOrFailed.length > 0) {
       const sep = document.createElement('div');
       sep.className = 'fb-section-sep';
       sep.innerHTML = '<span>✅ 已完成</span>';
-      body.appendChild(sep);
-      doneOrFailed.forEach(item => body.appendChild(renderCompletedFeedbackCard(item)));
+      cardList.appendChild(sep);
+      doneOrFailed.forEach(item => cardList.appendChild(renderCompletedFeedbackCard(item)));
     }
   }
 
   async function loadMediaCompletedFeedback() {
+    // Render panel immediately to show topbar buttons, then populate data
+    renderMediaFeedbackPanel();
     if (!rootId || !project || !filePath) return;
     const fn = filePath.split('/').pop();
     try {
@@ -3022,6 +3290,14 @@
   function renderOfficePdfFeedbackPanel() {
     const body = document.getElementById('feedbackBody');
     body.innerHTML = '';
+
+    var topBar = document.createElement('div');
+    topBar.className = 'fb-topbar';
+    body.appendChild(topBar);
+
+    var cardList = document.createElement('div');
+    cardList.className = 'fb-card-list';
+    body.appendChild(cardList);
 
     // Top row: Add feedback + Submit all
 
@@ -3075,7 +3351,7 @@
 
     // Pending items
     if (officePdfPendingItems.length > 0) {
-      [...officePdfPendingItems].reverse().forEach(item => body.appendChild(createFeedbackCard(item)));
+      [...officePdfPendingItems].reverse().forEach(item => cardList.appendChild(createFeedbackCard(item)));
     }
 
 
@@ -3084,12 +3360,14 @@
       const sep = document.createElement('div');
       sep.className = 'fb-section-sep';
       sep.innerHTML = '<span>✅ 已提交</span>';
-      body.appendChild(sep);
-      officePdfCompletedItems.forEach(item => body.appendChild(renderCompletedFeedbackCard(item)));
+      cardList.appendChild(sep);
+      officePdfCompletedItems.forEach(item => cardList.appendChild(renderCompletedFeedbackCard(item)));
     }
   }
 
   async function loadOfficePdfCompletedFeedback() {
+    // Render panel immediately to show topbar buttons, then populate data
+    renderOfficePdfFeedbackPanel();
     if (!rootId || !project || !filePath) return;
     const fn = filePath.split('/').pop();
     try {
@@ -3672,7 +3950,10 @@
             item.text = '读取文件' + filePath;
           }
         }
-        renderFeedbackPanel();
+        if (isImageMode) renderImageFeedbackPanel();
+        else if (isMediaMode) renderMediaFeedbackPanel();
+        else if (isOfficePdfMode) renderOfficePdfFeedbackPanel();
+        else renderFeedbackPanel();
       });
       tagRow.appendChild(btn);
     });
@@ -4073,6 +4354,14 @@
     const body = document.getElementById('feedbackBody');
     body.innerHTML = '';
 
+    var topBar = document.createElement('div');
+    topBar.className = 'fb-topbar';
+    body.appendChild(topBar);
+
+    var cardList = document.createElement('div');
+    cardList.className = 'fb-card-list';
+    body.appendChild(cardList);
+
     // Top row: Add feedback + Submit all
 
 
@@ -4122,7 +4411,7 @@
 
     // Pending items
     if (imagePendingItems.length > 0) {
-      [...imagePendingItems].reverse().forEach(item => body.appendChild(createFeedbackCard(item)));
+      [...imagePendingItems].reverse().forEach(item => cardList.appendChild(createFeedbackCard(item)));
     }
 
     // Completed items
@@ -4130,12 +4419,14 @@
       const sep = document.createElement('div');
       sep.className = 'fb-section-sep';
       sep.innerHTML = '<span>✅ 已提交</span>';
-      body.appendChild(sep);
-      imageCompletedItems.forEach(item => body.appendChild(renderCompletedFeedbackCard(item)));
+      cardList.appendChild(sep);
+      imageCompletedItems.forEach(item => cardList.appendChild(renderCompletedFeedbackCard(item)));
     }
   }
 
   async function loadImageCompletedFeedback() {
+    // Render panel immediately to show topbar buttons, then populate data
+    renderImageFeedbackPanel();
     if (!rootId || !project || !filePath) return;
     const fn = filePath.split('/').pop();
     try {
@@ -4148,7 +4439,6 @@
   }
 
   async function loadCompletedFeedback() {
-    if (!rootId || !project || !filePath) return;
     if (isImageMode) {
       await loadImageCompletedFeedback();
       return;
@@ -4157,6 +4447,9 @@
       await loadMediaCompletedFeedback();
       return;
     }
+    // Render panel immediately to show topbar buttons, then populate data
+    renderFeedbackPanel();
+    if (!rootId || !project || !filePath) return;
     const fn = filePath.split('/').pop();
     try {
       const res = await fetch(`/api/clawmate/feedback/list?root=${encodeURIComponent(rootId)}&project=${encodeURIComponent(project)}&file=${encodeURIComponent(fn)}`);
@@ -5373,8 +5666,8 @@
       var isOpen = !agentPanel.classList.contains('hidden');
 
       if (!isOpen) {
-        // Mutual exclusion: close other panels when opening agent
-        if (leftSidebar && !leftSidebar.classList.contains('hidden')) {
+        // Mutual exclusion: close left sidebar only on narrow screens
+        if (window.innerWidth <= 1500 && leftSidebar && !leftSidebar.classList.contains('hidden')) {
           closeLeftSidebar();
         }
         if (rightSidebar && !rightSidebar.classList.contains('hidden')) {
@@ -5388,6 +5681,7 @@
           agentPanel.classList.remove('hidden');
           btnToggleAgent.classList.add('active');
           updateGridColumns();
+          _syncPanelOpenClass();
 
           if (window.Agent) {
             // Use the directory of the previewed file as the agent working dir
@@ -5407,6 +5701,7 @@
               if (agentPanel) agentPanel.classList.add('hidden');
               if (btnToggleAgent) btnToggleAgent.classList.remove('active');
               updateGridColumns();
+              _syncPanelOpenClass();
             };
             // Pass current file context so Agent can auto-read the previewed content
             var fileCtx = filePath ? {
@@ -5425,6 +5720,7 @@
         agentPanel.classList.add('hidden');
         btnToggleAgent.classList.remove('active');
         updateGridColumns();
+        _syncPanelOpenClass();
         if (window.Agent) {
           window.Agent.close();
         }
@@ -5439,6 +5735,7 @@
       if (agentPanel) agentPanel.classList.add('hidden');
       if (btnToggleAgent) btnToggleAgent.classList.remove('active');
       updateGridColumns();
+      _syncPanelOpenClass();
       if (window.Agent) {
         window.Agent.close();
       }

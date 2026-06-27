@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, interactive-widget=resizes-content" />
   <link rel="icon" type="image/png" sizes="32x32" href="./asset/clawmate-logo.png" />
   <link rel="apple-touch-icon" href="./asset/clawmate-logo.png" />
   <meta name="theme-color" content="#0d9488" media="(prefers-color-scheme: light)" />
@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./css/style.css?v=20260625a" />
+  <link rel="stylesheet" href="./css/style.css?v=20260627a" />
   <link rel="stylesheet" href="./vendor/github-markdown-dark.min.css" id="github-markdown-css" />
   <!-- KaTeX CSS loaded conditionally by preview.js -->
   <link rel="stylesheet" href="./vendor/github.min.css" id="highlight-theme-css" />
@@ -88,9 +88,13 @@
       <!-- Right: Agent Panel (shares column 4 with feedback, mutually exclusive) -->
       <aside class="preview-agent-panel hidden" id="previewAgentPanel">
         <div class="preview-agent-panel-header">
-          <span class="agent-panel-badge" id="previewAgentBackendBadge"></span>
+          <select class="agent-backend-select" id="previewAgentBackendSelect">
+            <option value="claude">Claude</option>
+            <option value="codex">Codex</option>
+            <option value="openclaw">OpenClaw</option>
+          </select>
           <span class="agent-panel-title" id="previewAgentTitle">Agent</span>
-          <button class="agent-clear-btn" id="previewBtnClearAgent" title="清屏">⌧</button>
+          <button class="agent-clear-btn" id="previewBtnClearAgent" title="清屏"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 21 4-4"/><path d="M17 3a2.83 2.83 0 1 1 4 4L10 18H5v-5L16 2Z"/><path d="M14 5c4 3 6 6 4 9"/><path d="M4 20h2"/></svg></button>
           <button class="panel-close-btn" id="previewBtnCloseAgent" title="关闭 Agent"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
         </div>
         <div id="previewXtermContainer" class="xterm-container"></div>
@@ -198,8 +202,8 @@
   <script src="./vendor/highlight.min.js" defer></script>
   <script src="./js/icons.js?v=20260624" defer></script>
   <script src="./js/topbar.js?v=20260626" defer></script>
-  <script src="./js/preview-common.js" defer></script>
-  <script src="./js/preview.js?v=20260626a" defer></script>
+  <script src="./js/preview-common.js?v=20260627a" defer></script>
+  <script src="./js/preview.js?v=20260627a" defer></script>
   <!-- Service Worker registration for PWA -->
   <script>
     if ('serviceWorker' in navigator) {

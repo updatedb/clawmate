@@ -184,16 +184,22 @@ from config import load as _config
 from store import list_items, scan_all
 
 
+_action_desc_cache: dict[str, str] | None = None
+
+
 def _action_desc(task_id: str, fallback_action: str = "") -> str:
-    """从 task_template.desc 获取操作描述。"""
-    for t in load_task_templates():
-        if t.id == task_id and t.desc:
-            return t.desc
-    return "根据 note 处理"
+    """从 task_template.desc 获取操作描述（模块级缓存，仅首次加载模板）。"""
+    global _action_desc_cache
+    if _action_desc_cache is None:
+        _action_desc_cache = {}
+        for t in load_task_templates():
+            if t.desc:
+                _action_desc_cache[t.id] = t.desc
+    return _action_desc_cache.get(task_id, "根据 note 处理")
 
 
 _last_wake: dict[str, float] = {}
-_DEBOUNCE_SECONDS = 5
+_DEBOUNCE_SECONDS = 60
 
 
 def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> None:

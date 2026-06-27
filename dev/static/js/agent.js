@@ -1,4 +1,4 @@
-// ===== Agent Panel — dual-mode: xterm.js (Claude) + markdown chat (OpenClaw) =====
+// ===== Agent Panel — xterm.js (Claude/Codex) + markdown chat (OpenClaw) =====
 //
 // Exposes window.Agent API:
 //   Agent.init({ wsUrl, rootId, dir, agentId, backend })  — one-time setup
@@ -12,7 +12,7 @@
 
   // --- DOM refs (re-initializable with prefix for reuse in preview page) ---
   let _domPrefix = '';
-  let panel, resizeHandle, xtermContainer, chatView, chatMessages, chatInput, chatSendBtn, badgeEl, closeBtn, toggleBtn, clearBtn;
+  let panel, resizeHandle, xtermContainer, chatView, chatMessages, chatInput, chatSendBtn, backendSelect, closeBtn, toggleBtn, clearBtn;
   let panelTitleEl;
   // Resize tracking shared between createTerminal & disconnectWs
   var _lastResizeSent = { cols: 0, rows: 0 };
@@ -29,7 +29,7 @@
     chatMessages  = document.getElementById(p + 'AgentChatMessages') || document.getElementById(p + 'agentChatMessages') || document.getElementById('agentChatMessages');
     chatInput     = document.getElementById(p + 'AgentChatInput') || document.getElementById(p + 'agentChatInput') || document.getElementById('agentChatInput');
     chatSendBtn   = document.getElementById(p + 'AgentChatSend') || document.getElementById(p + 'agentChatSend') || document.getElementById('agentChatSend');
-    badgeEl       = document.getElementById(p + 'AgentBackendBadge') || document.getElementById(p + 'agentBackendBadge') || document.getElementById('agentBackendBadge');
+    backendSelect = document.getElementById(p + 'AgentBackendSelect') || document.getElementById(p + 'agentBackendSelect') || document.getElementById('agentBackendSelect');
     closeBtn      = document.getElementById(p + 'BtnCloseAgent') || document.getElementById(p + 'btnCloseAgent') || document.getElementById('btnCloseAgent');
     toggleBtn     = document.getElementById(p + 'BtnToggleAgent') || document.getElementById(p + 'btnToggleAgent') || document.getElementById('btnToggleAgent');
     panelTitleEl  = document.getElementById(p + 'AgentPanelTitle') || document.getElementById(p + 'agentPanelTitle') || document.getElementById('agentPanelTitle');
@@ -135,7 +135,6 @@
     document.body.style.userSelect = '';
     document.removeEventListener('mousemove', onResizeMouseMove);
     document.removeEventListener('mouseup', onResizeMouseUp);
-    // Flush final resize dimensions to backend
     _flushResize();
   }
 
@@ -154,7 +153,7 @@
     if (chatInput) chatInput.focus();
   }
 
-  // --- xterm.js init (Claude backend) ---
+  // --- xterm.js init ---
   function createTerminal() {
     if (term) { xlog('init', 'term already exists, skipping'); return; }
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
@@ -174,9 +173,7 @@
     }
     const cursor = '#14b8a6';
 
-    // ── Estimate cols/rows from container before Terminal creation ──
-    // This avoids the hardcoded 100×30 → fit mismatch that garbles initial output.
-    // Measure actual character width instead of hardcoded 8.4px
+    // Estimate cols/rows from container before Terminal creation
     var fontFamily = '"JetBrains Mono", "Cascadia Code", "Fira Code", "Consolas", "SF Mono", "DejaVu Sans Mono", monospace';
     var _measureSpan = document.createElement('span');
     _measureSpan.style.cssText = 'position:absolute;visibility:hidden;font-family:' + fontFamily + ';font-size:14px;white-space:pre;';
@@ -184,8 +181,8 @@
     document.body.appendChild(_measureSpan);
     var CHAR_W = _measureSpan.offsetWidth / 62;
     document.body.removeChild(_measureSpan);
-    if (!(CHAR_W > 4 && CHAR_W < 16)) CHAR_W = 8.4; // fallback if measurement fails
-    var CHAR_H = 19.6;  // fontSize * lineHeight = 14 * 1.4
+    if (!(CHAR_W > 4 && CHAR_W < 16)) CHAR_W = 8.4;
+    var CHAR_H = 19.6;
     var containerW = xtermContainer.clientWidth || 600;
     var containerH = xtermContainer.clientHeight || 400;
     var usableW = Math.max(100, containerW - 12 - 6);
@@ -196,7 +193,6 @@
     xlog('init', 'container=' + containerW + 'x' + containerH +
       ' usable=' + Math.round(usableW) + 'x' + Math.round(usableH) +
       ' estimated cols=' + estimatedCols + ' rows=' + estimatedRows);
-    xlog('init', 'theme bg=' + bg + ' fg=' + fg + ' cursor=' + cursor);
 
     term = new Terminal({
       cursorBlink: true, cursorStyle: 'bar',
@@ -205,17 +201,13 @@
       allowTransparency: false,
       drawBoldTextInBrightColors: false,
       theme: {
-        background: bg,
-        foreground: fg,
-        cursor: cursor,
-        selectionBackground: selBg,
-        selectionForeground: selFg,
+        background: bg, foreground: fg, cursor: cursor,
+        selectionBackground: selBg, selectionForeground: selFg,
         selectionInactiveBackground: selInactiveBg,
       },
       allowProposedApi: true, scrollback: 5000, cols: estimatedCols, rows: estimatedRows,
     });
 
-    // Store estimated dimensions so connectWs() can pass them to the backend
     window._agentInitCols = estimatedCols;
     window._agentInitRows = estimatedRows;
 
@@ -231,41 +223,26 @@
     }
 
     term.open(xtermContainer);
-    // Immediate rough fit — refined later when fonts load
     if (fitAddon) {
       try { fitAddon.fit(); } catch (_) {}
       if (term) { try { term.refresh(0, term.rows - 1); } catch (_) {} }
     }
     xlog('init', 'term.open() done — term.element=' + (!!term.element) + ' term.textarea=' + (!!term.textarea));
-    xlog('init', 'xtermContainer rect', JSON.stringify(rectJson(xtermContainer)));
 
-    xlog('init', 'xtermContainer rect', JSON.stringify(rectJson(xtermContainer)));
-
-
-    // --- IME recovery ---
-    // CJK input-method switching can steal focus from xterm's hidden textarea;
-    // clicks on the terminal surface must always restore focus.
+    // IME recovery
     var termElement = term.element;
     if (termElement) {
       termElement.addEventListener('click', function () { xlog('focus', 'click → term.focus()'); term.focus(); });
       termElement.addEventListener('mousedown', function () { term.focus(); });
-      xlog('init', 'IME click/focus handlers registered on term.element');
     }
 
-    // After composition ends (IME candidate selected or cancelled), refocus to
-    // guarantee keystrokes keep flowing to the terminal.
     var textarea = term.textarea;
     if (textarea) {
-      textarea.addEventListener('compositionstart', function () {
-        xlog('ime', 'compositionstart');
-      });
+      textarea.addEventListener('compositionstart', function () { xlog('ime', 'compositionstart'); });
       textarea.addEventListener('compositionend', function () {
         xlog('ime', 'compositionend → refocus');
         setTimeout(function () { term.focus(); }, 0);
       });
-      // When IME popup/candidate-window opens, the textarea loses focus with
-      // relatedTarget === null (the IME window is a native OS surface, not a
-      // DOM element).  Pull focus back only in that case.
       textarea.addEventListener('blur', function (e) {
         var rtTag = e.relatedTarget ? (e.relatedTarget.tagName || 'unknown') : 'null';
         xlog('focus', 'textarea blur relatedTarget=' + rtTag + ' panel.hidden=' + panel.classList.contains('hidden'));
@@ -275,15 +252,10 @@
           setTimeout(function () { term.focus(); }, 0);
         }
       });
-      textarea.addEventListener('focus', function () {
-        xlog('focus', 'textarea gained focus');
-      });
-      xlog('init', 'IME composition/focus handlers registered on textarea');
-    } else {
-      xlog('init', 'WARNING: term.textarea is null — IME recovery disabled');
+      textarea.addEventListener('focus', function () { xlog('focus', 'textarea gained focus'); });
     }
 
-    // --- Fit after layout (with font-ready guard) ---
+    // Fit after layout (with font-ready guard)
     function doFit(label) {
       if (panel.classList.contains('hidden') || !fitAddon) return;
       var before = term ? { rows: term.rows, cols: term.cols } : null;
@@ -292,19 +264,13 @@
       if (term) {
         var deltaCols = term.cols - (before ? before.cols : 0);
         xlog('fit', 'result rows=' + term.rows + ' cols=' + term.cols +
-          ' (Δ rows:' + (term.rows - (before ? before.rows : 0)) +
-          ' cols:' + deltaCols + ')');
-        // Refresh WebGL renderer; double-rAF ensures the framebuffer
-        // reallocates at the new character-grid dimensions.
+          ' (Δ rows:' + (term.rows - (before ? before.rows : 0)) + ' cols:' + deltaCols + ')');
         try { term.refresh(0, term.rows - 1); } catch (_) {}
-        requestAnimationFrame(function () {
-          try { term.refresh(0, term.rows - 1); } catch (_) {}
-        });
+        requestAnimationFrame(function () { try { term.refresh(0, term.rows - 1); } catch (_) {} });
       }
     }
 
     if (fitAddon) {
-      xlog('fit', 'waiting for fonts.ready...');
       var fontFitted = false;
       var fontTimer = setTimeout(function () {
         if (!fontFitted) { fontFitted = true; doFit('font-timeout'); }
@@ -312,27 +278,19 @@
       if (document.fonts && document.fonts.ready) {
         document.fonts.ready.then(function () {
           clearTimeout(fontTimer);
-          if (!fontFitted) {
-            fontFitted = true;
-            xlog('fit', 'fonts.ready resolved');
-            // Wait one rAF so the browser applies the font to layout
-            requestAnimationFrame(function () { doFit('fonts-ready'); });
-          }
+          if (!fontFitted) { fontFitted = true; requestAnimationFrame(function () { doFit('fonts-ready'); }); }
         }).catch(function () {
           clearTimeout(fontTimer);
           if (!fontFitted) { fontFitted = true; requestAnimationFrame(function () { requestAnimationFrame(function () { doFit('fonts-fallback'); }); }); }
         });
       } else {
-        // document.fonts not supported — immediate fit
         clearTimeout(fontTimer);
         fontFitted = true;
         requestAnimationFrame(function () { requestAnimationFrame(function () { doFit('rAFx2'); }); });
       }
-    } else {
-      xlog('fit', 'SKIP — fitAddon is null');
     }
 
-    // --- ResizeObserver (debounced 200ms) ---
+    // ResizeObserver (debounced 200ms)
     if (typeof ResizeObserver !== 'undefined') {
       if (termResizeObserver) termResizeObserver.disconnect();
       var _roDebounce = null;
@@ -351,45 +309,26 @@
       xlog('init', 'ResizeObserver active on xtermContainer (200ms debounce)');
     }
 
-    // --- Data / resize forward to WebSocket ---
-    var _inputBatch = '';
-    var _inputBatchTimer = null;
-    var INPUT_BATCH_MS = 30;
-    function _flushInputBatch() {
-      var batch = _inputBatch;
-      _inputBatch = '';
-      if (batch && ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(batch);
-      }
-    }
+    // Data / resize forward to WebSocket
     term.onData(function (data) {
       xlog('data', 'len=' + data.length + ' preview=' + JSON.stringify(data.slice(0, 40)) + ' ws=' + (ws ? ws.readyState : 'null'));
-      _inputBatch += data;
-      // Send Enter immediately for zero-latency command submission
       if (data === '\r' || data === '\n') {
-        clearTimeout(_inputBatchTimer);
-        _inputBatchTimer = null;
-        _flushInputBatch();
+        if (ws && ws.readyState === WebSocket.OPEN) { ws.send(data); }
         return;
       }
-      // Flush immediately so that PTY echo arrives without avoidable delay.
-      // The user sees characters only after the server echoes them back,
-      // so any batching here directly adds to perceived input lag.
-      _flushInputBatch();
+      if (ws && ws.readyState === WebSocket.OPEN) { ws.send(data); }
     });
-    // ── Resize strategy: first immediate, then throttle 50ms, skip dupes ──
+
     term.onResize(function (size) {
       xlog('resize', 'term.onResize cols=' + size.cols + ' rows=' + size.rows);
       _scheduleResize(size.cols, size.rows);
     });
 
     function _scheduleResize(cols, rows) {
-      // Send immediately if this is the very first resize (initial sync)
       if (_lastResizeSent.cols === 0 && _lastResizeSent.rows === 0) {
         _sendResize(cols, rows);
         return;
       }
-      // Throttle rapid consecutive resizes to 50ms
       if (_pendingResize) clearTimeout(_pendingResize);
       _pendingResize = setTimeout(function () {
         _pendingResize = null;
@@ -405,30 +344,15 @@
       }
     }
 
-    // Flush pending resize on drag end
     function _flushResize() {
       if (_pendingResize) { clearTimeout(_pendingResize); _pendingResize = null; }
       if (term) { _sendResize(term.cols, term.rows); }
     }
 
-    // ── Flow control: prevent xterm.js write buffer from growing unbounded ──
-    // xterm.js processes ALL terminal output (including echoes) on the main thread
-    // with a ~12ms per-frame budget. When the write buffer exceeds the HIGH
-    // watermark we stop feeding data — xterm.js already buffers internally, so
-    // additional external buffering would only create a ping-pong effect where
-    // the resume dump immediately re-triggers flow-pause.
-    // Data arriving during flow-pause is dropped; this is intentional — the
-    // terminal renderer is the bottleneck, and dropping frames is the standard
-    // approach for real-time output streams.
+    // Flow control
     if (term.onFlowControlPause) {
-      term.onFlowControlPause(function () {
-        flowPaused = true;
-        xlog('flow', 'PAUSE — write buffer full, pausing terminal writes');
-      });
-      term.onFlowControlResume(function () {
-        flowPaused = false;
-        xlog('flow', 'RESUME — accepting data again');
-      });
+      term.onFlowControlPause(function () { flowPaused = true; xlog('flow', 'PAUSE'); });
+      term.onFlowControlResume(function () { flowPaused = false; xlog('flow', 'RESUME'); });
       xlog('init', 'Flow control handlers registered');
     }
   }
@@ -438,7 +362,7 @@
     var div = document.createElement('div');
     div.className = 'agent-chat-msg agent-chat-' + role;
     if (role === 'assistant') {
-      div.innerHTML = text; // markdown rendered by markdown-it if available
+      div.innerHTML = text;
     } else {
       div.textContent = text;
     }
@@ -449,7 +373,6 @@
 
   function showChatStatus(text, type) {
     if (!chatMessages) return;
-    // Remove previous status
     if (chatStatusEl) { chatStatusEl.remove(); chatStatusEl = null; }
     if (!text) return;
     chatStatusEl = document.createElement('div');
@@ -476,10 +399,6 @@
     var type = msg.type || '';
 
     if (type === 'info') {
-      // Fallback: extract sessionKey from OpenClaw info message
-      if (msg.sessionKey && rootEl && !rootEl.textContent) {
-        rootEl.textContent = msg.sessionKey;
-      }
       if (msg.sessionKey && panelTitleEl) {
         panelTitleEl.textContent = msg.sessionKey;
       }
@@ -502,7 +421,6 @@
 
     if (type === 'user') {
       addChatBubble('user', msg.text || '');
-      // Create placeholder for assistant response
       chatBuf = '';
       chatBufEl = addChatBubble('assistant', '...');
       return;
@@ -514,7 +432,6 @@
         if (chatBufEl) {
           chatBufEl.textContent = chatBuf;
           renderMarkdown(chatBufEl, chatBuf);
-          // Auto-scroll to show new content
           chatMessages.scrollTop = chatMessages.scrollHeight;
         }
       }
@@ -553,7 +470,6 @@
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
     if (!wsUrl) return;
 
-    // Pass current terminal dimensions so the backend PTY starts at the right size
     var initCols = (term && term.cols) || window._agentInitCols || 80;
     var initRows = (term && term.rows) || window._agentInitRows || 24;
 
@@ -565,31 +481,21 @@
       '&cols=' + initCols +
       '&rows=' + initRows;
 
+    xlog('ws', 'connecting backend=' + backendMode + ' url=' + url);
     try { ws = new WebSocket(url); } catch (e) { xlog('ws', 'constructor failed', e); scheduleReconnect(); return; }
 
     ws.onopen = function () {
       xlog('ws', 'OPEN');
       reconnectAttempts = 0;
       if (isPtyBackend() && term) {
-        // Send current dimensions immediately so backend PTY output is
-        // formatted at the correct column width from the very first byte.
-        try {
-          ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-        } catch (_) {}
-        // Now show the connection banner — the backend already has the
-        // correct dimensions, and fit() has already run once.
+        try { ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows })); } catch (_) {}
         term.clear();
         term.writeln('\x1b[1;36m✓ 已连接 Agent 终端\x1b[0m');
         term.writeln('\x1b[2m  ' + term.cols + '×' + term.rows + '  |  调整面板宽度后运行的程序会自动适配新宽度\x1b[0m');
         term.writeln('');
-        // Send file context if preview page opened agent with a file
         if (_pendingFileContext) {
           try {
-            ws.send(JSON.stringify({
-              type: 'file_context',
-              path: _pendingFileContext.path || '',
-              content: _pendingFileContext.content || '',
-            }));
+            ws.send(JSON.stringify({ type: 'file_context', path: _pendingFileContext.path || '', content: _pendingFileContext.content || '' }));
           } catch (_) {}
           _pendingFileContext = null;
         }
@@ -604,13 +510,10 @@
       try {
         var msg = JSON.parse(e.data);
         if (msg.type === 'session' && msg.key) {
-          if (rootEl) rootEl.textContent = msg.key;
           if (panelTitleEl) panelTitleEl.textContent = msg.key;
-          // Detect session key change — skip initial connection (currentSessionKey empty)
           if (currentSessionKey && msg.key !== currentSessionKey) {
             xlog('session', 'key changed: ' + currentSessionKey + ' -> ' + msg.key);
             currentSessionKey = msg.key;
-            // Defer reconnect so we exit onmessage before old WS is torn down
             setTimeout(function () { reconnectToNewSession(); }, 0);
             return;
           }
@@ -620,20 +523,14 @@
       } catch (_) {}
 
       if (isPtyBackend() && term) {
-        // Respect xterm.js flow control: if the internal write buffer is
-        // over the HIGH watermark, drop incoming data. xterm.js already
-        // buffers internally, so an external buffer just creates a ping-pong
-        // effect on resume. Dropping frames is the standard approach for
-        // real-time terminal output that can't keep up with rendering.
         if (flowPaused) { return; }
         term.write(e.data);
         return;
       }
-      // OpenClaw chat mode: parse JSON messages
       if (backendMode === 'openclaw') {
         try {
-          var msg = JSON.parse(e.data);
-          handleChatMessage(msg);
+          var chatMsg = JSON.parse(e.data);
+          handleChatMessage(chatMsg);
         } catch (_) {
           // Raw text fallback (banner etc.)
         }
@@ -668,21 +565,14 @@
     currentSessionKey = '';
     if (panelTitleEl) panelTitleEl.textContent = 'Agent';
     if (ws) { ws.onclose = null; ws.close(); ws = null; }
-    if (_renderMode === 'dom' && _domOutput) {
-      _addDomLine('\x1b[2m终端已断开。\x1b[0m');
-    }
-    if (_renderMode === 'xterm' && term) {
-      // Suspend cursor blink timer — hidden terminals that keep blinking
-      // waste main-thread time every ~500ms competing with active UI.
+    if (term) {
       try { term.blur(); } catch (_) {}
       term.clear(); term.writeln('\x1b[2m终端已断开。\x1b[0m');
     }
     if (chatMessages) { chatMessages.innerHTML = ''; }
     chatBuf = ''; chatBufEl = null; chatStatusEl = null;
-    // Reset resize tracking so next connection sends dimensions immediately
     _lastResizeSent = { cols: 0, rows: 0 };
     if (_pendingResize) { clearTimeout(_pendingResize); _pendingResize = null; }
-    // Reset flow control state for clean reconnection
     flowPaused = false;
   }
 
@@ -710,7 +600,6 @@
     xlog('session', 'reconnecting to new session...');
     clearReconnect();
 
-    // Close old WS silently — prevent onclose/onerror from firing
     if (ws) {
       ws.onclose = null;
       ws.onerror = null;
@@ -718,8 +607,6 @@
       ws = null;
     }
 
-    // Clear display for clean transition — use reset() instead of clear()
-    // because clear() can leave the WebGL renderer in a broken state
     if (isPtyBackend() && term) {
       term.reset();
       term.writeln('\x1b[1;36m⟳ 项目已切换，重新连接...\x1b[0m');
@@ -731,11 +618,7 @@
       chatStatusEl = null;
     }
 
-    // Reset reconnect counter — this is intentional, not a failure
     reconnectAttempts = 0;
-
-    // Open new WebSocket — currentRootId/currentDir were already
-    // updated by Agent.updateRoot() before the chdir was sent
     connectWs();
   }
 
@@ -757,38 +640,49 @@
     closeBtn.addEventListener('click', function () { window.Agent.close(); });
   }
 
-  // --- Clear button ---
+  // --- Clear button (clears local terminal + re-syncs PTY dimensions) ---
   if (clearBtn) {
     clearBtn.addEventListener('click', function () {
       if (term) {
         term.clear();
         term.writeln('\x1b[1;36m✓ 已清屏\x1b[0m');
+        // Cancel any pending resize — a debounced resize that fires AFTER clear
+        // would send stale dimensions and desync the PTY.
+        if (_pendingResize) { clearTimeout(_pendingResize); _pendingResize = null; }
+        // Reset PTY row/col — force re-sync so backend tty matches xterm dimensions
+        _lastResizeSent = { cols: 0, rows: 0 };
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          try {
+            ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+          } catch (_) {}
+        }
       }
     });
   }
 
-  // --- Backend badge: cycle claude → codex → openclaw ---
-  var _backendCycle = ['claude', 'codex', 'openclaw'];
-
+  // --- Backend select dropdown ---
   function switchBackend(newBackend) {
-    if (_backendCycle.indexOf(newBackend) === -1) return;
+    if (newBackend !== 'claude' && newBackend !== 'codex' && newBackend !== 'openclaw') return;
     if (backendMode === newBackend) return;
 
     xlog('backend', 'switching: ' + backendMode + ' → ' + newBackend);
     backendMode = newBackend;
-    if (badgeEl) badgeEl.textContent = backendMode;
 
-    // Update mode button label
-    if (modeBtn) {
-      modeBtn.textContent = (backendMode === 'openclaw') ? 'Chat' : 'DOM';
+    // Persist per-project preference
+    if (currentRootId) {
+      try { localStorage.setItem('clawmate_backend_' + currentRootId, backendMode); } catch (_) {}
+    }
+
+    // Update select if it doesn't match (e.g. set programmatically)
+    if (backendSelect && backendSelect.value !== backendMode) {
+      backendSelect.value = backendMode;
     }
 
     // If panel is not open, just save the preference — next open will use it
     var wasOpen = panel && !panel.classList.contains('hidden');
     if (!wasOpen) return;
 
-    // For non-openclaw ↔ openclaw transitions, the view mode needs to change
-    // Force-close current connection first
+    // Force-close current connection
     clearReconnect();
     if (ws) {
       ws.onclose = null;
@@ -799,13 +693,11 @@
     currentSessionKey = '';
 
     // Clear terminal display
-    if (term) {
-      try { term.clear(); } catch (_) {}
-    }
+    if (term) { try { term.clear(); } catch (_) {} }
     if (chatMessages) { chatMessages.innerHTML = ''; }
     chatBuf = ''; chatBufEl = null; chatStatusEl = null;
 
-    // Switch view mode before reconnect
+    // Switch view mode
     if (backendMode === 'openclaw') {
       showChatMode();
       chatMessages.innerHTML = '';
@@ -815,7 +707,7 @@
       createTerminal();
     }
 
-    // Reset resize tracking
+    // Reset state
     _lastResizeSent = { cols: 0, rows: 0 };
     if (_pendingResize) { clearTimeout(_pendingResize); _pendingResize = null; }
     flowPaused = false;
@@ -828,28 +720,43 @@
       try { termResizeObserver.unobserve(xtermContainer); } catch (_) {}
       try { termResizeObserver.observe(xtermContainer); } catch (_) {}
     }
+
+    // Focus after switch
+    setTimeout(function () {
+      if (backendMode === 'openclaw') {
+        if (chatInput) chatInput.focus();
+      } else {
+        if (term) term.focus();
+      }
+    }, 200);
   }
 
-  if (badgeEl) {
-    badgeEl.addEventListener('click', function () {
-      var idx = _backendCycle.indexOf(backendMode);
-      var next = _backendCycle[(idx + 1) % _backendCycle.length];
-      switchBackend(next);
+  if (backendSelect) {
+    backendSelect.addEventListener('change', function () {
+      switchBackend(backendSelect.value);
     });
   }
 
   // --- Public API ---
   window.Agent = {
     init: function (config) {
-      // Re-resolve DOM if a custom prefix is provided (e.g. 'preview' for preview page)
       if (config.domPrefix) { _resolveDom(config.domPrefix); }
       wsUrl = config.wsUrl || '';
       currentRootId = config.rootId || '';
       currentDir = config.dir || '';
       currentAgentId = config.agentId || '';
-      backendMode = config.backend || 'claude';
-      if (badgeEl) badgeEl.textContent = backendMode;
-      if (modeBtn) modeBtn.textContent = (backendMode === 'openclaw') ? 'Chat' : 'DOM';
+
+      // Restore per-project saved backend, falling back to config default
+      var savedBackend = '';
+      if (currentRootId) {
+        try { savedBackend = localStorage.getItem('clawmate_backend_' + currentRootId) || ''; } catch (_) {}
+      }
+      backendMode = (savedBackend && ['claude','codex','openclaw'].indexOf(savedBackend) !== -1)
+        ? savedBackend
+        : (config.backend || 'claude');
+
+      // Sync select to initial backend
+      if (backendSelect) backendSelect.value = backendMode;
 
       if (backendMode === 'openclaw') {
         showChatMode();
@@ -865,17 +772,14 @@
 
       animatingOut = false;
       clearTimeout(collapseTimer);
-      // Temporarily override display:none so the panel is rendered
-      // (off-screen via translateX(100%)) before the slide-in transition.
       panel.style.display = 'flex';
-      // Force grid expansion before removing hidden for slide-in
       updateGridColumns(true);
-      panel.offsetHeight; // force reflow (sync layout)
+      panel.offsetHeight; // force reflow
       panel.classList.remove('hidden');
-      // Let CSS .agent-panel handle display from now on
       panel.style.display = '';
       document.body.classList.add('agent-open');
       setTimeout(function () { if (typeof syncSidebarBtn === 'function') syncSidebarBtn(); }, 0);
+
       if (backendMode === 'openclaw') {
         showChatMode();
         chatMessages.innerHTML = '';
@@ -884,21 +788,16 @@
         showXtermMode();
         createTerminal();
         if (term) { term.focus(); }
-        // Banner is now shown in ws.onopen after initial resize sync
       }
 
       reconnectAttempts = 0;
       connectWs();
 
-      // Reconnect ResizeObserver if it was disconnected on close.
-      // unobserve first to avoid InvalidStateError on Firefox when the
-      // element is already being observed (e.g. rapid open→close→open).
       if (termResizeObserver && xtermContainer) {
         try { termResizeObserver.unobserve(xtermContainer); } catch (_) {}
         try { termResizeObserver.observe(xtermContainer); xlog('init', 'ResizeObserver reconnected'); } catch (_) {}
       }
 
-      // Fit after panel slide-in transition completes (instead of 200ms blind timer)
       if (fitAddon) {
         var transitionFitted = false;
         var onPanelTransitionEnd = function (e) {
@@ -912,7 +811,6 @@
           }
         };
         panel.addEventListener('transitionend', onPanelTransitionEnd);
-        // Safety net: 500ms regardless
         setTimeout(function () {
           panel.removeEventListener('transitionend', onPanelTransitionEnd);
           if (!transitionFitted) {
@@ -927,24 +825,19 @@
     close: function () {
       disconnectWs();
       animatingOut = true;
-      // Disconnect ResizeObserver while panel is hidden — avoids wasted
-      // callbacks competing for main-thread time with visible UI elements.
       if (termResizeObserver) {
         try { termResizeObserver.disconnect(); } catch (_) {}
       }
-      // Override global .hidden display:none so the slide-out
-      // transition (translateX(0) → translateX(100%)) actually plays.
       panel.style.display = 'flex';
       panel.classList.add('hidden');
       document.body.classList.remove('agent-open');
       setTimeout(function () { if (typeof syncSidebarBtn === 'function') syncSidebarBtn(); }, 0);
-      updateGridColumns(); // keep column for slide-out animation
+      updateGridColumns();
       clearTimeout(collapseTimer);
       collapseTimer = setTimeout(function () {
         animatingOut = false;
-        panel.style.display = ''; // let CSS .hidden handle display again
-        updateGridColumns(); // collapse to 0px
-        // Cursor blink timer is now fully stopped after slide-out completes.
+        panel.style.display = '';
+        updateGridColumns();
       }, 300);
       if (toggleBtn) toggleBtn.classList.remove('active');
     },
@@ -961,7 +854,6 @@
     updateRoot: function (rootId, dir) {
       if (rootId) currentRootId = rootId;
       if (dir !== undefined) currentDir = dir;
-      // session key is updated via backend "session" message in response to chdir
       if (!panel.classList.contains('hidden') && ws && ws.readyState === WebSocket.OPEN) {
         try { ws.send(JSON.stringify({ type: 'chdir', root: currentRootId, dir: currentDir })); } catch (_) {}
       }
@@ -971,7 +863,6 @@
       return !panel.classList.contains('hidden');
     },
 
-    /** Focus terminal or chat input so keyboard input goes to the right place */
     focus: function () {
       if (term) {
         term.focus();
@@ -980,10 +871,8 @@
       }
     },
 
-    /** Recompute grid columns (called externally on sidebar toggle) */
     updateGrid: function () { updateGridColumns(); },
 
-    /** Re-theme the xterm terminal to match current app theme */
     syncTheme: function () {
       if (!term) return;
       var isDark = document.documentElement.getAttribute('data-theme') !== 'light';

@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, interactive-widget=resizes-content" />
   <link rel="icon" type="image/png" sizes="32x32" href="./asset/clawmate-logo.png" />
   <link rel="apple-touch-icon" href="./asset/clawmate-logo.png" />
   <meta name="theme-color" content="#0d9488" media="(prefers-color-scheme: light)" />
@@ -130,9 +130,13 @@
       <div id="agentResizeHandle" class="agent-resize-handle hidden"></div>
       <aside id="agentPanel" class="agent-panel hidden">
         <div class="agent-panel-header">
-          <span class="agent-panel-badge" id="agentBackendBadge"></span>
+          <select class="agent-backend-select" id="agentBackendSelect">
+            <option value="claude">Claude</option>
+            <option value="codex">Codex</option>
+            <option value="openclaw">OpenClaw</option>
+          </select>
           <span class="agent-panel-title" id="agentPanelTitle">Agent</span>
-          <button id="btnClearAgent" class="agent-clear-btn" title="清屏">⌧</button>
+          <button id="btnClearAgent" class="agent-clear-btn" title="清屏"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 21 4-4"/><path d="M17 3a2.83 2.83 0 1 1 4 4L10 18H5v-5L16 2Z"/><path d="M14 5c4 3 6 6 4 9"/><path d="M4 20h2"/></svg></button>
           <button id="btnCloseAgent" class="agent-panel-close" title="关闭 Agent"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
         </div>
         <div id="xtermContainer" class="xterm-container"></div>

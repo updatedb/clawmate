@@ -126,11 +126,14 @@ async def clawmate_list(
     offset: int = Query(0, ge=0),
     limit: int = Query(200, ge=1, le=1000),
     marker_filter: bool = Query(False),
+    sort_key: str = Query("name"),
+    sort_dir: str = Query("asc"),
 ):
     """列出目录内容。marker_filter=true 时只返回含 .clawmate/ 的子目录。"""
     try:
         return JSONResponse(content=list_dir(root, dir, offset=offset, limit=limit,
-                                              marker_filter=marker_filter))
+                                              marker_filter=marker_filter,
+                                              sort_key=sort_key, sort_dir=sort_dir))
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Directory not found")
     except PermissionError:
