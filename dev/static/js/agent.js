@@ -12,7 +12,7 @@
 
   // --- DOM refs (re-initializable with prefix for reuse in preview page) ---
   let _domPrefix = '';
-  let panel, resizeHandle, xtermContainer, chatView, chatMessages, chatInput, chatSendBtn, badgeEl, closeBtn, toggleBtn;
+  let panel, resizeHandle, xtermContainer, chatView, chatMessages, chatInput, chatSendBtn, badgeEl, closeBtn, toggleBtn, clearBtn;
   let panelTitleEl;
   // Resize tracking shared between createTerminal & disconnectWs
   var _lastResizeSent = { cols: 0, rows: 0 };
@@ -33,6 +33,7 @@
     closeBtn      = document.getElementById(p + 'BtnCloseAgent') || document.getElementById(p + 'btnCloseAgent') || document.getElementById('btnCloseAgent');
     toggleBtn     = document.getElementById(p + 'BtnToggleAgent') || document.getElementById(p + 'btnToggleAgent') || document.getElementById('btnToggleAgent');
     panelTitleEl  = document.getElementById(p + 'AgentPanelTitle') || document.getElementById(p + 'agentPanelTitle') || document.getElementById('agentPanelTitle');
+    clearBtn      = document.getElementById(p + 'BtnClearAgent') || document.getElementById(p + 'btnClearAgent') || document.getElementById('btnClearAgent');
   }
   _resolveDom('');  // default: main page IDs
 
@@ -240,38 +241,6 @@
 
     xlog('init', 'xtermContainer rect', JSON.stringify(rectJson(xtermContainer)));
 
-    term.attachCustomKeyEventHandler(function (e) {
-      if (e.type === 'keydown') {
-        // Ctrl+C with selection → copy to clipboard (keep default xterm behavior)
-        // Let xterm.js handle paste natively (Ctrl+V) — it flows through
-        // term.onData → ws.send(), keeping the same pipeline as keyboard input.
-        if (e.ctrlKey && !e.altKey && !e.metaKey) {
-          if (e.key === 'c' && term.hasSelection()) {
-            var sel = term.getSelection();
-            if (sel && navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(sel).catch(function () {});
-            }
-            xlog('key', 'Ctrl+C (copy) key=' + e.key + ' composing=' + e.isComposing);
-            return false;
-          }
-          if (e.key === 'l') {
-            // Ctrl+L: clear terminal + send to PTY
-            term.clear();
-            if (ws && ws.readyState === WebSocket.OPEN) {
-              ws.send('\x0c'); // Ctrl+L to PTY
-            }
-            return false;
-          }
-        }
-        // IME composition — never suppress, let xterm handle composition events
-        if (e.isComposing || e.key === 'Dead' || e.key === 'Process') {
-          xlog('key', 'IME composing key=' + e.key + ' isComposing=' + e.isComposing);
-          return true;
-        }
-        xlog('key', 'keydown key=' + e.key + ' ctrl=' + e.ctrlKey + ' composing=' + e.isComposing);
-      }
-      return true;
-    });
 
     // --- IME recovery ---
     // CJK input-method switching can steal focus from xterm's hidden textarea;
@@ -508,8 +477,8 @@
 
     if (type === 'info') {
       // Fallback: extract sessionKey from OpenClaw info message
-      if (msg.sessionKey && panelTitleEl && panelTitleEl.textContent === 'Agent') {
-        panelTitleEl.textContent = msg.sessionKey;
+      if (msg.sessionKey && rootEl && !rootEl.textContent) {
+        rootEl.textContent = msg.sessionKey;
       }
       if (msg.sessionKey && panelTitleEl) {
         panelTitleEl.textContent = msg.sessionKey;
@@ -635,6 +604,7 @@
       try {
         var msg = JSON.parse(e.data);
         if (msg.type === 'session' && msg.key) {
+          if (rootEl) rootEl.textContent = msg.key;
           if (panelTitleEl) panelTitleEl.textContent = msg.key;
           // Detect session key change — skip initial connection (currentSessionKey empty)
           if (currentSessionKey && msg.key !== currentSessionKey) {
@@ -696,8 +666,12 @@
   function disconnectWs() {
     clearReconnect();
     currentSessionKey = '';
+    if (panelTitleEl) panelTitleEl.textContent = 'Agent';
     if (ws) { ws.onclose = null; ws.close(); ws = null; }
-    if (term) {
+    if (_renderMode === 'dom' && _domOutput) {
+      _addDomLine('\x1b[2m终端已断开。\x1b[0m');
+    }
+    if (_renderMode === 'xterm' && term) {
       // Suspend cursor blink timer — hidden terminals that keep blinking
       // waste main-thread time every ~500ms competing with active UI.
       try { term.blur(); } catch (_) {}
@@ -783,19 +757,84 @@
     closeBtn.addEventListener('click', function () { window.Agent.close(); });
   }
 
+  // --- Clear button ---
+  if (clearBtn) {
+    clearBtn.addEventListener('click', function () {
+      if (term) {
+        term.clear();
+        term.writeln('\x1b[1;36m✓ 已清屏\x1b[0m');
+      }
+    });
+  }
+
   // --- Backend badge: cycle claude → codex → openclaw ---
   var _backendCycle = ['claude', 'codex', 'openclaw'];
+
+  function switchBackend(newBackend) {
+    if (_backendCycle.indexOf(newBackend) === -1) return;
+    if (backendMode === newBackend) return;
+
+    xlog('backend', 'switching: ' + backendMode + ' → ' + newBackend);
+    backendMode = newBackend;
+    if (badgeEl) badgeEl.textContent = backendMode;
+
+    // Update mode button label
+    if (modeBtn) {
+      modeBtn.textContent = (backendMode === 'openclaw') ? 'Chat' : 'DOM';
+    }
+
+    // If panel is not open, just save the preference — next open will use it
+    var wasOpen = panel && !panel.classList.contains('hidden');
+    if (!wasOpen) return;
+
+    // For non-openclaw ↔ openclaw transitions, the view mode needs to change
+    // Force-close current connection first
+    clearReconnect();
+    if (ws) {
+      ws.onclose = null;
+      ws.onerror = null;
+      try { ws.close(); } catch (_) {}
+      ws = null;
+    }
+    currentSessionKey = '';
+
+    // Clear terminal display
+    if (term) {
+      try { term.clear(); } catch (_) {}
+    }
+    if (chatMessages) { chatMessages.innerHTML = ''; }
+    chatBuf = ''; chatBufEl = null; chatStatusEl = null;
+
+    // Switch view mode before reconnect
+    if (backendMode === 'openclaw') {
+      showChatMode();
+      chatMessages.innerHTML = '';
+      chatBuf = ''; chatBufEl = null;
+    } else {
+      showXtermMode();
+      createTerminal();
+    }
+
+    // Reset resize tracking
+    _lastResizeSent = { cols: 0, rows: 0 };
+    if (_pendingResize) { clearTimeout(_pendingResize); _pendingResize = null; }
+    flowPaused = false;
+
+    reconnectAttempts = 0;
+    connectWs();
+
+    // Reconnect ResizeObserver
+    if (termResizeObserver && xtermContainer) {
+      try { termResizeObserver.unobserve(xtermContainer); } catch (_) {}
+      try { termResizeObserver.observe(xtermContainer); } catch (_) {}
+    }
+  }
+
   if (badgeEl) {
     badgeEl.addEventListener('click', function () {
       var idx = _backendCycle.indexOf(backendMode);
-      backendMode = _backendCycle[(idx + 1) % _backendCycle.length];
-      badgeEl.textContent = backendMode;
-      // Reconnect if panel is open
-      var wasOpen = panel && !panel.classList.contains('hidden');
-      if (wasOpen) {
-        window.Agent.close();
-        setTimeout(function () { window.Agent.open(currentRootId, currentDir); }, 400);
-      }
+      var next = _backendCycle[(idx + 1) % _backendCycle.length];
+      switchBackend(next);
     });
   }
 
@@ -810,6 +849,7 @@
       currentAgentId = config.agentId || '';
       backendMode = config.backend || 'claude';
       if (badgeEl) badgeEl.textContent = backendMode;
+      if (modeBtn) modeBtn.textContent = (backendMode === 'openclaw') ? 'Chat' : 'DOM';
 
       if (backendMode === 'openclaw') {
         showChatMode();
