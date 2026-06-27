@@ -10,6 +10,10 @@
 (function () {
   'use strict';
 
+  // --- xterm.js CDN (update version here → index.html <link>/<script> + preview.js follow) ---
+  var XTERM_VERSION = '5.5.0';
+  var XTERM_CDN_BASE = 'https://cdn.jsdelivr.net/npm/@xterm/xterm@' + XTERM_VERSION;
+
   // --- DOM refs (re-initializable with prefix for reuse in preview page) ---
   let _domPrefix = '';
   let panel, resizeHandle, xtermContainer, chatView, chatMessages, chatInput, chatSendBtn, backendSelect, closeBtn, toggleBtn, clearBtn;
@@ -32,8 +36,15 @@
     backendSelect = document.getElementById(p + 'AgentBackendSelect') || document.getElementById(p + 'agentBackendSelect') || document.getElementById('agentBackendSelect');
     closeBtn      = document.getElementById(p + 'BtnCloseAgent') || document.getElementById(p + 'btnCloseAgent') || document.getElementById('btnCloseAgent');
     toggleBtn     = document.getElementById(p + 'BtnToggleAgent') || document.getElementById(p + 'btnToggleAgent') || document.getElementById('btnToggleAgent');
-    panelTitleEl  = document.getElementById(p + 'AgentPanelTitle') || document.getElementById(p + 'agentPanelTitle') || document.getElementById('agentPanelTitle');
+    panelTitleEl  = document.getElementById(p + 'AgentPanelTitle') || document.getElementById(p + 'agentPanelTitle') || document.getElementById(p + 'AgentTitle') || document.getElementById(p + 'agentTitle') || document.getElementById('agentPanelTitle');
     clearBtn      = document.getElementById(p + 'BtnClearAgent') || document.getElementById(p + 'btnClearAgent') || document.getElementById('btnClearAgent');
+    // Re-bind backend select handler (may change after prefix update, e.g. on preview page)
+    if (backendSelect) {
+      backendSelect.onchange = function () {
+        var bm = backendSelect.value;
+        if (bm) switchBackend(bm);
+      };
+    }
   }
   _resolveDom('');  // default: main page IDs
 
@@ -57,6 +68,7 @@
   let ws = null;
   let wsUrl = '';
   let panelWidth = 0;
+  const AGENT_PANEL_WIDTH = 750; // fixed: ~86 cols PTY at 14px monospace, matches terminal
   let collapseTimer = null;
   let animatingOut = false; // true during slide-out animation
   let currentRootId = '';
@@ -90,56 +102,21 @@
     const sidebarHidden = sidebar && (sidebar.classList.contains('hidden') || getComputedStyle(sidebar).display === 'none');
     const lW = sidebarHidden ? '0px' : '240px';
     const hidden = panel.classList.contains('hidden');
-    if (!panelWidth) panelWidth = Math.min(Math.floor(window.innerWidth * 0.45), 800);
+    panelWidth = AGENT_PANEL_WIDTH;
     if (hidden && !animatingOut && !forceExpand) {
       // Collapsed — no panel visible
       content.style.gridTemplateColumns = lW + ' 1fr 0px 0px';
       if (resizeHandle) resizeHandle.classList.add('hidden');
     } else {
-      // Panel visible or animating out — keep column width
-      content.style.gridTemplateColumns = lW + ' 1fr 5px ' + panelWidth + 'px';
-      if (resizeHandle) resizeHandle.classList.remove('hidden');
+      // Panel visible or animating out — fixed width, hide resize handle
+      content.style.gridTemplateColumns = lW + ' 1fr 5px ' + AGENT_PANEL_WIDTH + 'px';
+      if (resizeHandle) resizeHandle.classList.add('hidden');
     }
   }
 
-  // --- Resize drag ---
-  let dragStartX = 0;
-  let dragStartWidth = 0;
-
-  function onResizeMouseDown(e) {
-    e.preventDefault();
-    dragStartX = e.clientX;
-    dragStartWidth = panelWidth;
-    resizeHandle.classList.add('active');
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', onResizeMouseMove);
-    document.addEventListener('mouseup', onResizeMouseUp);
-  }
-
-  function onResizeMouseMove(e) {
-    const delta = dragStartX - e.clientX;
-    const content = document.querySelector('.content');
-    if (!content) return;
-    panelWidth = Math.max(420, Math.min(900, dragStartWidth + delta));
-    const sb = document.getElementById('sidebar');
-    const sbHidden = sb && (sb.classList.contains('hidden') || getComputedStyle(sb).display === 'none');
-    const lW = sbHidden ? '0px' : '240px';
-    content.style.gridTemplateColumns = lW + ' 1fr 5px ' + panelWidth + 'px';
-    if (fitAddon) { try { fitAddon.fit(); } catch (_) {} }
-  }
-
-  function onResizeMouseUp() {
-    resizeHandle.classList.remove('active');
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-    document.removeEventListener('mousemove', onResizeMouseMove);
-    document.removeEventListener('mouseup', onResizeMouseUp);
-    _flushResize();
-  }
-
+  // --- Resize drag (disabled: agent panel has fixed width for PTY) ---
   if (resizeHandle) {
-    resizeHandle.addEventListener('mousedown', onResizeMouseDown);
+    resizeHandle.addEventListener('mousedown', function(e) { e.preventDefault(); });
   }
 
   // --- View mode switching ---
@@ -183,14 +160,20 @@
     document.body.removeChild(_measureSpan);
     if (!(CHAR_W > 4 && CHAR_W < 16)) CHAR_W = 8.4;
     var CHAR_H = 19.6;
-    var containerW = xtermContainer.clientWidth || 600;
-    var containerH = xtermContainer.clientHeight || 400;
+    // Guard against tiny dimensions during CSS transitions — the panel
+    // slides in with translate(), and the container can report ~4px
+    // before the animation finishes.  Treat <50px as invalid.
+    var rawW = xtermContainer.clientWidth;
+    var rawH = xtermContainer.clientHeight;
+    var containerW = (rawW != null && rawW > 50) ? rawW : 600;
+    var containerH = (rawH != null && rawH > 50) ? rawH : 400;
     var usableW = Math.max(100, containerW - 12 - 6);
     var usableH = Math.max(100, containerH - 8);
     var estimatedCols = Math.max(40, Math.floor(usableW / CHAR_W));
     var estimatedRows = Math.max(10, Math.floor(usableH / CHAR_H));
 
-    xlog('init', 'container=' + containerW + 'x' + containerH +
+    xlog('init', 'raw=' + rawW + 'x' + rawH +
+      ' container=' + containerW + 'x' + containerH +
       ' usable=' + Math.round(usableW) + 'x' + Math.round(usableH) +
       ' estimated cols=' + estimatedCols + ' rows=' + estimatedRows);
 
@@ -208,6 +191,8 @@
       allowProposedApi: true, scrollback: 5000, cols: estimatedCols, rows: estimatedRows,
     });
 
+    // Save estimated dimensions BEFORE FitAddon.fit() potentially shrinks
+    // them to match the animating container (see guard above).
     window._agentInitCols = estimatedCols;
     window._agentInitRows = estimatedRows;
 
@@ -223,9 +208,14 @@
     }
 
     term.open(xtermContainer);
-    if (fitAddon) {
+    // Defer FitAddon.fit() — during slide-in transition the container
+    // may report a tiny width (4px).  The ResizeObserver + font-ready
+    // callbacks handle the real fit after layout settles.
+    if (fitAddon && rawW > 200) {
       try { fitAddon.fit(); } catch (_) {}
       if (term) { try { term.refresh(0, term.rows - 1); } catch (_) {} }
+    } else if (fitAddon) {
+      xlog('init', 'skipping immediate fit — container too narrow (' + rawW + 'px), waiting for layout');
     }
     xlog('init', 'term.open() done — term.element=' + (!!term.element) + ' term.textarea=' + (!!term.textarea));
 
@@ -258,6 +248,9 @@
     // Fit after layout (with font-ready guard)
     function doFit(label) {
       if (panel.classList.contains('hidden') || !fitAddon) return;
+      // Skip fit during slide-in transition — container can report ~4px
+      var rw = xtermContainer.clientWidth;
+      if (rw < 50) { xlog('fit', (label||'doFit') + ' skipped — container too narrow (' + rw + 'px)'); return; }
       var before = term ? { rows: term.rows, cols: term.cols } : null;
       xlog('fit', (label || 'doFit') + ' container=' + JSON.stringify(rectJson(xtermContainer)) + ' before=' + JSON.stringify(before));
       try { fitAddon.fit(); } catch (e) { xlog('fit', 'ERROR', e); }
@@ -300,9 +293,7 @@
           _roDebounce = null;
           var r = entries[0] && entries[0].contentRect;
           xlog('resize-observer', 'fired container=' + (r ? Math.round(r.width) + 'x' + Math.round(r.height) : '?') + ' hidden=' + panel.classList.contains('hidden'));
-          if (fitAddon && !panel.classList.contains('hidden')) {
-            try { fitAddon.fit(); } catch (_) {}
-          }
+          doFit('resize-observer');
         }, 200);
       });
       termResizeObserver.observe(xtermContainer);
@@ -312,10 +303,6 @@
     // Data / resize forward to WebSocket
     term.onData(function (data) {
       xlog('data', 'len=' + data.length + ' preview=' + JSON.stringify(data.slice(0, 40)) + ' ws=' + (ws ? ws.readyState : 'null'));
-      if (data === '\r' || data === '\n') {
-        if (ws && ws.readyState === WebSocket.OPEN) { ws.send(data); }
-        return;
-      }
       if (ws && ws.readyState === WebSocket.OPEN) { ws.send(data); }
     });
 
@@ -411,10 +398,18 @@
     }
 
     if (type === 'error') {
-      var err = document.createElement('div');
-      err.className = 'agent-chat-error';
-      err.textContent = '✕ ' + (msg.text || 'Unknown error');
-      chatMessages.appendChild(err);
+      // Replace pending '...' placeholder bubble if present
+      if (chatBufEl) {
+        chatBufEl.textContent = '✕ ' + (msg.text || 'Unknown error');
+        chatBufEl.className = 'agent-chat-msg agent-chat-error';
+        chatBufEl = null;
+        chatBuf = '';
+      } else {
+        var err = document.createElement('div');
+        err.className = 'agent-chat-error';
+        err.textContent = '✕ ' + (msg.text || 'Unknown error');
+        chatMessages.appendChild(err);
+      }
       chatMessages.scrollTop = chatMessages.scrollHeight;
       return;
     }
@@ -470,8 +465,16 @@
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
     if (!wsUrl) return;
 
-    var initCols = (term && term.cols) || window._agentInitCols || 80;
-    var initRows = (term && term.rows) || window._agentInitRows || 24;
+    // Prefer saved init dimensions (pre-fit) over live term.cols/rows
+    // which may have been shrunk by FitAddon during a CSS transition.
+    var initCols = window._agentInitCols;
+    var initRows = window._agentInitRows;
+    if (!initCols || initCols < 10) {
+      initCols = (term && term.cols && term.cols >= 10) ? term.cols : 80;
+    }
+    if (!initRows || initRows < 5) {
+      initRows = (term && term.rows && term.rows >= 5) ? term.rows : 24;
+    }
 
     var url = wsUrl +
       '?root=' + encodeURIComponent(currentRootId || '') +
@@ -511,6 +514,14 @@
         var msg = JSON.parse(e.data);
         if (msg.type === 'session' && msg.key) {
           if (panelTitleEl) panelTitleEl.textContent = msg.key;
+          // Write session info to terminal for PTY backends (claude/codex)
+          if (isPtyBackend() && term) {
+            if (currentSessionKey && msg.key === currentSessionKey) {
+              term.writeln('\r\n\x1b[1;36m⟳ 已重连会话: ' + msg.key + '\x1b[0m');
+            } else {
+              term.writeln('\x1b[1;36m📋 会话: ' + msg.key + '\x1b[0m');
+            }
+          }
           if (currentSessionKey && msg.key !== currentSessionKey) {
             xlog('session', 'key changed: ' + currentSessionKey + ' -> ' + msg.key);
             currentSessionKey = msg.key;
@@ -543,6 +554,13 @@
         term.writeln('\r\n\x1b[1;33m⚠ 连接已断开\x1b[0m');
       }
       if (backendMode === 'openclaw') {
+        // Replace pending '...' placeholder if present
+        if (chatBufEl) {
+          chatBufEl.textContent = '⚠ 连接已断开，正在重连...';
+          chatBufEl.className = 'agent-chat-msg agent-chat-error';
+          chatBufEl = null;
+          chatBuf = '';
+        }
         showChatStatus('⚠ 连接已断开，正在重连...', 'error');
       }
       ws = null;
@@ -551,12 +569,8 @@
 
     ws.onerror = function () {
       xlog('ws', 'ERROR');
-      if (isPtyBackend() && term) {
-        term.writeln('\r\n\x1b[1;31m✕ 连接失败\x1b[0m');
-      }
-      if (backendMode === 'openclaw') {
-        showChatStatus('✕ 连接失败', 'error');
-      }
+      // onclose always fires after onerror and handles reconnect messaging;
+      // avoid duplicate error messages in the terminal / chat view.
     };
   }
 
@@ -629,12 +643,9 @@
     if (_winResizeDebounce) clearTimeout(_winResizeDebounce);
     _winResizeDebounce = setTimeout(function () {
       _winResizeDebounce = null;
-      if (fitAddon && !panel.classList.contains('hidden')) {
-        try { fitAddon.fit(); } catch (_) {}
-      }
+      doFit('win-resize');
     }, 200);
   });
-
   // --- Close button ---
   if (closeBtn) {
     closeBtn.addEventListener('click', function () { window.Agent.close(); });
@@ -692,8 +703,14 @@
     }
     currentSessionKey = '';
 
+    // Dispose old terminal before creating a new one
+    if (term) {
+      try { term.dispose(); } catch (_) {}
+      term = null;
+    }
+    if (xtermContainer) xtermContainer.innerHTML = '';
+
     // Clear terminal display
-    if (term) { try { term.clear(); } catch (_) {} }
     if (chatMessages) { chatMessages.innerHTML = ''; }
     chatBuf = ''; chatBufEl = null; chatStatusEl = null;
 
@@ -731,14 +748,10 @@
     }, 200);
   }
 
-  if (backendSelect) {
-    backendSelect.addEventListener('change', function () {
-      switchBackend(backendSelect.value);
-    });
-  }
-
   // --- Public API ---
   window.Agent = {
+    XTERM_CDN_BASE: XTERM_CDN_BASE,
+
     init: function (config) {
       if (config.domPrefix) { _resolveDom(config.domPrefix); }
       wsUrl = config.wsUrl || '';

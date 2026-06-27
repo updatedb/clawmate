@@ -82,7 +82,7 @@ def _session_key(root: str, dir_: str = "", backend: str = "claude") -> str:
     return f"{backend}:{base}"
 
 
-def _resolve_session_cwd(root: str, dir_: str = "") -> str:
+def resolve_session_cwd(root: str, dir_: str = "") -> str:
     """确定 session 的工作目录。有 .clawmate marker → marker 所在目录，无 → root 目录。"""
     root_path = _resolve_root_dir(root)
     if not root_path:
@@ -246,6 +246,73 @@ def _find_codex_binary() -> str:
         os.path.expanduser("~/.npm-global/bin/codex"),
         os.path.expanduser("~/.local/bin/codex"),
     ])
+
+
+def spawn_background_agent(
+    message: str,
+    cwd: str,
+    backend: str = "claude",
+    extra_env: dict[str, str] | None = None,
+) -> bool:
+    """Spawn a one-shot non-interactive agent process for feedback execution.
+
+    Uses ``claude -p`` / ``codex -p`` (non-interactive mode).  The prompt
+    is piped via stdin to avoid ARG_MAX limits.  Runs in a daemon thread;
+    fire-and-forget — the process communicates results back via the
+    batch-update HTTP API embedded in *message*.
+
+    Returns True if the process started, False if the binary was not found.
+    """
+    import subprocess
+    import threading
+
+    try:
+        if backend == "codex":
+            binary = _find_codex_binary()
+        else:
+            binary = _find_claude_binary()
+    except RuntimeError:
+        logger.warning(
+            "[bg-agent] %s binary not found, cannot spawn background process", backend
+        )
+        return False
+
+    env = os.environ.copy()
+    if backend == "claude":
+        env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
+    if extra_env:
+        env.update(extra_env)
+
+    args = [binary, "-p"]
+    if backend == "claude":
+        args.append("--dangerously-skip-permissions")
+
+    def _run():
+        try:
+            proc = subprocess.Popen(
+                args,
+                cwd=cwd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env=env,
+                start_new_session=True,
+            )
+            # Pipe prompt via stdin — no ARG_MAX limit
+            try:
+                proc.stdin.write(message.encode())
+                proc.stdin.close()
+            except (BrokenPipeError, OSError):
+                pass
+            logger.info(
+                "[bg-agent] spawned pid=%d backend=%s cwd=%s msg_len=%d",
+                proc.pid, backend, cwd, len(message),
+            )
+        except Exception as e:
+            logger.warning("[bg-agent] spawn failed: %s", e)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return True
 
 
 # --- PTY agent backends (Claude, Codex) ---
@@ -506,6 +573,98 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
 
 # --- OpenClaw backend ---
 
+async def _connect_openclaw(oc_url: str, oc_token: str):
+    """Connect and authenticate to the OpenClaw Gateway.
+
+    Tries localhost first (Gateway auto-grants scopes to local clients),
+    then the configured URL.  Each URL is tried for BOTH connection AND
+    authentication; if auth fails we try the next URL instead of giving up.
+
+    Returns (oc_ws, hello, req_id) on success, or (None, error_text, 0) on failure.
+    """
+    try_urls = []
+    local_url = "ws://127.0.0.1:18789"
+    if oc_url != local_url:
+        try_urls.append(local_url)
+    try_urls.append(oc_url)
+
+    oc_ws = None
+    req_id = 0
+    last_auth_error = None
+
+    for url in try_urls:
+        if oc_ws is not None:
+            try:
+                await oc_ws.close()
+            except Exception:
+                pass
+            oc_ws = None
+
+        # Connect
+        try:
+            oc_ws = await asyncio.wait_for(
+                websockets.connect(url, ping_interval=30, ping_timeout=60),
+                timeout=5,
+            )
+        except Exception:
+            continue
+
+        # Handshake
+        try:
+            raw = await asyncio.wait_for(oc_ws.recv(), timeout=5)
+            challenge = json.loads(raw)
+            if challenge.get("event") != "connect.challenge":
+                last_auth_error = "Unexpected OpenClaw handshake"
+                continue
+        except Exception as e:
+            last_auth_error = f"Handshake failed: {e}"
+            continue
+
+        # Authenticate
+        req_id += 1
+        await oc_ws.send(json.dumps({
+            "type": "req", "id": str(req_id), "method": "connect",
+            "params": {
+                "minProtocol": 4, "maxProtocol": 4,
+                "client": {"id": "gateway-client", "version": "1.0.0", "platform": "linux", "mode": "backend"},
+                "role": "operator",
+                "scopes": ["operator.read", "operator.write", "operator.admin"],
+                "auth": {"token": oc_token},
+                "locale": "en-US",
+                "userAgent": "clawmate-agent/1.0.0",
+            },
+        }))
+
+        try:
+            hello_raw = await asyncio.wait_for(oc_ws.recv(), timeout=5)
+            hello = json.loads(hello_raw)
+        except Exception as e:
+            last_auth_error = f"Auth response failed: {e}"
+            continue
+
+        if hello.get("ok"):
+            return (oc_ws, hello, req_id)
+
+        err = hello.get("error", {}).get("message", "unknown")
+        last_auth_error = err
+
+    # All URLs failed
+    error_text = (
+        f"✕ OpenClaw 鉴权失败: {last_auth_error}\r\n"
+        f"  已尝试 {', '.join(try_urls)}，均未通过鉴权。\r\n"
+        f"  请确认 openclaw_token 有效，且 Gateway 已授予 operator.write 权限。"
+    ) if oc_ws is not None else (
+        f"✕ Cannot connect to OpenClaw gateway\r\n"
+        f"  Tried: {', '.join(try_urls)}"
+    )
+    if oc_ws is not None:
+        try:
+            await oc_ws.close()
+        except Exception:
+            pass
+    return (None, error_text, 0)
+
+
 async def _openclaw_backend(
     ws: WebSocket,
     cwd: str,
@@ -531,100 +690,17 @@ async def _openclaw_backend(
         )
         return
 
-    # Try URLs in order — localhost first (Gateway trusts it, grants full scopes),
-    # then configured URL as fallback.  Each URL is tried for BOTH connection
-    # AND authentication; if auth fails we try the next URL instead of giving up.
-    try_urls = []
-    # Always try localhost first — Gateway auto-grants scopes to local clients
-    local_url = "ws://127.0.0.1:18789"
-    if oc_url != local_url:
-        try_urls.append(local_url)
-    try_urls.append(oc_url)
-
-    oc_ws = None
-    req_id = 0
-    line_buf = ""
-    last_auth_error = None
-
-    for url in try_urls:
-        # Close previous failed attempt
-        if oc_ws is not None:
-            try: await oc_ws.close()
-            except Exception: pass
-            oc_ws = None
-
-        # --- Connect ---
-        try:
-            oc_ws = await asyncio.wait_for(
-                websockets.connect(url, ping_interval=30, ping_timeout=60),
-                timeout=5,
-            )
-        except Exception:
-            continue
-
-        # --- Handshake ---
-        try:
-            raw = await asyncio.wait_for(oc_ws.recv(), timeout=5)
-            challenge = json.loads(raw)
-            if challenge.get("event") != "connect.challenge":
-                last_auth_error = "Unexpected OpenClaw handshake"
-                continue
-        except Exception as e:
-            last_auth_error = f"Handshake failed: {e}"
-            continue
-
-        # --- Authenticate ---
-        req_id += 1
-        await oc_ws.send(json.dumps({
-            "type": "req", "id": str(req_id), "method": "connect",
-            "params": {
-                "minProtocol": 4, "maxProtocol": 4,
-                "client": {"id": "gateway-client", "version": "1.0.0", "platform": "linux", "mode": "backend"},
-                "role": "operator",
-                "scopes": ["operator.read", "operator.write", "operator.admin"],
-                "auth": {"token": oc_token},
-                "locale": "en-US",
-                "userAgent": "clawmate-agent/1.0.0",
-            },
-        }))
-
-        try:
-            hello_raw = await asyncio.wait_for(oc_ws.recv(), timeout=5)
-            hello = json.loads(hello_raw)
-        except Exception as e:
-            last_auth_error = f"Auth response failed: {e}"
-            continue
-
-        if hello.get("ok"):
-            conn_url = url
-            last_auth_error = None
-            break  # success
-
-        err = hello.get("error", {}).get("message", "unknown")
-        last_auth_error = err
-        # If scope error on localhost, unlikely but try next URL
-        # If on remote URL, localhost might work — continue loop
-
+    oc_ws, hello_or_error, req_id = await _connect_openclaw(oc_url, oc_token)
     if oc_ws is None:
-        await ws.send_text(
-            f"\x1b[1;31m✕ Cannot connect to OpenClaw gateway\x1b[0m\r\n"
-            f"\x1b[2m  Tried: {', '.join(try_urls)}\x1b[0m\r\n"
-        )
-        return
-
-    if last_auth_error is not None:
         await ws.send_text(json.dumps({
             "type": "error",
-            "text": (
-                f"✕ OpenClaw 鉴权失败: {last_auth_error}\r\n"
-                f"  已尝试 {', '.join(try_urls)}，均未通过鉴权。\r\n"
-                f"  请确认 openclaw_token 有效，且 Gateway 已授予 operator.write 权限。"
-            ),
+            "text": hello_or_error,
         }, ensure_ascii=False))
-        try: await oc_ws.close()
-        except Exception: pass
         return
 
+    hello = hello_or_error
+
+    line_buf = ""
     async def oc_send(method, params=None):
         nonlocal req_id
         req_id += 1
@@ -639,7 +715,7 @@ async def _openclaw_backend(
 
         # Save device token if returned (pairing approved)
         new_device_token = hello.get("payload", {}).get("auth", {}).get("deviceToken", "")
-        if new_device_token and new_device_token != device_token:
+        if new_device_token and new_device_token != agent_cfg.openclaw_device_token:
             await ws.send_text(json.dumps({
                 "type": "info",
                 "text": f"Device paired! Token saved. Add to config.json: agent.openclaw_device_token"
@@ -873,7 +949,7 @@ async def agent_terminal(
     else:
         backend = config_backend
 
-    cwd = _resolve_session_cwd(root, dir)
+    cwd = resolve_session_cwd(root, dir)
     key = _session_key(root, dir, backend)
 
     # Send session key to frontend so it can display it

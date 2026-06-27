@@ -389,6 +389,7 @@ button svg, .btn svg, a svg {
   background: var(--bg-primary);
   translate: 0;
   transition: translate var(--duration-slow) var(--ease-out);
+  grid-column: 4; /* always last column — grid auto-placement shifts on hidden siblings */
 }
 .agent-panel.hidden {
   translate: 100%;

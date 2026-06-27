@@ -2146,7 +2146,7 @@
   // --- Right panel resize ---
   const resizeHandle = document.getElementById('previewResizeHandle');
   let rightPanelWidth = 380;   // feedback panel default
-  let agentPanelWidth = Math.min(Math.floor(window.innerWidth * 0.45), 800); // agent panel default
+  const AGENT_PANEL_WIDTH = 750; // fixed: ~86 cols PTY at 14px monospace, matches terminal
   let dragStartX = 0;
   let dragStartWidth = 0;
 
@@ -2165,8 +2165,9 @@
       threeCol.style.gridTemplateColumns = `${lW} 1fr 0px 0px`;
       if (resizeHandle) resizeHandle.classList.add('hidden');
     } else {
-      if (resizeHandle) resizeHandle.classList.remove('hidden');
-      var panelW = !agentHidden ? agentPanelWidth : rightPanelWidth;
+      // Hide resize handle when agent panel (fixed width) is open
+      if (resizeHandle) resizeHandle.classList.toggle('hidden', !agentHidden);
+      var panelW = !agentHidden ? AGENT_PANEL_WIDTH : rightPanelWidth;
       threeCol.style.gridTemplateColumns = `${lW} 1fr 5px ${panelW}px`;
     }
   }
@@ -2247,11 +2248,12 @@
 
   if (resizeHandle) {
     resizeHandle.addEventListener('mousedown', function (e) {
+      // Agent panel has fixed width — resize only applies to feedback panel
+      var agentOpen = agentPanel && !agentPanel.classList.contains('hidden');
+      if (agentOpen) return;
       e.preventDefault();
       dragStartX = e.clientX;
-      // Track which panel is open — set drag width accordingly
-      var agentOpen = agentPanel && !agentPanel.classList.contains('hidden');
-      dragStartWidth = agentOpen ? agentPanelWidth : rightPanelWidth;
+      dragStartWidth = rightPanelWidth;
       resizeHandle.classList.add('active');
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
@@ -2262,12 +2264,7 @@
     function onResizeMove(e) {
       const delta = dragStartX - e.clientX;
       var newWidth = Math.max(420, Math.min(900, dragStartWidth + delta));
-      var agentOpen = agentPanel && !agentPanel.classList.contains('hidden');
-      if (agentOpen) {
-        agentPanelWidth = newWidth;
-      } else {
-        rightPanelWidth = newWidth;
-      }
+      rightPanelWidth = newWidth;
       threeCol.style.gridTemplateColumns =
         (leftSidebar.classList.contains('hidden') ? '0px' : '240px') +
         ' 1fr 5px ' + newWidth + 'px';
@@ -5615,6 +5612,9 @@
     } catch (_) {}
   }
 
+  // xterm.js version — keep in sync with agent.js XTERM_VERSION + index.html <link>/<script>
+  var XTERM_CDN = 'https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0';
+
   /** Lazy-load xterm.js + addons + agent.js (only on first agent open) */
   function _loadAgentLibs() {
     return new Promise(function(resolve, reject) {
@@ -5630,11 +5630,11 @@
       // xterm CSS
       var cssLink = document.createElement('link');
       cssLink.rel = 'stylesheet';
-      cssLink.href = 'https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css';
+      cssLink.href = XTERM_CDN + '/css/xterm.min.css';
       document.head.appendChild(cssLink);
 
       var scripts = [
-        'https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js',
+        XTERM_CDN + '/lib/xterm.min.js',
         './vendor/addon-fit.min.js?v=20260622',
         './vendor/addon-webgl.min.js?v=20260622',
         './js/agent.js?v=20260624',
@@ -5650,7 +5650,10 @@
         var script = document.createElement('script');
         script.src = scripts[idx];
         script.onload = function() { loadNext(idx + 1); };
-        script.onerror = function() { reject(new Error('Failed to load: ' + scripts[idx])); };
+        script.onerror = function() {
+          _agentLibsLoading = false;  // reset so retry works
+          reject(new Error('Failed to load: ' + scripts[idx]));
+        };
         document.head.appendChild(script);
       }
       loadNext(0);
