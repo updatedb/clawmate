@@ -5641,7 +5641,7 @@
         XTERM_CDN + '/lib/xterm.min.js',
         './vendor/addon-fit.min.js?v=20260622',
         './vendor/addon-webgl.min.js?v=20260622',
-        './js/agent.js?v=20260624',
+        './js/agent.js?v=20260628b',
       ];
 
       function loadNext(idx) {
