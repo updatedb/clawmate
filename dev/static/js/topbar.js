@@ -29,7 +29,7 @@
   function updateThemeButton() {
     var btn = document.getElementById('themeToggle');
     if (!btn) return;
-    var icons = { auto: 'sun', dark: 'moon', light: 'sun' };
+    var icons = { auto: 'sun-moon', dark: 'moon', light: 'sun' };
     var titles = { auto: '自动主题', dark: '深色模式', light: '浅色模式' };
     var icon = icons[currentTheme] || 'sun';
     btn.title = titles[currentTheme] || '切换主题';
