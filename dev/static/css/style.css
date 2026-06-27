@@ -410,10 +410,6 @@ button svg, .btn svg, a svg {
   background: var(--accent-light); color: var(--accent); text-transform: uppercase;
   white-space: nowrap;
 }
-.agent-panel-root {
-  font-size: 11px; color: var(--text-muted); white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0;
-}
 .agent-panel-close {
   background: none; border: none; color: var(--text-muted); cursor: pointer;
   font-size: 16px; padding: 2px 6px; border-radius: var(--radius-sm); line-height: 1;

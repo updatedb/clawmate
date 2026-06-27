@@ -12,7 +12,7 @@
 
   // --- DOM refs (re-initializable with prefix for reuse in preview page) ---
   let _domPrefix = '';
-  let panel, resizeHandle, xtermContainer, chatView, chatMessages, chatInput, chatSendBtn, badgeEl, rootEl, closeBtn, toggleBtn;
+  let panel, resizeHandle, xtermContainer, chatView, chatMessages, chatInput, chatSendBtn, badgeEl, closeBtn, toggleBtn;
   let panelTitleEl;
   // Resize tracking shared between createTerminal & disconnectWs
   var _lastResizeSent = { cols: 0, rows: 0 };
@@ -30,7 +30,6 @@
     chatInput     = document.getElementById(p + 'AgentChatInput') || document.getElementById(p + 'agentChatInput') || document.getElementById('agentChatInput');
     chatSendBtn   = document.getElementById(p + 'AgentChatSend') || document.getElementById(p + 'agentChatSend') || document.getElementById('agentChatSend');
     badgeEl       = document.getElementById(p + 'AgentBackendBadge') || document.getElementById(p + 'agentBackendBadge') || document.getElementById('agentBackendBadge');
-    rootEl        = document.getElementById(p + 'AgentPanelRoot') || document.getElementById(p + 'agentPanelRoot') || document.getElementById('agentPanelRoot');
     closeBtn      = document.getElementById(p + 'BtnCloseAgent') || document.getElementById(p + 'btnCloseAgent') || document.getElementById('btnCloseAgent');
     toggleBtn     = document.getElementById(p + 'BtnToggleAgent') || document.getElementById(p + 'btnToggleAgent') || document.getElementById('btnToggleAgent');
     panelTitleEl  = document.getElementById(p + 'AgentPanelTitle') || document.getElementById(p + 'agentPanelTitle') || document.getElementById('agentPanelTitle');
@@ -501,8 +500,8 @@
 
     if (type === 'info') {
       // Fallback: extract sessionKey from OpenClaw info message
-      if (msg.sessionKey && rootEl && !rootEl.textContent) {
-        rootEl.textContent = msg.sessionKey;
+      if (msg.sessionKey && panelTitleEl && panelTitleEl.textContent === 'Agent') {
+        panelTitleEl.textContent = msg.sessionKey;
       }
       if (msg.sessionKey && panelTitleEl) {
         panelTitleEl.textContent = msg.sessionKey;
@@ -627,7 +626,6 @@
       try {
         var msg = JSON.parse(e.data);
         if (msg.type === 'session' && msg.key) {
-          if (rootEl) rootEl.textContent = msg.key;
           if (panelTitleEl) panelTitleEl.textContent = msg.key;
           // Detect session key change — skip initial connection (currentSessionKey empty)
           if (currentSessionKey && msg.key !== currentSessionKey) {
