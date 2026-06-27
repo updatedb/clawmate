@@ -124,7 +124,7 @@
     const sbHidden = sb && (sb.classList.contains('hidden') || getComputedStyle(sb).display === 'none');
     const lW = sbHidden ? '0px' : '240px';
     content.style.gridTemplateColumns = lW + ' 1fr 5px ' + panelWidth + 'px';
-    if (fitAddon) { try { fitAddon.fit(); } catch (_) {} }
+    applyScale();
   }
 
   function onResizeMouseUp() {
@@ -133,8 +133,6 @@
     document.body.style.userSelect = '';
     document.removeEventListener('mousemove', onResizeMouseMove);
     document.removeEventListener('mouseup', onResizeMouseUp);
-    // Flush final resize dimensions to backend
-    _flushResize();
   }
 
   if (resizeHandle) {
@@ -172,29 +170,15 @@
     }
     const cursor = '#14b8a6';
 
-    // ── Estimate cols/rows from container before Terminal creation ──
-    // This avoids the hardcoded 100×30 → fit mismatch that garbles initial output.
-    // Measure actual character width instead of hardcoded 8.4px
-    var fontFamily = '"JetBrains Mono", "Cascadia Code", "Fira Code", "Consolas", "SF Mono", "DejaVu Sans Mono", monospace';
-    var _measureSpan = document.createElement('span');
-    _measureSpan.style.cssText = 'position:absolute;visibility:hidden;font-family:' + fontFamily + ';font-size:14px;white-space:pre;';
-    _measureSpan.textContent = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    document.body.appendChild(_measureSpan);
-    var CHAR_W = _measureSpan.offsetWidth / 62;
-    document.body.removeChild(_measureSpan);
-    if (!(CHAR_W > 4 && CHAR_W < 16)) CHAR_W = 8.4; // fallback if measurement fails
+    // ── Fixed 80-column terminal + CSS scale to fit panel width ──
+    // PTY always sees 80 cols — output format never changes.
+    // Visual adaptation by CSS transform:scale on the container.
+    var FIXED_COLS = 80;
+    var containerH = xtermContainer.parentElement.clientHeight || 400; // wrapper height
     var CHAR_H = 19.6;  // fontSize * lineHeight = 14 * 1.4
-    var containerW = xtermContainer.clientWidth || 600;
-    var containerH = xtermContainer.clientHeight || 400;
-    var usableW = Math.max(100, containerW - 12 - 6);
-    var usableH = Math.max(100, containerH - 8);
-    var estimatedCols = Math.max(40, Math.floor(usableW / CHAR_W));
-    var estimatedRows = Math.max(10, Math.floor(usableH / CHAR_H));
+    var estimatedRows = Math.max(10, Math.floor((containerH - 8) / CHAR_H));
 
-    xlog('init', 'container=' + containerW + 'x' + containerH +
-      ' usable=' + Math.round(usableW) + 'x' + Math.round(usableH) +
-      ' estimated cols=' + estimatedCols + ' rows=' + estimatedRows);
-    xlog('init', 'theme bg=' + bg + ' fg=' + fg + ' cursor=' + cursor);
+    xlog('init', 'cols=' + FIXED_COLS + ' rows=' + estimatedRows + ' theme bg=' + bg + ' fg=' + fg);
 
     term = new Terminal({
       cursorBlink: true, cursorStyle: 'bar',
@@ -210,34 +194,56 @@
         selectionForeground: selFg,
         selectionInactiveBackground: selInactiveBg,
       },
-      allowProposedApi: true, scrollback: 5000, cols: estimatedCols, rows: estimatedRows,
+      allowProposedApi: true, scrollback: 5000, cols: FIXED_COLS, rows: estimatedRows,
     });
 
-    // Store estimated dimensions so connectWs() can pass them to the backend
-    window._agentInitCols = estimatedCols;
+    // Fixed dimensions — PTY never resizes
+    window._agentInitCols = FIXED_COLS;
     window._agentInitRows = estimatedRows;
 
+    // FitAddon not needed for resizing; kept only for WebglAddon loading
     if (typeof FitAddon !== 'undefined') {
       fitAddon = new FitAddon.FitAddon();
       term.loadAddon(fitAddon);
-      xlog('init', 'FitAddon loaded');
-    } else {
-      xlog('init', 'FitAddon NOT available — terminal will NOT auto-resize');
     }
     if (typeof WebglAddon !== 'undefined') {
       try { term.loadAddon(new WebglAddon.WebglAddon()); xlog('init', 'WebglAddon loaded'); } catch (_) { xlog('init', 'WebglAddon failed', _); }
     }
 
     term.open(xtermContainer);
-    // Immediate rough fit — refined later when fonts load
-    if (fitAddon) {
-      try { fitAddon.fit(); } catch (_) {}
-      if (term) { try { term.refresh(0, term.rows - 1); } catch (_) {} }
-    }
-    xlog('init', 'term.open() done — term.element=' + (!!term.element) + ' term.textarea=' + (!!term.textarea));
-    xlog('init', 'xtermContainer rect', JSON.stringify(rectJson(xtermContainer)));
+    xlog('init', 'term.open() done');
 
-    xlog('init', 'xtermContainer rect', JSON.stringify(rectJson(xtermContainer)));
+    // ── CSS scale to fit terminal within panel width ──
+    var scaleWrapper = xtermContainer.parentElement; // .xterm-scale-wrapper
+    var _naturalWidth = 0; // set after first render
+
+    function applyScale() {
+      if (!scaleWrapper || !term) return;
+      if (!_naturalWidth) {
+        // Measure terminal's natural pixel width at 80 cols × 14px font
+        _naturalWidth = xtermContainer.scrollWidth || xtermContainer.offsetWidth || 700;
+        if (_naturalWidth < 300) _naturalWidth = 700; // sanity floor
+        xlog('scale', 'naturalWidth=' + Math.round(_naturalWidth));
+      }
+      var wrapperW = scaleWrapper.clientWidth;
+      if (wrapperW <= 0) return;
+      var usableW = Math.max(200, wrapperW - 12); // padding + scrollbar reserve
+      var scale = usableW / _naturalWidth;
+      scale = Math.max(0.35, Math.min(2.5, scale)); // clamp extreme ratios
+
+      xtermContainer.style.width = _naturalWidth + 'px';
+      xtermContainer.style.transform = 'scale(' + scale + ')';
+      // Adjust wrapper height to prevent overflow
+      var h = xtermContainer.scrollHeight || (term.rows * CHAR_H + 8);
+      scaleWrapper.style.height = Math.ceil(h * scale) + 'px';
+
+      xlog('scale', 'wrapper=' + Math.round(wrapperW) + ' scale=' + scale.toFixed(3) + ' natural=' + Math.round(_naturalWidth));
+    }
+
+    // Measure after xterm has rendered its first frame
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { applyScale(); });
+    });
 
     term.attachCustomKeyEventHandler(function (e) {
       if (e.type === 'keydown') {
@@ -305,72 +311,34 @@
       xlog('init', 'WARNING: term.textarea is null — IME recovery disabled');
     }
 
-    // --- Fit after layout (with font-ready guard) ---
-    function doFit(label) {
-      if (panel.classList.contains('hidden') || !fitAddon) return;
-      var before = term ? { rows: term.rows, cols: term.cols } : null;
-      xlog('fit', (label || 'doFit') + ' container=' + JSON.stringify(rectJson(xtermContainer)) + ' before=' + JSON.stringify(before));
-      try { fitAddon.fit(); } catch (e) { xlog('fit', 'ERROR', e); }
-      if (term) {
-        var deltaCols = term.cols - (before ? before.cols : 0);
-        xlog('fit', 'result rows=' + term.rows + ' cols=' + term.cols +
-          ' (Δ rows:' + (term.rows - (before ? before.rows : 0)) +
-          ' cols:' + deltaCols + ')');
-        // Refresh WebGL renderer; double-rAF ensures the framebuffer
-        // reallocates at the new character-grid dimensions.
-        try { term.refresh(0, term.rows - 1); } catch (_) {}
-        requestAnimationFrame(function () {
-          try { term.refresh(0, term.rows - 1); } catch (_) {}
-        });
-      }
-    }
-
-    if (fitAddon) {
-      xlog('fit', 'waiting for fonts.ready...');
-      var fontFitted = false;
-      var fontTimer = setTimeout(function () {
-        if (!fontFitted) { fontFitted = true; doFit('font-timeout'); }
+    // Re-measure natural width after fonts load
+    if (document.fonts && document.fonts.ready) {
+      var _fontsDone = false;
+      var _fontTimer = setTimeout(function () {
+        if (!_fontsDone) { _fontsDone = true; _naturalWidth = 0; applyScale(); }
       }, 1000);
-      if (document.fonts && document.fonts.ready) {
-        document.fonts.ready.then(function () {
-          clearTimeout(fontTimer);
-          if (!fontFitted) {
-            fontFitted = true;
-            xlog('fit', 'fonts.ready resolved');
-            // Wait one rAF so the browser applies the font to layout
-            requestAnimationFrame(function () { doFit('fonts-ready'); });
-          }
-        }).catch(function () {
-          clearTimeout(fontTimer);
-          if (!fontFitted) { fontFitted = true; requestAnimationFrame(function () { requestAnimationFrame(function () { doFit('fonts-fallback'); }); }); }
-        });
-      } else {
-        // document.fonts not supported — immediate fit
-        clearTimeout(fontTimer);
-        fontFitted = true;
-        requestAnimationFrame(function () { requestAnimationFrame(function () { doFit('rAFx2'); }); });
-      }
-    } else {
-      xlog('fit', 'SKIP — fitAddon is null');
+      document.fonts.ready.then(function () {
+        clearTimeout(_fontTimer);
+        if (!_fontsDone) { _fontsDone = true; _naturalWidth = 0; applyScale(); }
+      }).catch(function () {
+        clearTimeout(_fontTimer);
+        if (!_fontsDone) { _fontsDone = true; _naturalWidth = 0; applyScale(); }
+      });
     }
 
-    // --- ResizeObserver (debounced 200ms) ---
+    // --- ResizeObserver on scale wrapper (debounced 200ms) ---
     if (typeof ResizeObserver !== 'undefined') {
       if (termResizeObserver) termResizeObserver.disconnect();
       var _roDebounce = null;
-      termResizeObserver = new ResizeObserver(function (entries) {
+      termResizeObserver = new ResizeObserver(function () {
         if (_roDebounce) clearTimeout(_roDebounce);
         _roDebounce = setTimeout(function () {
           _roDebounce = null;
-          var r = entries[0] && entries[0].contentRect;
-          xlog('resize-observer', 'fired container=' + (r ? Math.round(r.width) + 'x' + Math.round(r.height) : '?') + ' hidden=' + panel.classList.contains('hidden'));
-          if (fitAddon && !panel.classList.contains('hidden')) {
-            try { fitAddon.fit(); } catch (_) {}
-          }
+          if (!panel.classList.contains('hidden')) applyScale();
         }, 200);
       });
-      termResizeObserver.observe(xtermContainer);
-      xlog('init', 'ResizeObserver active on xtermContainer (200ms debounce)');
+      termResizeObserver.observe(scaleWrapper);
+      xlog('init', 'ResizeObserver active on scale wrapper (200ms debounce)');
     }
 
     // --- Data / resize forward to WebSocket ---
@@ -399,25 +367,11 @@
       // so any batching here directly adds to perceived input lag.
       _flushInputBatch();
     });
-    // ── Resize strategy: first immediate, then throttle 50ms, skip dupes ──
+    // ── PTY resize: cols always 80, only rows may change ──
     term.onResize(function (size) {
       xlog('resize', 'term.onResize cols=' + size.cols + ' rows=' + size.rows);
-      _scheduleResize(size.cols, size.rows);
+      _sendResize(FIXED_COLS, size.rows);
     });
-
-    function _scheduleResize(cols, rows) {
-      // Send immediately if this is the very first resize (initial sync)
-      if (_lastResizeSent.cols === 0 && _lastResizeSent.rows === 0) {
-        _sendResize(cols, rows);
-        return;
-      }
-      // Throttle rapid consecutive resizes to 50ms
-      if (_pendingResize) clearTimeout(_pendingResize);
-      _pendingResize = setTimeout(function () {
-        _pendingResize = null;
-        _sendResize(cols, rows);
-      }, 50);
-    }
 
     function _sendResize(cols, rows) {
       if (cols === _lastResizeSent.cols && rows === _lastResizeSent.rows) return;
@@ -425,12 +379,6 @@
       if (ws && ws.readyState === WebSocket.OPEN) {
         try { ws.send(JSON.stringify({ type: 'resize', cols: cols, rows: rows })); } catch (_) {}
       }
-    }
-
-    // Flush pending resize on drag end
-    function _flushResize() {
-      if (_pendingResize) { clearTimeout(_pendingResize); _pendingResize = null; }
-      if (term) { _sendResize(term.cols, term.rows); }
     }
 
     // ── Flow control: prevent xterm.js write buffer from growing unbounded ──
@@ -759,9 +707,7 @@
     if (_winResizeDebounce) clearTimeout(_winResizeDebounce);
     _winResizeDebounce = setTimeout(function () {
       _winResizeDebounce = null;
-      if (fitAddon && !panel.classList.contains('hidden')) {
-        try { fitAddon.fit(); } catch (_) {}
-      }
+      if (!panel.classList.contains('hidden')) applyScale();
     }, 200);
   });
 
@@ -837,8 +783,7 @@
             panel.removeEventListener('transitionend', onPanelTransitionEnd);
             if (!transitionFitted) {
               transitionFitted = true;
-              try { fitAddon.fit(); } catch (_) {}
-              if (term) { try { term.refresh(0, term.rows - 1); } catch (_) {} }
+              applyScale();
             }
           }
         };
@@ -848,8 +793,7 @@
           panel.removeEventListener('transitionend', onPanelTransitionEnd);
           if (!transitionFitted) {
             transitionFitted = true;
-            try { fitAddon.fit(); } catch (_) {}
-            if (term) { try { term.refresh(0, term.rows - 1); } catch (_) {} }
+            applyScale();
           }
         }, 500);
       }

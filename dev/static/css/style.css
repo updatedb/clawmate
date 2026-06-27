@@ -420,8 +420,21 @@ button svg, .btn svg, a svg {
   flex-shrink: 0; margin-left: auto;
 }
 .agent-panel-close:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+/* xterm scale wrapper: clips and provides layout space */
+.xterm-scale-wrapper {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  background: var(--xterm-bg, #1e1e2e);
+}
+.xterm-scale-wrapper > .xterm-container {
+  position: absolute;
+  top: 0; left: 0;
+  transform-origin: top left;
+  /* width/height set by JS to natural terminal dimensions */
+}
 .xterm-container {
-  flex: 1; overflow: hidden; padding: 0; position: relative;
+  overflow: hidden; padding: 0;
   background: var(--xterm-bg, #1e1e2e);
 }
 /* Agent chat view (OpenClaw backend) */
