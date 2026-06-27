@@ -1001,7 +1001,7 @@
       to { transform: rotate(360deg); }
     }
 
-    /* Mobile back button: hidden on desktop */
+    /* Mobile back button: hidden on desktop, shares topbar-btn base */
     .mobile-back-btn { display: none; }
 
     /* ===== Mobile Responsive (≤768px) ===== */
@@ -1011,14 +1011,7 @@
       .preview-app > .topbar .brand { font-size: 0; flex: none; }
       .mobile-back-btn {
         display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 32px; height: 32px;
-        color: #fff; text-decoration: none;
-        font-size: 18px; flex-shrink: 0;
-        border-radius: 6px;
       }
-      .mobile-back-btn:active { background: rgba(255,255,255,0.12); }
       .preview-topbar-title { font-size: 13px; text-align: center; }
       .topbar-btn { width: 30px; height: 30px; font-size: 13px; }
 
@@ -1047,9 +1040,7 @@
         top: 0; bottom: 0;
         z-index: 7;
         display: flex;
-        width: 280px !important;
-        min-width: 280px !important;
-        max-width: 78vw;
+        width: 100vw !important;
         padding: 48px 0 0 0 !important;
         border-width: 1px !important;
         border-style: solid;
@@ -1300,9 +1291,7 @@
         top: 0; bottom: 0; right: 0;
         z-index: 7;
         display: flex;
-        width: 280px !important;
-        min-width: 280px !important;
-        max-width: 78vw;
+        width: 100vw !important;
         padding: 48px 0 0 0 !important;
         border-left: 1px solid var(--border-color) !important;
         overflow-y: auto !important;
