@@ -254,6 +254,14 @@
             xlog('key', 'Ctrl+C (copy) key=' + e.key + ' composing=' + e.isComposing);
             return false;
           }
+          if (e.key === 'l') {
+            // Ctrl+L: clear terminal + send to PTY
+            term.clear();
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send('\x0c'); // Ctrl+L to PTY
+            }
+            return false;
+          }
         }
         // IME composition — never suppress, let xterm handle composition events
         if (e.isComposing || e.key === 'Dead' || e.key === 'Process') {
