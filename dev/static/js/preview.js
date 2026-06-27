@@ -2217,8 +2217,12 @@
     if (window.innerWidth <= 1500 && leftSidebar && !leftSidebar.classList.contains('hidden')) {
       closeLeftSidebar();
     }
+    // Snap agent panel closed instantly (no transition) to avoid overlap flicker
     if (agentPanel && !agentPanel.classList.contains('hidden')) {
+      agentPanel.style.transition = 'none';
       if (window.Agent) window.Agent.close();
+      agentPanel.offsetHeight; // force reflow
+      agentPanel.style.transition = '';
     }
     rightSidebar.style.display = 'flex';        // override global .hidden
     // Expand grid column directly while panel is still "hidden"
@@ -5673,9 +5677,13 @@
         if (window.innerWidth <= 1500 && leftSidebar && !leftSidebar.classList.contains('hidden')) {
           closeLeftSidebar();
         }
+        // Snap feedback panel closed instantly (no transition) to avoid overlap flicker
         if (rightSidebar && !rightSidebar.classList.contains('hidden')) {
+          rightSidebar.style.transition = 'none';
           _stopSidebarRefresh();
           closeRightSidebar();
+          rightSidebar.offsetHeight; // force reflow
+          rightSidebar.style.transition = '';
         }
         // Opening — lazy-load libs then init Agent
         _fetchAgentConfig().then(function() {
