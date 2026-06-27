@@ -428,8 +428,8 @@
       var btn = e.target.closest('.mermaid-zoom-btn');
       if (!btn) return;
       if (btn.dataset.zoom === 'expand') { openMermaidDialog(svg); return; }
-      if (btn.dataset.zoom === 'in') { scale = Math.min(5, scale + 0.5); }
-      else if (btn.dataset.zoom === 'out') { scale = Math.max(0.3, scale - 0.5); }
+      if (btn.dataset.zoom === 'in') { scale = Math.min(5, scale + 0.1); }
+      else if (btn.dataset.zoom === 'out') { scale = Math.max(0.3, scale - 0.1); }
       else { scale = 1; originX = 0; originY = 0; }
       applyZoom();
     });
@@ -549,8 +549,8 @@
     zoomGroup.addEventListener('click', function(e) {
       var btn = e.target.closest('.mermaid-zoom-btn');
       if (!btn) return;
-      if (btn.dataset.dzoom === 'in') { dScale = Math.min(5, dScale + 0.5); }
-      else if (btn.dataset.dzoom === 'out') { dScale = Math.max(0.3, dScale - 0.5); }
+      if (btn.dataset.dzoom === 'in') { dScale = Math.min(5, dScale + 0.1); }
+      else if (btn.dataset.dzoom === 'out') { dScale = Math.max(0.3, dScale - 0.1); }
       else { dScale = 1; dPanX = 0; dPanY = 0; }
       applyDialogZoom();
     });
@@ -1400,6 +1400,7 @@
     } else {
       // Closing sidebar
       clearHL(); hideTooltip();
+      if (_desktopPollTimer) { clearInterval(_desktopPollTimer); _desktopPollTimer = null; }
       _stopSidebarRefresh();
       closeRightSidebar();
     }
@@ -1412,6 +1413,7 @@
   document.getElementById('btnCloseRight').addEventListener('click', () => {
     clearHL();
     hideTooltip();
+    if (_desktopPollTimer) { clearInterval(_desktopPollTimer); _desktopPollTimer = null; }
     _stopSidebarRefresh();
     closeRightSidebar();
   });
@@ -5680,6 +5682,7 @@
         // Snap feedback panel closed instantly (no transition) to avoid overlap flicker
         if (rightSidebar && !rightSidebar.classList.contains('hidden')) {
           rightSidebar.style.transition = 'none';
+          if (_desktopPollTimer) { clearInterval(_desktopPollTimer); _desktopPollTimer = null; }
           _stopSidebarRefresh();
           closeRightSidebar();
           rightSidebar.offsetHeight; // force reflow
@@ -5747,6 +5750,7 @@
       if (btnToggleAgent) btnToggleAgent.classList.remove('active');
       updateGridColumns();
       _syncPanelOpenClass();
+      if (_desktopPollTimer) { clearInterval(_desktopPollTimer); _desktopPollTimer = null; }
       if (window.Agent) {
         window.Agent.close();
       }

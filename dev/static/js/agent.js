@@ -789,6 +789,7 @@
       updateGridColumns(true);
       panel.offsetHeight; // force reflow
       panel.classList.remove('hidden');
+      void panel.offsetHeight; // flush grid expansion + animation start into same frame
       panel.style.display = '';
       document.body.classList.add('agent-open');
       setTimeout(function () { if (typeof syncSidebarBtn === 'function') syncSidebarBtn(); }, 0);
