@@ -230,28 +230,24 @@
 
   function _domWrite(data) {
     if (!_domOutput || !_ansiUp) return;
+    // Strip carriage-return-only lines (progress overwrites):
+    // \r without \n means "overwrite current line". We replace the last
+    // line's content when the next chunk starts with a non-control char.
+    if (data.charCodeAt(0) === 13 && data.length < 8) return;
     var html = _ansiUp.ansi_to_html(data);
     if (!html) return;
-    // Split by newlines, update last line or append new lines
-    var parts = html.split('\n');
-    for (var i = 0; i < parts.length; i++) {
-      if (i === 0 && _domLines.length > 0) {
-        // Append to last line
-        var last = _domOutput.lastElementChild;
-        if (last && last.classList.contains('dom-line')) {
-          last.innerHTML += parts[i];
-        } else {
-          _addDomLine(parts[i]);
-        }
-      } else {
-        _addDomLine(parts[i]);
-      }
+    // ansi_up converts \n → <br/>, \r\n → <br/>. Just append as HTML.
+    var last = _domOutput.lastElementChild;
+    if (last && last.classList.contains('dom-line') && data.charCodeAt(0) !== 10) {
+      // Append to the last open line (ongoing output without a leading \n)
+      last.innerHTML += html;
+    } else {
+      _addDomLine(html);
     }
-    _domLines = [parts[parts.length - 1]];
+    _domOutput.scrollTop = _domOutput.scrollHeight;
   }
 
   function _toggleAgentMode() {
-    if (!term && _renderMode === 'xterm') return; // xterm not created yet
     var modeBtn = document.getElementById(modeBtnId);
     if (_renderMode === 'dom') {
       _renderMode = 'xterm';
@@ -260,6 +256,11 @@
       if (_domOutput) _domOutput.classList.add('hidden');
       if (_domInput) _domInput.classList.add('hidden');
       xtermContainer.classList.remove('hidden');
+      // Refresh xterm after becoming visible
+      if (term && fitAddon) {
+        try { fitAddon.fit(); } catch (_) {}
+        try { term.refresh(0, term.rows - 1); } catch (_) {}
+      }
     } else {
       _renderMode = 'dom';
       if (modeBtn) modeBtn.textContent = 'DOM';
