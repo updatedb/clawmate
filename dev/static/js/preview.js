@@ -1917,7 +1917,7 @@
   // --- Right panel resize ---
   const resizeHandle = document.getElementById('previewResizeHandle');
   let rightPanelWidth = 380;   // feedback panel default
-  let agentPanelWidth = Math.min(Math.floor(window.innerWidth * 0.45), 700); // agent panel default
+  let agentPanelWidth = Math.min(Math.floor(window.innerWidth * 0.45), 800); // agent panel default
   let dragStartX = 0;
   let dragStartWidth = 0;
 
@@ -2032,7 +2032,7 @@
 
     function onResizeMove(e) {
       const delta = dragStartX - e.clientX;
-      var newWidth = Math.max(360, Math.min(800, dragStartWidth + delta));
+      var newWidth = Math.max(420, Math.min(900, dragStartWidth + delta));
       var agentOpen = agentPanel && !agentPanel.classList.contains('hidden');
       if (agentOpen) {
         agentPanelWidth = newWidth;
