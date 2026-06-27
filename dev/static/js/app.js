@@ -95,6 +95,7 @@ const els = {
   batchDeleteBtn: document.getElementById("batchDeleteBtn"),
   batchDownloadBtn2: document.getElementById("batchDownloadBtn2"),
   batchClearBtn: document.getElementById("batchClearBtn"),
+  batchMoveBtn: document.getElementById("batchMoveBtn"),
 };
 
 function getResolvedTheme() {
@@ -1075,6 +1076,51 @@ async function batchDelete() {
 
   // Reload current directory
   await loadDir(state.dir);
+}
+
+function batchMoveSelected() {
+  const paths = Array.from(state.selectedPaths);
+  if (paths.length === 0) { setStatus("请先选择要移动的文件"); return; }
+  if (!state.rootId) { setStatus("请先选择根目录"); return; }
+
+  openDirPicker(`选择目标目录 — 移动 ${paths.length} 个文件`);
+  dirPickerCallback = async function (destDir) {
+    if (!destDir) return;
+    setStatus(`正在移动 ${paths.length} 个文件...`);
+    let moved = 0;
+    let failed = 0;
+    const errors = [];
+
+    for (const path of paths) {
+      try {
+        const res = await authFetch('/api/clawmate/move', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ root: state.rootId, path: path, dest: destDir })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+          moved++;
+          state.selectedPaths.delete(path);
+        } else {
+          failed++;
+          errors.push(`${path}: ${data.detail || data.error || '失败'}`);
+        }
+      } catch (e) {
+        failed++;
+        errors.push(`${path}: ${e.message}`);
+      }
+    }
+
+    if (errors.length > 0) {
+      setStatus(`移动完成: ${moved} 成功, ${failed} 失败。${errors.slice(0, 3).join("; ")}`);
+    } else {
+      setStatus(`成功移动 ${moved} 个文件`);
+    }
+
+    updateBatchBar();
+    await loadDir(state.dir);
+  };
 }
 
 function batchDownloadSelected() {
@@ -2076,6 +2122,7 @@ els.batchSelectAllBtn && els.batchSelectAllBtn.addEventListener("click", selectA
 
 // Batch operations
 els.batchDeleteBtn && els.batchDeleteBtn.addEventListener("click", batchDelete);
+els.batchMoveBtn && els.batchMoveBtn.addEventListener("click", batchMoveSelected);
 els.batchDownloadBtn2 && els.batchDownloadBtn2.addEventListener("click", batchDownloadSelected);
 els.batchClearBtn && els.batchClearBtn.addEventListener("click", batchClear);
 
