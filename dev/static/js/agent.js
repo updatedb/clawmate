@@ -774,6 +774,22 @@
     closeBtn.addEventListener('click', function () { window.Agent.close(); });
   }
 
+  // --- Backend badge: cycle claude → codex → openclaw ---
+  var _backendCycle = ['claude', 'codex', 'openclaw'];
+  if (badgeEl) {
+    badgeEl.addEventListener('click', function () {
+      var idx = _backendCycle.indexOf(backendMode);
+      backendMode = _backendCycle[(idx + 1) % _backendCycle.length];
+      badgeEl.textContent = backendMode;
+      // Reconnect if panel is open
+      var wasOpen = panel && !panel.classList.contains('hidden');
+      if (wasOpen) {
+        window.Agent.close();
+        setTimeout(function () { window.Agent.open(currentRootId, currentDir); }, 400);
+      }
+    });
+  }
+
   // --- Public API ---
   window.Agent = {
     init: function (config) {

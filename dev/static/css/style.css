@@ -408,8 +408,9 @@ button svg, .btn svg, a svg {
 .agent-panel-badge {
   font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px;
   background: var(--accent-light); color: var(--accent); text-transform: uppercase;
-  white-space: nowrap;
+  white-space: nowrap; cursor: pointer; user-select: none;
 }
+.agent-panel-badge:hover { background: var(--accent); color: #fff; }
 .agent-panel-close {
   background: none; border: none; color: var(--text-muted); cursor: pointer;
   font-size: 16px; padding: 2px 6px; border-radius: var(--radius-sm); line-height: 1;
