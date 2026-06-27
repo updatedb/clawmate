@@ -14,6 +14,7 @@
   let _domPrefix = '';
   let panel, resizeHandle, xtermContainer, chatView, chatMessages, chatInput, chatSendBtn, badgeEl, rootEl, closeBtn, toggleBtn;
   let modeBtn, domTermOutput, domTermInput;
+  let panelTitleEl;
   var domTermId, domInputId, modeBtnId;
   // Resize tracking shared between createTerminal & disconnectWs
   var _lastResizeSent = { cols: 0, rows: 0 };
@@ -35,6 +36,7 @@
     closeBtn      = document.getElementById(p + 'BtnCloseAgent') || document.getElementById(p + 'btnCloseAgent') || document.getElementById('btnCloseAgent');
     toggleBtn     = document.getElementById(p + 'BtnToggleAgent') || document.getElementById(p + 'btnToggleAgent') || document.getElementById('btnToggleAgent');
     modeBtn       = document.getElementById(p + 'BtnAgentMode') || document.getElementById(p + 'btnAgentMode') || document.getElementById('btnAgentMode');
+    panelTitleEl  = document.getElementById(p + 'AgentPanelTitle') || document.getElementById(p + 'agentPanelTitle') || document.getElementById('agentPanelTitle');
     domTermOutput = document.getElementById(p + 'DomTermOutput') || document.getElementById(p + 'domTermOutput') || document.getElementById('domTermOutput');
     domTermInput  = document.getElementById(p + 'DomTermInput') || document.getElementById(p + 'domTermInput') || document.getElementById('domTermInput');
     // Update ID strings for DOM terminal functions
@@ -140,7 +142,7 @@
     const sbHidden = sb && (sb.classList.contains('hidden') || getComputedStyle(sb).display === 'none');
     const lW = sbHidden ? '0px' : '240px';
     content.style.gridTemplateColumns = lW + ' 1fr 5px ' + panelWidth + 'px';
-    if (fitAddon) { try { fitAddon.fit(); } catch (_) {} }
+    if (_renderMode === 'xterm' && fitAddon) { try { fitAddon.fit(); } catch (_) {} }
   }
 
   function onResizeMouseUp() {
@@ -218,6 +220,7 @@
   }
 
   function _addDomLine(html) {
+    if (!_domOutput) return;
     var div = document.createElement('div');
     div.className = 'dom-line';
     div.innerHTML = html;
@@ -615,6 +618,9 @@
       if (msg.sessionKey && rootEl && !rootEl.textContent) {
         rootEl.textContent = msg.sessionKey;
       }
+      if (msg.sessionKey && panelTitleEl) {
+        panelTitleEl.textContent = msg.sessionKey;
+      }
       var info = document.createElement('div');
       info.className = 'agent-chat-info';
       info.textContent = msg.text || '';
@@ -736,6 +742,7 @@
         var msg = JSON.parse(e.data);
         if (msg.type === 'session' && msg.key) {
           if (rootEl) rootEl.textContent = msg.key;
+          if (panelTitleEl) panelTitleEl.textContent = msg.key;
           // Detect session key change — skip initial connection (currentSessionKey empty)
           if (currentSessionKey && msg.key !== currentSessionKey) {
             xlog('session', 'key changed: ' + currentSessionKey + ' -> ' + msg.key);
@@ -798,8 +805,9 @@
   function disconnectWs() {
     clearReconnect();
     currentSessionKey = '';
+    if (panelTitleEl) panelTitleEl.textContent = 'Agent';
     if (ws) { ws.onclose = null; ws.close(); ws = null; }
-    if (_renderMode === 'dom' && domTermOutput) {
+    if (_renderMode === 'dom' && _domOutput) {
       _addDomLine('\x1b[2m终端已断开。\x1b[0m');
     }
     if (_renderMode === 'xterm' && term) {

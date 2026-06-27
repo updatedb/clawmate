@@ -206,6 +206,8 @@ _WHITELIST = frozenset([
     "/api/clawmate/onlyoffice/",
     "/clawmate/login.html",
     "/clawmate/share-view.html",
+    "/clawmate/manifest.json",
+    "/clawmate/sw.js",
     "/clawmate/api/health",
 ])
 
@@ -218,6 +220,7 @@ _WHITELIST_PREFIXES = (
     "/clawmate/vendor/",
     "/clawmate/asset/",
     "/clawmate/m/",
+    "/clawmate/js/",
     "/api/clawmate/share/",
 )
 
