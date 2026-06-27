@@ -584,6 +584,7 @@
       '?root=' + encodeURIComponent(currentRootId || '') +
       '&dir=' + encodeURIComponent(currentDir || '') +
       '&agentId=' + encodeURIComponent(currentAgentId || '') +
+      '&backend=' + encodeURIComponent(backendMode) +
       '&cols=' + initCols +
       '&rows=' + initRows;
 

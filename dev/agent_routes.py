@@ -768,6 +768,7 @@ async def agent_terminal(
     root: str = Query(""),
     agentId: str = Query(""),
     dir: str = Query(""),
+            backend: str = Query(""),
     cols: int = Query(0),
     rows: int = Query(0),
 ):
@@ -788,7 +789,12 @@ async def agent_terminal(
 
     cfg = load_cfg()
     agent_cfg = getattr(cfg, "agent", None)
-    backend = getattr(agent_cfg, "backend", "claude") if agent_cfg else "claude"
+    config_backend = getattr(agent_cfg, "backend", "claude") if agent_cfg else "claude"
+    # Client-side backend override (from badge click passing ?backend=...)
+    if backend and backend in ("claude", "codex", "openclaw"):
+        pass  # use client-provided backend
+    else:
+        backend = config_backend
 
     cwd = _resolve_session_cwd(root, dir)
     key = _session_key(root, dir, backend)
