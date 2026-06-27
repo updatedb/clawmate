@@ -933,19 +933,17 @@ function renderSidebarTree() {
     label.style.textOverflow = "ellipsis";
     label.style.whiteSpace = "nowrap";
 
+    li.addEventListener("click", () => {
+      if (entry.relPath !== state.dir) loadDir(entry.relPath);
+      if (window.innerWidth < 768) {
+        els.sidebar.classList.add('hidden');
+        btnToggleSidebar.classList.remove('active');
+        if (els.sidebarOverlay) els.sidebarOverlay.style.display = 'none';
+      }
+    });
     if (entry.relPath === state.dir) {
       li.style.fontWeight = "bold";
       li.style.color = "var(--accent, #4a9eff)";
-      li.style.cursor = "default";
-    } else {
-      li.addEventListener("click", () => {
-        loadDir(entry.relPath);
-        if (window.innerWidth < 768) {
-          els.sidebar.classList.add('hidden');
-          btnToggleSidebar.classList.remove('active');
-          if (els.sidebarOverlay) els.sidebarOverlay.style.display = 'none';
-        }
-      });
     }
 
     li.appendChild(icon);
