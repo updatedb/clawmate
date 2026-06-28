@@ -633,22 +633,25 @@
     closeBtn.addEventListener('click', function () { window.Agent.close(); });
   }
 
-  // --- Clear button (clears local terminal + re-syncs PTY dimensions) ---
+  // --- Clear button (clears local terminal / chat + re-syncs PTY dimensions) ---
   if (clearBtn) {
     clearBtn.addEventListener('click', function () {
       if (term) {
+        // PTY mode (claude/codex)
         term.clear();
         term.writeln('\x1b[1;36m✓ 已清屏\x1b[0m');
-        // Cancel any pending resize — a debounced resize that fires AFTER clear
-        // would send stale dimensions and desync the PTY.
         if (_pendingResize) { clearTimeout(_pendingResize); _pendingResize = null; }
-        // Reset PTY row/col — force re-sync so backend tty matches xterm dimensions
         _lastResizeSent = { cols: 0, rows: 0 };
         if (ws && ws.readyState === WebSocket.OPEN) {
           try {
             ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
           } catch (_) {}
         }
+      } else if (backendMode === 'openclaw') {
+        // Chat mode (openclaw) — clear messages, keep input + focus
+        if (chatMessages) chatMessages.innerHTML = '';
+        chatBuf = ''; chatBufEl = null; chatStatusEl = null;
+        if (chatInput) chatInput.focus();
       }
     });
   }
