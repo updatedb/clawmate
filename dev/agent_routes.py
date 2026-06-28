@@ -334,8 +334,8 @@ async def _spawn_pt(cwd: str, cols: int, rows: int, binary: str,
 
     env = os.environ.copy()
     env["TERM"] = "xterm-256color"
-    env["COLUMNS"] = str(cols)
-    env["LINES"] = str(rows)
+    env["COLUMNS"] = str(wsize.columns)
+    env["LINES"] = str(wsize.lines)
     if extra_env:
         env.update(extra_env)
 
