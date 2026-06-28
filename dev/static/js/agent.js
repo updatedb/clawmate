@@ -16,7 +16,7 @@
 
   // --- DOM refs (re-initializable with prefix for reuse in preview page) ---
   let _domPrefix = '';
-  let panel, resizeHandle, xtermContainer, chatView, chatMessages, chatInput, chatSendBtn, backendSelect, closeBtn, toggleBtn, clearBtn;
+  let panel, xtermContainer, chatView, chatMessages, chatInput, chatSendBtn, backendSelect, closeBtn, toggleBtn, clearBtn;
   let panelTitleEl;
   // Resize tracking shared between createTerminal & disconnectWs
   var _lastResizeSent = { cols: 0, rows: 0 };
@@ -27,7 +27,6 @@
     var p = _domPrefix;
     // Try prefixed IDs first, fall back to unprefixed (for main page where prefix is '')
     panel         = document.getElementById(p + 'AgentPanel') || document.getElementById(p + 'agentPanel') || document.getElementById('agentPanel');
-    resizeHandle  = document.getElementById(p + 'agentResizeHandle') || document.getElementById('agentResizeHandle');
     xtermContainer = document.getElementById(p + 'XtermContainer') || document.getElementById(p + 'xtermContainer') || document.getElementById('xtermContainer');
     chatView      = document.getElementById(p + 'AgentChatView') || document.getElementById(p + 'agentChatView') || document.getElementById('agentChatView');
     chatMessages  = document.getElementById(p + 'AgentChatMessages') || document.getElementById(p + 'agentChatMessages') || document.getElementById('agentChatMessages');
@@ -67,7 +66,6 @@
   let termResizeObserver = null;
   let ws = null;
   let wsUrl = '';
-  let panelWidth = 0;
   const AGENT_PANEL_WIDTH = 750; // fixed: ~86 cols PTY at 14px monospace, matches terminal
   let collapseTimer = null;
   let animatingOut = false; // true during slide-out animation
@@ -90,33 +88,22 @@
   let flowPaused = false;    // xterm.js flow control: true when write buffer > HIGH watermark
 
   // --- Grid update ---
-  function updateGridColumns(forceExpand) {
+  function updateGridColumns() {
     const content = document.querySelector('.content');
     if (!content) return;
     if (window.innerWidth < 768) {
       content.style.gridTemplateColumns = '';
-      if (resizeHandle) resizeHandle.classList.add('hidden');
       return;
     }
     const sidebar = document.getElementById('sidebar');
     const sidebarHidden = sidebar && (sidebar.classList.contains('hidden') || getComputedStyle(sidebar).display === 'none');
     const lW = sidebarHidden ? '0px' : '240px';
     const hidden = panel.classList.contains('hidden');
-    panelWidth = AGENT_PANEL_WIDTH;
-    if (hidden && !animatingOut && !forceExpand) {
-      // Collapsed — no panel visible
+    if (hidden && !animatingOut) {
       content.style.gridTemplateColumns = lW + ' 1fr 0px 0px';
-      if (resizeHandle) resizeHandle.classList.add('hidden');
     } else {
-      // Panel visible or animating out — fixed width, hide resize handle
       content.style.gridTemplateColumns = lW + ' 1fr 5px ' + AGENT_PANEL_WIDTH + 'px';
-      if (resizeHandle) resizeHandle.classList.add('hidden');
     }
-  }
-
-  // --- Resize drag (disabled: agent panel has fixed width for PTY) ---
-  if (resizeHandle) {
-    resizeHandle.addEventListener('mousedown', function(e) { e.preventDefault(); });
   }
 
   // --- View mode switching ---
@@ -781,9 +768,9 @@
       animatingOut = false;
       clearTimeout(collapseTimer);
       panel.style.display = 'flex';
-      updateGridColumns(true);
       panel.offsetHeight; // force reflow
       panel.classList.remove('hidden');
+      updateGridColumns(); // grid expands — hidden is now false
       panel.style.display = '';
       document.body.classList.add('agent-open');
       setTimeout(function () { if (typeof syncSidebarBtn === 'function') syncSidebarBtn(); }, 0);
