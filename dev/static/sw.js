@@ -1,6 +1,6 @@
 // ClawMate Service Worker — cache-first for static assets,
 // network-first for API, stale-while-revalidate for vendor libs.
-const CACHE_VERSION = 'v20260627a';
+const CACHE_VERSION = 'v20260628c';
 const STATIC_CACHE = 'clawmate-static-' + CACHE_VERSION;
 const VENDOR_CACHE = 'clawmate-vendor-' + CACHE_VERSION;
 const API_CACHE = 'clawmate-api-' + CACHE_VERSION;
