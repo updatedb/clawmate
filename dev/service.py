@@ -438,65 +438,6 @@ def list_dir(root_id: str, rel_dir: str = "", offset: int = 0, limit: int = 200,
     return result
 
 
-def search_media(query: str, root_id: str, rel_dir: str = "", recursive: bool = True,
-                 limit: int = 200, max_depth: int = 8, timeout: float = 10.0) -> Dict:
-    """搜索文件/目录名，支持递归深度限制和硬超时。
-
-    Args:
-        max_depth: 递归最大深度（从 start_dir 算起），默认 8 层
-        timeout: 搜索超时秒数，默认 10s；超时后返回已有结果并标记 truncated=True
-    """
-    import time as _time
-    _deadline = _time.time() + timeout
-
-    root_path, target, _ = safe_path(root_id, rel_dir)
-    if not target.exists() or not target.is_dir():
-        raise FileNotFoundError("Directory not found")
-
-    query_lower = query.lower().strip()
-    results: List[Dict] = []
-    truncated = False
-    if not query_lower:
-        return {"query": query, "results": results, "truncated": False}
-
-    if recursive:
-        from collections import deque
-        queue: deque = deque([(target, 0)])  # (dir_path, depth)
-        while queue:
-            if _time.time() > _deadline:
-                truncated = True
-                break
-            dir_path, depth = queue.popleft()
-            if depth > max_depth:
-                continue
-            try:
-                entries = sorted(dir_path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
-            except (OSError, PermissionError):
-                continue
-            for entry in entries:
-                if query_lower in entry.name.lower():
-                    results.append(file_info(entry, str(entry.relative_to(root_path))))
-                    if len(results) >= limit:
-                        break
-            if len(results) >= limit:
-                break
-            if depth < max_depth:
-                for entry in entries:
-                    if entry.is_dir():
-                        queue.append((entry, depth + 1))
-    else:
-        for entry in target.iterdir():
-            if _time.time() > _deadline:
-                truncated = True
-                break
-            if query_lower in entry.name.lower():
-                results.append(file_info(entry, str(entry.relative_to(root_path))))
-                if len(results) >= limit:
-                    break
-
-    return {"query": query, "results": results, "truncated": truncated}
-
-
 def preview_text(path: Path) -> Tuple[str, bool]:
     with open(path, "r", encoding="utf-8", errors="replace") as f:
         content = f.read(PREVIEW_MAX_BYTES)

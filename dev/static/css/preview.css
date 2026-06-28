@@ -944,6 +944,79 @@
       font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
     }
 
+    /* ── Line numbers (CSS Grid) ─────────────────────────────────── */
+    .code-with-lines {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      position: relative;
+      background: var(--bg-code);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow: hidden;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+    .code-line-numbers {
+      grid-column: 1;
+      user-select: none;
+      white-space: pre;
+      text-align: right;
+      padding: 16px 10px 16px 14px;
+      font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-muted);
+      background: var(--bg-tertiary);
+      border-right: 1px solid var(--border-color);
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .code-with-lines > pre.raw-text,
+    .code-with-lines > pre.code-highlighted,
+    .code-with-lines > pre.raw-text {
+      grid-column: 2;
+      border: none;
+      border-radius: 0;
+      margin: 0;
+    }
+
+    [data-theme="dark"] .code-line-numbers {
+      background: rgba(255,255,255,0.03);
+      color: rgba(255,255,255,0.25);
+    }
+
+    /* ── Line flash highlight ──────────────────────────────────── */
+    .code-line-flash {
+      position: absolute;
+      left: 0;
+      right: 0;
+      background: rgba(250, 204, 21, 0.35);
+      pointer-events: none;
+      z-index: 1;
+      animation: lineFlashFade 1.5s ease-out forwards;
+    }
+    @keyframes lineFlashFade {
+      0%   { background: rgba(250, 204, 21, 0.55); }
+      40%  { background: rgba(250, 204, 21, 0.40); }
+      100% { background: rgba(250, 204, 21, 0); }
+    }
+
+    [data-theme="dark"] .code-line-flash {
+      background: rgba(250, 204, 21, 0.25);
+      animation: lineFlashFadeDark 1.5s ease-out forwards;
+    }
+    @keyframes lineFlashFadeDark {
+      0%   { background: rgba(250, 204, 21, 0.35); }
+      40%  { background: rgba(250, 204, 21, 0.25); }
+      100% { background: rgba(250, 204, 21, 0); }
+    }
+
+    @media (max-width: 768px) {
+      .code-line-numbers { display: none; }
+      .code-with-lines { grid-template-columns: 1fr; }
+    }
+
 
     /* Hidden file input for subtitle picker */
     #subtitleFileInput { display: none; }

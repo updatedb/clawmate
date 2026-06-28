@@ -1,6 +1,13 @@
 // ClawMate Service Worker — cache-first for static assets,
-// network-first for API, stale-while-revalidate for vendor libs.
-const CACHE_VERSION = 'v20260628c';
+// network-first for HTML, stale-while-revalidate for vendor libs.
+//
+// ════ MAINTENANCE ════
+// When adding a new static file (JS/CSS/image), add it to PRECACHE_URLS
+// below and bump CACHE_VERSION (any unique string will do — date, hash, etc).
+// The ?v= query strings on HTML <script>/<link> tags are NO LONGER NEEDED —
+// proper HTTP Cache-Control headers on the server handle that now.
+//
+const CACHE_VERSION = 'v20260629';
 const STATIC_CACHE = 'clawmate-static-' + CACHE_VERSION;
 const VENDOR_CACHE = 'clawmate-vendor-' + CACHE_VERSION;
 const API_CACHE = 'clawmate-api-' + CACHE_VERSION;
@@ -8,6 +15,10 @@ const API_CACHE = 'clawmate-api-' + CACHE_VERSION;
 // ── Assets to pre-cache on install ──────────────────────────────────
 const PRECACHE_URLS = [
   '/clawmate/',
+  '/clawmate/preview.html',
+  '/clawmate/login.html',
+  '/clawmate/share-view.html',
+  '/clawmate/onlyoffice.html',
   '/clawmate/css/tokens.css',
   '/clawmate/css/style.css',
   '/clawmate/css/preview.css',
@@ -15,9 +26,9 @@ const PRECACHE_URLS = [
   '/clawmate/js/icons.js',
   '/clawmate/js/topbar.js',
   '/clawmate/js/app.js',
+  '/clawmate/js/agent.js',
   '/clawmate/js/preview.js',
   '/clawmate/js/preview-common.js',
-  '/clawmate/js/agent.js',
   '/clawmate/asset/clawmate-logo.png',
   '/clawmate/manifest.json',
 ];
@@ -59,13 +70,19 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // HTML pages — network-first (they must always be fresh)
+  if (url.pathname === '/clawmate/' || url.pathname.endsWith('.html')) {
+    event.respondWith(networkFirst(request, STATIC_CACHE));
+    return;
+  }
+
   // Vendor libraries (with version hash in path) — stale-while-revalidate
   if (url.pathname.includes('/vendor/') || url.pathname.includes('/pdfjs/')) {
     event.respondWith(staleWhileRevalidate(request, VENDOR_CACHE));
     return;
   }
 
-  // Static app assets (HTML, CSS, JS with ?v= cache busters) — cache-first
+  // Static app assets (CSS, JS, images) — cache-first
   if (url.pathname.startsWith('/clawmate/')) {
     event.respondWith(cacheFirst(request, STATIC_CACHE));
     return;

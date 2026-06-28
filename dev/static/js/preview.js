@@ -886,24 +886,73 @@
   }
 
   function scrollToCodeLine(lineNum) {
-    // Check textarea (edit mode) first, then pre (view mode)
+    // Check textarea (edit mode) first
     var ta = document.getElementById('plainTextEditor');
     if (ta) {
       var lineHeight = parseFloat(getComputedStyle(ta).lineHeight) || 22;
       ta.scrollTop = Math.max(0, (lineNum - 4) * lineHeight);
-      // Move cursor + briefly highlight the line
       var lines = ta.value.split('\n');
       var pos = 0;
       for (var i = 0; i < Math.min(lineNum - 1, lines.length); i++) pos += lines[i].length + 1;
       ta.setSelectionRange(pos, pos + (lines[lineNum - 1] || '').length);
       ta.focus();
+      setTimeout(function() { ta.setSelectionRange(pos, pos); }, 1500);
       return;
     }
-    var pre = contentBody.querySelector('pre');
+
+    // Find the right pre: prefer sourceRawPre (md/html source), fallback to any visible pre
+    var srcPre = document.getElementById('sourceRawPre');
+    var pre = null;
+    var wrapper = null;
+    var wasHidden = false;
+
+    if (srcPre) {
+      // Markdown/HTML file — use the source pre
+      wrapper = srcPre.closest('.code-with-lines');
+      if (wrapper && window.getComputedStyle(wrapper).display === 'none') {
+        // Source view is hidden (rendered mode) — show it temporarily
+        // Also hide the rendered view
+        var mdDiv = document.getElementById('markdownRenderedDiv');
+        var htmlIframe = document.getElementById('htmlIframe');
+        if (mdDiv) mdDiv.style.display = 'none';
+        if (htmlIframe) htmlIframe.style.display = 'none';
+        // Show source view buttons
+        var editBtn = document.getElementById('btnSourceEdit');
+        var srcToggle = document.getElementById('btnSrcToggle');
+        if (editBtn) editBtn.style.display = '';
+        if (srcToggle) { srcToggle.textContent = '📝 渲染'; srcToggle.classList.add('active'); }
+        wrapper.style.display = '';
+        wasHidden = true;
+      }
+      pre = srcPre;
+    } else {
+      // Plain text/code file — find the pre in contentBody
+      var ct = document.getElementById('contentBody');
+      if (ct) pre = ct.querySelector('pre');
+    }
+
     if (!pre) return;
+
+    var ct = document.getElementById('contentBody');
+    if (!ct) return;
     var lineHeight = parseFloat(getComputedStyle(pre).lineHeight) || 22;
-    var scrollTarget = Math.max(0, (lineNum - 4) * lineHeight);
-    pre.parentElement.scrollTop = scrollTarget;
+    // Scroll contentBody to bring the target line near the top (with 4-line margin)
+    var preTop = pre.getBoundingClientRect().top - ct.getBoundingClientRect().top + ct.scrollTop;
+    var scrollTarget = Math.max(0, preTop + (lineNum - 4) * lineHeight);
+    ct.scrollTop = scrollTarget;
+
+    // Flash highlight bar
+    if (!wrapper) wrapper = pre.closest('.code-with-lines') || pre.parentElement;
+    var preRect = pre.getBoundingClientRect();
+    var wrapperRect = wrapper.getBoundingClientRect();
+    var flashTop = (lineNum - 1) * lineHeight + (preRect.top - wrapperRect.top);
+    var flash = document.createElement('div');
+    flash.className = 'code-line-flash';
+    flash.style.top = flashTop + 'px';
+    flash.style.height = lineHeight + 'px';
+    wrapper.appendChild(flash);
+    // Remove after animation completes
+    setTimeout(function() { if (flash.parentNode) flash.remove(); }, 1600);
   }
 
   function renderCodeOutline(items) {
@@ -1091,6 +1140,30 @@
   let isPlainTextEditMode = false;
   let sourceDirty = false;
 
+  // ── Line numbers for code / source views ──────────────────────────
+  function renderCodeWithLineNumbers(rawContent, preEl) {
+    const lineCount = (rawContent || '').split('\n').length;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'code-with-lines';
+
+    const lineNumDiv = document.createElement('div');
+    lineNumDiv.className = 'code-line-numbers';
+    lineNumDiv.textContent = Array.from({ length: lineCount }, (_, i) => i + 1).join('\n');
+
+    wrapper.appendChild(lineNumDiv);
+    wrapper.appendChild(preEl);
+
+    return wrapper;
+  }
+
+  function updateCodeLineNumbers(wrapper, rawContent) {
+    if (!wrapper) return;
+    const lineNumDiv = wrapper.querySelector('.code-line-numbers');
+    if (!lineNumDiv) return;
+    const lineCount = (rawContent || '').split('\n').length;
+    lineNumDiv.textContent = Array.from({ length: lineCount }, (_, i) => i + 1).join('\n');
+  }
+
   function _updateSourcePre(pre, content) {
     if (!pre) return;
     var code = pre.querySelector('code');
@@ -1099,6 +1172,9 @@
     } else {
       pre.textContent = content;
     }
+    // Sync line numbers if wrapped
+    var wrapper = pre.closest('.code-with-lines');
+    if (wrapper) updateCodeLineNumbers(wrapper, content);
   }
 
   function enterSourceEditMode() {
@@ -1106,7 +1182,9 @@
     if (!srcPre) return;
     isPlainTextEditMode = true;
     sourceDirty = false;
-    srcPre.style.display = 'none';
+    const wrapper = srcPre.closest('.code-with-lines');
+    if (wrapper) wrapper.style.display = 'none';
+    else srcPre.style.display = 'none';
     // Also hide the HTML iframe when entering edit mode (HTML mode only)
     if (isHtmlMode) {
       const htmlIframe = document.getElementById('htmlIframe');
@@ -1118,13 +1196,14 @@
     ta.value = rawContent;
     ta.spellcheck = false;
     ta.style.height = Math.max(300, window.innerHeight - 48 - 42 - 40) + 'px';
-    // Insert after the banner (or as first child if no banner)
+    // Insert after the wrapper (or banner)
     const banner = document.getElementById('sourceEditBanner');
+    const insertAfter = wrapper || srcPre;
     if (banner) {
       banner.style.display = '';
-      srcPre.parentNode.insertBefore(ta, banner.nextSibling);
+      insertAfter.parentNode.insertBefore(ta, banner.nextSibling);
     } else {
-      srcPre.parentNode.insertBefore(ta, srcPre);
+      insertAfter.parentNode.insertBefore(ta, insertAfter.nextSibling);
     }
     // Fix: position cursor and scroll at file beginning
     ta.selectionStart = 0;
@@ -1145,7 +1224,14 @@
     if (ta) ta.remove();
     if (banner) banner.style.display = 'none';
     if (srcPre) {
-      srcPre.style.display = isRawMode ? '' : 'none';
+      const wrapper = srcPre.closest('.code-with-lines');
+      if (wrapper) {
+        wrapper.style.display = isRawMode ? '' : 'none';
+        // Update line numbers
+        updateCodeLineNumbers(wrapper, rawContent);
+      } else {
+        srcPre.style.display = isRawMode ? '' : 'none';
+      }
     }
     // Restore iframe visibility when exiting HTML edit mode
     if (isHtmlMode) {
@@ -1354,9 +1440,16 @@
         if (mdDiv) mdDiv.style.display = 'none';
         if (htmlIframe) htmlIframe.style.display = 'none';
         if (srcPre) {
-          srcPre.style.display = '';
-          // Refresh source content in case it was edited
-          if (srcPre.textContent !== rawContent) _updateSourcePre(srcPre, rawContent);
+          const wrapper = srcPre.closest('.code-with-lines');
+          if (wrapper) {
+            wrapper.style.display = '';
+            // Refresh source content and line numbers
+            if (srcPre.textContent !== rawContent) _updateSourcePre(srcPre, rawContent);
+            updateCodeLineNumbers(wrapper, rawContent);
+          } else {
+            srcPre.style.display = '';
+            if (srcPre.textContent !== rawContent) _updateSourcePre(srcPre, rawContent);
+          }
         }
       } else {
         // Switch to rendered view — 重新加载内容确保渲染最新
@@ -1380,13 +1473,24 @@
       if (mdDiv) mdDiv.style.display = 'none';
       if (htmlIframe) htmlIframe.style.display = 'none';
       if (srcPre) {
-        srcPre.style.display = '';
-        _updateSourcePre(srcPre, rawContent);
+        const wrapper = srcPre.closest('.code-with-lines');
+        if (wrapper) {
+          wrapper.style.display = '';
+          _updateSourcePre(srcPre, rawContent);
+          updateCodeLineNumbers(wrapper, rawContent);
+        } else {
+          srcPre.style.display = '';
+          _updateSourcePre(srcPre, rawContent);
+        }
       }
     } else {
       if (mdDiv) mdDiv.style.display = '';
       if (htmlIframe) htmlIframe.style.display = '';
-      if (srcPre) srcPre.style.display = 'none';
+      if (srcPre) {
+        const wrapper = srcPre.closest('.code-with-lines');
+        if (wrapper) wrapper.style.display = 'none';
+        else srcPre.style.display = 'none';
+      }
     }
   }
 
@@ -1918,8 +2022,9 @@
         } else {
           srcPre.className = 'raw-text';
         }
-        srcPre.style.display = isRawMode ? '' : 'none';
-        contentBody.appendChild(srcPre);
+        const mdSrcWrapper = renderCodeWithLineNumbers(content, srcPre);
+        mdSrcWrapper.style.display = isRawMode ? '' : 'none';
+        contentBody.appendChild(mdSrcWrapper);
 
         // Create rendered markdown div
         const mdDiv = document.createElement('div');
@@ -1949,7 +2054,7 @@
           mdDiv.style.display = 'none';
           contentBody.appendChild(mdDiv);
           // Force source view so user can still read the file
-          srcPre.style.display = '';
+          if (mdSrcWrapper) mdSrcWrapper.style.display = '';
           isRawMode = true;
           leftSidebar.classList.add('hidden');
           btnToggleLeft.classList.remove('active');
@@ -1991,6 +2096,7 @@
         removeLoading();
         updateMarkdownDynamicButtons();
         if (!_skipFeedbackLoad) loadCompletedFeedback();
+        _handleLineScroll();
         return;
       }
 
@@ -2047,11 +2153,14 @@
         } else {
           srcPre.textContent = content;
         }
-        htmlWrap.appendChild(srcPre);
+        var htmlSrcWrapper = renderCodeWithLineNumbers(content, srcPre);
+        htmlSrcWrapper.style.display = isRawMode ? '' : 'none';
+        htmlWrap.appendChild(htmlSrcWrapper);
 
         removeLoading();
         updateMarkdownDynamicButtons();
         if (!_skipFeedbackLoad) loadCompletedFeedback();
+        _handleLineScroll();
         return;
       }
 
@@ -2103,7 +2212,7 @@
           } else {
             pre.textContent = rawContent;
           }
-          contentBody.appendChild(pre);
+          contentBody.appendChild(renderCodeWithLineNumbers(rawContent, pre));
           removeLoading();
           // Render outline sidebar for code (display mode: auto-open on desktop only)
           if (codeOutlineItems.length >= 2) {
@@ -2117,6 +2226,9 @@
 
       // Load completed feedback items from API
       if (!_skipFeedbackLoad) loadCompletedFeedback();
+
+      // Handle ?line= / #LN scroll after initial load
+      _handleLineScroll();
 
     } catch (e) {
       const loadingEl3 = document.querySelector('.preview-loading');
@@ -5268,7 +5380,41 @@
     showToast('PDF.js 渲染模式（编辑模式不可用）', 3000);
   }
 
-  // ============ Init ============
+  // ── Line param / hash handler ──────────────────────────────────
+  var _lineScrollHandled = false;
+
+  function _handleLineScroll() {
+    if (_lineScrollHandled) return;
+    _lineScrollHandled = true;
+
+    var lineNum = null;
+
+    // 1) ?line=N query parameter
+    var lineParam = params.get('line');
+    if (lineParam) {
+      lineNum = parseInt(lineParam, 10);
+      if (isNaN(lineNum) || lineNum < 1) lineNum = null;
+    }
+
+    // 2) #LN or #L{N} hash fragment
+    if (!lineNum) {
+      var hash = window.location.hash;
+      var m = hash && hash.match(/^#L(\d+)$/);
+      if (m) lineNum = parseInt(m[1], 10);
+    }
+
+    if (lineNum) {
+      setTimeout(function() { scrollToCodeLine(lineNum); }, 300);
+    }
+  }
+
+  // ── Listen for hash changes ─────────────────────────────────────
+  window.addEventListener('hashchange', function() {
+    _lineScrollHandled = false;
+    _handleLineScroll();
+  });
+
+  // ── Init ────────────────────────────────────────────────────────
   loadContent();
   // 加载 task_templates 到 _taskTemplates 并初始化标签按钮
   getRootsConfig().then(function(cfg) {

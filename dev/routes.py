@@ -19,7 +19,6 @@ from pathlib import Path
 from service import (
     list_dir,
     safe_path,
-    search_media,
     preview_text,
     guess_category,
     get_public_base_url,
@@ -185,87 +184,6 @@ async def clawmate_list_navigation(root: str = "", path: str = ""):
     })
 
 
-@router.get("/api/clawmate/search", response_class=JSONResponse)
-async def clawmate_search(
-    q: str,
-    root: str = "",
-    dir: str = "",
-    recursive: bool = True,
-    limit: int = Query(200, ge=1, le=500),
-    max_depth: int = Query(8, ge=1, le=20),
-    timeout: float = Query(10.0, ge=1.0, le=30.0),
-):
-    try:
-        return JSONResponse(content=search_media(
-            q, root_id=root, rel_dir=dir, recursive=recursive,
-            limit=limit, max_depth=max_depth, timeout=timeout,
-        ))
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Directory not found")
-    except PermissionError:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid path")
-
-
-@router.get("/api/clawmate/link", response_class=JSONResponse)
-async def clawmate_link(
-    q: str,
-    root: str = "",
-    ext: str = "",
-    limit: int = Query(50, ge=1, le=200),
-    request: Request = None,
-):
-    """一站式搜索并生成预览链接。
-
-    参数：
-        q:     搜索关键词（必填）
-        root:  root ID（必填）
-        ext:   文件扩展名过滤，多个用逗号分隔，如 "md,py"（可选）
-        limit: 返回数量上限（默认 50）
-
-    返回每个结果的 preview_url，可直接生成 Markdown 可点击链接。
-    """
-    try:
-        results = search_media(q, root_id=root, limit=limit)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Directory not found")
-    except PermissionError:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid path")
-
-    base_url = get_public_base_url(request).rstrip("/")
-
-    # Extension filter
-    if ext:
-        exts = set(e.strip().lstrip(".").lower() for e in ext.split(",") if e.strip())
-    else:
-        exts = None
-
-    items = []
-    for r in results.get("results", []):
-        if r.get("is_dir"):
-            continue
-        file_ext = (r.get("ext") or "").lstrip(".").lower()
-        if exts and file_ext not in exts:
-            continue
-        path = r.get("path", "")
-        preview_url = f"{base_url}/clawmate/preview.html?root={quote(root, safe='')}&file={quote(path, safe='')}"
-        items.append({
-            "name": r.get("name", ""),
-            "path": path,
-            "ext": file_ext,
-            "preview_url": preview_url,
-        })
-
-    return JSONResponse(content={
-        "query": q,
-        "root": root,
-        "ext": ext,
-        "base_url": base_url,
-        "results": items,
-    })
 _PREVIEW_TOKEN_SECRET = os.environ.get("CLAWMATE_PREVIEW_TOKEN_SECRET", "")
 if not _PREVIEW_TOKEN_SECRET:
     print("[clawmate] WARNING: CLAWMATE_PREVIEW_TOKEN_SECRET not set — preview token verification will fail", flush=True)

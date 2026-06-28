@@ -169,16 +169,28 @@ from task_runner import router as task_router  # noqa: E402
 from subtitle_routes import router as subtitle_router  # noqa: E402
 from share_routes import router as share_router  # noqa: E402
 from agent_routes import router as agent_router  # noqa: E402
+from search_routes import router as search_router  # noqa: E402
 
 app.include_router(clawmate_router)
 app.include_router(task_router)
 app.include_router(subtitle_router)
 app.include_router(share_router)
 app.include_router(agent_router)
+app.include_router(search_router)
 
 # mount static files under /clawmate/
 if STATIC_DIR.exists() and STATIC_DIR.is_dir():
     app.mount("/clawmate", StaticFiles(directory=str(STATIC_DIR), html=True), name="clawmate_static")
+
+# Cache-bust middleware — must be added AFTER StaticFiles mount so it can
+# intercept responses.  Two mechanisms:
+#   1. HTML rewriting: injects ?v=<mtime> into <script>/<link> URLs so
+#      browsers immediately pick up file changes (real-time cache busting).
+#   2. Cache-Control headers: versioned URLs get 1-year immutable cache;
+#      unversioned fallbacks get short max-age + revalidation.
+# ZERO maintenance — add or change files, mtime handles the rest.
+from cache_bust import StaticCacheMiddleware  # noqa: E402
+app.add_middleware(StaticCacheMiddleware, static_dir=str(STATIC_DIR))
 
 
 # redirect root to /clawmate/
