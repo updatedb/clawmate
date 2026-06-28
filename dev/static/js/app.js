@@ -353,7 +353,7 @@ function getFileIcon(entry) {
   if (typeof fileThumbSVG === 'function') return fileThumbSVG(entry);
   // Fallback if icons.js not loaded
   if (!entry || !entry.is_dir && !entry.category) return '<span style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;font-size:48px;flex-shrink:0;">📄</span>';
-  if (entry.is_dir) return '<span style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;font-size:48px;flex-shrink:0;">' + (entry.marker ? '🦞' : '📁') + '</span>';
+  if (entry.is_dir) return '<span style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;font-size:48px;flex-shrink:0;">' + ('📁') + '</span>';
   return '<span style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;font-size:48px;flex-shrink:0;">📄</span>';
 }
 
@@ -924,7 +924,7 @@ function renderSidebarTree() {
 
     const icon = document.createElement("span");
     var icoName = entry.relPath === state.dir ? 'folder-open' : (entry.marker ? 'folder-project' : 'folder');
-    icon.innerHTML = typeof iconSVG === 'function' ? iconSVG(icoName, 14) : (entry.relPath === state.dir ? '📂' : (entry.marker ? '🦞' : '📁'));
+    icon.innerHTML = typeof iconSVG === 'function' ? iconSVG(icoName, 14) : (entry.relPath === state.dir ? '📂' : ('📁'));
     icon.style.flexShrink = "0";
 
     const label = document.createElement("span");
