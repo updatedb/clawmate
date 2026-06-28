@@ -436,7 +436,7 @@ button svg, .btn svg, a svg {
 }
 /* Agent chat view (OpenClaw backend) */
 .agent-chat-view {
-  display: flex; flex-direction: column; flex: 1; overflow: hidden;
+  display: flex; flex-direction: column; height: 100%; overflow: hidden;
 }
 .agent-chat-view.hidden { display: none; }
 .agent-chat-messages {
