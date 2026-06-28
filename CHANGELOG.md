@@ -1,6 +1,44 @@
 # Changelog
 
-## v1.45 (2026-06-28)
+## v1.45 (2026-06-27)
+### Agent Panel 后端切换
+- badge 点击循环切换后端 claude→codex→openclaw，前后端联动（WS 传递 backend 参数）
+- header 精简 — 移除 agent-panel-root 标签，保留 badge + title
+- Ctrl+L 清屏 → 改为 clear 按钮（本地 term.clear() + PTY 发送 \x0c）
+- 面板最大宽度 +100px（默认 700→800，拖拽 800→900）
+
+### Agent 渲染实验与回退
+- ansi-up DOM 渲染器 + 按钮切换双模式（DOM/xterm）→ 回退到纯 xterm 方案
+- xterm CSS transform:scale 适配面板宽度 → 回退，保留其他修复
+
+### xterm.js 可靠性
+- 多屏适配：实测字符宽度 + COLUMNS/LINES 环境变量 + 移除 reset
+- 统一 index 与 preview 的 agent panel 宽度限制
+- panelTitleEl 显示会话名 + drag 适配 DOM 模式 + null 守卫
+
+### Mermaid 弹窗缩放
+- 缩放控件增加弹窗查看按钮（expand dialog □）
+- 弹窗内支持缩放/拖拽，内容居中
+- 弹窗内鼠标滚轮直接缩放（不需 Ctrl）
+- expand 按钮复用 iconSVG() 生成，改为纯文本 □
+
+### Mobile 完善
+- 移动端面板 z-index 调整为 overlay7 < panel8 < topbar10
+- 目录/大纲条目点击后自动关闭侧边面板
+- html,body 锁定视口 overflow:hidden（对齐 preview）
+- bfcache 恢复时自动刷新 + CSS/JS 版本号更新
+
+### PWA + 主题 + 图片导航
+- PWA 支持（manifest + Service Worker）+ Agent 文件上下文注入 + 无限滚动
+- 主题防闪烁（data-theme 在 <head> 同步设置）
+- 自动模式图标从 sun 改为 sun-moon（与浅色模式区分）
+- 图片导航按钮固定视口位置 + isImageMode 扩展支持全部图片格式
+
+### Docs
+- README 截图全部重新截取 + 精简为两张（文件管理/预览+反馈）
+- SKILL.md 模板去重 + 章节编号修正 + 版本号 bump 至 2.7.2
+
+## v1.46 (2026-06-28)
 ### Agent Panel 空白修复（grid-column 错位）
 - 根因：`.agent-panel` 无显式 grid-column，auto-placement 在 sidebar/resize-handle 都 `display:none` 时把面板放到第 2 列（1fr≈25px→4px）
 - 修复：`.agent-panel { grid-column: 4; }` 始终占第 4 列（750px）

@@ -2131,6 +2131,11 @@
   const agentPanel = document.getElementById('previewAgentPanel');
   const threeCol = document.querySelector('.preview-three-col');
 
+  // CSS .preview-right.hidden / .preview-agent-panel.hidden include display:none
+  // but the CSSOM drops it. Explicitly set display:none on initially-hidden panels.
+  if (rightSidebar.classList.contains('hidden')) { rightSidebar.style.display = 'none'; console.log('[init] rightSidebar display:none'); }
+  if (agentPanel.classList.contains('hidden')) { agentPanel.style.display = 'none'; console.log('[init] agentPanel display:none'); }
+
   // Topbar outline toggle button (must be after sidebar declarations)
   const btnToggleLeft = document.getElementById('btnToggleLeft');
   btnToggleLeft.addEventListener('click', () => {
@@ -2250,7 +2255,7 @@
     _stopSidebarRefresh();
     document.getElementById('btnToggleRight').classList.remove('active');
     _rightCloseTimer = setTimeout(function () {
-      rightSidebar.style.display = '';          // let global .hidden take over
+      rightSidebar.style.display = 'none';      // explicitly hide — CSS .preview-right.hidden broken in CSSOM
       updateGridColumns();                      // grid column → 0px
       _syncPanelOpenClass();
     }, 300);
@@ -5703,7 +5708,9 @@
         _fetchAgentConfig().then(function() {
           return _loadAgentLibs();
         }).then(function() {
+          agentPanel.style.display = 'flex';     // override any stale display:none from previous close
           agentPanel.classList.remove('hidden');
+          agentPanel.style.display = '';         // let CSS take over
           btnToggleAgent.classList.add('active');
           updateGridColumns();
           _syncPanelOpenClass();
@@ -5723,7 +5730,7 @@
             var _origClose = window.Agent.close;
             window.Agent.close = function () {
               _origClose.apply(this, arguments);
-              if (agentPanel) agentPanel.classList.add('hidden');
+              if (agentPanel) { agentPanel.classList.add('hidden'); agentPanel.style.display = 'none'; }
               if (btnToggleAgent) btnToggleAgent.classList.remove('active');
               updateGridColumns();
               _syncPanelOpenClass();
@@ -5757,7 +5764,7 @@
   var btnClosePreviewAgent = document.getElementById('previewBtnCloseAgent');
   if (btnClosePreviewAgent) {
     btnClosePreviewAgent.addEventListener('click', function() {
-      if (agentPanel) agentPanel.classList.add('hidden');
+      if (agentPanel) { agentPanel.classList.add('hidden'); agentPanel.style.display = 'none'; }
       if (btnToggleAgent) btnToggleAgent.classList.remove('active');
       updateGridColumns();
       _syncPanelOpenClass();
