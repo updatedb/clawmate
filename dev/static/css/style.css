@@ -418,12 +418,6 @@ button svg, .btn svg, a svg {
 }
 .agent-backend-select:focus { border-color: var(--accent); }
 .agent-backend-select option { background: var(--bg); color: var(--text-primary); }
-.agent-clear-btn {
-  background: none; border: none; color: var(--text-muted); cursor: pointer;
-  font-size: 14px; padding: 2px 6px; border-radius: var(--radius-sm); line-height: 1;
-  flex-shrink: 0;
-}
-.agent-clear-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
 .agent-panel-close {
   background: none; border: none; color: var(--text-muted); cursor: pointer;
   font-size: 16px; padding: 2px 6px; border-radius: var(--radius-sm); line-height: 1;

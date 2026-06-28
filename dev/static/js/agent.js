@@ -16,7 +16,7 @@
 
   // --- DOM refs (re-initializable with prefix for reuse in preview page) ---
   let _domPrefix = '';
-  let panel, xtermContainer, chatView, chatMessages, chatInput, chatSendBtn, backendSelect, closeBtn, toggleBtn, clearBtn;
+  let panel, xtermContainer, chatView, chatMessages, chatInput, chatSendBtn, backendSelect, closeBtn, toggleBtn;
   let panelTitleEl;
   // Resize tracking shared between createTerminal & disconnectWs
   var _lastResizeSent = { cols: 0, rows: 0 };
@@ -36,7 +36,6 @@
     closeBtn      = document.getElementById(p + 'BtnCloseAgent') || document.getElementById(p + 'btnCloseAgent') || document.getElementById('btnCloseAgent');
     toggleBtn     = document.getElementById(p + 'BtnToggleAgent') || document.getElementById(p + 'btnToggleAgent') || document.getElementById('btnToggleAgent');
     panelTitleEl  = document.getElementById(p + 'AgentPanelTitle') || document.getElementById(p + 'agentPanelTitle') || document.getElementById(p + 'AgentTitle') || document.getElementById(p + 'agentTitle') || document.getElementById('agentPanelTitle');
-    clearBtn      = document.getElementById(p + 'BtnClearAgent') || document.getElementById(p + 'btnClearAgent') || document.getElementById('btnClearAgent');
     // Re-bind backend select handler (may change after prefix update, e.g. on preview page)
     if (backendSelect) {
       backendSelect.onchange = function () {
@@ -631,29 +630,6 @@
   // --- Close button ---
   if (closeBtn) {
     closeBtn.addEventListener('click', function () { window.Agent.close(); });
-  }
-
-  // --- Clear button (clears local terminal / chat + re-syncs PTY dimensions) ---
-  if (clearBtn) {
-    clearBtn.addEventListener('click', function () {
-      if (term) {
-        // PTY mode (claude/codex)
-        term.clear();
-        term.writeln('\x1b[1;36m✓ 已清屏\x1b[0m');
-        if (_pendingResize) { clearTimeout(_pendingResize); _pendingResize = null; }
-        _lastResizeSent = { cols: 0, rows: 0 };
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          try {
-            ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-          } catch (_) {}
-        }
-      } else if (backendMode === 'openclaw') {
-        // Chat mode (openclaw) — clear messages, keep input + focus
-        if (chatMessages) chatMessages.innerHTML = '';
-        chatBuf = ''; chatBufEl = null; chatStatusEl = null;
-        if (chatInput) chatInput.focus();
-      }
-    });
   }
 
   // --- Backend select dropdown ---
