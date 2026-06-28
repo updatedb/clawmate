@@ -643,7 +643,7 @@
     if (_winResizeDebounce) clearTimeout(_winResizeDebounce);
     _winResizeDebounce = setTimeout(function () {
       _winResizeDebounce = null;
-      doFit('win-resize');
+      if (typeof doFit === 'function') doFit('win-resize');
     }, 200);
   });
   // --- Close button ---

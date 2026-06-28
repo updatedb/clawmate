@@ -139,6 +139,7 @@
       grid-row: 1;
     }
     .preview-right.hidden {
+      display: none;
       translate: 100%;
       pointer-events: none;
     }
@@ -1240,6 +1241,7 @@
       grid-row: 1;
     }
     .preview-agent-panel.hidden {
+      display: none;
       translate: 100%;
       pointer-events: none;
     }

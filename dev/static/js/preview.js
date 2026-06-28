@@ -2214,6 +2214,7 @@
 
   function openRightSidebar() {
     if (!rightSidebar.classList.contains('hidden')) return;
+    console.log('[ClawMate] openRightSidebar called. Stack:', new Error().stack);
     clearTimeout(_rightCloseTimer);
     // Mutual exclusion: close left sidebar only on narrow screens
     if (window.innerWidth <= 1500 && leftSidebar && !leftSidebar.classList.contains('hidden')) {
@@ -2225,6 +2226,7 @@
       if (window.Agent) window.Agent.close();
       agentPanel.offsetHeight; // force reflow
       agentPanel.style.transition = '';
+      agentPanel.style.display = ''; // let CSS display:none take effect now
     }
     rightSidebar.style.display = 'flex';        // override global .hidden
     // Expand grid column directly while panel is still "hidden"
@@ -2243,7 +2245,9 @@
     if (rightSidebar.classList.contains('hidden')) return;
     clearTimeout(_rightCloseTimer);
     rightSidebar.style.display = 'flex';        // override global .hidden
+    if (_desktopPollTimer) { clearInterval(_desktopPollTimer); _desktopPollTimer = null; }
     rightSidebar.classList.add('hidden');       // slide-out: 0 → 100%
+    _stopSidebarRefresh();
     document.getElementById('btnToggleRight').classList.remove('active');
     _rightCloseTimer = setTimeout(function () {
       rightSidebar.style.display = '';          // let global .hidden take over
@@ -2303,6 +2307,12 @@
   function _syncPanelOpenClass() {
     var rightOpen = rightSidebar && !rightSidebar.classList.contains('hidden');
     var agentOpen = agentPanel && !agentPanel.classList.contains('hidden');
+    // 防御：如果两个都 open，强制关掉 agent（feedback 优先）
+    if (rightOpen && agentOpen) {
+      console.warn('[ClawMate] _syncPanelOpenClass: both panels open, forcing agent closed. Stack:', new Error().stack);
+      agentPanel.classList.add('hidden');
+      agentOpen = false;
+    }
     document.body.classList.toggle('preview-panel-open', rightOpen || agentOpen);
   }
 
@@ -5687,6 +5697,7 @@
           closeRightSidebar();
           rightSidebar.offsetHeight; // force reflow
           rightSidebar.style.transition = '';
+          rightSidebar.style.display = ''; // let CSS display:none take effect now (inline flex from closeRightSidebar is no longer needed)
         }
         // Opening — lazy-load libs then init Agent
         _fetchAgentConfig().then(function() {
