@@ -961,7 +961,7 @@ async def agent_terminal(
     # Check for existing session
     sess = _sessions.get(key)
 
-    if sess and not sess.stop_event.is_set():
+    if sess and not sess.stop_event.is_set() and sess.proc.returncode is None:
         # Existing session — apply new dimensions BEFORE sending any output.
         # Without this, the reconnected banner and buffered history would be
         # formatted for the OLD PTY dimensions, causing misalignment with the
