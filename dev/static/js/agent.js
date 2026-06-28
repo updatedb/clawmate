@@ -46,18 +46,7 @@
   }
   _resolveDom('');  // default: main page IDs
 
-  // --- Debug logging ---
-  const XLOG = 'font-weight:bold;color:#14b8a6';
-  function xlog(tag, msg, data) {
-    var args = ['%c[xterm:' + tag + '] %c' + msg, XLOG, 'color:inherit'];
-    if (data !== undefined) args.push(data);
-    console.log.apply(console, args);
-  }
-  function rectJson(el) {
-    if (!el) return null;
-    var r = el.getBoundingClientRect();
-    return { w: Math.round(r.width), h: Math.round(r.height), t: Math.round(r.top), l: Math.round(r.left) };
-  }
+  function xlog() {} // debug logging disabled
 
   // --- State ---
   let term = null;
@@ -236,14 +225,9 @@
       if (panel.classList.contains('hidden') || !fitAddon) return;
       // Skip fit during slide-in transition — container can report ~4px
       var rw = xtermContainer.clientWidth;
-      if (rw < 50) { xlog('fit', (label||'doFit') + ' skipped — container too narrow (' + rw + 'px)'); return; }
-      var before = term ? { rows: term.rows, cols: term.cols } : null;
-      xlog('fit', (label || 'doFit') + ' container=' + JSON.stringify(rectJson(xtermContainer)) + ' before=' + JSON.stringify(before));
-      try { fitAddon.fit(); } catch (e) { xlog('fit', 'ERROR', e); }
+      if (rw < 50) return;
+      try { fitAddon.fit(); } catch (_) {}
       if (term) {
-        var deltaCols = term.cols - (before ? before.cols : 0);
-        xlog('fit', 'result rows=' + term.rows + ' cols=' + term.cols +
-          ' (Δ rows:' + (term.rows - (before ? before.rows : 0)) + ' cols:' + deltaCols + ')');
         try { term.refresh(0, term.rows - 1); } catch (_) {}
         requestAnimationFrame(function () { try { term.refresh(0, term.rows - 1); } catch (_) {} });
       }
