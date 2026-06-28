@@ -636,15 +636,10 @@
     connectWs();
   }
 
-  // --- Resize handler (debounced 200ms) ---
-  var _winResizeDebounce = null;
+  // --- Resize handler ---
   window.addEventListener('resize', function () {
     updateGridColumns();
-    if (_winResizeDebounce) clearTimeout(_winResizeDebounce);
-    _winResizeDebounce = setTimeout(function () {
-      _winResizeDebounce = null;
-      if (typeof doFit === 'function') doFit('win-resize');
-    }, 200);
+    // xtermContainer ResizeObserver handles terminal fit on size change
   });
   // --- Close button ---
   if (closeBtn) {
