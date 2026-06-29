@@ -486,9 +486,8 @@
           if (panelTitleEl) panelTitleEl.textContent = msg.key;
           // Write session info to terminal for PTY backends (claude/codex)
           if (isPtyBackend() && term) {
-            if (currentSessionKey && msg.key === currentSessionKey) {
-              term.writeln('\r\n\x1b[1;36m⟳ 已重连会话: ' + msg.key + '\x1b[0m');
-            } else {
+            if (!currentSessionKey) {
+              // First connection — show session key
               term.writeln('\x1b[1;36m📋 会话: ' + msg.key + '\x1b[0m');
             }
           }

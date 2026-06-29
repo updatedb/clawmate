@@ -457,6 +457,9 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
                             new_dir = msg.get("dir", "")
                             _bk = sess.key.split(":")[0] if sess.key and ":" in sess.key else "claude"
                             new_key = _session_key(new_root, new_dir, _bk)
+                            # Skip if key unchanged — same project, no reconnect needed
+                            if new_key == sess.key:
+                                continue
                             for w in list(sess.ws_set):
                                 try:
                                     if w.client_state == WebSocketState.CONNECTED:
