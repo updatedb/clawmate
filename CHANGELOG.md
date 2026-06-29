@@ -38,6 +38,15 @@
 - README 截图全部重新截取 + 精简为两张（文件管理/预览+反馈）
 - SKILL.md 模板去重 + 章节编号修正 + 版本号 bump 至 2.7.2
 
+## v1.47 (2026-06-29)
+### Preview &line=N 滚动 + 搜索清除 + 内容匹配面板 + 源码高亮修复
+- Preview: `&line=N` 渲染模式下不再强制切换源码视图，滚动到最近标题段落（`_scrollRenderedMarkdownToLine`）
+- Preview: HTML 文件切换源码/编辑模式内容空白（`srcPre.style.display` 未同步 3 处）
+- Preview: Markdown 源码模式高亮修复（`textContent` 和 `code` 元素重复导致裸文本覆盖高亮）
+- Search: 清除搜索按钮完整清理内容匹配状态（IIFE 猴子补丁移到事件绑定之前）
+- 内容匹配面板: `cmd-file-header` 点击区域修复（spacer 替代 `flex:1` 链接，仅文件名打开预览）
+- 内容匹配面板: chevron 箭头方向修正（展开↓ 收起→）
+
 ## v1.46 (2026-06-28)
 ### Agent Panel 空白修复（grid-column 错位）
 - 根因：`.agent-panel` 无显式 grid-column，auto-placement 在 sidebar/resize-handle 都 `display:none` 时把面板放到第 2 列（1fr≈25px→4px）

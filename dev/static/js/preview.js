@@ -910,7 +910,12 @@
       // Markdown/HTML file — use the source pre
       wrapper = srcPre.closest('.code-with-lines');
       if (wrapper && window.getComputedStyle(wrapper).display === 'none') {
-        // Source view is hidden (rendered mode) — show it temporarily
+        // Rendered mode for markdown: scroll rendered content, don't switch views
+        if (!isRawMode && document.getElementById('markdownRenderedDiv')) {
+          _scrollRenderedMarkdownToLine(lineNum);
+          return;
+        }
+        // Source view is hidden but user is in source mode — show it
         // Also hide the rendered view
         var mdDiv = document.getElementById('markdownRenderedDiv');
         var htmlIframe = document.getElementById('htmlIframe');
@@ -922,6 +927,7 @@
         if (editBtn) editBtn.style.display = '';
         if (srcToggle) { srcToggle.textContent = '📝 渲染'; srcToggle.classList.add('active'); }
         wrapper.style.display = '';
+        if (srcPre) srcPre.style.display = '';
         wasHidden = true;
       }
       pre = srcPre;
@@ -953,6 +959,73 @@
     wrapper.appendChild(flash);
     // Remove after animation completes
     setTimeout(function() { if (flash.parentNode) flash.remove(); }, 1600);
+  }
+
+  // Scroll rendered markdown to the section containing line N
+  function _scrollRenderedMarkdownToLine(lineNum) {
+    var srcPre = document.getElementById('sourceRawPre');
+    var mdDiv = document.getElementById('markdownRenderedDiv');
+    if (!srcPre || !mdDiv) return;
+
+    var sourceText = srcPre.textContent || '';
+    var lines = sourceText.split('\n');
+    var totalLines = lines.length;
+
+    // Walk backwards from lineNum-1 to find the nearest heading
+    var headingText = null;
+    for (var i = Math.min(lineNum - 1, totalLines - 1); i >= 0; i--) {
+      var m = lines[i].match(/^#{1,4}\s+(.+)/);
+      if (m) { headingText = m[1].trim(); break; }
+    }
+
+    if (headingText) {
+      // Generate heading ID the same way markdown-it does:
+      // lowercase, replace spaces with -, strip non-word chars, collapse dashes
+      var headingId = headingText
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^\w一-鿿㐀-䶿-]/g, '')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+
+      // Try to find the heading by ID first, then by text content
+      var target = document.getElementById(headingId);
+      if (!target) {
+        // Fallback: search headings by text content
+        var headings = mdDiv.querySelectorAll('h1, h2, h3, h4');
+        for (var h = 0; h < headings.length; h++) {
+          if (headings[h].textContent.trim() === headingText) {
+            target = headings[h];
+            break;
+          }
+        }
+      }
+
+      if (target) {
+        var ct = document.getElementById('contentBody');
+        if (ct) {
+          var targetTop = target.getBoundingClientRect().top - ct.getBoundingClientRect().top + ct.scrollTop;
+          ct.scrollTo({ top: Math.max(0, targetTop - 20), behavior: 'smooth' });
+        }
+        // Brief highlight on the heading
+        var origBg = target.style.transition;
+        target.style.transition = 'background-color 0.3s';
+        target.style.backgroundColor = 'var(--line-flash-bg, rgba(255,213,79,0.35))';
+        setTimeout(function() {
+          target.style.backgroundColor = '';
+          target.style.transition = origBg;
+        }, 1500);
+        return;
+      }
+    }
+
+    // Fallback: scroll to proportional position
+    var ct = document.getElementById('contentBody');
+    if (ct) {
+      var ratio = Math.min(1, Math.max(0, lineNum / Math.max(1, totalLines)));
+      var scrollTarget = ratio * mdDiv.scrollHeight;
+      ct.scrollTo({ top: Math.max(0, scrollTarget - 60), behavior: 'smooth' });
+    }
   }
 
   function renderCodeOutline(items) {
@@ -1198,7 +1271,8 @@
     ta.style.height = Math.max(300, window.innerHeight - 48 - 42 - 40) + 'px';
     // Insert after the wrapper (or banner)
     const banner = document.getElementById('sourceEditBanner');
-    const insertAfter = wrapper || srcPre;
+    // HTML: the wrapper lives inside htmlWrap, but textarea belongs in contentBody
+    var insertAfter = (isHtmlMode ? document.getElementById('htmlContentWrap') : null) || wrapper || srcPre;
     if (banner) {
       banner.style.display = '';
       insertAfter.parentNode.insertBefore(ta, banner.nextSibling);
@@ -1443,6 +1517,7 @@
           const wrapper = srcPre.closest('.code-with-lines');
           if (wrapper) {
             wrapper.style.display = '';
+            srcPre.style.display = '';  // HTML: pre has its own inline display:none
             // Refresh source content and line numbers
             if (srcPre.textContent !== rawContent) _updateSourcePre(srcPre, rawContent);
             updateCodeLineNumbers(wrapper, rawContent);
@@ -1476,6 +1551,7 @@
         const wrapper = srcPre.closest('.code-with-lines');
         if (wrapper) {
           wrapper.style.display = '';
+          srcPre.style.display = '';  // HTML: pre has its own inline display:none
           _updateSourcePre(srcPre, rawContent);
           updateCodeLineNumbers(wrapper, rawContent);
         } else {
@@ -2007,7 +2083,6 @@
         // Create source view (raw pre, hidden by default unless isRawMode)
         const srcPre = document.createElement('pre');
         srcPre.id = 'sourceRawPre';
-        srcPre.textContent = content;
         if (window.hljs) {
           try {
             const highlighted = window.hljs.highlight(content, { language: 'markdown', ignoreIllegals: true }).value;
@@ -2017,9 +2092,11 @@
             srcPre.appendChild(code);
             srcPre.className = 'code-highlighted';
           } catch (_) {
+            srcPre.textContent = content;
             srcPre.className = 'raw-text';
           }
         } else {
+          srcPre.textContent = content;
           srcPre.className = 'raw-text';
         }
         const mdSrcWrapper = renderCodeWithLineNumbers(content, srcPre);

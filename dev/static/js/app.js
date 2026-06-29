@@ -1909,6 +1909,16 @@ async function loadConfig() {
   populateRootSelect();
 }
 
+// Patch clearSearch to also hide content results (must be before event bindings)
+(function() {
+  var origClearSearch = clearSearch;
+  clearSearch = function() {
+    _hideContentResults();
+    _stopContentSummaryPoll();
+    origClearSearch();
+  };
+})();
+
 // ===== Event Listeners =====
 els.searchBtn.addEventListener("click", search);
 els.clearSearchBtn.addEventListener("click", clearSearch);
@@ -3211,6 +3221,11 @@ function _renderContentMatchModalBody(results, query) {
     fileLink.addEventListener('click', function(e) { e.stopPropagation(); });
     fileHeader.appendChild(fileLink);
 
+    // Spacer to absorb flex space so only the link text opens preview
+    var spacer = document.createElement('span');
+    spacer.style.cssText = 'flex:1;min-width:0;';
+    fileHeader.appendChild(spacer);
+
     var fileMeta = document.createElement('span');
     fileMeta.className = 'cmd-file-meta';
     fileMeta.textContent = (r.match_count || 0) + ' 处匹配';
@@ -3436,15 +3451,5 @@ els.searchInput.addEventListener('keydown', function(e) {
     unifiedSearch();
   }
 });
-
-// Clear search also hides content results
-(function() {
-  var origClearSearch = clearSearch;
-  clearSearch = function() {
-    _hideContentResults();
-    _stopContentSummaryPoll();
-    origClearSearch();
-  };
-})();
 
 init();

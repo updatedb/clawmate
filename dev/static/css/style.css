@@ -2126,9 +2126,10 @@ pre:hover .code-copy-btn,
   height: 8px;
   border-right: 2px solid var(--text-muted);
   border-bottom: 2px solid var(--text-muted);
-  transform: rotate(-45deg) translate(1px, -1px);
-  margin: 4px 0 0 2px;
+  transform: rotate(45deg) translate(2px, -2px);
+  margin: 2px 0 0 2px;
 }
+/* Collapsed: arrow points right */
 .cmd-file-section.collapsed .cmd-section-chevron {
   transform: rotate(-90deg);
 }
@@ -2177,7 +2178,6 @@ pre:hover .code-copy-btn,
   color: var(--accent);
   text-decoration: none;
   word-break: break-all;
-  flex: 1;
   min-width: 0;
 }
 .cmd-file-link:hover { text-decoration: underline; }
