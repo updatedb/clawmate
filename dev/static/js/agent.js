@@ -780,6 +780,7 @@
     },
 
     close: function () {
+      if (panel.classList.contains('hidden') && !animatingOut) return;
       disconnectWs();
       animatingOut = true;
       if (termResizeObserver) {
