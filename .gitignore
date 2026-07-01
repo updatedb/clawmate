@@ -49,6 +49,7 @@ config.json.bak
 share_links.json
 CHANGELOG.md
 .playwright-mcp/
+.mcp.json
 agent-chat-test.png
 agent-panel-test.png
 agent-terminal-test.png
