@@ -1470,6 +1470,7 @@ pre:hover .code-copy-btn,
 @media (max-width: 1000px) {
   .tb-left label { font-size: 0; padding: 0; }
   #multiSelectToggle span,
+  #btnCreate span,
   #viewGrid span,
   #viewList span { display: none; }
   .sort-pill { padding: 0 8px; }
@@ -1484,6 +1485,7 @@ pre:hover .code-copy-btn,
   body.agent-open .list-item > :nth-child(3),
   body.agent-open .list-item > :nth-child(4) { display: none; }
   body.agent-open #multiSelectToggle span,
+  body.agent-open #btnCreate span,
   body.agent-open #viewGrid span,
   body.agent-open #viewList span { display: none; }
   body.agent-open .sort-pill { padding: 0 8px; }

@@ -5940,7 +5940,6 @@
       var scripts = [
         XTERM_CDN + '/lib/xterm.min.js',
         './vendor/addon-fit.min.js?v=20260622',
-        './vendor/addon-webgl.min.js?v=20260622',
       ];
 
       function loadNext(idx) {
