@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.48 (2026-07-01)
+### 分享功能增强
+- index 卡片 ⋯ 菜单底部添加"生成分享链接 / 取消分享"（仅文件，目录不显示）
+- 分享/取消成功同步更新状态栏（`setStatus`）+ `showToast`
+- preview 页面分享按钮根据文件分享状态高亮（`active` class），点击 toggle 创建/取消分享
+- 图片导航时自动刷新分享状态
+- 删除 thumb 上独立的 `card-share-icon` 叠加图标（功能移至菜单）
+
+### 后端新增 API
+- `GET /api/clawmate/share/active` — 返回全部有效分享文件列表（按 root 分组）
+- `POST /api/clawmate/share/expire` — 将指定文件分享标记为过期
+
 ## v1.45 (2026-06-27)
 ### Agent Panel 后端切换
 - badge 点击循环切换后端 claude→codex→openclaw，前后端联动（WS 传递 backend 参数）
