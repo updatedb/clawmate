@@ -1640,6 +1640,8 @@
     // Re-fetch nav data from API, skip outline rebuild (just update highlight)
     imgNav = { prev: null, next: null, idx: 0, total: 0 };
     fetchImageNav({ skipOutlineRebuild: true });
+    // Refresh share status for the new image
+    checkShareStatus();
   }
 
   // Reusable: fetch sibling images from the API with current sort params,
@@ -3963,25 +3965,81 @@
     document.body.removeChild(link);
   });
 
-  document.getElementById('btnShare').addEventListener('click', async () => {
-    const btn = document.getElementById('btnShare');
-    btn.textContent = '⏳';
-    btn.disabled = true;
+  // ── Share state & toggle ───────────────────────────────────────────
+  var _isShared = false;
+  var _btnShareHtml = '';
+
+  function updateShareButton() {
+    var btn = document.getElementById('btnShare');
+    if (!btn) return;
+    if (_isShared) {
+      btn.classList.add('active');
+      btn.title = '点击取消分享';
+    } else {
+      btn.classList.remove('active');
+      btn.title = '生成分享链接';
+    }
+  }
+
+  async function checkShareStatus() {
     try {
-      const res = await fetch('/api/clawmate/share/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ root: rootId, path: filePath }),
-      });
-      if (!res.ok) { showToast('❌ 分享链接生成失败 (' + res.status + ')', 3000); return; }
-      const data = await res.json();
-      await copyText(data.url, '✅ 分享链接已复制到剪贴板');
-      showToast('🔗 已复制 · ' + (data.reused ? '有效期已刷新' : '24小时有效'), 3000);
+      var res = await fetch('/api/clawmate/share/active');
+      if (res.ok) {
+        var data = await res.json();
+        var shared = data.shared || {};
+        var fileList = shared[rootId] || [];
+        _isShared = fileList.indexOf(filePath) !== -1;
+      }
+    } catch (_) {
+      _isShared = false;
+    }
+    updateShareButton();
+  }
+
+  document.getElementById('btnShare').addEventListener('click', async () => {
+    var btn = document.getElementById('btnShare');
+    // Cache original HTML on first click
+    if (!_btnShareHtml) _btnShareHtml = btn.innerHTML;
+    btn.disabled = true;
+
+    try {
+      if (_isShared) {
+        // Already shared — expire it
+        btn.textContent = '⏳';
+        var res = await fetch('/api/clawmate/share/expire', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ root: rootId, path: filePath }),
+        });
+        if (res.ok) {
+          _isShared = false;
+          updateShareButton();
+          showToast('已取消分享', 2000);
+        } else {
+          showToast('❌ 取消分享失败 (' + res.status + ')', 3000);
+        }
+      } else {
+        // Not shared — create share link
+        btn.textContent = '⏳';
+        var res = await fetch('/api/clawmate/share/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ root: rootId, path: filePath }),
+        });
+        if (!res.ok) { showToast('❌ 分享链接生成失败 (' + res.status + ')', 3000); return; }
+        var data = await res.json();
+        await copyText(data.url, '✅ 分享链接已复制到剪贴板');
+        showToast('🔗 已复制 · ' + (data.reused ? '有效期已刷新' : '24小时有效'), 3000);
+        _isShared = true;
+        updateShareButton();
+      }
     } catch (e) {
       showToast('❌ ' + e.message, 3000);
     } finally {
-      btn.textContent = '↗️ 分享';
+      btn.innerHTML = _btnShareHtml;
       btn.disabled = false;
+      // Re-sync visual state after restoring innerHTML (class list is preserved)
+      updateShareButton();
     }
   });
 
@@ -5493,6 +5551,7 @@
 
   // ── Init ────────────────────────────────────────────────────────
   loadContent();
+  checkShareStatus();
   // 加载 task_templates 到 _taskTemplates 并初始化标签按钮
   getRootsConfig().then(function(cfg) {
     if (cfg && cfg.task_templates) { _taskTemplates = cfg.task_templates; initPstTags(); }

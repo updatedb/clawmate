@@ -158,6 +158,58 @@ async def share_create(request: Request):
     })
 
 
+@router.get("/api/clawmate/share/active", response_class=JSONResponse)
+async def share_active():
+    """返回所有当前有效的分享文件列表（免登录）。
+
+    Response: {"shared": {"root_id": ["file1", "file2", ...], ...}}
+    """
+    data = _load_share_links()
+    data = _clean_expired(data)
+    # Save cleaned data back (housekeeping)
+    if len(data.get("links", [])) < len(_load_share_links().get("links", [])):
+        _save_share_links(data)
+    result = {}
+    for link in data.get("links", []):
+        root = link.get("root", "")
+        file = link.get("file", "")
+        if root and file:
+            result.setdefault(root, []).append(file)
+    return JSONResponse(content={"shared": result})
+
+
+@router.post("/api/clawmate/share/expire")
+async def share_expire(request: Request):
+    """将指定文件的分享标记为过期"""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    root_id = str(body.get("root", "")).strip()
+    file_path = str(body.get("path", "")).strip()
+
+    if not root_id or not file_path:
+        raise HTTPException(status_code=400, detail="Missing root/path")
+
+    data = _load_share_links()
+    data = _clean_expired(data)
+
+    now = int(time.time())
+    found = False
+    for l in data["links"]:
+        if l["root"] == root_id and l["file"] == file_path:
+            l["expires_at"] = now  # Expire immediately
+            found = True
+            break
+
+    if found:
+        _save_share_links(data)
+        return JSONResponse(content={"ok": True})
+    else:
+        return JSONResponse(content={"ok": False, "reason": "not_found"}, status_code=404)
+
+
 @router.get("/api/clawmate/share/{token}/data")
 async def share_data(token: str):
     """返回分享文件的内容 JSON（免登录）"""

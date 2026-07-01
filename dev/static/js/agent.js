@@ -178,9 +178,9 @@
     } else {
       xlog('init', 'FitAddon NOT available — terminal will NOT auto-resize');
     }
-    if (typeof WebglAddon !== 'undefined') {
-      try { term.loadAddon(new WebglAddon.WebglAddon()); xlog('init', 'WebglAddon loaded'); } catch (_) { xlog('init', 'WebglAddon failed', _); }
-    }
+    // if (typeof WebglAddon !== 'undefined') {
+    //   try { term.loadAddon(new WebglAddon.WebglAddon()); xlog('init', 'WebglAddon loaded'); } catch (_) { xlog('init', 'WebglAddon failed', _); }
+    // }
 
     term.open(xtermContainer);
     // Defer FitAddon.fit() — during slide-in transition the container

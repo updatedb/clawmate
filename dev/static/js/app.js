@@ -55,6 +55,7 @@ const state = {
   multiSelectEnabled: false,
   onlyofficeAvailable: null, // null=unknown, true=available, false=unavailable
   contentResults: null,  // raw content search results for detail modal
+  activeShares: {},       // root -> [file_paths] for active share links
 };
 
 // Sidebar state — shows parent directory's children (siblings of current dir)
@@ -94,7 +95,7 @@ const els = {
   batchDownloadBtn: document.getElementById("batchDownloadBtn"),
   // Multi-select
   multiSelectToggle: document.getElementById("multiSelectToggle"),
-  btnMkdir: document.getElementById("btnMkdir"),
+  btnCreate: document.getElementById("btnCreate"),
   batchBar: document.getElementById("batchBar"),
   batchCount: document.getElementById("batchCount"),
   batchSelectAllBtn: document.getElementById("batchSelectAllBtn"),
@@ -1210,6 +1211,14 @@ function appendGalleryGroupHeader(container, label) {
   container.appendChild(header);
 }
 
+function isEntryShared(entry) {
+  var root = state.rootId;
+  var shared = state.activeShares;
+  if (!root || !shared || !shared[root]) return false;
+  var path = entry.relPath || '';
+  return shared[root].indexOf(path) !== -1;
+}
+
 function renderGallery(markdownEntries, folderEntries, otherEntries) {
   els.gallery.innerHTML = "";
 
@@ -1221,6 +1230,7 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
       const card = document.createElement("div");
       card.className = "card";
       card.dataset.path = entry.relPath;
+      if (isEntryShared(entry)) card.classList.add("shared");
       const isSelected = state.selectedPaths.has(entry.relPath);
       if (isSelected) card.classList.add("selected");
 
@@ -1330,6 +1340,60 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
           }
         });
         addItem('trash-2', '删除', function () { deleteEntry(entry); });
+        // Share / unshare (only for files, not directories)
+        if (!entry.is_dir) {
+          var shareLabel = isEntryShared(entry) ? '取消分享' : '生成分享链接';
+          addItem('share', shareLabel, async function () {
+            if (isEntryShared(entry)) {
+              // Expire existing share
+              try {
+                var res = await authFetch("/api/clawmate/share/expire", {
+                  method: "POST",
+                  headers: {"Content-Type": "application/json"},
+                  body: JSON.stringify({root: state.rootId, path: entry.relPath}),
+                });
+                if (res.ok) {
+                  // Update card visual
+                  document.querySelectorAll('[data-path="' + CSS.escape(entry.relPath) + '"]').forEach(function (el) {
+                    el.classList.remove("shared");
+                  });
+                  // Update local state
+                  var root = state.rootId;
+                  if (state.activeShares && state.activeShares[root]) {
+                    var idx = state.activeShares[root].indexOf(entry.relPath);
+                    if (idx !== -1) state.activeShares[root].splice(idx, 1);
+                  }
+                  setStatus("已取消分享");
+                  if (typeof showToast === "function") showToast("已取消分享");
+                }
+              } catch (_) {}
+            } else {
+              // Create share link
+              try {
+                var res = await authFetch("/api/clawmate/share/create", {
+                  method: "POST",
+                  headers: {"Content-Type": "application/json"},
+                  body: JSON.stringify({root: state.rootId, path: entry.relPath}),
+                });
+                if (res.ok) {
+                  var data = await res.json();
+                  await copyText(data.url, '✅ 分享链接已复制到剪贴板');
+                  // Update card visual
+                  document.querySelectorAll('[data-path="' + CSS.escape(entry.relPath) + '"]').forEach(function (el) {
+                    el.classList.add("shared");
+                  });
+                  // Update local state
+                  if (!state.activeShares[state.rootId]) state.activeShares[state.rootId] = [];
+                  if (state.activeShares[state.rootId].indexOf(entry.relPath) === -1) {
+                    state.activeShares[state.rootId].push(entry.relPath);
+                  }
+                  setStatus("已生成分享链接");
+                  if (typeof showToast === "function") showToast("🔗 已复制分享链接 · 24小时有效", 3000);
+                }
+              } catch (_) {}
+            }
+          });
+        }
         // Position dropdown relative to the menu button (viewport-relative)
         // so it floats above all cards, never clipped.
         var btnRect = menuBtn.getBoundingClientRect();
@@ -1713,6 +1777,7 @@ async function loadDir(dir) {
     state.hasMore = cached.hasMore;
     updateUrl();
     await loadSidebarParent(state.dir);
+    await loadActiveShares();
     render();
     if (window.Agent) window.Agent.updateRoot(state.rootId, state.dir);
     return;
@@ -1742,6 +1807,7 @@ async function loadDir(dir) {
   updateUrl();
   // Also load parent dir for sidebar
   await loadSidebarParent(state.dir);
+  await loadActiveShares();  // refresh share status
   render();
 }
 
@@ -2108,36 +2174,104 @@ btnLogoutMain && btnLogoutMain.addEventListener("click", async function() {
   window.location.href = "/clawmate/login.html";
 });
 
-// Create directory
-async function mkdirCurrent() {
+// Create menu dropdown
+function toggleCreateMenu() {
   if (!state.rootId) { setStatus("请先选择根目录"); return; }
-  var name = prompt("请输入新目录名：");
-  if (!name) return;
-  name = name.trim();
-  if (!name) return;
-  try {
-    var res = await authFetch("/api/clawmate/mkdir", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ root: state.rootId, dir: state.dir, name: name }),
-    });
-    if (res.ok) {
-      setStatus("目录已创建: " + name);
-      invalidateDirCache();
-      loadDir(state.dir);
-    } else {
-      var detail = "";
-      try { var err = await res.json(); detail = err.detail || ""; } catch (_) {}
-      setStatus("创建失败: " + (detail || res.status));
-    }
-  } catch (e) {
-    setStatus("创建出错: " + (e.message || e));
+
+  var btn = els.btnCreate;
+  // Toggle: close if already open
+  if (btn._dropdown) {
+    btn._dropdown.remove();
+    btn._dropdown = null;
+    return;
   }
+  // Close any other open menu
+  var existing = document.querySelector('.toolbar-dropdown');
+  if (existing) existing.remove();
+
+  var dropdown = document.createElement("div");
+  dropdown.className = "toolbar-dropdown";
+  btn._dropdown = dropdown;
+
+  function addItem(iconName, label, onClick) {
+    var item = document.createElement("div");
+    item.className = "card-menu-item";
+    item.innerHTML = iconSVG(iconName, 13) + '<span>' + label + '</span>';
+    item.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      dropdown.remove();
+      btn._dropdown = null;
+      onClick();
+    });
+    dropdown.appendChild(item);
+  }
+
+  addItem('folder', '创建目录', async function () {
+    var name = prompt("请输入新目录名：");
+    if (!name) return;
+    name = name.trim();
+    if (!name) return;
+    try {
+      var res = await authFetch("/api/clawmate/mkdir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ root: state.rootId, dir: state.dir, name: name }),
+      });
+      if (res.ok) {
+        setStatus("目录已创建: " + name);
+        invalidateDirCache();
+        loadDir(state.dir);
+      } else {
+        var detail = "";
+        try { var err = await res.json(); detail = err.detail || ""; } catch (_) {}
+        setStatus("创建失败: " + (detail || res.status));
+      }
+    } catch (e) {
+      setStatus("创建出错: " + (e.message || e));
+    }
+  });
+
+  addItem('file', '创建 Markdown', async function () {
+    var name = prompt("请输入文件名（自动添加 .md 后缀）：");
+    if (!name) return;
+    name = name.trim();
+    if (!name) return;
+    if (!/\.md$/i.test(name)) name += '.md';
+    var content = '# ' + name.replace(/\.md$/i, '') + '\n\n';
+    try {
+      var blob = new Blob([content], { type: 'text/markdown' });
+      var formData = new FormData();
+      formData.append('file', blob, name);
+      var res = await authFetch(
+        '/api/clawmate/upload?root=' + encodeURIComponent(state.rootId) + '&dir=' + encodeURIComponent(state.dir),
+        { method: 'POST', body: formData }
+      );
+      if (res.ok) {
+        setStatus("Markdown 已创建: " + name);
+        invalidateDirCache();
+        loadDir(state.dir);
+      } else {
+        var detail = "";
+        try { var err = await res.json(); detail = err.detail || ""; } catch (_) {}
+        setStatus("创建失败: " + (detail || res.status));
+      }
+    } catch (e) {
+      setStatus("创建出错: " + (e.message || e));
+    }
+  });
+
+  // Position dropdown below the button
+  var btnRect = btn.getBoundingClientRect();
+  dropdown.style.position = 'fixed';
+  dropdown.style.top = (btnRect.bottom + 4) + 'px';
+  dropdown.style.left = btnRect.left + 'px';
+  dropdown.style.zIndex = '9999';
+  document.body.appendChild(dropdown);
 }
 
 // Multi-select
 els.multiSelectToggle && els.multiSelectToggle.addEventListener("click", toggleMultiSelect);
-els.btnMkdir && els.btnMkdir.addEventListener("click", mkdirCurrent);
+els.btnCreate && els.btnCreate.addEventListener("click", toggleCreateMenu);
 els.batchSelectAllBtn && els.batchSelectAllBtn.addEventListener("click", selectAll);
 
 // Batch operations
@@ -2604,8 +2738,21 @@ function clearActiveFeedbackPanel() {
 }
 
 
+async function loadActiveShares() {
+  try {
+    var res = await authFetch('/api/clawmate/share/active');
+    if (res.ok) {
+      var data = await res.json();
+      state.activeShares = data.shared || {};
+    }
+  } catch (_) {
+    state.activeShares = {};
+  }
+}
+
 async function init() {
   await loadConfig();
+  await loadActiveShares();
   // Sync sort select with state default
   updateSortPills();
   setupDragDrop(); // Activate drag-and-drop upload
@@ -2893,9 +3040,9 @@ function _renderDirPickerTree(container, dirs, rootDirName) {
 
 // Close any open card menu dropdown when clicking outside
 document.addEventListener('click', function (e) {
+  // Close card-menu-dropdown
   var open = document.querySelector('.card-menu-dropdown');
   if (open && !e.target.closest('.card-menu-btn') && !e.target.closest('.card-menu-dropdown')) {
-    // Clear reference on the owning button
     var allBtns = document.querySelectorAll('.card-menu-btn');
     for (var i = 0; i < allBtns.length; i++) {
       if (allBtns[i]._dropdown === open) {
@@ -2904,6 +3051,13 @@ document.addEventListener('click', function (e) {
       }
     }
     open.remove();
+  }
+  // Close toolbar-dropdown
+  var tOpen = document.querySelector('.toolbar-dropdown');
+  if (tOpen && !e.target.closest('#btnCreate') && !e.target.closest('.toolbar-dropdown')) {
+    var btn = document.getElementById('btnCreate');
+    if (btn && btn._dropdown) btn._dropdown = null;
+    tOpen.remove();
   }
 });
 

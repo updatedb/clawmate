@@ -68,7 +68,6 @@
           </div>
           <div class="toolbar-bottom">
             <div class="tb-left">
-              <label id="filterLabel">类型</label>
               <select id="filterType">
                 <option value="all">全部</option>
                 <option value="dir">目录</option>
@@ -78,7 +77,6 @@
                 <option value="text">文本</option>
                 <option value="other">其他</option>
               </select>
-              <label>排序</label>
               <button id="sortTime" class="sort-pill active" data-key="time" data-dir="desc">↓ 最新</button>
               <button id="sortName" class="sort-pill" data-key="name" data-dir="asc">↑ 名称</button>
               <button id="sortSize" class="sort-pill" data-key="size" data-dir="desc">↓ 大小</button>
@@ -86,9 +84,10 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                 <span> 多选</span>
               </button>
-              <button id="btnMkdir" title="创建目录">
+              <button id="btnCreate" title="创建">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-                <span> 创建目录</span>
+                <span> 创建</span>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="create-chevron"><path d="m6 9 6 6 6-6"/></svg>
               </button>
             </div>
             <div class="tb-right">
@@ -187,7 +186,6 @@
   <!-- xterm addons use independent semver (not tied to @xterm/xterm version).
        addon-fit 0.11.0 / addon-webgl 0.19.0 are compatible with xterm 5.x -->
   <script src="./vendor/addon-fit.min.js?v=20260622" defer></script>
-  <script src="./vendor/addon-webgl.min.js?v=20260622" defer></script>
   <script src="./js/icons.js" defer></script>
   <script src="./js/topbar.js" defer></script>
   <script src="./js/agent.js" defer></script>

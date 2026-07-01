@@ -658,6 +658,10 @@ button svg, .btn svg, a svg {
   transform: rotate(45deg) translateY(-1px);
 }
 .card .thumb { height: 78px; background: var(--bg-tertiary); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; font-size: 28px; color: var(--text-muted); overflow: hidden; flex-shrink: 0; position: relative; }
+/* Shared file indicator — accent background + share icon (bottom-right) */
+.card.shared .thumb {
+  background: var(--highlight);
+}
 .card img { max-width: 100%; max-height: 78px; object-fit: cover; border-radius: var(--radius-sm); }
 .card .title { font-size: 13px; font-weight: 500; word-break: break-all; color: var(--text-primary); line-height: 1.4; }
 .card .meta { font-size: 11px; color: var(--text-secondary); display: flex; justify-content: space-between; margin-top: auto; padding-top: 4px; }
@@ -697,6 +701,17 @@ button svg, .btn svg, a svg {
 .card-menu-item:hover { background: var(--bg-tertiary); }
 .card-menu-item span { white-space: nowrap; }
 
+/* Toolbar create dropdown */
+.toolbar-dropdown {
+  background: var(--card-bg); border: 1px solid var(--border-color);
+  border-radius: var(--radius-md); box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  min-width: 150px; padding: 4px;
+}
+.create-chevron {
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+
 /* ===== Entry Group Headers ===== */
 .entry-group-header { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 0 4px; margin-top: 8px; grid-column: 1 / -1; border-bottom: 1px solid var(--border-color); }
 .entry-group-header:first-child { margin-top: 0; }
@@ -710,7 +725,7 @@ button svg, .btn svg, a svg {
 .list-table-wrap td:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
 .list-table-wrap td:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 .list-table-wrap td.selected { border-color: var(--accent); background: var(--accent-light); }
-.list-table-wrap .list-check { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
+.list-table-wrap .list-check { width: 22px; height: 22px; cursor: pointer; accent-color: var(--accent); }
 .list-table-wrap .col-name { display: flex; align-items: center; gap: 8px; min-width: 200px; }
 .list-table-wrap .col-name span { font-size: 12px; color: var(--text-secondary); flex-shrink: 0; }
 .list-table-wrap .col-type, .list-table-wrap .col-size, .list-table-wrap .col-mtime { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
@@ -718,7 +733,7 @@ button svg, .btn svg, a svg {
 .list-item { background: var(--card-bg); padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); display: grid; grid-template-columns: 32px 1fr max-content max-content max-content; gap: 12px; align-items: center; cursor: pointer; color: var(--text-primary); font-size: 13px; transition: background 0.12s; min-width: 0; }
 .list-item:hover { background: var(--bg-tertiary); }
 .list-item.selected { border-color: var(--accent); background: var(--accent-light); }
-.list-item .list-check { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); justify-self: center; }
+.list-item .list-check { width: 22px; height: 22px; cursor: pointer; accent-color: var(--accent); justify-self: center; }
 .list-item > :nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list-item span { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
 .list-copy-btn { flex-shrink: 0; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; border-radius: 3px; color: var(--text-secondary); opacity: 0.55; cursor: pointer; padding: 0; margin-left: 6px; transition: opacity 0.15s, background 0.15s, color 0.15s; }
@@ -1361,7 +1376,6 @@ pre:hover .code-copy-btn,
   font-weight: 500;
   transition: opacity 0.15s;
 }
-.pst-btn-send:hover { opacity: 0.9; }
 .pst-status { font-size: 11px; min-height: 0; line-height: 1.3; }
 .pst-status-ok { color: var(--success); }
 .pst-status-error { color: var(--danger); }
