@@ -625,7 +625,7 @@ button svg, .btn svg, a svg {
 .main.drag-over::after { content: '释放文件上传'; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--bg-secondary); border: 2px dashed var(--accent); border-radius: var(--radius-lg); padding: 24px 48px; font-size: 18px; font-weight: 600; color: var(--accent); box-shadow: var(--card-shadow-hover); z-index: 100; pointer-events: none; }
 
 /* ===== Gallery & Cards ===== */
-.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
 @keyframes cardFadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 .card { background: var(--card-bg); padding: 0 0 8px 0; border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; display: flex; flex-direction: column; gap: 6px; position: relative; overflow: hidden; transition: transform var(--duration-base) var(--ease-out), box-shadow var(--duration-base) var(--ease-out), border-color var(--duration-base) var(--ease-out); box-shadow: var(--card-shadow); }
 .card:hover { transform: translateY(-3px); box-shadow: var(--card-shadow-hover); border-color: var(--accent); }
