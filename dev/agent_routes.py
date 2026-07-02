@@ -30,6 +30,7 @@ from starlette.websockets import WebSocketState
 
 from config import load as load_cfg
 from service import find_project_marker
+from session_logger import SessionLogger, SessionIndex
 
 router = APIRouter()
 logger = logging.getLogger("clawmate.agent")
@@ -57,6 +58,7 @@ class _AgentSession:
     last_active: float = 0.0
     last_input_time: float = 0.0  # timestamp of last user keystroke (for output coordination)
     last_injected_file: str = ""   # path of the last file_context injected (avoid dupes on reconnect)
+    logger: Optional[SessionLogger] = None  # session log writer (persists PTY output to disk)
 
     def __post_init__(self):
         if not self.created_at:
@@ -92,6 +94,30 @@ def resolve_session_cwd(root: str, dir_: str = "") -> str:
         if project:
             return str(root_path / project)
     return str(root_path)
+
+
+def _session_log_dir(key: str, cwd: str | None = None) -> Path | None:
+    """Resolve .clawmate/sessions/ path from session key.
+
+    key format: {backend}:{root}[:{project}]
+    If cwd is provided, search upward for .clawmate/ marker.
+    """
+    parts = key.split(":")
+    if len(parts) < 2:
+        return None
+    root_id = parts[1]
+    root_path = _resolve_root_dir(root_id)
+    if not root_path:
+        return None
+    if len(parts) >= 3 and parts[2]:
+        project = parts[2]
+    elif cwd:
+        project = find_project_marker(root_path, cwd)
+    else:
+        project = None
+    if not project:
+        return None
+    return root_path / project / ".clawmate" / "sessions"
 
 
 def get_agent_session(root: str, dir_: str = "", backend: str = ""):
@@ -140,6 +166,8 @@ def _cleanup_dead_sessions():
     for key in dead:
         try:
             sess = _sessions.pop(key)
+            if sess.logger:
+                sess.logger.close("ended")
             try:
                 os.close(sess.master_fd)
             except OSError:
@@ -171,6 +199,8 @@ async def _idle_reaper():
         for key in dead:
             sess = _sessions.pop(key, None)
             if sess:
+                if sess.logger:
+                    sess.logger.close("killed")
                 sess.stop_event.set()
                 try:
                     os.killpg(os.getpgid(sess.proc.pid), signal.SIGTERM)
@@ -189,6 +219,34 @@ async def _idle_reaper():
                     os.close(sess.master_fd)
                 except OSError:
                     pass
+        # ── TTL: 清理过期会话日志 ──
+        try:
+            cfg = load_cfg()
+            ttl = getattr(cfg.agent, "session_log_ttl_days", 30)
+            seen_roots = set()
+            for key in list(_sessions.keys()):
+                parts = key.split(":")
+                if len(parts) >= 2:
+                    seen_roots.add(parts[1])
+            for rid in seen_roots:
+                rp = _resolve_root_dir(rid)
+                if rp and rp.is_dir():
+                    for proj_dir in rp.iterdir():
+                        if not proj_dir.is_dir():
+                            continue
+                        sess_dir = proj_dir / ".clawmate" / "sessions"
+                        if sess_dir.is_dir():
+                            try:
+                                removed = SessionIndex.reap(sess_dir, ttl)
+                                if removed:
+                                    logger.info(
+                                        "TTL reaper: removed %d expired sessions from %s",
+                                        removed, sess_dir,
+                                    )
+                            except Exception as exc:
+                                logger.debug("TTL reap error for %s: %s", sess_dir, exc)
+        except Exception as exc:
+            logger.warning("TTL reaper error: %s", exc)
 
 
 # Start reaper on module load
@@ -519,6 +577,8 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
                         break  # PTY closed — Claude Code exited
                     text = data.decode("utf-8", errors="replace")
                     sess.output_buffer.append(text)
+                    if sess.logger:
+                        sess.logger.write(text)
                     out_buf += text
                     now = time.monotonic()
                     # Brief yield after user input so echo arrives before output
@@ -1033,6 +1093,40 @@ async def agent_terminal(
                 return
         sess.key = key
         _sessions[key] = sess
+
+        # Initialize session logger (write PTY output to .clawmate/sessions/)
+        try:
+            sess_dir = _session_log_dir(key, cwd)
+            if sess_dir:
+                ts = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+                safe_key = key.replace(":", "_").replace("/", "_")
+                session_id = f"{safe_key}_{ts}"
+                sess.logger = SessionLogger(
+                    session_id=session_id,
+                    meta={
+                        "session_id": session_id,
+                        "key": key,
+                        "backend": backend,
+                        "cwd": cwd,
+                        "root": root,
+                        "started_at": time.time(),
+                        "status": "active",
+                    },
+                    log_dir=sess_dir,
+                )
+                SessionIndex.add(sess_dir, {
+                    "id": session_id,
+                    "key": key,
+                    "backend": backend,
+                    "root": root,
+                    "started_at": time.time(),
+                    "last_active": time.time(),
+                    "title": backend,
+                    "status": "active",
+                })
+        except Exception as exc:
+            logger.warning("failed to init session logger for key=%s: %s", key, exc)
+
         logger.info(
             "session created key=%s pid=%d cols=%d rows=%d (%d total sessions)",
             key, sess.proc.pid, cols or 0, rows or 0, len(_sessions),
