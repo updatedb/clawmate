@@ -49,6 +49,7 @@ class AgentConfig:
     openclaw_device_secret: str = "" # HMAC secret for device pairing
     openclaw_device_token: str = ""  # device token from Gateway (saved after pairing)
     max_sessions: int = 10           # max concurrent Claude sessions
+    session_log_ttl_days: int = 30   # auto-cleanup agent session logs after N days
     env: dict[str, str] = field(default_factory=dict)  # extra env vars passed to agent subprocess
 
 
@@ -265,6 +266,7 @@ def _parse_config(raw: dict) -> AppConfig:
             openclaw_device_secret=str(ag.get("openclaw_device_secret", "")),
             openclaw_device_token=str(ag.get("openclaw_device_token", "")),
             max_sessions=int(ag.get("max_sessions", 10)),
+            session_log_ttl_days=int(ag.get("session_log_ttl_days", 30)),
             env=dict(ag.get("env") or {}),
         ),
         onlyoffice=OnlyOfficeConfig(
