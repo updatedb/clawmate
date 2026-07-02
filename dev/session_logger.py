@@ -107,7 +107,7 @@ class SessionLogger:
                     if not line:
                         continue
                     # Strip timestamp prefix
-                    content = re.sub(r"^\[\+\d{2}:\d{2}\]\s*", "", line)
+                    content = re.sub(r"^\[\+\d+:\d{2}\]\s*", "", line)
                     if content:
                         return content[:60]
         except FileNotFoundError:
