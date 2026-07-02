@@ -25,7 +25,8 @@ from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
 from starlette.websockets import WebSocketState
 
 from config import load as load_cfg
@@ -1144,3 +1145,247 @@ async def agent_terminal(
                 pass
     else:
         await ws.send_text(f"\x1b[1;31m✕ Unknown agent backend: {backend}\x1b[0m\r\n")
+
+
+# ── Session History APIs ──
+
+@router.get("/api/clawmate/agent/sessions")
+async def agent_session_list(
+    root: str = "",
+    project: str = "",
+    backend: str = "",
+    status: str = "",
+    q: str = "",
+    limit: int = 50,
+    offset: int = 0,
+):
+    """List archived agent sessions, grouped by project."""
+    results: list[dict] = []
+    seen: set[str] = set()
+
+    cfg = load_cfg()
+    roots_to_check = []
+    if root:
+        for r in cfg.roots:
+            if r.id == root:
+                roots_to_check.append(r)
+                break
+    else:
+        roots_to_check = cfg.roots
+
+    for r in roots_to_check:
+        root_dir = Path(r.dir)
+        if not root_dir.is_dir():
+            continue
+        # If project specified, look only there
+        dirs_to_check: list[Path] = []
+        if project:
+            p = root_dir / project
+            if p.is_dir():
+                dirs_to_check.append(p)
+        else:
+            for p in root_dir.iterdir():
+                if p.is_dir() and (p / ".clawmate").is_dir():
+                    dirs_to_check.append(p)
+
+        for proj_dir in dirs_to_check:
+            sess_dir = proj_dir / ".clawmate" / "sessions"
+            if not sess_dir.is_dir():
+                continue
+            sessions = SessionIndex.load(sess_dir)
+            for s in sessions:
+                if status and s.get("status", "") != status:
+                    continue
+                if backend and s.get("backend", "") != backend:
+                    continue
+                if q:
+                    if q.lower() not in s.get("title", "").lower():
+                        sid = s.get("id", "")
+                        text_path = sess_dir / f"{sid}.text.log"
+                        if text_path.is_file():
+                            try:
+                                content = text_path.read_text("utf-8", errors="replace")
+                                if q.lower() not in content.lower():
+                                    continue
+                            except Exception:
+                                continue
+                        else:
+                            continue
+                sid = s.get("id", "")
+                if sid in seen:
+                    continue
+                seen.add(sid)
+
+                # Get ansi_size and text_size from actual files
+                ansi_size = 0
+                text_size = 0
+                if sid:
+                    ansi_p = sess_dir / f"{sid}.ansi.log"
+                    text_p = sess_dir / f"{sid}.text.log"
+                    if ansi_p.is_file():
+                        ansi_size = ansi_p.stat().st_size
+                    if text_p.is_file():
+                        text_size = text_p.stat().st_size
+
+                results.append({
+                    **s,
+                    "ansi_size": ansi_size,
+                    "text_size": text_size,
+                    "root": r.id,
+                    "project": proj_dir.name,
+                    "log_dir": str(sess_dir),
+                })
+
+    results.sort(key=lambda x: x.get("started_at", 0), reverse=True)
+    total = len(results)
+    paged = results[offset:offset + limit]
+    return JSONResponse({"total": total, "sessions": paged})
+
+
+@router.get("/api/clawmate/agent/sessions/{session_id}/log")
+async def agent_session_log(
+    session_id: str,
+    root: str = "",
+    project: str = "",
+    fmt: str = Query("text", alias="format"),
+    offset: int = 0,
+    limit: int = 200,
+):
+    """Read session log content. format=text|ansi."""
+    cfg = load_cfg()
+    for r in cfg.roots:
+        root_dir = Path(r.dir)
+        if not root_dir.is_dir():
+            continue
+        projects_to_check: list[tuple[str, Path]] = []
+        if project:
+            p = root_dir / project
+            if p.is_dir():
+                projects_to_check.append((project, p))
+        else:
+            for p in root_dir.iterdir():
+                if p.is_dir():
+                    projects_to_check.append((p.name, p))
+
+        for proj_name, proj_path in projects_to_check:
+            sess_dir = proj_path / ".clawmate" / "sessions"
+            ext = ".ansi.log" if fmt == "ansi" else ".text.log"
+            log_path = sess_dir / f"{session_id}{ext}"
+            if not log_path.is_file():
+                continue
+
+            meta = {}
+            meta_path = sess_dir / f"{session_id}.meta.json"
+            if meta_path.is_file():
+                try:
+                    meta = json.loads(meta_path.read_text("utf-8"))
+                except Exception:
+                    pass
+
+            content = log_path.read_text("utf-8", errors="replace")
+            lines = content.splitlines(keepends=True)
+            total_lines = len(lines)
+            paged_lines = lines[offset:offset + limit] if limit > 0 else lines
+
+            return JSONResponse({
+                "session_id": session_id,
+                "meta": meta,
+                "format": fmt,
+                "total_lines": total_lines,
+                "offset": offset,
+                "limit": limit,
+                "content": "".join(paged_lines),
+            })
+
+    raise HTTPException(status_code=404, detail="Session not found")
+
+
+@router.get("/api/clawmate/agent/sessions/{session_id}")
+async def agent_session_detail(session_id: str, root: str = "", project: str = ""):
+    """Return session metadata + first/last N lines of text log."""
+    cfg = load_cfg()
+    for r in cfg.roots:
+        root_dir = Path(r.dir)
+        if not root_dir.is_dir():
+            continue
+        projects_to_check: list[tuple[str, Path]] = []
+        if project:
+            p = root_dir / project
+            if p.is_dir():
+                projects_to_check.append((project, p))
+        else:
+            for p in root_dir.iterdir():
+                if p.is_dir():
+                    projects_to_check.append((p.name, p))
+
+        for proj_name, proj_path in projects_to_check:
+            sess_dir = proj_path / ".clawmate" / "sessions"
+            meta_path = sess_dir / f"{session_id}.meta.json"
+            text_path = sess_dir / f"{session_id}.text.log"
+            ansi_path = sess_dir / f"{session_id}.ansi.log"
+
+            if not meta_path.is_file() and not text_path.is_file():
+                continue
+
+            meta = {}
+            if meta_path.is_file():
+                try:
+                    meta = json.loads(meta_path.read_text("utf-8"))
+                except Exception:
+                    pass
+
+            preview: dict = {"head": "", "tail": "", "total_lines": 0}
+            if text_path.is_file():
+                lines = text_path.read_text("utf-8", errors="replace").splitlines()
+                preview["head"] = "\n".join(lines[:20])
+                preview["tail"] = "\n".join(lines[-20:]) if len(lines) > 40 else ""
+                preview["total_lines"] = len(lines)
+
+            ansi_size = ansi_path.stat().st_size if ansi_path.is_file() else 0
+            text_size = text_path.stat().st_size if text_path.is_file() else 0
+
+            return JSONResponse({
+                "session_id": session_id,
+                "meta": meta,
+                "ansi_size": ansi_size,
+                "text_size": text_size,
+                "root": r.id,
+                "project": proj_name,
+                "preview": preview,
+            })
+
+    raise HTTPException(status_code=404, detail="Session not found")
+
+
+@router.delete("/api/clawmate/agent/sessions/{session_id}")
+async def agent_session_delete(session_id: str, root: str = "", project: str = ""):
+    """Delete a session log."""
+    cfg = load_cfg()
+    for r in cfg.roots:
+        root_dir = Path(r.dir)
+        if not root_dir.is_dir():
+            continue
+        projects_to_check: list[tuple[str, Path]] = []
+        if project:
+            p = root_dir / project
+            if p.is_dir():
+                projects_to_check.append((project, p))
+        else:
+            for p in root_dir.iterdir():
+                if p.is_dir():
+                    projects_to_check.append((p.name, p))
+
+        for proj_name, proj_path in projects_to_check:
+            sess_dir = proj_path / ".clawmate" / "sessions"
+            meta_path = sess_dir / f"{session_id}.meta.json"
+            if not meta_path.is_file():
+                continue
+
+            for ext in [".meta.json", ".ansi.log", ".text.log"]:
+                p = sess_dir / f"{session_id}{ext}"
+                if p.exists():
+                    p.unlink()
+            SessionIndex.remove(sess_dir, session_id)
+            return JSONResponse({"ok": True, "session_id": session_id})
+
+    raise HTTPException(status_code=404, detail="Session not found")
