@@ -351,8 +351,8 @@ button svg, .btn svg, a svg {
 #rootSelect option { background: var(--bg-primary); color: var(--text-primary); }
 #multiSelectToggle { display: inline-flex; align-items: center; gap: 3px; }
 /* Multi-select checkboxes: hidden by default, shown when multiselect active */
-.card-check, .list-check { visibility: hidden; pointer-events: none; }
-.multiselect .card-check, .multiselect .list-check { visibility: visible; pointer-events: auto; }
+.card-check, .list-check { display: none; }
+.multiselect .card-check, .multiselect .list-check { display: inline-block; }
 #multiSelectToggle.active { background: var(--accent); color: #fff; }
 #filterType.filtering { border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring); }
 .breadcrumb { font-size: 12px; margin-bottom: 8px; color: var(--text-secondary); }
@@ -730,7 +730,8 @@ button svg, .btn svg, a svg {
 .list-table-wrap .col-name span { font-size: 12px; color: var(--text-secondary); flex-shrink: 0; }
 .list-table-wrap .col-type, .list-table-wrap .col-size, .list-table-wrap .col-mtime { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
 /* Legacy list-item class (for non-table rendering) */
-.list-item { background: var(--card-bg); padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); display: grid; grid-template-columns: 32px 1fr max-content max-content max-content; gap: 12px; align-items: center; cursor: pointer; color: var(--text-primary); font-size: 13px; transition: background 0.12s; min-width: 0; }
+.list-item { background: var(--card-bg); padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); display: grid; grid-template-columns: 0 1fr max-content max-content max-content; gap: 0; align-items: center; cursor: pointer; color: var(--text-primary); font-size: 13px; transition: background 0.12s; min-width: 0; }
+body.multiselect .list-item { grid-template-columns: 32px 1fr max-content max-content max-content; gap: 12px; }
 .list-item:hover { background: var(--bg-tertiary); }
 .list-item.selected { border-color: var(--accent); background: var(--accent-light); }
 .list-item .list-check { width: 22px; height: 22px; cursor: pointer; accent-color: var(--accent); justify-self: center; }
