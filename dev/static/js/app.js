@@ -984,9 +984,9 @@ function toggleMultiSelect() {
   state.multiSelectEnabled = !state.multiSelectEnabled;
   if (els.multiSelectToggle) {
     if (typeof iconSVG === 'function') {
-      els.multiSelectToggle.innerHTML = (state.multiSelectEnabled ? iconSVG('check-square', 14) : iconSVG('check-square', 14)) + ' 多选';
+      els.multiSelectToggle.innerHTML = state.multiSelectEnabled ? iconSVG('check-square', 14) : iconSVG('check-square', 14);
     } else {
-      els.multiSelectToggle.textContent = state.multiSelectEnabled ? "☑ 多选" : "☐ 多选";
+      els.multiSelectToggle.textContent = state.multiSelectEnabled ? "☑" : "☐";
     }
     if (state.multiSelectEnabled) {
       els.multiSelectToggle.classList.add("active");
@@ -2003,7 +2003,7 @@ if (els.rootSelect) {
       state.multiSelectEnabled = false;
       state.selectedPaths.clear();
       if (els.multiSelectToggle) {
-        els.multiSelectToggle.textContent = "☐ 多选";
+        els.multiSelectToggle.textContent = "☐";
         els.multiSelectToggle.classList.remove("active");
       }
       updateBatchBar();
