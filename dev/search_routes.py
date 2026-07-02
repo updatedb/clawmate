@@ -43,6 +43,9 @@ async def clawmate_search(
         raise HTTPException(status_code=404, detail="Directory not found")
     except PermissionError:
         raise HTTPException(status_code=403, detail="Forbidden")
+    except OSError as e:
+        _logger.error("search_media OSError for q=%s root=%s dir=%s: %s", q, root, dir, e)
+        raise HTTPException(status_code=500, detail="Error reading directory")
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid path")
 
@@ -71,6 +74,9 @@ async def clawmate_link(
         raise HTTPException(status_code=404, detail="Directory not found")
     except PermissionError:
         raise HTTPException(status_code=403, detail="Forbidden")
+    except OSError as e:
+        _logger.error("search_media(link) OSError for q=%s root=%s: %s", q, root, e)
+        raise HTTPException(status_code=500, detail="Error reading directory")
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid path")
 

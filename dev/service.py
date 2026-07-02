@@ -369,26 +369,59 @@ def get_public_base_url(request) -> str:
 
 
 def file_info(path: Path, rel_path: str) -> Dict:
-    stat = path.stat()
+    """Return file/dir metadata dict.
+
+    Handles broken symlinks gracefully: uses lstat() as fallback and marks the
+    entry with ``broken_link=True`` so callers can distinguish a truly missing
+    entry from a dangling symlink.
+    """
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        # Broken symlink — stat() follows the link and fails.  Use lstat() to
+        # read the symlink's own metadata so we can still show the entry.
+        try:
+            stat = path.lstat()
+        except OSError:
+            stat = None
     mime, _ = mimetypes.guess_type(str(path))
     return {
         "name": path.name,
         "path": rel_path,
         "is_dir": path.is_dir(),
-        "size": stat.st_size,
-        "mtime": int(stat.st_mtime),
+        "size": stat.st_size if stat else 0,
+        "mtime": int(stat.st_mtime) if stat else 0,
         "ext": path.suffix.lower(),
         "mime": mime or "application/octet-stream",
         "category": guess_category(path),
+        "broken_link": stat is None or path.is_symlink(),
     }
 
 
+def _safe_stat_mtime(p: Path) -> float:
+    """Return st_mtime for sorting, handling broken symlinks gracefully."""
+    try:
+        return p.stat().st_mtime
+    except (FileNotFoundError, OSError):
+        return 0.0
+
+
+def _safe_stat_size(p: Path) -> int:
+    """Return st_size for sorting, handling broken symlinks gracefully."""
+    try:
+        return p.stat().st_size
+    except (FileNotFoundError, OSError):
+        return 0
+
+
 def list_dir(root_id: str, rel_dir: str = "", offset: int = 0, limit: int = 200,
-             marker_filter: bool = False, sort_key: str = "name", sort_dir: str = "asc") -> Dict:
+             marker_filter: bool = False, sort_key: str = "name", sort_dir: str = "asc",
+             dirs_only: bool = False) -> Dict:
     """列出目录内容。
 
     marker_filter=True 时只返回包含 .clawmate/ marker 的子目录（项目列表），
     文件和非 marker 目录被过滤掉。
+    dirs_only=True 时只返回目录条目（用于目录选择器加速）。
     """
     root_path, target, _ = safe_path(root_id, rel_dir)
     if not target.exists() or not target.is_dir():
@@ -403,15 +436,18 @@ def list_dir(root_id: str, rel_dir: str = "", offset: int = 0, limit: int = 200,
     # 根据 sort_key / sort_dir 排序，目录始终优先
     reverse = sort_dir == "desc"
     if sort_key == "time":
-        entries_iter = sorted(target.iterdir(), key=lambda p: p.stat().st_mtime, reverse=reverse)
+        entries_iter = sorted(target.iterdir(), key=_safe_stat_mtime, reverse=reverse)
     elif sort_key == "size":
-        entries_iter = sorted(target.iterdir(), key=lambda p: p.stat().st_size, reverse=reverse)
+        entries_iter = sorted(target.iterdir(), key=_safe_stat_size, reverse=reverse)
     else:  # name
         entries_iter = sorted(target.iterdir(), key=lambda p: p.name.lower(), reverse=reverse)
     # 二次稳定排序保证目录优先
     entries_iter = sorted(entries_iter, key=lambda p: not p.is_dir())
 
     for entry in entries_iter:
+        # dirs_only 模式: 跳过文件，只处理目录
+        if dirs_only and not entry.is_dir():
+            continue
         # marker 过滤: 仅 clawmate 项目列表使用，跳过非项目（无 .clawmate/ 的目录 + 所有文件）
         if marker_filter:
             if not entry.is_dir() or not (entry / ".clawmate").is_dir():

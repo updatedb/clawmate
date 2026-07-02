@@ -2857,6 +2857,12 @@ window.addEventListener("resize", () => {
 var dirPickerCallback = null;
 var dirPickerSelectedDir = '';
 var dirPickerMode = ''; // 'move'
+// Lazy-load tree state: cache of children per dir path, expanded/loading flags
+var dirPickerCache = {};
+var dirPickerExpanded = {};
+var dirPickerLoading = {};
+var dirPickerSkipped = 0;
+var DIR_PICKER_SKIP_PREFIXES = ['.', '__pycache__', 'node_modules'];
 
 function initDirPicker() {
   var closeBtn = document.getElementById('dirPickerClose');
@@ -2881,6 +2887,11 @@ function closeDirPicker() {
   dirPickerCallback = null;
   dirPickerSelectedDir = '';
   dirPickerMode = '';
+  // Reset lazy-load state
+  dirPickerCache = {};
+  dirPickerExpanded = {};
+  dirPickerLoading = {};
+  dirPickerSkipped = 0;
 }
 
 function confirmDirPicker() {
@@ -2890,9 +2901,30 @@ function confirmDirPicker() {
   closeDirPicker();
 }
 
-function openDirPicker(title) {
+/** Filter API entries to directories only, skipping hidden/cache dirs. */
+function _filterDirsForPicker(entries) {
+  var dirs = [];
+  for (var i = 0; i < entries.length; i++) {
+    if (!entries[i].is_dir) continue;
+    var nm = entries[i].name;
+    var skip = false;
+    for (var s = 0; s < DIR_PICKER_SKIP_PREFIXES.length; s++) {
+      if (nm.indexOf(DIR_PICKER_SKIP_PREFIXES[s]) === 0) { skip = true; break; }
+    }
+    if (skip) { dirPickerSkipped++; continue; }
+    dirs.push({name: nm, path: entries[i].path});
+  }
+  return dirs;
+}
+
+async function openDirPicker(title) {
   dirPickerMode = 'move';
   dirPickerSelectedDir = state.dir || '';
+  dirPickerCache = {};
+  dirPickerExpanded = {};
+  dirPickerLoading = {};
+  dirPickerSkipped = 0;
+
   var titleEl = document.getElementById('dirPickerTitle');
   var modal = document.getElementById('dirPickerModal');
   var tree = document.getElementById('dirPickerTree');
@@ -2903,128 +2935,109 @@ function openDirPicker(title) {
   if (selLabel) selLabel.textContent = dirPickerSelectedDir || '(根目录)';
   modal.style.display = 'flex';
 
-  // Load directory tree (mirrors preview.js logic)
   tree.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;">加载中...</div>';
 
-  (async function () {
-    try {
-      var MAX_DEPTH = 10;
-      var SKIP_PREFIXES = ['.', '__pycache__', 'node_modules'];
-      var allDirs = [];
-      var rootDirName = state.rootId;
-      var skippedCount = 0;
+  try {
+    // Level 0: fetch root directory listing (directories only)
+    var res = await authFetch('/api/clawmate/list?root=' + encodeURIComponent(state.rootId) + '&dir=&limit=500&dirs_only=true');
+    var data = await res.json();
+    dirPickerCache[''] = _filterDirsForPicker(data.entries || []);
 
-      function filterDirs(entries) {
-        var dirs = [];
-        for (var i = 0; i < entries.length; i++) {
-          if (!entries[i].is_dir) continue;
-          var nm = entries[i].name;
-          var skip = false;
-          for (var s = 0; s < SKIP_PREFIXES.length; s++) {
-            if (nm.indexOf(SKIP_PREFIXES[s]) === 0) { skip = true; break; }
-          }
-          if (skip) { skippedCount++; continue; }
-          dirs.push(entries[i].path);
+    // Pre-expand the path from root to the current directory so the user
+    // sees context immediately without having to manually expand every level.
+    if (dirPickerSelectedDir) {
+      var parts = dirPickerSelectedDir.split('/');
+      var accumulated = '';
+      for (var i = 0; i < parts.length; i++) {
+        accumulated = accumulated ? accumulated + '/' + parts[i] : parts[i];
+        dirPickerExpanded[accumulated] = true;
+        var childRes = await authFetch('/api/clawmate/list?root=' + encodeURIComponent(state.rootId)
+          + '&dir=' + encodeURIComponent(accumulated) + '&limit=500&dirs_only=true');
+        if (childRes.ok) {
+          var childData = await childRes.json();
+          dirPickerCache[accumulated] = _filterDirsForPicker(childData.entries || []);
         }
-        return dirs;
       }
-
-      // Level 0: root
-      var res = await authFetch('/api/clawmate/list?root=' + encodeURIComponent(state.rootId) + '&dir=&limit=1000');
-      var data = await res.json();
-      if (data.name) rootDirName = data.name;
-      var currentLevel = filterDirs(data.entries || []);
-      allDirs = allDirs.concat(currentLevel);
-
-      // Level 1..MAX_DEPTH: parallel fetches per level
-      for (var depth = 1; depth < MAX_DEPTH && currentLevel.length > 0; depth++) {
-        var results = await Promise.all(currentLevel.map(function(dir) {
-          return authFetch('/api/clawmate/list?root=' + encodeURIComponent(state.rootId) + '&dir=' + encodeURIComponent(dir) + '&limit=1000')
-            .then(function(r) { return r.ok ? r.json() : null; })
-            .catch(function() { return null; });
-        }));
-        var nextLevel = [];
-        for (var j = 0; j < results.length; j++) {
-          if (!results[j]) continue;
-          var subDirs = filterDirs(results[j].entries || []);
-          allDirs = allDirs.concat(subDirs);
-          nextLevel = nextLevel.concat(subDirs);
-        }
-        currentLevel = nextLevel;
-      }
-
-      // Render tree
-      _renderDirPickerTree(tree, allDirs, rootDirName);
-      if (skippedCount > 0) {
-        var note = document.createElement('div');
-        note.style.cssText = 'text-align:center;color:var(--text-muted);font-size:11px;padding:6px 0 2px;';
-        note.textContent = '已跳过 ' + skippedCount + ' 个隐藏/缓存目录';
-        tree.appendChild(note);
-      }
-    } catch (e) {
-      tree.innerHTML = '<div style="text-align:center;color:var(--danger);padding:20px;">加载目录失败: ' + escHtml(e.message) + '</div>';
     }
-  })();
+
+    // Root node is always expanded
+    dirPickerExpanded[''] = true;
+
+    // Render the lazy tree
+    _renderDirPickerTreeLazy(tree, data.name || state.rootId);
+
+    if (dirPickerSkipped > 0) {
+      var note = document.createElement('div');
+      note.style.cssText = 'text-align:center;color:var(--text-muted);font-size:11px;padding:6px 0 2px;';
+      note.textContent = '已跳过 ' + dirPickerSkipped + ' 个隐藏/缓存目录';
+      tree.appendChild(note);
+    }
+  } catch (e) {
+    tree.innerHTML = '<div style="text-align:center;color:var(--danger);padding:20px;">加载目录失败: ' + escHtml(e.message) + '</div>';
+  }
 }
 
-function _renderDirPickerTree(container, dirs, rootDirName) {
-  if (dirs.length === 0) {
-    container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;">没有可用的子目录</div>';
-    return;
-  }
-
-  // Sort dirs by depth, then alphabetically
-  dirs.sort(function(a, b) {
-    var depthA = (a.match(/\//g) || []).length;
-    var depthB = (b.match(/\//g) || []).length;
-    if (depthA !== depthB) return depthA - depthB;
-    return a.localeCompare(b);
-  });
-
-  // Build tree structure
-  var treeData = {};
-  for (var i = 0; i < dirs.length; i++) {
-    var parts = dirs[i].split('/');
-    var current = treeData;
-    for (var j = 0; j < parts.length; j++) {
-      if (!current[parts[j]]) current[parts[j]] = {};
-      current = current[parts[j]];
-    }
-  }
-
-  var html = '';
+/** Render the lazy directory tree using dirPickerCache / dirPickerExpanded. */
+function _renderDirPickerTreeLazy(container, rootName) {
   var folderSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;flex-shrink:0;"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>';
+  var rootLabel = rootName || state.rootId || '';
+  var html = '';
 
-  var rootLabel = rootDirName || state.rootId || '';
   // Root entry
   html += '<div class="dir-picker-item" data-dir="" style="display:flex;align-items:center;padding:4px 8px;cursor:pointer;border-radius:4px;margin:1px 0;' + (dirPickerSelectedDir === '' ? 'background:var(--accent);color:#fff;' : '') + '">';
+  html += '<span style="width:16px;flex-shrink:0;text-align:center;margin-right:2px;user-select:none;">▼</span>';
   html += folderSvg;
   html += '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(rootLabel) + ' (根目录)</span>';
   html += '</div>';
 
-  function renderTreeLevel(obj, prefix, depth) {
-    var keys = Object.keys(obj).sort();
-    for (var k = 0; k < keys.length; k++) {
-      var fullPath = prefix ? prefix + '/' + keys[k] : keys[k];
-      var isSelected = dirPickerSelectedDir === fullPath;
-      html += '<div class="dir-picker-item" data-dir="' + escHtml(fullPath) + '" style="display:flex;align-items:center;padding:4px 8px 4px ' + (8 + depth * 16) + 'px;cursor:pointer;border-radius:4px;margin:1px 0;' + (isSelected ? 'background:var(--accent);color:#fff;' : '') + '">';
-      html += folderSvg;
-      html += '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(keys[k]) + '</span>';
-      html += '</div>';
-      if (obj[keys[k]]) {
-        renderTreeLevel(obj[keys[k]], fullPath, depth + 1);
-      }
-    }
-  }
+  // Children of root
+  html += _renderDirChildrenHtml('', 1);
 
-  renderTreeLevel(treeData, '', 1);
   container.innerHTML = html;
 
-  // Click handler: update selection
+  // Click handler — event delegation for expand/collapse + selection
   container.onclick = function(e) {
+    var arrow = e.target.closest('.dir-picker-arrow');
     var item = e.target.closest('.dir-picker-item');
     if (!item) return;
+
     var dir = item.getAttribute('data-dir');
+
+    // Click on arrow: toggle expand/collapse (lazy-load if needed)
+    if (arrow) {
+      if (dirPickerExpanded[dir]) {
+        // Collapse
+        dirPickerExpanded[dir] = false;
+        _renderDirPickerTreeLazy(container, rootName);
+      } else if (!dirPickerLoading[dir]) {
+        // Expand
+        dirPickerExpanded[dir] = true;
+        if (dirPickerCache[dir] === undefined) {
+          // Not yet loaded — fetch children
+          dirPickerLoading[dir] = true;
+          _renderDirPickerTreeLazy(container, rootName); // show ⏳ indicator
+          authFetch('/api/clawmate/list?root=' + encodeURIComponent(state.rootId)
+            + '&dir=' + encodeURIComponent(dir) + '&limit=500&dirs_only=true')
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(d) {
+              dirPickerCache[dir] = d ? _filterDirsForPicker(d.entries || []) : [];
+              dirPickerLoading[dir] = false;
+              _renderDirPickerTreeLazy(container, rootName);
+            })
+            .catch(function() {
+              dirPickerCache[dir] = [];
+              dirPickerLoading[dir] = false;
+              _renderDirPickerTreeLazy(container, rootName);
+            });
+        } else {
+          // Already cached — just re-render
+          _renderDirPickerTreeLazy(container, rootName);
+        }
+      }
+      return;
+    }
+
+    // Click elsewhere on row: select the directory
     dirPickerSelectedDir = dir;
     var items = container.querySelectorAll('.dir-picker-item');
     for (var i = 0; i < items.length; i++) {
@@ -3036,6 +3049,47 @@ function _renderDirPickerTree(container, dirs, rootDirName) {
     var selLabel = document.getElementById('dirPickerSelected');
     if (selLabel) selLabel.textContent = dir || rootLabel + ' (根目录)';
   };
+}
+
+/** Recursively build HTML for children of a given parent directory. */
+function _renderDirChildrenHtml(parentPath, depth) {
+  var html = '';
+  var children = dirPickerCache[parentPath];
+  if (!children) return html;
+
+  children.sort(function(a, b) { return a.name.localeCompare(b.name); });
+
+  for (var i = 0; i < children.length; i++) {
+    var child = children[i];
+    var fullPath = child.path;
+    var isExpanded = !!dirPickerExpanded[fullPath];
+    var isCached = dirPickerCache[fullPath] !== undefined;
+    var isLoading = !!dirPickerLoading[fullPath];
+    var isSelected = dirPickerSelectedDir === fullPath;
+
+    html += '<div class="dir-picker-item" data-dir="' + escHtml(fullPath) + '" style="display:flex;align-items:center;padding:4px 8px 4px ' + (8 + depth * 16) + 'px;cursor:pointer;border-radius:4px;margin:1px 0;' + (isSelected ? 'background:var(--accent);color:#fff;' : '') + '">';
+
+    // Arrow / loading indicator / empty spacer
+    if (isLoading) {
+      html += '<span style="width:16px;flex-shrink:0;text-align:center;margin-right:2px;user-select:none;">⏳</span>';
+    } else if (isCached && dirPickerCache[fullPath].length === 0) {
+      // Known-empty directory — no arrow
+      html += '<span style="width:16px;flex-shrink:0;display:inline-block;"></span>';
+    } else {
+      html += '<span class="dir-picker-arrow" style="width:16px;flex-shrink:0;text-align:center;cursor:pointer;margin-right:2px;user-select:none;">' + (isExpanded ? '▼' : '▶') + '</span>';
+    }
+
+    html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;flex-shrink:0;"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>';
+    html += '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(child.name) + '</span>';
+    html += '</div>';
+
+    // Children (recursive — only render if expanded and has children)
+    if (isExpanded && isCached && dirPickerCache[fullPath].length > 0) {
+      html += _renderDirChildrenHtml(fullPath, depth + 1);
+    }
+  }
+
+  return html;
 }
 
 // Close any open card menu dropdown when clicking outside

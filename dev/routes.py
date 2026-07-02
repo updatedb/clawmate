@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Query, HTTPException, Request
 from fastapi.responses import JSONResponse, FileResponse, RedirectResponse, StreamingResponse
 from urllib.parse import quote, unquote_to_bytes
@@ -35,6 +37,8 @@ from config import load as config
 
 
 router = APIRouter()
+
+logger = logging.getLogger("clawmate.routes")
 
 # Feedback routes (extracted to feedback_api.py)
 router.include_router(feedback_router)
@@ -127,16 +131,22 @@ async def clawmate_list(
     marker_filter: bool = Query(False),
     sort_key: str = Query("name"),
     sort_dir: str = Query("asc"),
+    dirs_only: bool = Query(False),
 ):
-    """列出目录内容。marker_filter=true 时只返回含 .clawmate/ 的子目录。"""
+    """列出目录内容。marker_filter=true 时只返回含 .clawmate/ 的子目录。
+    dirs_only=true 时只返回目录条目（用于目录选择器加速）。"""
     try:
         return JSONResponse(content=list_dir(root, dir, offset=offset, limit=limit,
                                               marker_filter=marker_filter,
-                                              sort_key=sort_key, sort_dir=sort_dir))
+                                              sort_key=sort_key, sort_dir=sort_dir,
+                                              dirs_only=dirs_only))
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Directory not found")
     except PermissionError:
         raise HTTPException(status_code=403, detail="Forbidden")
+    except OSError as e:
+        logger.error("list_dir OSError for root=%s dir=%s: %s", root, dir, e)
+        raise HTTPException(status_code=500, detail="Error reading directory")
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid path")
 
@@ -154,6 +164,9 @@ async def clawmate_list_navigation(root: str = "", path: str = ""):
         raise HTTPException(status_code=404, detail="Directory not found")
     except PermissionError:
         raise HTTPException(status_code=403, detail="Forbidden")
+    except OSError as e:
+        logger.error("list_dir nav OSError for root=%s path=%s: %s", root, path, e)
+        raise HTTPException(status_code=500, detail="Error reading directory")
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid path")
 
