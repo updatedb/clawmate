@@ -351,8 +351,14 @@ button svg, .btn svg, a svg {
 #rootSelect option { background: var(--bg-primary); color: var(--text-primary); }
 #multiSelectToggle { display: inline-flex; align-items: center; gap: 3px; }
 /* Multi-select checkboxes: hidden by default, shown when multiselect active */
-.card-check, .list-check { display: none; }
-.multiselect .card-check, .multiselect .list-check { display: inline-block; }
+/* Multi-select checkboxes: hidden by default.
+   card-check (position:absolute) → display:none ok.
+   list-check (grid child)        → must keep visibility:hidden to stay in grid flow,
+                                     otherwise grid items shift columns. */
+.card-check { display: none; }
+.list-check { visibility: hidden; pointer-events: none; }
+.multiselect .card-check { display: inline-block; }
+.multiselect .list-check { visibility: visible; pointer-events: auto; }
 #multiSelectToggle.active { background: var(--accent); color: #fff; }
 #filterType.filtering { border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring); }
 .breadcrumb { font-size: 12px; margin-bottom: 8px; color: var(--text-secondary); }
