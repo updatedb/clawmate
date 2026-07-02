@@ -122,9 +122,9 @@ UTF-8 编码的原始 PTY 输出（包含 ANSI 转义序列），直接追加写
 | `add(log_dir, entry)` | 添加新会话条目 |
 | `update(log_dir, session_id, updates)` | 更新指定条目字段 |
 | `remove(log_dir, session_id)` | 删除条目 |
-| `reap(log_dir, ttl_hours)` | 清理过期会话 |
+| `reap(log_dir, ttl_days)` | 清理过期会话 |
 
-**TTL 清理**：`reap()` 遍历 index，`last_active < now - ttl_hours` 则删除该会话的
+**TTL 清理**：`reap()` 遍历 index，`last_active < now - ttl_days * 86400` 则删除该会话的
 所有文件（`.meta.json`、`.ansi.log`、`.text.log`）并从 index 移除。
 
 ### 修改文件：`dev/agent_routes.py`
@@ -156,7 +156,7 @@ UTF-8 编码的原始 PTY 输出（包含 ANSI 转义序列），直接追加写
 @dataclass
 class AgentConfig:
     ...
-    session_log_ttl_hours: int = 168   # 默认 7 天
+    session_log_ttl_days: int = 30    # 默认 30 天
 ```
 
 ## 前端改动
@@ -256,11 +256,11 @@ _idle_reaper():
     2. 新增：遍历所有已知 project 的 .clawmate/sessions/
        for each root in config.roots:
            for each project with .clawmate/ marker:
-               SessionIndex.reap(project_sessions_dir, ttl_hours)
+               SessionIndex.reap(project_sessions_dir, ttl_days)
     3. 日志：记录清理的会话数量
 ```
 
-默认 TTL：168 小时（7 天），通过 `config.py` 的 `agent.session_log_ttl_hours` 配置。
+默认 TTL：30 天，通过 `config.json` 的 `agent.session_log_ttl_days` 配置。
 
 ## 文件改动清单
 
@@ -268,7 +268,7 @@ _idle_reaper():
 |------|------|
 | `dev/session_logger.py` | **新增** — 日志写入、索引管理、TTL 清理 |
 | `dev/agent_routes.py` | **修改** — 集成日志写入、新增 API 路由、TTL 清理 |
-| `dev/config.py` | **修改** — 增加 `session_log_ttl_hours` |
+| `dev/config.py` | **修改** — 增加 `session_log_ttl_days` |
 | `dev/static/js/agent.js` | **修改** — 历史会话视图、搜索、回放 |
 | `dev/static/css/style.css` | **修改** — 会话历史相关样式 |
 
