@@ -75,6 +75,18 @@
   let currentSessionKey = '';  // tracks last session key from backend
   let flowPaused = false;    // xterm.js flow control: true when write buffer > HIGH watermark
 
+  // --- Session history state ---
+  var historyState = {
+    view: null,           // null | 'history' | 'session-view'
+    sessions: [],
+    page: 0,
+    total: 0,
+    query: '',
+    currentSessionId: null,
+  };
+  var historyContainer = null;
+  var historyBtn = null;
+
   // --- Grid update ---
   function updateGridColumns() {
     const content = document.querySelector('.content');
@@ -615,6 +627,20 @@
     closeBtn.addEventListener('click', function () { window.Agent.close(); });
   }
 
+  // --- History button ---
+  historyBtn = document.getElementById('agentHistoryBtn');
+  if (!historyBtn) {
+    historyBtn = document.createElement('button');
+    historyBtn.id = 'agentHistoryBtn';
+    historyBtn.className = 'agent-panel-header-btn';
+    historyBtn.title = '历史会话';
+    historyBtn.textContent = '\u{1F4CB}';  // clipboard emoji
+    historyBtn.addEventListener('click', function () { toggleHistoryView(); });
+    if (closeBtn && closeBtn.parentNode) {
+      closeBtn.parentNode.insertBefore(historyBtn, closeBtn);
+    }
+  }
+
   // --- Backend select dropdown ---
   function switchBackend(newBackend) {
     if (newBackend !== 'claude' && newBackend !== 'codex' && newBackend !== 'openclaw') return;
@@ -690,6 +716,274 @@
         if (term) term.focus();
       }
     }, 200);
+  }
+
+  // ── Session History Functions ──
+
+  function toggleHistoryView() {
+    if (historyState.view === 'history') {
+      // Switch back to terminal
+      historyState.view = null;
+      showTerminalView();
+      return;
+    }
+    historyState.view = 'history';
+    historyState.page = 0;
+    hideTerminalView();
+    loadHistorySessions();
+  }
+
+  function hideTerminalView() {
+    if (xtermContainer) xtermContainer.style.display = 'none';
+    if (chatView) chatView.style.display = 'none';
+  }
+
+  function showTerminalView() {
+    if (xtermContainer) xtermContainer.style.display = '';
+    if (chatView && backendMode === 'openclaw') chatView.style.display = '';
+  }
+
+  function loadHistorySessions() {
+    var params = new URLSearchParams();
+    params.set('limit', '50');
+    params.set('offset', String(historyState.page * 50));
+    if (historyState.query) params.set('q', historyState.query);
+
+    // Get current root/project
+    var parts = (currentSessionKey || '').split(':');
+    if (parts.length >= 2) params.set('root', parts[1]);
+    if (parts.length >= 3) params.set('project', parts[2]);
+
+    var url = '/api/clawmate/agent/sessions?' + params.toString();
+    (typeof authFetch === 'function' ? authFetch(url) : fetch(url))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        historyState.total = data.total || 0;
+        historyState.sessions = data.sessions || [];
+        renderHistoryView();
+      })
+      .catch(function(err) {
+        console.error('Failed to load sessions:', err);
+        renderHistoryView();
+      });
+  }
+
+  function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+  function escHtml(s) {
+    var d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
+  function formatDate(ts) {
+    var d = new Date((ts || 0) * 1000);
+    return (d.getMonth() + 1) + '/' + d.getDate();
+  }
+
+  function ensureHistoryContainer() {
+    if (historyContainer) return historyContainer;
+    historyContainer = document.createElement('div');
+    historyContainer.id = 'agentHistoryContainer';
+    historyContainer.className = 'agent-history-container';
+    var body = xtermContainer && xtermContainer.parentNode;
+    if (body) body.appendChild(historyContainer);
+    return historyContainer;
+  }
+
+  function renderHistoryView() {
+    var container = ensureHistoryContainer();
+    container.innerHTML = '';
+
+    // Search bar
+    var searchEl = document.createElement('div');
+    searchEl.className = 'agent-history-search';
+    searchEl.innerHTML = '<input type="text" placeholder="搜索会话..." id="agentHistorySearch">';
+    container.appendChild(searchEl);
+
+    var searchInput = searchEl.querySelector('input');
+    searchInput.value = historyState.query;
+    searchInput.addEventListener('input', function() {
+      historyState.query = this.value;
+      historyState.page = 0;
+      loadHistorySessions();
+    });
+
+    searchInput.focus();
+
+    if (!historyState.sessions.length) {
+      container.innerHTML += '<div class="agent-history-empty">暂无历史会话</div>';
+      return;
+    }
+
+    // Group by date
+    var groups = {};
+    var now = new Date();
+    var todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000;
+    var yesterdayStart = todayStart - 86400;
+
+    historyState.sessions.forEach(function(s) {
+      var t = s.started_at || 0;
+      var label;
+      if (t >= todayStart) label = '今天';
+      else if (t >= yesterdayStart) label = '昨天';
+      else label = formatDate(t);
+      if (!groups[label]) groups[label] = [];
+      groups[label].push(s);
+    });
+
+    // Render groups
+    var groupKeys = Object.keys(groups);
+    groupKeys.sort(function(a, b) {
+      var order = ['今天', '昨天'];
+      var ai = order.indexOf(a);
+      var bi = order.indexOf(b);
+      if (ai !== -1 && bi !== -1) return ai - bi;
+      if (ai !== -1) return -1;
+      if (bi !== -1) return 1;
+      return a < b ? 1 : -1; // reverse date strings (newer first)
+    });
+
+    groupKeys.forEach(function(label) {
+      var groupEl = document.createElement('div');
+      groupEl.className = 'agent-history-group';
+      groupEl.innerHTML = '<div class="agent-history-group-title">' + escHtml(label) + '</div>';
+
+      groups[label].forEach(function(s) {
+        var item = document.createElement('div');
+        item.className = 'agent-history-item';
+        item.dataset.sid = s.id;
+
+        var startDate = new Date((s.started_at || 0) * 1000);
+        var timeStr = pad2(startDate.getHours()) + ':' + pad2(startDate.getMinutes());
+        var durStr = '';
+        if (s.started_at && s.ended_at) {
+          var durMin = Math.round((s.ended_at - s.started_at) / 60);
+          if (durMin >= 1) durStr = durMin + 'min';
+          else durStr = '<1min';
+        }
+
+        var title = s.title || s.id || 'Unknown';
+        var backendLabel = escHtml(s.backend || '?');
+
+        item.innerHTML =
+          '<div class="agent-history-item-title">' + escHtml(title) + '</div>' +
+          '<div class="agent-history-item-meta">' +
+            '<span class="agent-history-backend">' + backendLabel + '</span>' +
+            '<span>' + timeStr + '</span>' +
+            (durStr ? '<span>' + durStr + '</span>' : '') +
+          '</div>';
+
+        item.addEventListener('click', function() {
+          openSessionView(s.id, s.root, s.project);
+        });
+
+        groupEl.appendChild(item);
+      });
+
+      container.appendChild(groupEl);
+    });
+
+    // Pagination
+    if (historyState.total > 50) {
+      var pag = document.createElement('div');
+      pag.className = 'agent-history-pagination';
+      var totalPages = Math.ceil(historyState.total / 50);
+      pag.innerHTML =
+        '<button id="agentHistPrev"' + (historyState.page === 0 ? ' disabled' : '') + '>&larr;</button>' +
+        '<span>' + (historyState.page + 1) + '/' + totalPages + '</span>' +
+        '<button id="agentHistNext"' + ((historyState.page + 1) * 50 >= historyState.total ? ' disabled' : '') + '>&rarr;</button>';
+      container.appendChild(pag);
+
+      var prevBtn = document.getElementById('agentHistPrev');
+      var nextBtn = document.getElementById('agentHistNext');
+      if (prevBtn) prevBtn.addEventListener('click', function() {
+        if (historyState.page > 0) { historyState.page--; loadHistorySessions(); }
+      });
+      if (nextBtn) nextBtn.addEventListener('click', function() {
+        if ((historyState.page + 1) * 50 < historyState.total) { historyState.page++; loadHistorySessions(); }
+      });
+    }
+  }
+
+  function openSessionView(sessionId, root, project) {
+    historyState.currentSessionId = sessionId;
+    historyState.view = 'session-view';
+
+    var container = ensureHistoryContainer();
+    container.innerHTML = '<div class="agent-session-viewer">加载中...</div>';
+
+    var params = new URLSearchParams();
+    if (root) params.set('root', root);
+    if (project) params.set('project', project);
+
+    var loadUrl = '/api/clawmate/agent/sessions/' + encodeURIComponent(sessionId) + '?' + params.toString();
+    var logUrl = '/api/clawmate/agent/sessions/' + encodeURIComponent(sessionId) + '/log?format=text&limit=9999&' + params.toString();
+
+    var fetcher = (typeof authFetch === 'function') ? authFetch : fetch;
+
+    Promise.all([
+      fetcher(loadUrl).then(function(r) { return r.json(); }),
+      fetcher(logUrl).then(function(r) { return r.json(); }),
+    ]).then(function(results) {
+      var detail = results[0];
+      var logData = results[1];
+      renderSessionView(detail, logData);
+    }).catch(function(err) {
+      container.innerHTML = '<div class="agent-session-viewer">加载失败: ' + err.message + '</div>';
+    });
+  }
+
+  function renderSessionView(detail, logData) {
+    var container = ensureHistoryContainer();
+    container.innerHTML = '';
+
+    var header = document.createElement('div');
+    header.className = 'agent-session-viewer-header';
+    header.innerHTML =
+      '<button id="sessionViewBack">&larr; 返回</button>' +
+      '<span class="agent-session-viewer-title">' + escHtml(detail.meta ? detail.meta.title || detail.session_id : detail.session_id) + '</span>' +
+      '<button id="sessionViewDelete" class="danger" title="删除此会话">\u{1F5D1}</button>';
+    container.appendChild(header);
+
+    var content = document.createElement('div');
+    content.className = 'agent-session-viewer-content';
+
+    var pre = document.createElement('pre');
+    pre.className = 'agent-session-viewer-text';
+    pre.textContent = logData.content || '';
+    content.appendChild(pre);
+    container.appendChild(content);
+
+    // Back button
+    var backBtn = document.getElementById('sessionViewBack');
+    if (backBtn) {
+      backBtn.addEventListener('click', function() {
+        historyState.view = 'history';
+        historyState.currentSessionId = null;
+        renderHistoryView();
+      });
+    }
+
+    // Delete button
+    var delBtn = document.getElementById('sessionViewDelete');
+    if (delBtn) {
+      delBtn.addEventListener('click', function() {
+        if (!confirm('确定删除此会话？')) return;
+        var params = new URLSearchParams();
+        if (detail.root) params.set('root', detail.root);
+        if (detail.project) params.set('project', detail.project);
+        var delUrl = '/api/clawmate/agent/sessions/' + encodeURIComponent(detail.session_id) + '?' + params.toString();
+        var fetcher = (typeof authFetch === 'function') ? authFetch : fetch;
+        fetcher(delUrl, { method: 'DELETE' }).then(function(r) { return r.json(); }).then(function() {
+          historyState.view = 'history';
+          historyState.currentSessionId = null;
+          loadHistorySessions();
+        }).catch(function(err) {
+          console.error('Delete failed:', err);
+        });
+      });
+    }
   }
 
   // --- Public API ---
@@ -782,6 +1076,10 @@
     close: function () {
       if (panel.classList.contains('hidden') && !animatingOut) return;
       disconnectWs();
+      // Reset history view
+      historyState.view = null;
+      historyState.currentSessionId = null;
+      if (historyContainer) { historyContainer.remove(); historyContainer = null; }
       animatingOut = true;
       if (termResizeObserver) {
         try { termResizeObserver.disconnect(); } catch (_) {}
