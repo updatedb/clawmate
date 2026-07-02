@@ -428,6 +428,12 @@ button svg, .btn svg, a svg {
   flex-shrink: 0;
 }
 .agent-panel-close:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.agent-panel-header-btn {
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+  font-size: 14px; padding: 2px 5px; border-radius: var(--radius-sm); line-height: 1;
+  flex-shrink: 0;
+}
+.agent-panel-header-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
 .xterm-container {
   flex: 1; overflow: hidden; padding: 0; position: relative;
   background: var(--xterm-bg, #1e1e2e);
@@ -2270,4 +2276,89 @@ pre:hover .code-copy-btn,
   border-radius: 2px;
   padding: 0 2px;
   font-weight: 600;
+}
+
+/* ── Agent Session History ── */
+.agent-history-container {
+  display: flex; flex-direction: column; height: 100%; overflow: hidden;
+  background: var(--bg-primary);
+}
+.agent-history-search {
+  padding: 8px; border-bottom: 1px solid var(--border-color);
+}
+.agent-history-search input {
+  width: 100%; padding: 6px 8px; border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm); background: var(--bg-primary);
+  color: var(--text-primary); font-size: 12px; outline: none;
+  box-sizing: border-box;
+}
+.agent-history-search input:focus { border-color: var(--accent); }
+.agent-history-empty {
+  padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px;
+}
+.agent-history-group-title {
+  padding: 6px 8px; font-size: 11px; font-weight: 600;
+  color: var(--text-secondary); text-transform: uppercase;
+  background: var(--bg-tertiary); border-bottom: 1px solid var(--border-color);
+}
+.agent-history-item {
+  padding: 8px 10px; cursor: pointer; border-bottom: 1px solid var(--border-color);
+  transition: background 0.12s;
+}
+.agent-history-item:hover { background: var(--bg-tertiary); }
+.agent-history-item-title {
+  font-size: 12px; font-weight: 500; color: var(--text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.agent-history-item-meta {
+  display: flex; gap: 8px; font-size: 11px; color: var(--text-secondary);
+  margin-top: 2px; align-items: center;
+}
+.agent-history-backend {
+  display: inline-block; padding: 0 4px; border-radius: 3px;
+  background: var(--accent-light); color: var(--accent); font-weight: 600;
+  font-size: 10px; text-transform: uppercase;
+}
+.agent-history-pagination {
+  display: flex; justify-content: center; align-items: center;
+  gap: 8px; padding: 8px; font-size: 12px; color: var(--text-secondary);
+  border-top: 1px solid var(--border-color); margin-top: auto;
+}
+.agent-history-pagination button {
+  padding: 3px 8px; border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm); background: var(--btn-bg);
+  color: var(--btn-text); cursor: pointer; font-size: 11px;
+}
+.agent-history-pagination button:hover:not([disabled]) {
+  background: var(--bg-tertiary);
+}
+.agent-history-pagination button[disabled] { opacity: 0.4; cursor: default; }
+
+/* Session viewer */
+.agent-session-viewer {
+  display: flex; flex-direction: column; height: 100%;
+}
+.agent-session-viewer-header {
+  display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+  border-bottom: 1px solid var(--border-color); flex-shrink: 0;
+  background: var(--bg-secondary);
+}
+.agent-session-viewer-header button {
+  padding: 3px 8px; border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm); background: var(--btn-bg);
+  color: var(--btn-text); cursor: pointer; font-size: 11px; flex-shrink: 0;
+}
+.agent-session-viewer-header button:hover { background: var(--bg-tertiary); }
+.agent-session-viewer-header button.danger:hover { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
+.agent-session-viewer-title {
+  flex: 1; font-size: 12px; font-weight: 600; color: var(--text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.agent-session-viewer-content {
+  flex: 1; overflow: auto; padding: 8px;
+}
+.agent-session-viewer-text {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1.5;
+  color: var(--text-primary); white-space: pre-wrap; word-break: break-all;
+  margin: 0;
 }
