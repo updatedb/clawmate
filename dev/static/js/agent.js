@@ -85,7 +85,8 @@
     currentSessionId: null,
   };
   var historyContainer = null;
-  var historyBtn = null;
+  var sessionToggleBtn = null;
+
 
   // --- Grid update ---
   function updateGridColumns() {
@@ -109,11 +110,15 @@
   // --- View mode switching ---
   function showXtermMode() {
     xtermContainer.classList.remove('hidden');
+    xtermContainer.style.display = '';
     chatView.classList.add('hidden');
+    chatView.style.display = '';
   }
   function showChatMode() {
     xtermContainer.classList.add('hidden');
+    xtermContainer.style.display = '';
     chatView.classList.remove('hidden');
+    chatView.style.display = '';
     if (chatInput) chatInput.focus();
   }
 
@@ -355,12 +360,50 @@
     if (chatStatusEl) { chatStatusEl.remove(); chatStatusEl = null; }
   }
 
+  // Pre-bind markdownit so it's always available inside the IIFE
+  var _mdRenderer = typeof window.markdownit !== 'undefined'
+    ? window.markdownit({ html: false, linkify: true, breaks: true })
+    : null;
+
+  function cleanTerminalInput(raw) {
+    // Strip ANSI escape codes and process backspace characters
+    if (!raw) return '';
+    // Remove OSC sequences: ESC ] ... (ST = ESC \ or BEL)
+    var s = raw.replace(/\x1b\][^\x1b\x07]*(?:\x1b\\|\x07)/g, '');
+    // Remove CSI sequences: ESC [ param* intermediate* byte
+    s = s.replace(/\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]/g, '');
+    // Remove remaining bare ESC + any char
+    s = s.replace(/\x1b./g, '');
+    // Strip non-printable control chars (keep tab, newline)
+    var out = '';
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charAt(i);
+      if (c >= ' ' || c === '\t' || c === '\n' || c === '\r') {
+        out += c;
+      }
+    }
+    // Process backspace (DEL = \x7f, BS = \b)
+    var buf = [];
+    for (var i = 0; i < out.length; i++) {
+      var c = out.charAt(i);
+      if (c === '\x7f' || c === '\b') {
+        if (buf.length > 0) buf.pop();
+      } else {
+        buf.push(c);
+      }
+    }
+    return buf.join('').trim();
+  }
+
   function renderMarkdown(el, rawText) {
-    if (typeof window.markdownit !== 'undefined') {
+    if (_mdRenderer) {
       try {
-        var md = window.markdownit({ html: false, linkify: true, breaks: true });
-        el.innerHTML = md.render(rawText || '');
-      } catch (_) {}
+        el.innerHTML = _mdRenderer.render(rawText || '');
+      } catch (_) {
+        el.textContent = rawText || '';
+      }
+    } else {
+      el.textContent = rawText || '';
     }
   }
 
@@ -627,19 +670,38 @@
     closeBtn.addEventListener('click', function () { window.Agent.close(); });
   }
 
-  // --- History button ---
-  historyBtn = document.getElementById('agentHistoryBtn');
-  if (!historyBtn) {
-    historyBtn = document.createElement('button');
-    historyBtn.id = 'agentHistoryBtn';
-    historyBtn.className = 'agent-panel-header-btn';
-    historyBtn.title = '历史会话';
-    historyBtn.textContent = '\u{1F4CB}';  // clipboard emoji
-    historyBtn.addEventListener('click', function () { toggleHistoryView(); });
+  // --- Session toggle button (切换 当前会话 / 历史会话) ---
+  sessionToggleBtn = document.getElementById('agentSessionToggleBtn');
+  if (!sessionToggleBtn) {
+    sessionToggleBtn = document.createElement('button');
+    sessionToggleBtn.id = 'agentSessionToggleBtn';
+    sessionToggleBtn.className = 'agent-panel-header-btn';
+    // Set initial innerHTML ONCE before attaching listener
+    var svgEl = typeof iconSVG === 'function' ? iconSVG('clock', 14) : '\u{1F4CB}';
+    sessionToggleBtn.innerHTML = svgEl + '<span> 历史会话</span>';
+    sessionToggleBtn.title = '历史会话';
     if (closeBtn && closeBtn.parentNode) {
-      closeBtn.parentNode.insertBefore(historyBtn, closeBtn);
+      closeBtn.parentNode.insertBefore(sessionToggleBtn, closeBtn);
     }
   }
+  // Always attach listener — the button may survive across reloads via bfcache
+  sessionToggleBtn.addEventListener('click', function () {
+    if (historyState.view === null) {
+      // Switch to history view — reset search so stale query doesn't persist
+      historyState.view = 'history';
+      historyState.page = 0;
+      historyState.query = '';
+      hideTerminalView();
+      updateHeaderButtons();
+      loadHistorySessions();
+    } else {
+      // Switch back to terminal
+      historyState.view = null;
+      showTerminalView();
+      updateHeaderButtons();
+    }
+  });
+  updateHeaderButtons();
 
   // --- Backend select dropdown ---
   function switchBackend(newBackend) {
@@ -720,27 +782,33 @@
 
   // ── Session History Functions ──
 
-  function toggleHistoryView() {
-    if (historyState.view === 'history') {
-      // Switch back to terminal
-      historyState.view = null;
-      showTerminalView();
-      return;
+  function updateHeaderButtons() {
+    if (!sessionToggleBtn) return;
+    // Never set innerHTML here — that would destroy the click listener.
+    // SVG is set once during button creation; only update title + span text.
+    var span = sessionToggleBtn.querySelector('span');
+    if (historyState.view === null) {
+      sessionToggleBtn.title = '历史会话';
+      if (span) span.textContent = ' 历史会话';
+      sessionToggleBtn.classList.remove('active');
+    } else {
+      sessionToggleBtn.title = '当前会话';
+      if (span) span.textContent = ' 当前会话';
+      sessionToggleBtn.classList.add('active');
     }
-    historyState.view = 'history';
-    historyState.page = 0;
-    hideTerminalView();
-    loadHistorySessions();
   }
 
   function hideTerminalView() {
     if (xtermContainer) xtermContainer.style.display = 'none';
     if (chatView) chatView.style.display = 'none';
+    if (historyContainer) historyContainer.style.display = '';
   }
 
   function showTerminalView() {
     if (xtermContainer) xtermContainer.style.display = '';
     if (chatView && backendMode === 'openclaw') chatView.style.display = '';
+    if (historyContainer) historyContainer.style.display = 'none';
+    updateHeaderButtons();
   }
 
   function loadHistorySessions() {
@@ -906,6 +974,7 @@
     }
   }
 
+
   function openSessionView(sessionId, root, project) {
     historyState.currentSessionId = sessionId;
     historyState.view = 'session-view';
@@ -918,17 +987,14 @@
     if (project) params.set('project', project);
 
     var loadUrl = '/api/clawmate/agent/sessions/' + encodeURIComponent(sessionId) + '?' + params.toString();
-    var logUrl = '/api/clawmate/agent/sessions/' + encodeURIComponent(sessionId) + '/log?format=text&limit=9999&' + params.toString();
+    var logUrl = '/api/clawmate/agent/sessions/' + encodeURIComponent(sessionId) + '/log?' + params.toString();
 
     var fetcher = (typeof authFetch === 'function') ? authFetch : fetch;
-
     Promise.all([
       fetcher(loadUrl).then(function(r) { return r.json(); }),
       fetcher(logUrl).then(function(r) { return r.json(); }),
     ]).then(function(results) {
-      var detail = results[0];
-      var logData = results[1];
-      renderSessionView(detail, logData);
+      renderSessionView(results[0], results[1]);
     }).catch(function(err) {
       container.innerHTML = '<div class="agent-session-viewer">加载失败: ' + err.message + '</div>';
     });
@@ -936,56 +1002,76 @@
 
   function renderSessionView(detail, logData) {
     var container = ensureHistoryContainer();
-    container.innerHTML = '';
+    var viewer = document.createElement('div');
+    viewer.className = 'agent-session-viewer';
 
+    // Header
     var header = document.createElement('div');
     header.className = 'agent-session-viewer-header';
     header.innerHTML =
       '<button id="sessionViewBack">&larr; 返回</button>' +
       '<span class="agent-session-viewer-title">' + escHtml(detail.meta ? detail.meta.title || detail.session_id : detail.session_id) + '</span>' +
-      '<button id="sessionViewDelete" class="danger" title="删除此会话">\u{1F5D1}</button>';
-    container.appendChild(header);
+      '<button id="sessionViewDelete" class="danger" title="删除此会话">🗑</button>';
+    viewer.appendChild(header);
 
+    // Content area - chat bubbles
     var content = document.createElement('div');
-    content.className = 'agent-session-viewer-content';
+    content.className = 'agent-chat-content';
 
-    var pre = document.createElement('pre');
-    pre.className = 'agent-session-viewer-text';
-    pre.textContent = logData.content || '';
-    content.appendChild(pre);
-    container.appendChild(content);
+    var turns = logData.turns || [];
+    if (!turns.length) {
+      content.innerHTML = '<div class="agent-chat-empty">暂无对话记录</div>';
+    } else {
+      for (var i = 0; i < turns.length; i++) {
+        var turn = turns[i];
+        var bubble = document.createElement('div');
+        bubble.className = 'agent-chat-bubble agent-chat-bubble-' + (turn.role === 'user' ? 'user' : 'assistant');
+
+        var meta = document.createElement('div');
+        meta.className = 'agent-chat-meta';
+        meta.textContent = turn.role === 'user' ? '你' : 'Agent';
+        if (turn.ts) {
+          var d = new Date(turn.ts * 1000);
+          var timeStr = d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+          meta.textContent += ' ' + timeStr;
+        }
+        bubble.appendChild(meta);
+
+        var body = document.createElement('div');
+        body.className = 'agent-chat-body';
+        if (turn.content) {
+          renderMarkdown(body, cleanTerminalInput(turn.content));
+        }
+        bubble.appendChild(body);
+
+        content.appendChild(bubble);
+      }
+    }
+
+    viewer.appendChild(content);
+    container.innerHTML = '';
+    container.appendChild(viewer);
 
     // Back button
-    var backBtn = document.getElementById('sessionViewBack');
-    if (backBtn) {
-      backBtn.addEventListener('click', function() {
-        historyState.view = 'history';
-        historyState.currentSessionId = null;
-        renderHistoryView();
-      });
-    }
+    document.getElementById('sessionViewBack').addEventListener('click', function() {
+      renderHistoryView();
+    });
 
     // Delete button
-    var delBtn = document.getElementById('sessionViewDelete');
-    if (delBtn) {
-      delBtn.addEventListener('click', function() {
-        if (!confirm('确定删除此会话？')) return;
-        var params = new URLSearchParams();
-        if (detail.root) params.set('root', detail.root);
-        if (detail.project) params.set('project', detail.project);
-        var delUrl = '/api/clawmate/agent/sessions/' + encodeURIComponent(detail.session_id) + '?' + params.toString();
-        var fetcher = (typeof authFetch === 'function') ? authFetch : fetch;
-        fetcher(delUrl, { method: 'DELETE' }).then(function(r) { return r.json(); }).then(function() {
-          historyState.view = 'history';
-          historyState.currentSessionId = null;
-          loadHistorySessions();
-        }).catch(function(err) {
-          console.error('Delete failed:', err);
-        });
+    document.getElementById('sessionViewDelete').addEventListener('click', function() {
+      if (!confirm('确定删除此会话？')) return;
+      var params = new URLSearchParams();
+      if (detail.root) params.set('root', detail.root);
+      if (detail.project) params.set('project', detail.project);
+      var url = '/api/clawmate/agent/sessions/' + encodeURIComponent(detail.session_id) + '?' + params.toString();
+      var fetcher = (typeof authFetch === 'function') ? authFetch : fetch;
+      fetcher(url, { method: 'DELETE' }).then(function() {
+        loadHistorySessions();
+      }).catch(function(err) {
+        console.error('delete failed:', err);
       });
-    }
+    });
   }
-
   // --- Public API ---
   window.Agent = {
     XTERM_CDN_BASE: XTERM_CDN_BASE,

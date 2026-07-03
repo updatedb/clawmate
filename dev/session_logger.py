@@ -1,89 +1,75 @@
-"""Session output persistence — writes PTY output to .ansi.log and .text.log."""
+"""Session output persistence — records structured conversation turns to .chat.jsonl."""
 
 from __future__ import annotations
 
 import json
-import re
 import time
 import typing
 from pathlib import Path
 from typing import Optional
 
 
-# ── ANSI strip ──
-
-_ANSI_STRIP_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?(\x1b\\|\x07)|\x1b[\\\]_PX^]")
-
-
-def strip_ansi(text: str) -> str:
-    """Remove ANSI escape sequences from text."""
-    return _ANSI_STRIP_RE.sub("", text)
-
-
 # ── SessionLogger ──
 
 class SessionLogger:
-    """Per-session logger: appends to .ansi.log (raw) and .text.log (plain text with timestamps)."""
+    """Per-session logger: appends structured conversation turns to .chat.jsonl.
+
+    User input is recorded immediately at the WebSocket boundary.
+    Assistant responses are captured after session end from the CLI's own
+    transcript files (~/.claude/projects/*.jsonl or ~/.codex/sessions/*.jsonl).
+    """
 
     def __init__(self, session_id: str, meta: dict, log_dir: str | Path):
         self.session_id = session_id
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self._started_at = meta.get("started_at", time.time())
-        self._ansi_fd: Optional[typing.IO] = None  # noqa: UP045
-        self._text_fd: Optional[typing.IO] = None  # noqa: UP045
-        self._line_buf = ""
+        self._chat_fd: Optional[typing.IO] = None
 
         # Write meta.json
         meta_path = self.log_dir / f"{session_id}.meta.json"
         with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
 
-        # Open file handles
-        self._ansi_fd = open(self.log_dir / f"{session_id}.ansi.log", "w", encoding="utf-8", buffering=1)
-        self._text_fd = open(self.log_dir / f"{session_id}.text.log", "w", encoding="utf-8", buffering=1)
+        # Open .chat.jsonl
+        self._chat_fd = open(
+            self.log_dir / f"{session_id}.chat.jsonl",
+            "a", encoding="utf-8",
+        )
 
-    def write(self, data: str):
-        """Append raw PTY data to .ansi.log; strip ANSI and write lines with timestamps to .text.log."""
-        if not data:
+    def record_user(self, content: str):
+        """Record a user input turn (called from WebSocket boundary).
+
+        Written immediately so even incomplete sessions are captured.
+        """
+        if not self._chat_fd:
             return
-        # 1) Write raw ANSI
-        if self._ansi_fd:
-            self._ansi_fd.write(data)
+        turn = {
+            "role": "user",
+            "ts": time.time(),
+            "content": content,
+        }
+        self._chat_fd.write(json.dumps(turn, ensure_ascii=False) + "\n")
+        self._chat_fd.flush()
 
-        # 2) Strip ANSI and accumulate lines for .text.log
-        if self._text_fd:
-            plain = strip_ansi(data)
-            self._line_buf += plain
-            while "\n" in self._line_buf:
-                idx = self._line_buf.index("\n")
-                line = self._line_buf[:idx]
-                self._line_buf = self._line_buf[idx + 1:]
-                elapsed = int(time.time() - self._started_at)
-                mm, ss = divmod(elapsed, 60)
-                self._text_fd.write(f"[+{mm:02d}:{ss:02d}] {line}\n")
+    def record_turns(self, turns: list[dict]):
+        """Batch-write turns parsed from CLI transcript files (e.g. assistant replies)."""
+        if not self._chat_fd:
+            return
+        for t in turns:
+            self._chat_fd.write(json.dumps(t, ensure_ascii=False) + "\n")
+        self._chat_fd.flush()
 
     def flush(self):
-        """Force-flush both file handles."""
-        if self._ansi_fd:
-            self._ansi_fd.flush()
-        if self._text_fd:
-            self._text_fd.flush()
+        """Force-flush file handle."""
+        if self._chat_fd:
+            self._chat_fd.flush()
 
     def close(self, status: str = "ended"):
-        """Flush, close files, update meta.json."""
-        if self._line_buf and self._text_fd:
-            elapsed = int(time.time() - self._started_at)
-            mm, ss = divmod(elapsed, 60)
-            self._text_fd.write(f"[+{mm:02d}:{ss:02d}] {self._line_buf}\n")
-            self._line_buf = ""
-
-        if self._ansi_fd:
-            self._ansi_fd.close()
-            self._ansi_fd = None
-        if self._text_fd:
-            self._text_fd.close()
-            self._text_fd = None
+        """Close .chat.jsonl handle and update meta.json."""
+        if self._chat_fd:
+            self._chat_fd.close()
+            self._chat_fd = None
 
         # Update meta.json
         meta_path = self.log_dir / f"{self.session_id}.meta.json"
@@ -97,22 +83,22 @@ class SessionLogger:
         with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
 
-    def get_title(self) -> str:
-        """Read first non-empty line from .text.log as session title."""
-        text_path = self.log_dir / f"{self.session_id}.text.log"
+        # Update index
+        SessionIndex.update(self.log_dir, self.session_id, {
+            "status": status,
+            "ended_at": time.time(),
+            "last_active": time.time(),
+        })
+
+    def count_turns(self) -> int:
+        """Count turns recorded so far (for display in session list)."""
+        if not self._chat_fd:
+            return 0
         try:
-            with open(text_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    # Strip timestamp prefix
-                    content = re.sub(r"^\[\+\d+:\d{2}\]\s*", "", line)
-                    if content:
-                        return content[:60]
+            with open(self.log_dir / f"{self.session_id}.chat.jsonl") as f:
+                return sum(1 for _ in f)
         except FileNotFoundError:
-            pass
-        return self.session_id
+            return 0
 
 
 # ── SessionIndex ──
@@ -183,7 +169,7 @@ class SessionIndex:
             if s.get("last_active", 0) < cutoff:
                 sid = s.get("id", "")
                 if sid:
-                    for ext in [".meta.json", ".ansi.log", ".text.log"]:
+                    for ext in [".meta.json", ".chat.jsonl"]:
                         p = log_dir / f"{sid}{ext}"
                         if p.exists():
                             p.unlink()

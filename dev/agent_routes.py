@@ -21,6 +21,7 @@ import struct
 import termios
 import time
 import websockets
+import re
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -46,6 +47,31 @@ _IDLE_TIMEOUT_SECONDS = 600  # 10 minutes
 _MAX_SESSION_LIFETIME = 24 * 3600  # 24 hours
 
 
+
+# ── Terminal input cleanup ──
+
+
+def _clean_terminal_input(raw: str) -> str:
+    """Strip ANSI escape codes and process backspace from raw terminal input."""
+    import re as _re
+    # OSC: ESC ] ... (ST = ESC \ or BEL)
+    s = _re.sub(r'\x1b\][^\x1b\x07]*(?:\x1b\\|\x07)', '', raw)
+    # CSI: ESC [ param* intermediate* byte
+    s = _re.sub(r'\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]', '', s)
+    # Remaining bare ESC + any char
+    s = _re.sub(r'\x1b.', '', s)
+    # Strip non-printable control chars (keep tab)
+    s = ''.join(c for c in s if c >= ' ' or c in '\t')
+    # Process backspace (DEL = \x7f, BS = \b)
+    buf = []
+    for c in s:
+        if c in '\x7f\b':
+            if buf:
+                buf.pop()
+        else:
+            buf.append(c)
+    return ''.join(buf).strip()
+
 @dataclass
 class _AgentSession:
     """A persistent Claude Code process that survives WebSocket reconnects."""
@@ -59,7 +85,9 @@ class _AgentSession:
     last_active: float = 0.0
     last_input_time: float = 0.0  # timestamp of last user keystroke (for output coordination)
     last_injected_file: str = ""   # path of the last file_context injected (avoid dupes on reconnect)
-    logger: Optional[SessionLogger] = None  # session log writer (persists PTY output to disk)
+    logger: Optional[SessionLogger] = None  # session log writer (.chat.jsonl)
+    cwd: str = ""                            # working directory (for transcript matching)
+    log_dir: str = ""                        # .clawmate/sessions/ path (for transcript collection)
 
     def __post_init__(self):
         if not self.created_at:
@@ -167,6 +195,9 @@ def _cleanup_dead_sessions():
     for key in dead:
         try:
             sess = _sessions.pop(key)
+            # Collect assistant turns from CLI transcript before closing
+            if sess.logger and sess.log_dir:
+                _collect_transcript(sess, Path(sess.log_dir))
             if sess.logger:
                 sess.logger.close("ended")
             try:
@@ -200,6 +231,9 @@ async def _idle_reaper():
         for key in dead:
             sess = _sessions.pop(key, None)
             if sess:
+                # Collect assistant turns from CLI transcript before closing
+                if sess.logger and sess.log_dir:
+                    _collect_transcript(sess, Path(sess.log_dir))
                 if sess.logger:
                     sess.logger.close("killed")
                 sess.stop_event.set()
@@ -484,6 +518,7 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
 
     async def ws_to_pty():
         """Forward WebSocket → PTY (keyboard input)."""
+        _input_buf = ""  # accumulate user input until newline for logging
         try:
             while not sess.stop_event.is_set():
                 try:
@@ -556,6 +591,15 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
                     pass
 
                 # Raw terminal input
+                # Accumulate user input and record complete lines for chat log
+                _input_buf += data
+                if '\n' in _input_buf or '\r' in _input_buf:
+                    parts = _input_buf.replace('\r\n', '\n').replace('\r', '\n').split('\n')
+                    for part in parts[:-1]:
+                        cleaned = _clean_terminal_input(part)
+                        if cleaned and sess.logger:
+                            sess.logger.record_user(cleaned)
+                    _input_buf = parts[-1]  # keep incomplete fragment
                 try:
                     os.write(sess.master_fd, data.encode())
                 except (OSError, BlockingIOError):
@@ -578,8 +622,6 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
                         break  # PTY closed — Claude Code exited
                     text = data.decode("utf-8", errors="replace")
                     sess.output_buffer.append(text)
-                    if sess.logger:
-                        sess.logger.write(text)
                     out_buf += text
                     now = time.monotonic()
                     # Brief yield after user input so echo arrives before output
@@ -1093,12 +1135,14 @@ async def agent_terminal(
                 await ws.send_text("\x1b[1;31m✕ Claude CLI not found\x1b[0m\r\n")
                 return
         sess.key = key
+        sess.cwd = cwd
         _sessions[key] = sess
 
-        # Initialize session logger (write PTY output to .clawmate/sessions/)
+        # Initialize session logger (.chat.jsonl)
         try:
             sess_dir = _session_log_dir(key, cwd)
             if sess_dir:
+                sess.log_dir = str(sess_dir)
                 ts = time.strftime("%Y%m%d_%H%M%S", time.localtime())
                 safe_key = key.replace(":", "_").replace("/", "_")
                 session_id = f"{safe_key}_{ts}"
@@ -1145,6 +1189,192 @@ async def agent_terminal(
                 pass
     else:
         await ws.send_text(f"\x1b[1;31m✕ Unknown agent backend: {backend}\x1b[0m\r\n")
+
+
+# ── Transcript collection (from CLI's own on-disk .jsonl transcripts) ──
+
+
+def _sanitized_fragment(path: str) -> str:
+    """Convert a filesystem path to the sanitized form used by Claude Code's project dirs.
+    e.g. /home/user/projects/my-app → home-user-projects-my-app
+    """
+    return path.lstrip("/").replace("/", "-")
+
+
+def _find_claude_transcript(cwd: str, started_at: float) -> Path | None:
+    """Locate Claude Code's transcript file for the session that started at started_at.
+
+    Claude Code writes transcripts to:
+      ~/.claude/projects/<sanitized-cwd>/<uuid>.jsonl
+
+    We match by modification time: the youngest file whose mtime is >= started_at
+    is assumed to belong to this session.
+    """
+    sanitized = _sanitized_fragment(cwd)
+    transcript_dir = Path.home() / ".claude" / "projects" / f"-{sanitized}"
+    if not transcript_dir.is_dir():
+        return None
+    candidates = sorted(transcript_dir.glob("*.jsonl"), key=os.path.getmtime, reverse=True)
+    for c in candidates:
+        if os.path.getmtime(c) >= started_at - 5:  # 5s tolerance
+            return c
+    return candidates[0] if candidates else None
+
+
+def _find_codex_transcript(cwd: str, started_at: float) -> Path | None:
+    """Locate Codex CLI's session transcript file.
+
+    Codex writes transcripts to:
+      ~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl
+
+    The first line is session_meta with cwd and timestamp — we scan likely
+    directories and match by cwd + timestamp proximity.
+    """
+    import datetime
+    dt = datetime.datetime.fromtimestamp(started_at)
+    session_dir = Path.home() / ".codex" / "sessions" / f"{dt.year:04d}" / f"{dt.month:02d}" / f"{dt.day:02d}"
+    if not session_dir.is_dir():
+        return None
+    candidates = sorted(session_dir.glob("rollout-*.jsonl"), key=os.path.getmtime, reverse=True)
+    for c in candidates:
+        try:
+            with open(c) as f:
+                first = json.loads(f.readline())
+            if first.get("type") == "session_meta":
+                meta = first.get("payload", {})
+                if meta.get("cwd") == cwd:
+                    return c
+        except Exception:
+            continue
+    # Fallback: return most recent file in directory
+    return candidates[0] if candidates else None
+
+
+def _parse_claude_transcript(path: Path, started_at_sessions: set[str]) -> list[dict]:
+    """Parse Claude Code transcript and extract assistant text replies,
+    skipping tool- call blocks and thinking blocks.
+
+    Claude Code transcript format:
+      {"type":"user", "message":{"role":"user", "content":[...]}}
+      {"type":"assistant", "message":{"role":"assistant", "content":[{"type":"text","text":"..."}, ...]}}
+    """
+    turns = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if obj.get("type") != "assistant":
+                    continue
+                msg = obj.get("message", "")
+                if isinstance(msg, str):
+                    try:
+                        msg = json.loads(msg)
+                    except json.JSONDecodeError:
+                        continue
+                if not isinstance(msg, dict):
+                    continue
+                content_blocks = msg.get("content", [])
+                texts = []
+                for block in content_blocks:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        texts.append(block.get("text", ""))
+                if texts:
+                    ts = obj.get("timestamp", time.time())
+                    if isinstance(ts, str):
+                        try:
+                            import datetime
+                            ts = datetime.datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+                        except Exception:
+                            ts = time.time()
+                    turns.append({
+                        "role": "assistant",
+                        "ts": ts,
+                        "content": "\n".join(texts),
+                    })
+    except FileNotFoundError:
+        pass
+    return turns
+
+
+def _parse_codex_transcript(path: Path) -> list[dict]:
+    """Parse Codex CLI transcript and extract user + assistant messages.
+
+    Codex transcript format:
+      {"type":"response_item","payload":{"role":"user","content":[{"type":"input_text","text":"..."}]}}
+      {"type":"response_item","payload":{"role":"assistant","content":[{"type":"text","text":"..."}]}}
+    """
+    turns = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if obj.get("type") != "response_item":
+                    continue
+                pl = obj.get("payload", {})
+                role = pl.get("role", "")
+                if role not in ("user", "assistant"):
+                    continue
+                content_blocks = pl.get("content", []) or []
+                texts = []
+                for block in content_blocks:
+                    if isinstance(block, dict):
+                        txt = block.get("text", "")
+                        if txt:
+                            texts.append(txt)
+                if texts:
+                    ts_str = obj.get("timestamp", "")
+                    ts = time.time()
+                    if ts_str:
+                        try:
+                            import datetime
+                            ts = datetime.datetime.fromisoformat(ts_str.replace("Z", "+00:00")).timestamp()
+                        except Exception:
+                            pass
+                    turns.append({
+                        "role": role,
+                        "ts": ts,
+                        "content": "\n".join(texts),
+                    })
+    except FileNotFoundError:
+        pass
+    return turns
+
+
+def _collect_transcript(sess, log_dir: Path):
+    """After a session ends, try to collect assistant turns from CLI transcript files.
+
+    Called from session cleanup code. Best-effort — silently does nothing
+    if transcript files cannot be found or parsed.
+    """
+    if not sess.logger:
+        return
+    cwd = getattr(sess, "cwd", None) or ""
+    backend = (sess.key or "").split(":")[0] or "claude"
+    started_at = getattr(sess, "created_at", 0)
+
+    transcript_path = None
+    turns = []
+    if backend == "claude":
+        transcript_path = _find_claude_transcript(cwd, started_at)
+        if transcript_path:
+            turns = _parse_claude_transcript(transcript_path, set())
+    elif backend == "codex":
+        transcript_path = _find_codex_transcript(cwd, started_at)
+        if transcript_path:
+            turns = _parse_codex_transcript(transcript_path)
+
+    if turns:
+        sess.logger.record_turns(turns)
+        logger.info(
+            "collected %d assistant turns from %s transcript %s",
+            len(turns), backend, transcript_path,
+        )
 
 
 # ── Session History APIs ──
@@ -1199,38 +1429,29 @@ async def agent_session_list(
                 if backend and s.get("backend", "") != backend:
                     continue
                 if q:
-                    if q.lower() not in s.get("title", "").lower():
-                        sid = s.get("id", "")
-                        text_path = sess_dir / f"{sid}.text.log"
-                        if text_path.is_file():
-                            try:
-                                content = text_path.read_text("utf-8", errors="replace")
-                                if q.lower() not in content.lower():
+                    sid = s.get("id", "")
+                    chat_path = sess_dir / f"{sid}.chat.jsonl"
+                    if chat_path.is_file():
+                        try:
+                            with open(chat_path) as cf:
+                                matched = False
+                                for chat_line in cf:
+                                    if q.lower() in chat_line.lower():
+                                        matched = True
+                                        break
+                                if not matched:
                                     continue
-                            except Exception:
-                                continue
-                        else:
+                        except Exception:
                             continue
+                    else:
+                        continue
                 sid = s.get("id", "")
                 if sid in seen:
                     continue
                 seen.add(sid)
 
-                # Get ansi_size and text_size from actual files
-                ansi_size = 0
-                text_size = 0
-                if sid:
-                    ansi_p = sess_dir / f"{sid}.ansi.log"
-                    text_p = sess_dir / f"{sid}.text.log"
-                    if ansi_p.is_file():
-                        ansi_size = ansi_p.stat().st_size
-                    if text_p.is_file():
-                        text_size = text_p.stat().st_size
-
                 results.append({
                     **s,
-                    "ansi_size": ansi_size,
-                    "text_size": text_size,
                     "root": r.id,
                     "project": proj_dir.name,
                     "log_dir": str(sess_dir),
@@ -1247,11 +1468,8 @@ async def agent_session_log(
     session_id: str,
     root: str = "",
     project: str = "",
-    fmt: str = Query("text", alias="format"),
-    offset: int = 0,
-    limit: int = 200,
 ):
-    """Read session log content. format=text|ansi."""
+    """Read session chat log (.chat.jsonl). Returns structured conversation turns."""
     cfg = load_cfg()
     for r in cfg.roots:
         root_dir = Path(r.dir)
@@ -1269,9 +1487,8 @@ async def agent_session_log(
 
         for proj_name, proj_path in projects_to_check:
             sess_dir = proj_path / ".clawmate" / "sessions"
-            ext = ".ansi.log" if fmt == "ansi" else ".text.log"
-            log_path = sess_dir / f"{session_id}{ext}"
-            if not log_path.is_file():
+            chat_path = sess_dir / f"{session_id}.chat.jsonl"
+            if not chat_path.is_file():
                 continue
 
             meta = {}
@@ -1282,19 +1499,13 @@ async def agent_session_log(
                 except Exception:
                     pass
 
-            content = log_path.read_text("utf-8", errors="replace")
-            lines = content.splitlines(keepends=True)
-            total_lines = len(lines)
-            paged_lines = lines[offset:offset + limit] if limit > 0 else lines
+            lines = chat_path.read_text("utf-8", errors="replace").splitlines()
 
             return JSONResponse({
                 "session_id": session_id,
                 "meta": meta,
-                "format": fmt,
-                "total_lines": total_lines,
-                "offset": offset,
-                "limit": limit,
-                "content": "".join(paged_lines),
+                "turns": [json.loads(l) for l in lines if l.strip()],
+                "total_turns": len(lines),
             })
 
     raise HTTPException(status_code=404, detail="Session not found")
@@ -1302,7 +1513,7 @@ async def agent_session_log(
 
 @router.get("/api/clawmate/agent/sessions/{session_id}")
 async def agent_session_detail(session_id: str, root: str = "", project: str = ""):
-    """Return session metadata + first/last N lines of text log."""
+    """Return session metadata + chat.jsonl turn count."""
     cfg = load_cfg()
     for r in cfg.roots:
         root_dir = Path(r.dir)
@@ -1321,10 +1532,9 @@ async def agent_session_detail(session_id: str, root: str = "", project: str = "
         for proj_name, proj_path in projects_to_check:
             sess_dir = proj_path / ".clawmate" / "sessions"
             meta_path = sess_dir / f"{session_id}.meta.json"
-            text_path = sess_dir / f"{session_id}.text.log"
-            ansi_path = sess_dir / f"{session_id}.ansi.log"
+            chat_path = sess_dir / f"{session_id}.chat.jsonl"
 
-            if not meta_path.is_file() and not text_path.is_file():
+            if not meta_path.is_file() and not chat_path.is_file():
                 continue
 
             meta = {}
@@ -1334,24 +1544,19 @@ async def agent_session_detail(session_id: str, root: str = "", project: str = "
                 except Exception:
                     pass
 
-            preview: dict = {"head": "", "tail": "", "total_lines": 0}
-            if text_path.is_file():
-                lines = text_path.read_text("utf-8", errors="replace").splitlines()
-                preview["head"] = "\n".join(lines[:20])
-                preview["tail"] = "\n".join(lines[-20:]) if len(lines) > 40 else ""
-                preview["total_lines"] = len(lines)
-
-            ansi_size = ansi_path.stat().st_size if ansi_path.is_file() else 0
-            text_size = text_path.stat().st_size if text_path.is_file() else 0
+            turn_count = 0
+            if chat_path.is_file():
+                try:
+                    turn_count = sum(1 for _ in chat_path.open())
+                except Exception:
+                    pass
 
             return JSONResponse({
                 "session_id": session_id,
                 "meta": meta,
-                "ansi_size": ansi_size,
-                "text_size": text_size,
                 "root": r.id,
                 "project": proj_name,
-                "preview": preview,
+                "turn_count": turn_count,
             })
 
     raise HTTPException(status_code=404, detail="Session not found")
@@ -1381,7 +1586,7 @@ async def agent_session_delete(session_id: str, root: str = "", project: str = "
             if not meta_path.is_file():
                 continue
 
-            for ext in [".meta.json", ".ansi.log", ".text.log"]:
+            for ext in [".meta.json", ".chat.jsonl"]:
                 p = sess_dir / f"{session_id}{ext}"
                 if p.exists():
                     p.unlink()
