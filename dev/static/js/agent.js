@@ -180,7 +180,7 @@
         selectionBackground: selBg, selectionForeground: selFg,
         selectionInactiveBackground: selInactiveBg,
       },
-      allowProposedApi: true, scrollback: 5000, cols: estimatedCols, rows: estimatedRows,
+      allowProposedApi: true, scrollback: 65535, cols: estimatedCols, rows: estimatedRows,
     });
 
     // Save estimated dimensions BEFORE FitAddon.fit() potentially shrinks
@@ -1018,7 +1018,20 @@
     var content = document.createElement('div');
     content.className = 'agent-chat-content';
 
-    var turns = logData.turns || [];
+    var rawTurns = logData.turns || [];
+    // Merge consecutive user turns ≤1s apart — terminal multi-line paste
+    // is split into separate \n-delimited turns in the WebSocket handler.
+    var turns = [];
+    for (var i = 0; i < rawTurns.length; i++) {
+      var t = rawTurns[i];
+      var prev = turns.length > 0 ? turns[turns.length - 1] : null;
+      if (prev && prev.role === 'user' && t.role === 'user' &&
+          t.ts && prev.ts && Math.abs(t.ts - prev.ts) <= 1.0) {
+        prev.content = (prev.content || '') + '\n' + (t.content || '');
+      } else {
+        turns.push(t);
+      }
+    }
     if (!turns.length) {
       content.innerHTML = '<div class="agent-chat-empty">暂无对话记录</div>';
     } else {

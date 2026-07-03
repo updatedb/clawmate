@@ -10,6 +10,31 @@ from pathlib import Path
 from typing import Optional
 
 
+def _derive_title_from_input(content: str, max_len: int = 60) -> str:
+    """Derive a human-readable session title from the first user input.
+
+    Uses the first substantive line of *content*, truncated to *max_len*
+    characters.  Falls back to the whole (truncated) content if no single
+    line is long enough.
+    """
+    stripped = content.strip()
+    if not stripped:
+        return ""
+
+    # Prefer the first non-empty line that is long enough to be meaningful
+    for line in stripped.split("\n"):
+        line = line.strip()
+        if line and len(line) >= 5:
+            if len(line) > max_len:
+                return line[: max_len - 3].rstrip() + "..."
+            return line
+
+    # Fallback: use the full content, truncated
+    if len(stripped) > max_len:
+        return stripped[: max_len - 3].rstrip() + "..."
+    return stripped if len(stripped) >= 3 else ""
+
+
 # ── Known log file extensions (for cleanup) ──
 
 # New format (structured chat logs)
@@ -36,6 +61,7 @@ class SessionLogger:
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self._started_at = meta.get("started_at", time.time())
         self._chat_fd: Optional[typing.IO] = None
+        self._title_set = False
 
         # Write meta.json
         meta_path = self.log_dir / f"{session_id}.meta.json"
@@ -48,10 +74,12 @@ class SessionLogger:
             "a", encoding="utf-8",
         )
 
-    def record_user(self, content: str):
+    async def record_user(self, content: str):
         """Record a user input turn (called from WebSocket boundary).
 
         Written immediately so even incomplete sessions are captured.
+        On the first user input, a meaningful title is derived from the
+        content and persisted to both meta.json and index.json.
         """
         if not self._chat_fd:
             return
@@ -62,6 +90,35 @@ class SessionLogger:
         }
         self._chat_fd.write(json.dumps(turn, ensure_ascii=False) + "\n")
         self._chat_fd.flush()
+
+        # Derive a human-readable title from the first user input
+        if not self._title_set and content:
+            await self._extract_and_set_title(content)
+
+    async def _extract_and_set_title(self, content: str):
+        """Derive a title from *content* and persist to meta.json + index.json."""
+        title = _derive_title_from_input(content)
+        if not title:
+            self._title_set = True
+            return
+
+        # Update meta.json
+        meta_path = self.log_dir / f"{self.session_id}.meta.json"
+        try:
+            with open(meta_path, "r") as f:
+                meta = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            meta = {}
+        meta["title"] = title
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+
+        # Use instance-based async method with per-dir lock so we don't
+        # race with update_batch / reap_async from the reaper task.
+        idx = SessionIndex.for_dir(self.log_dir)
+        await idx.update_async(self.session_id, {"title": title})
+
+        self._title_set = True
 
     def record_turns(self, turns: list[dict]):
         """Batch-write turns parsed from CLI transcript files (e.g. assistant replies)."""
@@ -232,8 +289,14 @@ class SessionIndex:
         SessionIndex._sync_save(Path(log_dir), sessions)
 
     @staticmethod
-    def reap(log_dir: str | Path, ttl_days: int) -> int:
-        """Synchronous reap — prefer the async instance method when possible."""
+    def reap(log_dir: str | Path, ttl_days: int,
+             active_keys: set[str] | None = None) -> int:
+        """Synchronous reap — prefer the async instance method when possible.
+
+        *active_keys*: a set of session keys that are currently running.
+        When provided, sessions whose key is in this set are never reaped
+        (replaces the ``status == "active"`` heuristic).
+        """
         log_dir = Path(log_dir)
         idx = SessionIndex.for_dir(log_dir)
         sessions = SessionIndex._sync_load(log_dir)
@@ -242,9 +305,14 @@ class SessionIndex:
         kept = []
         removed = 0
         for s in sessions:
-            if s.get("status") == "active":
-                kept.append(s)
-                continue
+            if active_keys is not None:
+                if s.get("key", "") in active_keys:
+                    kept.append(s)
+                    continue
+            else:
+                if s.get("status") == "active":
+                    kept.append(s)
+                    continue
             if s.get("last_active", 0) < cutoff:
                 sid = s.get("id", "")
                 if sid:
@@ -333,11 +401,15 @@ class SessionIndex:
             sessions = [s for s in sessions if s.get("id") != session_id]
             self._sync_save(self._log_dir, sessions)
 
-    async def reap_async(self, ttl_days: int) -> int:
+    async def reap_async(self, ttl_days: int,
+                         active_keys: set[str] | None = None) -> int:
         """Remove sessions whose last_active is older than *ttl_days*.
 
-        Active sessions (status == "active") are never reaped as a
-        belt-and-suspenders measure.  Returns count removed.
+        *active_keys*: a set of session keys that are currently running.
+        When provided, sessions whose key is in this set are never reaped
+        (replaces the ``status == "active"`` heuristic which fails for
+        sessions that crashed without calling ``aclose()``).
+        Returns count removed.
         """
         async with self._lock:
             sessions = self._sync_load(self._log_dir)
@@ -346,9 +418,14 @@ class SessionIndex:
             kept = []
             removed = 0
             for s in sessions:
-                if s.get("status") == "active":
-                    kept.append(s)
-                    continue
+                if active_keys is not None:
+                    if s.get("key", "") in active_keys:
+                        kept.append(s)
+                        continue
+                else:
+                    if s.get("status") == "active":
+                        kept.append(s)
+                        continue
                 if s.get("last_active", 0) < cutoff:
                     sid = s.get("id", "")
                     if sid:

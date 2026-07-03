@@ -60,3 +60,9 @@ openclaw-*-test.png
 
 # Local IDE/agent config
 .claude/
+
+# Runtime session data
+.clawmate/sessions/
+
+# Dev helper wrappers
+.git_wrapper.sh

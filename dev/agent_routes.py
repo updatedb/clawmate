@@ -21,7 +21,7 @@ import struct
 import termios
 import time
 import websockets
-import re
+import re as _re
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -53,7 +53,6 @@ _MAX_SESSION_LIFETIME = 24 * 3600  # 24 hours
 
 def _clean_terminal_input(raw: str) -> str:
     """Strip ANSI escape codes and process backspace from raw terminal input."""
-    import re as _re
     # OSC: ESC ] ... (ST = ESC \ or BEL)
     s = _re.sub(r'\x1b\][^\x1b\x07]*(?:\x1b\\|\x07)', '', raw)
     # CSI: ESC [ param* intermediate* byte
@@ -62,10 +61,10 @@ def _clean_terminal_input(raw: str) -> str:
     s = _re.sub(r'\x1b.', '', s)
     # Strip non-printable control chars (keep tab)
     s = ''.join(c for c in s if c >= ' ' or c in '\t')
-    # Process backspace (DEL = \x7f, BS = \b)
+    # Process backspace (DEL = \x7f; BS \b is already stripped above)
     buf = []
     for c in s:
-        if c in '\x7f\b':
+        if c == '\x7f':
             if buf:
                 buf.pop()
         else:
@@ -287,7 +286,9 @@ async def _idle_reaper():
                         if sess_dir.is_dir():
                             try:
                                 idx = SessionIndex.for_dir(sess_dir)
-                                removed = await idx.reap_async(ttl)
+                                removed = await idx.reap_async(
+                                    ttl, active_keys=set(_sessions.keys()),
+                                )
                                 if removed:
                                     logger.info(
                                         "TTL reaper: removed %d expired sessions from %s",
@@ -588,6 +589,11 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
                             _path = msg.get("path", "")
                             if _path and sess.master_fd is not None and sess.last_injected_file != _path:
                                 sess.last_injected_file = _path
+                                # ── 从文件名设置 session title ──
+                                if sess.logger and not sess.logger._title_set:
+                                    _fname = os.path.basename(_path).rsplit('.', 1)[0] if '.' in os.path.basename(_path) else os.path.basename(_path)
+                                    if _fname:
+                                        await sess.logger._extract_and_set_title(f"分析: {_fname}")
                                 # 带 ANSI 青色的提示，回显即显示，同时作为 Claude 的输入
                                 _prompt = (
                                     f"\x1b[1;36m分析文件: {_path}\x1b[0m\r\n"
@@ -613,7 +619,7 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
                     for part in parts[:-1]:
                         cleaned = _clean_terminal_input(part)
                         if cleaned and sess.logger:
-                            sess.logger.record_user(cleaned)
+                            await sess.logger.record_user(cleaned)
                     _input_buf = parts[-1]  # keep incomplete fragment
                 try:
                     os.write(sess.master_fd, data.encode())
@@ -1266,7 +1272,7 @@ def _find_codex_transcript(cwd: str, started_at: float) -> Path | None:
     return candidates[0] if candidates else None
 
 
-def _parse_claude_transcript(path: Path, started_at_sessions: set[str]) -> list[dict]:
+def _parse_claude_transcript(path: Path) -> list[dict]:
     """Parse Claude Code transcript and extract assistant text replies,
     skipping tool- call blocks and thinking blocks.
 
@@ -1316,7 +1322,11 @@ def _parse_claude_transcript(path: Path, started_at_sessions: set[str]) -> list[
 
 
 def _parse_codex_transcript(path: Path) -> list[dict]:
-    """Parse Codex CLI transcript and extract user + assistant messages.
+    """Parse Codex CLI transcript and extract assistant messages only.
+
+    User messages are already recorded at the WebSocket boundary via
+    ``SessionLogger.record_user()``, so we only collect assistant turns
+    here to avoid duplication.
 
     Codex transcript format:
       {"type":"response_item","payload":{"role":"user","content":[{"type":"input_text","text":"..."}]}}
@@ -1333,8 +1343,7 @@ def _parse_codex_transcript(path: Path) -> list[dict]:
                 if obj.get("type") != "response_item":
                     continue
                 pl = obj.get("payload", {})
-                role = pl.get("role", "")
-                if role not in ("user", "assistant"):
+                if pl.get("role") != "assistant":
                     continue
                 content_blocks = pl.get("content", []) or []
                 texts = []
@@ -1353,12 +1362,30 @@ def _parse_codex_transcript(path: Path) -> list[dict]:
                         except Exception:
                             pass
                     turns.append({
-                        "role": role,
+                        "role": "assistant",
                         "ts": ts,
                         "content": "\n".join(texts),
                     })
     except FileNotFoundError:
         pass
+    return turns
+
+
+def _parse_transcript(cwd: str, backend: str, started_at: float) -> list[dict]:
+    """Find and parse CLI transcript for a session.
+
+    Returns a list of assistant-turn dicts (``{"role": "assistant", "ts": ..., "content": ...}``),
+    or an empty list if the transcript cannot be found/parsed.
+    """
+    turns: list[dict] = []
+    if backend == "claude":
+        transcript_path = _find_claude_transcript(cwd, started_at)
+        if transcript_path:
+            turns = _parse_claude_transcript(transcript_path)
+    elif backend == "codex":
+        transcript_path = _find_codex_transcript(cwd, started_at)
+        if transcript_path:
+            turns = _parse_codex_transcript(transcript_path)
     return turns
 
 
@@ -1374,22 +1401,12 @@ def _collect_transcript(sess, log_dir: Path):
     backend = (sess.key or "").split(":")[0] or "claude"
     started_at = getattr(sess, "created_at", 0)
 
-    transcript_path = None
-    turns = []
-    if backend == "claude":
-        transcript_path = _find_claude_transcript(cwd, started_at)
-        if transcript_path:
-            turns = _parse_claude_transcript(transcript_path, set())
-    elif backend == "codex":
-        transcript_path = _find_codex_transcript(cwd, started_at)
-        if transcript_path:
-            turns = _parse_codex_transcript(transcript_path)
-
+    turns = _parse_transcript(cwd, backend, started_at)
     if turns:
         sess.logger.record_turns(turns)
         logger.info(
-            "collected %d assistant turns from %s transcript %s",
-            len(turns), backend, transcript_path,
+            "collected %d assistant turns from transcript (backend=%s cwd=%s)",
+            len(turns), backend, cwd,
         )
 
 
@@ -1406,6 +1423,7 @@ async def agent_session_list(
     offset: int = 0,
 ):
     """List archived agent sessions, grouped by project."""
+    await _cleanup_dead_sessions()
     results: list[dict] = []
     seen: set[str] = set()
 
@@ -1439,7 +1457,17 @@ async def agent_session_list(
             if not sess_dir.is_dir():
                 continue
             sessions = await SessionIndex.for_dir(sess_dir).load_async()
+            # 预先收集当前活跃会话的 ID（不能用 key 判断，因为多个会话共享同一 key）
+            active_ids: set[str] = set()
+            if not status:
+                for asess in _sessions.values():
+                    if asess.logger:
+                        active_ids.add(asess.logger.session_id)
             for s in sessions:
+                # 过滤当前正在活跃运行的会话（id 在 active_ids 中），
+                # 而非依赖 status 字段（历史会话可能一直遗留为 "active"）
+                if not status and s.get("id", "") in active_ids:
+                    continue
                 if status and s.get("status", "") != status:
                     continue
                 if backend and s.get("backend", "") != backend:
@@ -1485,7 +1513,17 @@ async def agent_session_log(
     root: str = "",
     project: str = "",
 ):
-    """Read session chat log (.chat.jsonl). Returns structured conversation turns."""
+    """Read session chat log (.chat.jsonl). Returns structured conversation turns.
+
+    If the log contains user turns but no assistant turns, this endpoint
+    attempts an on-demand transcript collection from the CLI's own transcript
+    files (``~/.claude/projects/`` for claude, ``~/.codex/sessions/`` for
+    codex).  Collected turns are appended back to ``.chat.jsonl`` so
+    subsequent views are fast.
+    """
+    # Pre-clean any in-memory dead sessions so their transcripts are flushed
+    await _cleanup_dead_sessions()
+
     cfg = load_cfg()
     for r in cfg.roots:
         root_dir = Path(r.dir)
@@ -1517,11 +1555,54 @@ async def agent_session_log(
 
             lines = chat_path.read_text("utf-8", errors="replace").splitlines()
 
+            turns: list[dict] = []
+            for l in lines:
+                if not l.strip():
+                    continue
+                try:
+                    turns.append(json.loads(l))
+                except json.JSONDecodeError:
+                    logger.warning("skipping malformed JSONL line in %s: %s", chat_path, l[:80])
+
+            # ── On-demand transcript collection ──────────────────────────
+            # If .chat.jsonl has user turns but zero assistant turns, try to
+            # pull assistant responses from the CLI's own transcript files.
+            has_assistant = any(t.get("role") == "assistant" for t in turns)
+            if turns and not has_assistant:
+                cwd = meta.get("cwd", "")
+                backend = meta.get("backend", "")
+                raw_started = meta.get("started_at", 0)
+                if cwd and backend and raw_started:
+                    try:
+                        started_at = float(raw_started)
+                    except (TypeError, ValueError):
+                        started_at = 0
+                    if started_at:
+                        collected = _parse_transcript(cwd, backend, started_at)
+                        if collected:
+                            # Append to .chat.jsonl so next view skips this step
+                            try:
+                                with open(chat_path, "a", encoding="utf-8") as f:
+                                    for t in collected:
+                                        f.write(json.dumps(t, ensure_ascii=False) + "\n")
+                            except OSError:
+                                pass
+                            turns.extend(collected)
+                            logger.info(
+                                "on-demand collected %d assistant turns for session=%s backend=%s",
+                                len(collected), session_id, backend,
+                            )
+
+            # ── 按时间戳排序，确保严格时间顺序（旧→新） ────
+            # 用户消息在输入时即时写入，assistant 消息在会话结束时
+            # 才从 transcript 批量追加入文件，导致文件顺序非真实时序。
+            turns.sort(key=lambda t: t.get("ts", 0))
+
             return JSONResponse({
                 "session_id": session_id,
                 "meta": meta,
-                "turns": [json.loads(l) for l in lines if l.strip()],
-                "total_turns": len(lines),
+                "turns": turns,
+                "total_turns": len(turns),
             })
 
     raise HTTPException(status_code=404, detail="Session not found")
@@ -1582,7 +1663,7 @@ async def agent_session_detail(session_id: str, root: str = "", project: str = "
 async def agent_session_delete(session_id: str, root: str = "", project: str = ""):
     """Delete a session log."""
     # Validate session_id format to prevent path traversal
-    if not re.match(r"^[A-Za-z0-9_.-]+$", session_id):
+    if not _re.match(r"^[A-Za-z0-9_.-]+$", session_id):
         raise HTTPException(status_code=400, detail="Invalid session_id format")
 
     # Reject deletion of active sessions
