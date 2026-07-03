@@ -22,7 +22,7 @@ import termios
 import time
 import websockets
 import re
-from collections import deque
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -98,7 +98,6 @@ class _AgentSession:
 
 # session registry: key → _AgentSession
 _sessions: dict[str, _AgentSession] = {}
-_session_lock = asyncio.Lock()
 
 
 def _session_key(root: str, dir_: str = "", backend: str = "claude") -> str:
@@ -184,7 +183,7 @@ def inject_to_session(sess, text: str):
         pass
 
 
-def _cleanup_dead_sessions():
+async def _cleanup_dead_sessions():
     """Remove sessions whose processes have died."""
     dead = []
     for key, sess in _sessions.items():
@@ -199,7 +198,7 @@ def _cleanup_dead_sessions():
             if sess.logger and sess.log_dir:
                 _collect_transcript(sess, Path(sess.log_dir))
             if sess.logger:
-                sess.logger.close("ended")
+                await sess.logger.aclose("ended")
             try:
                 os.close(sess.master_fd)
             except OSError:
@@ -235,7 +234,7 @@ async def _idle_reaper():
                 if sess.logger and sess.log_dir:
                     _collect_transcript(sess, Path(sess.log_dir))
                 if sess.logger:
-                    sess.logger.close("killed")
+                    await sess.logger.aclose("killed")
                 sess.stop_event.set()
                 try:
                     os.killpg(os.getpgid(sess.proc.pid), signal.SIGTERM)
@@ -254,6 +253,21 @@ async def _idle_reaper():
                     os.close(sess.master_fd)
                 except OSError:
                     pass
+
+        # ── Sync last_active for live sessions before TTL reap ──
+        try:
+            dir_updates: dict[str, dict[str, dict]] = defaultdict(dict)
+            for key, sess in _sessions.items():
+                if sess.log_dir and sess.logger:
+                    dir_updates[sess.log_dir][sess.logger.session_id] = {
+                        "last_active": sess.last_active,
+                    }
+            for log_dir, updates in dir_updates.items():
+                idx = SessionIndex.for_dir(log_dir)
+                await idx.update_batch(updates)
+        except Exception as exc:
+            logger.debug("last_active sync error: %s", exc)
+
         # ── TTL: 清理过期会话日志 ──
         try:
             cfg = load_cfg()
@@ -272,7 +286,8 @@ async def _idle_reaper():
                         sess_dir = proj_dir / ".clawmate" / "sessions"
                         if sess_dir.is_dir():
                             try:
-                                removed = SessionIndex.reap(sess_dir, ttl)
+                                idx = SessionIndex.for_dir(sess_dir)
+                                removed = await idx.reap_async(ttl)
                                 if removed:
                                     logger.info(
                                         "TTL reaper: removed %d expired sessions from %s",
@@ -1044,7 +1059,7 @@ async def agent_terminal(
     """
     await ws.accept()
     _ensure_reaper()
-    _cleanup_dead_sessions()
+    await _cleanup_dead_sessions()
 
     cfg = load_cfg()
     agent_cfg = getattr(cfg, "agent", None)
@@ -1156,10 +1171,11 @@ async def agent_terminal(
                         "root": root,
                         "started_at": time.time(),
                         "status": "active",
+                        "title": backend,
                     },
                     log_dir=sess_dir,
                 )
-                SessionIndex.add(sess_dir, {
+                await SessionIndex.for_dir(sess_dir).add_async({
                     "id": session_id,
                     "key": key,
                     "backend": backend,
@@ -1422,7 +1438,7 @@ async def agent_session_list(
             sess_dir = proj_dir / ".clawmate" / "sessions"
             if not sess_dir.is_dir():
                 continue
-            sessions = SessionIndex.load(sess_dir)
+            sessions = await SessionIndex.for_dir(sess_dir).load_async()
             for s in sessions:
                 if status and s.get("status", "") != status:
                     continue
@@ -1565,6 +1581,18 @@ async def agent_session_detail(session_id: str, root: str = "", project: str = "
 @router.delete("/api/clawmate/agent/sessions/{session_id}")
 async def agent_session_delete(session_id: str, root: str = "", project: str = ""):
     """Delete a session log."""
+    # Validate session_id format to prevent path traversal
+    if not re.match(r"^[A-Za-z0-9_.-]+$", session_id):
+        raise HTTPException(status_code=400, detail="Invalid session_id format")
+
+    # Reject deletion of active sessions
+    for sess in _sessions.values():
+        if sess.logger and sess.logger.session_id == session_id:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Session {session_id} is currently active; kill it before deleting logs",
+            )
+
     cfg = load_cfg()
     for r in cfg.roots:
         root_dir = Path(r.dir)
@@ -1586,11 +1614,17 @@ async def agent_session_delete(session_id: str, root: str = "", project: str = "
             if not meta_path.is_file():
                 continue
 
+            deleted_files = []
             for ext in [".meta.json", ".chat.jsonl"]:
                 p = sess_dir / f"{session_id}{ext}"
                 if p.exists():
                     p.unlink()
-            SessionIndex.remove(sess_dir, session_id)
-            return JSONResponse({"ok": True, "session_id": session_id})
+                    deleted_files.append(ext)
+            await SessionIndex.for_dir(sess_dir).remove_async(session_id)
+            return JSONResponse({
+                "ok": True,
+                "session_id": session_id,
+                "deleted_files": deleted_files,
+            })
 
     raise HTTPException(status_code=404, detail="Session not found")
