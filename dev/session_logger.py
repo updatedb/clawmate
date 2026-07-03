@@ -10,6 +10,16 @@ from pathlib import Path
 from typing import Optional
 
 
+# ── Known log file extensions (for cleanup) ──
+
+# New format (structured chat logs)
+_SESSION_LOG_EXTS = [".meta.json", ".chat.jsonl"]
+# Legacy format (raw PTY logs)
+_SESSION_LEGACY_EXTS = [".ansi.log", ".text.log"]
+# All known log extensions for cleanup
+_SESSION_ALL_EXTS = _SESSION_LOG_EXTS + _SESSION_LEGACY_EXTS
+
+
 # ── SessionLogger ──
 
 class SessionLogger:
@@ -238,7 +248,7 @@ class SessionIndex:
             if s.get("last_active", 0) < cutoff:
                 sid = s.get("id", "")
                 if sid:
-                    for ext in [".meta.json", ".chat.jsonl"]:
+                    for ext in _SESSION_ALL_EXTS:
                         p = log_dir / f"{sid}{ext}"
                         if p.exists():
                             p.unlink()
@@ -342,7 +352,7 @@ class SessionIndex:
                 if s.get("last_active", 0) < cutoff:
                     sid = s.get("id", "")
                     if sid:
-                        for ext in [".meta.json", ".chat.jsonl"]:
+                        for ext in _SESSION_ALL_EXTS:
                             p = self._log_dir / f"{sid}{ext}"
                             if p.exists():
                                 p.unlink()

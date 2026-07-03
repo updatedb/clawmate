@@ -32,7 +32,7 @@ from starlette.websockets import WebSocketState
 
 from config import load as load_cfg
 from service import find_project_marker
-from session_logger import SessionLogger, SessionIndex
+from session_logger import SessionLogger, SessionIndex, _SESSION_ALL_EXTS
 
 router = APIRouter()
 logger = logging.getLogger("clawmate.agent")
@@ -1615,7 +1615,7 @@ async def agent_session_delete(session_id: str, root: str = "", project: str = "
                 continue
 
             deleted_files = []
-            for ext in [".meta.json", ".chat.jsonl"]:
+            for ext in _SESSION_ALL_EXTS:
                 p = sess_dir / f"{session_id}{ext}"
                 if p.exists():
                     p.unlink()
