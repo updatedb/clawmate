@@ -216,13 +216,16 @@ class SessionLogger:
         return self.log_dir
 
     def count_turns(self) -> int:
-        """Count turns recorded so far (for display in session list)."""
+        """Count recorded user instructions so far."""
         if not self._chat_fd:
             return 0
         try:
             with open(self.log_dir / f"{self.session_id}.chat.jsonl") as f:
-                return sum(1 for _ in f)
+                turns = [json.loads(line) for line in f if line.strip()]
+            return sum(1 for turn in turns if turn.get("role") == "user")
         except FileNotFoundError:
+            return 0
+        except json.JSONDecodeError:
             return 0
 
 

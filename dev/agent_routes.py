@@ -127,7 +127,8 @@ def _session_log_dir(key: str, cwd: str | None = None) -> Path | None:
     """Resolve .clawmate/sessions/ path from session key.
 
     key format: {backend}:{root}[:{project}]
-    If cwd is provided, search upward for .clawmate/ marker.
+    If cwd is provided, search upward for a project .clawmate/ marker.
+    Root-only sessions are stored under the root's own .clawmate/sessions/.
     """
     parts = key.split(":")
     if len(parts) < 2:
@@ -143,7 +144,7 @@ def _session_log_dir(key: str, cwd: str | None = None) -> Path | None:
     else:
         project = None
     if not project:
-        return None
+        return root_path / ".clawmate" / "sessions"
     return root_path / project / ".clawmate" / "sessions"
 
 
@@ -279,6 +280,21 @@ async def _idle_reaper():
             for rid in seen_roots:
                 rp = _resolve_root_dir(rid)
                 if rp and rp.is_dir():
+                    # ── Root-level sessions (no project marker) ──
+                    root_sess_dir = rp / ".clawmate" / "sessions"
+                    if root_sess_dir.is_dir():
+                        try:
+                            idx = SessionIndex.for_dir(root_sess_dir)
+                            removed = await idx.reap_async(
+                                ttl, active_keys=set(_sessions.keys()),
+                            )
+                            if removed:
+                                logger.info(
+                                    "TTL reaper: removed %d expired sessions from %s",
+                                    removed, root_sess_dir,
+                                )
+                        except Exception as exc:
+                            logger.debug("TTL reap error for %s: %s", root_sess_dir, exc)
                     for proj_dir in rp.iterdir():
                         if not proj_dir.is_dir():
                             continue
@@ -534,9 +550,15 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
 
     async def ws_to_pty():
         """Forward WebSocket → PTY (keyboard input)."""
-        _input_buf = ""  # accumulate user input until newline for logging
+        _input_buf = ""  # accumulate raw characters until newline
+        _input_batch = []  # cleaned lines waiting to be flushed as one user turn
+        _last_batch_ts = 0.0  # timestamp of the last line added to _input_batch
         try:
             while not sess.stop_event.is_set():
+                # ── Flush input batch if idle for >1.5s ──
+                if _input_batch and (time.time() - _last_batch_ts) > 1.5:
+                    await sess.logger.record_user('\n'.join(_input_batch))
+                    _input_batch = []
                 try:
                     data = await asyncio.wait_for(ws.receive_text(), timeout=0.1)
                 except asyncio.TimeoutError:
@@ -600,8 +622,15 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
                                     f"\x1b[2m1. 摘要（≤100字）\x1b[0m\r\n"
                                     f"\x1b[2m2. 问题与待办（≤3条）\x1b[0m\r\n"
                                 )
+                                # 记录到 .chat.jsonl 中，避免 session 因缺失 user turn 被过滤
+                                _clean_content = f"分析文件: {_path}\n1. 摘要（≤100字）\n2. 问题与待办（≤3条）"
+                                if sess.logger:
+                                    await sess.logger.record_user(_clean_content)
                                 async def _inject_analysis():
                                     await asyncio.sleep(2.5)
+                                    # 写入前校验 session 仍存活，避免向已回收的 FD 写入（FD 可能已被新 session 复用）
+                                    if sess.key not in _sessions:
+                                        return
                                     try:
                                         os.write(sess.master_fd, _prompt.encode())
                                     except (OSError, BlockingIOError):
@@ -619,7 +648,13 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
                     for part in parts[:-1]:
                         cleaned = _clean_terminal_input(part)
                         if cleaned and sess.logger:
-                            await sess.logger.record_user(cleaned)
+                            now = time.time()
+                            # Gap exceeded flush threshold → flush previous batch as one record
+                            if _input_batch and (now - _last_batch_ts) > 1.5:
+                                await sess.logger.record_user('\n'.join(_input_batch))
+                                _input_batch = []
+                            _input_batch.append(cleaned)
+                            _last_batch_ts = now
                     _input_buf = parts[-1]  # keep incomplete fragment
                 try:
                     os.write(sess.master_fd, data.encode())
@@ -629,6 +664,9 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
                 sess.last_active = time.time()
         except Exception:
             pass
+        finally:
+            if _input_batch and sess.logger:
+                await sess.logger.record_user('\n'.join(_input_batch))
 
     async def pty_to_ws():
         """Forward PTY output → WebSocket + buffer (60fps flush to prevent interleaving)."""
@@ -1224,55 +1262,107 @@ def _sanitized_fragment(path: str) -> str:
 
 
 def _find_claude_transcript(cwd: str, started_at: float) -> Path | None:
-    """Locate Claude Code's transcript file for the session that started at started_at.
+    """Locate Claude Code's transcript file by matching a timestamp line.
 
     Claude Code writes transcripts to:
       ~/.claude/projects/<sanitized-cwd>/<uuid>.jsonl
 
-    We match by modification time: the youngest file whose mtime is >= started_at
-    is assumed to belong to this session.
+    The first few lines are metadata (no timestamp).  Scans forward in each
+    candidate until it finds a JSON line with a parseable ``timestamp``,
+    then returns the candidate whose timestamp is closest to ``started_at``.
+    Falls back to mtime if no line with a timestamp can be found.
     """
+    import datetime as _dt
     sanitized = _sanitized_fragment(cwd)
     transcript_dir = Path.home() / ".claude" / "projects" / f"-{sanitized}"
     if not transcript_dir.is_dir():
         return None
     candidates = sorted(transcript_dir.glob("*.jsonl"), key=os.path.getmtime, reverse=True)
+
+    best_path: Path | None = None
+    best_distance = float('inf')
+
     for c in candidates:
-        if os.path.getmtime(c) >= started_at - 5:  # 5s tolerance
-            return c
-    return candidates[0] if candidates else None
+        try:
+            with open(c) as f:
+                found_ts = None
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    ts = obj.get("timestamp", 0)
+                    if ts and isinstance(ts, str):
+                        ts = _dt.datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+                    if ts:
+                        found_ts = float(ts)
+                        break
+        except Exception:
+            continue
+
+        if found_ts:
+            distance = abs(found_ts - started_at)
+            if distance < best_distance:
+                best_distance = distance
+                best_path = c
+        else:
+            # Fallback to mtime for candidates without any parseable timestamp
+            mtime = os.path.getmtime(c)
+            distance = abs(mtime - started_at)
+            if distance < best_distance:
+                best_distance = distance
+                best_path = c
+
+    return best_path if best_path else (candidates[0] if candidates else None)
 
 
 def _find_codex_transcript(cwd: str, started_at: float) -> Path | None:
-    """Locate Codex CLI's session transcript file.
+    """Locate Codex CLI's session transcript file by timestamp proximity.
 
     Codex writes transcripts to:
       ~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl
 
-    The first line is session_meta with cwd and timestamp — we scan likely
-    directories and match by cwd + timestamp proximity.
+    The first line is ``session_meta`` with ``cwd`` and ``timestamp``.
+    Candidates are filtered by cwd, then the one with timestamp closest
+    to ``started_at`` is returned.
     """
-    import datetime
-    dt = datetime.datetime.fromtimestamp(started_at)
+    import datetime as _dt
+    dt = _dt.datetime.fromtimestamp(started_at)
     session_dir = Path.home() / ".codex" / "sessions" / f"{dt.year:04d}" / f"{dt.month:02d}" / f"{dt.day:02d}"
     if not session_dir.is_dir():
         return None
     candidates = sorted(session_dir.glob("rollout-*.jsonl"), key=os.path.getmtime, reverse=True)
+
+    best_path: Path | None = None
+    best_distance = float('inf')
+
     for c in candidates:
         try:
             with open(c) as f:
                 first = json.loads(f.readline())
-            if first.get("type") == "session_meta":
-                meta = first.get("payload", {})
-                if meta.get("cwd") == cwd:
-                    return c
+            if first.get("type") != "session_meta":
+                continue
+            meta = first.get("payload", {})
+            if meta.get("cwd") != cwd:
+                continue
+            # Match by session_meta timestamp
+            ts = first.get("timestamp") if first.get("timestamp") is not None else meta.get("timestamp", 0)
+            if isinstance(ts, str):
+                ts = _dt.datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+            distance = abs(float(ts) - started_at) if ts else abs(os.path.getmtime(c) - started_at)
+            if distance < best_distance:
+                best_distance = distance
+                best_path = c
         except Exception:
             continue
-    # Fallback: return most recent file in directory
-    return candidates[0] if candidates else None
+
+    return best_path if best_path else (candidates[0] if candidates else None)
 
 
-def _parse_claude_transcript(path: Path) -> list[dict]:
+def _parse_claude_transcript(path: Path, started_at: float = 0) -> list[dict]:
     """Parse Claude Code transcript and extract assistant text replies,
     skipping tool- call blocks and thinking blocks.
 
@@ -1311,6 +1401,8 @@ def _parse_claude_transcript(path: Path) -> list[dict]:
                             ts = datetime.datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
                         except Exception:
                             ts = time.time()
+                    elif not isinstance(ts, (int, float)):
+                        ts = time.time()  # guard: null / list / dict → current time
                     turns.append({
                         "role": "assistant",
                         "ts": ts,
@@ -1318,10 +1410,14 @@ def _parse_claude_transcript(path: Path) -> list[dict]:
                     })
     except FileNotFoundError:
         pass
+    # Filter out turns that predate this session (cross-session contamination guard)
+    if started_at:
+        cutoff = started_at - 60  # 60s grace period
+        turns = [t for t in turns if t.get("ts", 0) >= cutoff]
     return turns
 
 
-def _parse_codex_transcript(path: Path) -> list[dict]:
+def _parse_codex_transcript(path: Path, started_at: float = 0) -> list[dict]:
     """Parse Codex CLI transcript and extract assistant messages only.
 
     User messages are already recorded at the WebSocket boundary via
@@ -1368,6 +1464,10 @@ def _parse_codex_transcript(path: Path) -> list[dict]:
                     })
     except FileNotFoundError:
         pass
+    # Filter out turns that predate this session (cross-session contamination guard)
+    if started_at:
+        cutoff = started_at - 60  # 60s grace period
+        turns = [t for t in turns if t.get("ts", 0) >= cutoff]
     return turns
 
 
@@ -1381,11 +1481,11 @@ def _parse_transcript(cwd: str, backend: str, started_at: float) -> list[dict]:
     if backend == "claude":
         transcript_path = _find_claude_transcript(cwd, started_at)
         if transcript_path:
-            turns = _parse_claude_transcript(transcript_path)
+            turns = _parse_claude_transcript(transcript_path, started_at=started_at)
     elif backend == "codex":
         transcript_path = _find_codex_transcript(cwd, started_at)
         if transcript_path:
-            turns = _parse_codex_transcript(transcript_path)
+            turns = _parse_codex_transcript(transcript_path, started_at=started_at)
     return turns
 
 
@@ -1412,10 +1512,139 @@ def _collect_transcript(sess, log_dir: Path):
 
 # ── Session History APIs ──
 
+def _roots_for_session_query(cfg, root: str):
+    """Return config roots constrained by the optional root id."""
+    if root:
+        return [r for r in cfg.roots if r.id == root]
+    return cfg.roots
+
+
+def _projects_for_session_query(root_dir: Path, project: str = "", dir_: str = "") -> list[tuple[str, Path]]:
+    """Resolve session project directories for history APIs.
+
+    `dir_` is the current file-browser directory. When it sits inside a
+    `.clawmate` project, use that project instead of listing every project
+    under the root. With no project constraint, include the root's own
+    `.clawmate/sessions` directory before project directories.
+    """
+    projects_to_check: list[tuple[str, Path]] = []
+
+    project_name = project
+    if not project_name and dir_:
+        project_name = find_project_marker(root_dir, dir_) or ""
+
+    if project_name:
+        p = root_dir / project_name
+        if p.is_dir():
+            projects_to_check.append((project_name, p))
+        return projects_to_check
+
+    if (root_dir / ".clawmate" / "sessions").is_dir():
+        projects_to_check.append(("", root_dir))
+
+    for p in root_dir.iterdir():
+        if p.is_dir() and (p / ".clawmate" / "sessions").is_dir():
+            projects_to_check.append((p.name, p))
+    return projects_to_check
+
+
+def _load_chat_turns(chat_path: Path) -> list[dict]:
+    """Load valid JSONL chat turns from a session log."""
+    if not chat_path.is_file():
+        return []
+    turns: list[dict] = []
+    try:
+        with chat_path.open(encoding="utf-8") as cf:
+            for chat_line in cf:
+                if not chat_line.strip():
+                    continue
+                try:
+                    turn = json.loads(chat_line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(turn, dict):
+                    turns.append(turn)
+    except OSError:
+        return []
+    return turns
+
+
+def _chat_turn_ts(turn: dict) -> float:
+    try:
+        return float(turn.get("ts") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _normalize_chat_turns(turns: list[dict]) -> list[dict]:
+    """Return the same turn sequence used by the session detail view.
+
+    Counting rules:
+    - turns with blank content are ignored;
+    - turns are sorted by timestamp, because assistant transcript collection can
+      append older assistant messages after user input has already been logged;
+    - consecutive user turns within 1 second are merged, matching terminal
+      multi-line paste handling in the history detail UI.
+    """
+    display_turns: list[dict] = []
+    non_empty_turns = [
+        dict(t) for t in turns
+        if str(t.get("content") or "").strip()
+    ]
+    non_empty_turns.sort(key=_chat_turn_ts)
+    for turn in non_empty_turns:
+        prev = display_turns[-1] if display_turns else None
+        prev_ts = _chat_turn_ts(prev) if prev else 0.0
+        turn_ts = _chat_turn_ts(turn)
+        if (
+            prev
+            and prev.get("role") == "user"
+            and turn.get("role") == "user"
+            and prev_ts
+            and turn_ts
+            and abs(turn_ts - prev_ts) <= 1.0
+        ):
+            prev["content"] = f"{prev.get('content', '')}\n{turn.get('content', '')}"
+        else:
+            display_turns.append(turn)
+    turn_index = 0
+    for turn in display_turns:
+        if turn.get("role") == "user":
+            turn_index += 1
+        if turn_index:
+            turn["turn_index"] = turn_index
+    return display_turns
+
+
+def _chat_log_stats(chat_path: Path) -> dict:
+    """Analyse a chat JSONL log and return stats dict.
+
+    Returns:
+        instruction_count: number of user instructions (条指令)
+        turn_count: number of user turns (轮对话; same as instruction_count)
+        total_turns: total entries across all roles
+        first_ts: timestamp of the earliest entry (epoch seconds)
+        last_ts:  timestamp of the latest entry (epoch seconds)
+    """
+    turns = _normalize_chat_turns(_load_chat_turns(chat_path))
+    user_count = sum(1 for t in turns if t.get("role") == "user")
+    timestamps = [t.get("ts") for t in turns if t.get("ts")]
+    first_ts = min(timestamps) if timestamps else None
+    last_ts = max(timestamps) if timestamps else None
+    return {
+        "instruction_count": user_count,
+        "turn_count": user_count,
+        "total_turns": len(turns),
+        "first_ts": first_ts,
+        "last_ts": last_ts,
+    }
+
+
 @router.get("/api/clawmate/agent/sessions")
 async def agent_session_list(
     root: str = "",
     project: str = "",
+    dir: str = "",
     backend: str = "",
     status: str = "",
     q: str = "",
@@ -1428,31 +1657,15 @@ async def agent_session_list(
     seen: set[str] = set()
 
     cfg = load_cfg()
-    roots_to_check = []
-    if root:
-        for r in cfg.roots:
-            if r.id == root:
-                roots_to_check.append(r)
-                break
-    else:
-        roots_to_check = cfg.roots
+    roots_to_check = _roots_for_session_query(cfg, root)
 
     for r in roots_to_check:
         root_dir = Path(r.dir)
         if not root_dir.is_dir():
             continue
-        # If project specified, look only there
-        dirs_to_check: list[Path] = []
-        if project:
-            p = root_dir / project
-            if p.is_dir():
-                dirs_to_check.append(p)
-        else:
-            for p in root_dir.iterdir():
-                if p.is_dir() and (p / ".clawmate").is_dir():
-                    dirs_to_check.append(p)
+        dirs_to_check = _projects_for_session_query(root_dir, project, dir)
 
-        for proj_dir in dirs_to_check:
+        for proj_name, proj_dir in dirs_to_check:
             sess_dir = proj_dir / ".clawmate" / "sessions"
             if not sess_dir.is_dir():
                 continue
@@ -1490,6 +1703,14 @@ async def agent_session_list(
                     else:
                         continue
                 sid = s.get("id", "")
+                chat_path = sess_dir / f"{sid}.chat.jsonl"
+                try:
+                    stats = _chat_log_stats(chat_path)
+                except (ValueError, OSError, TypeError) as _ex:
+                    logger.debug("skipping corrupt session %s: %s", sid, _ex)
+                    continue
+                if stats["total_turns"] == 0:
+                    continue
                 if sid in seen:
                     continue
                 seen.add(sid)
@@ -1497,8 +1718,9 @@ async def agent_session_list(
                 results.append({
                     **s,
                     "root": r.id,
-                    "project": proj_dir.name,
+                    "project": proj_name,
                     "log_dir": str(sess_dir),
+                    **stats,
                 })
 
     results.sort(key=lambda x: x.get("started_at", 0), reverse=True)
@@ -1512,6 +1734,7 @@ async def agent_session_log(
     session_id: str,
     root: str = "",
     project: str = "",
+    dir: str = "",
 ):
     """Read session chat log (.chat.jsonl). Returns structured conversation turns.
 
@@ -1525,19 +1748,11 @@ async def agent_session_log(
     await _cleanup_dead_sessions()
 
     cfg = load_cfg()
-    for r in cfg.roots:
+    for r in _roots_for_session_query(cfg, root):
         root_dir = Path(r.dir)
         if not root_dir.is_dir():
             continue
-        projects_to_check: list[tuple[str, Path]] = []
-        if project:
-            p = root_dir / project
-            if p.is_dir():
-                projects_to_check.append((project, p))
-        else:
-            for p in root_dir.iterdir():
-                if p.is_dir():
-                    projects_to_check.append((p.name, p))
+        projects_to_check = _projects_for_session_query(root_dir, project, dir)
 
         for proj_name, proj_path in projects_to_check:
             sess_dir = proj_path / ".clawmate" / "sessions"
@@ -1553,16 +1768,7 @@ async def agent_session_log(
                 except Exception:
                     pass
 
-            lines = chat_path.read_text("utf-8", errors="replace").splitlines()
-
-            turns: list[dict] = []
-            for l in lines:
-                if not l.strip():
-                    continue
-                try:
-                    turns.append(json.loads(l))
-                except json.JSONDecodeError:
-                    logger.warning("skipping malformed JSONL line in %s: %s", chat_path, l[:80])
+            turns = _load_chat_turns(chat_path)
 
             # ── On-demand transcript collection ──────────────────────────
             # If .chat.jsonl has user turns but zero assistant turns, try to
@@ -1593,38 +1799,29 @@ async def agent_session_log(
                                 len(collected), session_id, backend,
                             )
 
-            # ── 按时间戳排序，确保严格时间顺序（旧→新） ────
-            # 用户消息在输入时即时写入，assistant 消息在会话结束时
-            # 才从 transcript 批量追加入文件，导致文件顺序非真实时序。
-            turns.sort(key=lambda t: t.get("ts", 0))
+            turns = _normalize_chat_turns(turns)
+            instruction_count = sum(1 for t in turns if t.get("role") == "user")
 
             return JSONResponse({
                 "session_id": session_id,
                 "meta": meta,
                 "turns": turns,
                 "total_turns": len(turns),
+                "instruction_count": instruction_count,
             })
 
     raise HTTPException(status_code=404, detail="Session not found")
 
 
 @router.get("/api/clawmate/agent/sessions/{session_id}")
-async def agent_session_detail(session_id: str, root: str = "", project: str = ""):
+async def agent_session_detail(session_id: str, root: str = "", project: str = "", dir: str = ""):
     """Return session metadata + chat.jsonl turn count."""
     cfg = load_cfg()
-    for r in cfg.roots:
+    for r in _roots_for_session_query(cfg, root):
         root_dir = Path(r.dir)
         if not root_dir.is_dir():
             continue
-        projects_to_check: list[tuple[str, Path]] = []
-        if project:
-            p = root_dir / project
-            if p.is_dir():
-                projects_to_check.append((project, p))
-        else:
-            for p in root_dir.iterdir():
-                if p.is_dir():
-                    projects_to_check.append((p.name, p))
+        projects_to_check = _projects_for_session_query(root_dir, project, dir)
 
         for proj_name, proj_path in projects_to_check:
             sess_dir = proj_path / ".clawmate" / "sessions"
@@ -1641,26 +1838,21 @@ async def agent_session_detail(session_id: str, root: str = "", project: str = "
                 except Exception:
                     pass
 
-            turn_count = 0
-            if chat_path.is_file():
-                try:
-                    turn_count = sum(1 for _ in chat_path.open())
-                except Exception:
-                    pass
+            stats = _chat_log_stats(chat_path)
 
             return JSONResponse({
                 "session_id": session_id,
                 "meta": meta,
                 "root": r.id,
                 "project": proj_name,
-                "turn_count": turn_count,
+                **stats,
             })
 
     raise HTTPException(status_code=404, detail="Session not found")
 
 
 @router.delete("/api/clawmate/agent/sessions/{session_id}")
-async def agent_session_delete(session_id: str, root: str = "", project: str = ""):
+async def agent_session_delete(session_id: str, root: str = "", project: str = "", dir: str = ""):
     """Delete a session log."""
     # Validate session_id format to prevent path traversal
     if not _re.match(r"^[A-Za-z0-9_.-]+$", session_id):
@@ -1675,19 +1867,11 @@ async def agent_session_delete(session_id: str, root: str = "", project: str = "
             )
 
     cfg = load_cfg()
-    for r in cfg.roots:
+    for r in _roots_for_session_query(cfg, root):
         root_dir = Path(r.dir)
         if not root_dir.is_dir():
             continue
-        projects_to_check: list[tuple[str, Path]] = []
-        if project:
-            p = root_dir / project
-            if p.is_dir():
-                projects_to_check.append((project, p))
-        else:
-            for p in root_dir.iterdir():
-                if p.is_dir():
-                    projects_to_check.append((p.name, p))
+        projects_to_check = _projects_for_session_query(root_dir, project, dir)
 
         for proj_name, proj_path in projects_to_check:
             sess_dir = proj_path / ".clawmate" / "sessions"

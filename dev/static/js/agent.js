@@ -818,11 +818,15 @@
   function setOverlayHeaderMode(mode, title) {
     var overlay = ensureHistoryOverlay();
     var header = overlay.querySelector('.agent-history-overlay-header');
+    var xIcon = typeof iconSVG === 'function' ? iconSVG('x', 14) : '×';
+    var backIcon = typeof iconSVG === 'function' ? iconSVG('chevron-left', 14) : '←';
+    var clockIcon = typeof iconSVG === 'function' ? iconSVG('clock', 14) : '';
     if (mode === 'list') {
       header.innerHTML =
+        clockIcon +
         '<span class="agent-history-overlay-title">历史会话</span>' +
         '<input type="text" class="agent-header-search" placeholder="搜索会话..." value="' + escHtml(historyState.query || '') + '">' +
-        '<button class="agent-history-overlay-close" title="关闭历史会话">&times;</button>';
+        '<button class="agent-history-overlay-close" title="关闭历史会话">' + xIcon + '</button>';
       var searchInput = header.querySelector('.agent-header-search');
       searchInput.addEventListener('input', function () {
         historyState.query = this.value;
@@ -832,9 +836,9 @@
       header.querySelector('.agent-history-overlay-close').addEventListener('click', closeHistoryOverlay);
     } else if (mode === 'detail') {
       header.innerHTML =
-        '<button class="agent-history-overlay-back" title="返回列表">&larr;</button>' +
+        '<button class="agent-history-overlay-back" title="返回列表">' + backIcon + '</button>' +
         '<span class="agent-history-overlay-title">' + escHtml(title || '') + '</span>' +
-        '<button class="agent-history-overlay-close" title="关闭历史会话">&times;</button>';
+        '<button class="agent-history-overlay-close" title="关闭历史会话">' + xIcon + '</button>';
       header.querySelector('.agent-history-overlay-back').addEventListener('click', function () {
         renderOverlayList();
       });
@@ -1070,7 +1074,7 @@
         var title = s.title || s.id || 'Unknown';
         var turnCount = Number(s.turn_count || 0);
         var instrCount = Number(s.instruction_count || 0);
-        var turnLabel = instrCount > 0 ? '<span class="agent-history-turn-count" title="总条目数（含 assistant 回复）">' + instrCount + '条指令</span>' : '';
+        var turnLabel = instrCount > 0 ? '<span class="agent-history-turn-count" title="用户指令数">' + instrCount + '条指令</span>' : '';
 
         var downloadIcon = (typeof iconSVG === 'function') ? iconSVG('download', 14) : '导出';
         var deleteIcon = (typeof iconSVG === 'function') ? iconSVG('trash-2', 14) : '删除';
