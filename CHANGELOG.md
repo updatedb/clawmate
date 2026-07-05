@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.49 (2026-07-05)
+### Session History 增强 — 根级会话、输入批处理、跨 session 防护
+- **根级会话支持**：无 project 标记的 session 存储在 root 自身 `.clawmate/sessions/`，TTL reaper 同步覆盖
+- **输入批处理**：WebSocket → PTY 转发合并 1.5s idle 内的用户输入为单一 user turn（解决逐字符记录的噪音问题）
+- **跨 session 污染防护**：transcript 解析按 `started_at` 过滤 60s 前内容，防止旧 assistant 消息错误关联到当前 session
+- **Transcript 匹配优化**：Claude/Codex transcript 定位改用内容 timestamp 扫描替代 mtime 启发式算法
+- **"分析文件" 记录**：前端分析文件 prompt 同步写入 `.chat.jsonl`，避免空会话被 API 过滤
+- **计数修正**：`count_turns()` 仅统计 user role 条目，新增 JSON decode 错误兜底
+- **会话数据规范化**：`_normalize_chat_turns()` 负责排序、合并连续 user turn、分配 turn_index
+- **浏览器目录感知**：session API 新增 `dir` 参数，自动推断所属 project（无需手动切换目录）
+- **提取辅助函数**：`_roots_for_session_query()`、`_projects_for_session_query()`、`_load_chat_turns()`、`_chat_log_stats()`
+- **Session API 响应增强**：返回 `instruction_count`、`turn_count`、`total_turns`、`first_ts`、`last_ts` 统计字段
+- **CSS/UI**：按钮 26×26 统一尺寸、flexbox 居中、border hover/active 态；浮层 header 改用 SVG 图标
+- **测试**：新增 `tests/test_agent_history.py`
+
 ## v1.48 (2026-07-01)
 ### 分享功能增强
 - index 卡片 ⋯ 菜单底部添加"生成分享链接 / 取消分享"（仅文件，目录不显示）
