@@ -2050,6 +2050,8 @@ async def agent_session_log(
             session_cwd = _session_cwd_from_log_dir(sess_dir, session_id)
             meta = {"cwd": session_cwd} if session_cwd else {}
 
+            meta = {}  # kept for backward-compatible API response
+
             # ── On-demand transcript collection ──────────────────────────
             # If .chat.jsonl has user turns but zero assistant turns, try to
             # pull assistant responses from the CLI's own transcript files.
