@@ -393,6 +393,7 @@ button svg, .btn svg, a svg {
   flex-direction: column;
   overflow: hidden;
   height: 100%;
+  position: relative;
   border-left: 1px solid var(--border-color);
   background: var(--bg-primary);
   translate: 0;
@@ -435,6 +436,15 @@ button svg, .btn svg, a svg {
 }
 .agent-panel-header-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
 .agent-panel-header-btn.active { background: var(--accent-light); color: var(--accent); }
+.agent-header-search {
+  flex: 1; min-width: 0; height: 26px;
+  padding: 0 8px; border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm); background: var(--bg-primary);
+  color: var(--text-primary); font-size: 12px; outline: none;
+  font-family: inherit;
+}
+.agent-header-search:focus { border-color: var(--accent); }
+.agent-header-search::placeholder { color: var(--text-muted); }
 .xterm-container {
   flex: 1; overflow: hidden; padding: 0; position: relative;
   background: var(--xterm-bg, #1e1e2e);
@@ -563,6 +573,7 @@ button svg, .btn svg, a svg {
   }
   .agent-panel-title { font-size: 11px; }
   .agent-backend-select { font-size: 10px; max-width: 70px; }
+  .agent-header-search { font-size: 11px; height: 24px; }
   /* Ensure chat messages don't force horizontal scroll */
   .agent-chat-msg { max-width: 85%; word-break: break-word; }
   .agent-chat-input-wrap { flex-shrink: 0; }
@@ -1486,7 +1497,8 @@ pre:hover .code-copy-btn,
   #btnCreate span,
   #viewGrid span,
   #viewList span,
-  #agentSessionToggleBtn span { display: none; }
+  #agentSessionToggleBtn span,
+  #previewAgentSessionToggleBtn span { display: none; }
   .sort-pill { padding: 0 8px; }
 }
 
@@ -1502,7 +1514,8 @@ pre:hover .code-copy-btn,
   body.agent-open #btnCreate span,
   body.agent-open #viewGrid span,
   body.agent-open #viewList span,
-  body.agent-open #agentSessionToggleBtn span { display: none; }
+  body.agent-open #agentSessionToggleBtn span,
+  body.agent-open #previewAgentSessionToggleBtn span { display: none; }
   body.agent-open .sort-pill { padding: 0 8px; }
 }
 
@@ -2305,10 +2318,14 @@ pre:hover .code-copy-btn,
   background: var(--bg-tertiary); border-bottom: 1px solid var(--border-color);
 }
 .agent-history-item {
+  display: flex; align-items: center; gap: 8px;
   padding: 8px 10px; cursor: pointer; border-bottom: 1px solid var(--border-color);
   transition: background 0.12s;
 }
 .agent-history-item:hover { background: var(--bg-tertiary); }
+.agent-history-item-main {
+  flex: 1; min-width: 0;
+}
 .agent-history-item-title {
   font-size: 12px; font-weight: 500; color: var(--text-primary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -2321,6 +2338,22 @@ pre:hover .code-copy-btn,
   display: inline-block; padding: 0 4px; border-radius: 3px;
   background: var(--accent-light); color: var(--accent); font-weight: 600;
   font-size: 10px; text-transform: uppercase;
+}
+.agent-history-item-actions {
+  display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+}
+.agent-history-action {
+  width: 26px; height: 26px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border-color); border-radius: var(--radius-sm);
+  background: var(--btn-bg); color: var(--btn-text);
+  cursor: pointer;
+}
+.agent-history-action:hover {
+  background: var(--bg-primary); color: var(--text-primary);
+}
+.agent-history-delete:hover {
+  background: var(--danger-bg); border-color: var(--danger); color: var(--danger);
 }
 .agent-history-pagination {
   display: flex; justify-content: center; align-items: center;
@@ -2337,6 +2370,11 @@ pre:hover .code-copy-btn,
 }
 .agent-history-pagination button[disabled] { opacity: 0.4; cursor: default; }
 
+/* Scrollable history list wrapper — between search bar and pagination */
+.agent-history-list {
+  flex: 1; overflow-y: auto; min-height: 0;
+}
+
 /* Session viewer */
 .agent-session-viewer {
   display: flex; flex-direction: column; height: 100%;
@@ -2352,10 +2390,12 @@ pre:hover .code-copy-btn,
   color: var(--btn-text); cursor: pointer; font-size: 11px; flex-shrink: 0;
 }
 .agent-session-viewer-header button:hover { background: var(--bg-tertiary); }
-.agent-session-viewer-header button.danger:hover { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
 .agent-session-viewer-title {
   flex: 1; font-size: 12px; font-weight: 600; color: var(--text-primary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.agent-session-viewer-back {
+  margin-left: auto;
 }
 
 /* Chat bubbles in session viewer */
@@ -2409,4 +2449,50 @@ pre:hover .code-copy-btn,
 .agent-chat-body table { border-collapse: collapse; margin: 6px 0; font-size: 12px; }
 .agent-chat-body th, .agent-chat-body td {
   border: 1px solid var(--border-color); padding: 3px 6px; text-align: left;
+}
+
+/* ── Agent History Overlay ── */
+.agent-history-overlay {
+  position: absolute; inset: 0; z-index: 10;
+  display: flex; flex-direction: column;
+  background: var(--bg-primary);
+  transition: transform 0.25s ease;
+}
+.agent-history-overlay.hidden {
+  transform: translateX(100%);
+  pointer-events: none;
+}
+.agent-history-overlay:not(.hidden) {
+  transform: translateX(0);
+}
+.agent-history-overlay-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 14px; height: 40px; flex-shrink: 0;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+.agent-history-overlay-title {
+  font-size: 13px; font-weight: 600; color: var(--text-primary);
+  white-space: nowrap; flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.agent-history-overlay-back {
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+  font-size: 16px; padding: 2px 6px; border-radius: var(--radius-sm); line-height: 1;
+  flex-shrink: 0;
+}
+.agent-history-overlay-back:hover {
+  background: var(--bg-tertiary); color: var(--text-primary);
+}
+.agent-history-overlay-close {
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+  font-size: 16px; padding: 2px 6px; border-radius: var(--radius-sm); line-height: 1;
+  flex-shrink: 0;
+}
+.agent-history-overlay-close:hover {
+  background: var(--bg-tertiary); color: var(--text-primary);
+}
+.agent-history-overlay-body {
+  flex: 1; overflow: hidden; display: flex; flex-direction: column;
+  min-height: 0;
 }
