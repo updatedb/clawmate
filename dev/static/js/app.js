@@ -1155,6 +1155,28 @@ function batchClear() {
   deselectAll();
 }
 
+async function extractEntryToDir(entry, destDir) {
+  if (!entry || entry.is_dir || entry.category !== "archive") return;
+  setStatus('正在解压 "' + entry.name + '"...');
+  try {
+    var res = await authFetch('/api/clawmate/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ root: state.rootId, path: entry.relPath, destDir: destDir }),
+    });
+    var data = await res.json().catch(function () { return {}; });
+    if (res.ok && data.ok) {
+      invalidateDirCache();
+      setStatus('解压完成，共 ' + (data.count || 0) + ' 个文件');
+      await loadDir(destDir || '');
+    } else {
+      setStatus('解压失败: ' + (data.detail || data.error || '未知错误'));
+    }
+  } catch (e) {
+    setStatus('解压失败: ' + e.message);
+  }
+}
+
 
 function applyFilterSort(entries) {
   let filtered = entries;
@@ -1328,6 +1350,14 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
         } else {
           addItem('download', '下载', function () {
             triggerDownload(buildDownloadLink(entry.relPath));
+          });
+        }
+        if (!entry.is_dir && entry.category === "archive") {
+          addItem('archive', '解压到...', function () {
+            openDirPicker('解压 "' + entry.name + '" 到...');
+            dirPickerCallback = function (destDir) {
+              extractEntryToDir(entry, destDir);
+            };
           });
         }
         addItem('pencil', '重命名', function () {
