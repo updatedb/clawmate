@@ -176,3 +176,111 @@ def test_session_log_assigns_turn_index_per_user_instruction(tmp_path, monkeypat
     assert res.status_code == 200
     turns = res.json()["turns"]
     assert [t["turn_index"] for t in turns] == [1, 1, 2, 2]
+
+
+def test_session_list_returns_stored_session_key_when_present(tmp_path, monkeypatch):
+    sess_dir = tmp_path / ".clawmate" / "sessions"
+    sess_dir.mkdir(parents=True)
+    index = {
+        "version": 1,
+        "sessions": [
+            {
+                "id": "stored-key",
+                "backend": "codex",
+                "key": "codex:root:project-a",
+                "started_at": 10,
+                "status": "ended",
+            },
+        ],
+    }
+    (sess_dir / "index.json").write_text(json.dumps(index), encoding="utf-8")
+    _write_session(
+        sess_dir,
+        "stored-key",
+        [
+            {"role": "user", "content": "hello", "ts": 10.0},
+            {"role": "assistant", "content": "hi", "ts": 11.0},
+        ],
+    )
+
+    monkeypatch.setattr(
+        agent_routes,
+        "load_cfg",
+        lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
+    )
+
+    async def noop_cleanup():
+        return None
+
+    monkeypatch.setattr(agent_routes, "_cleanup_dead_sessions", noop_cleanup)
+    agent_routes._sessions.clear()
+
+    app = FastAPI()
+    app.include_router(agent_routes.router)
+    client = TestClient(app)
+
+    res = client.get("/api/clawmate/agent/sessions?root=root")
+
+    assert res.status_code == 200
+    session = res.json()["sessions"][0]
+    assert session["sessionKey"] == "codex:root:project-a"
+
+
+def test_session_list_falls_back_to_derived_session_key(tmp_path, monkeypatch):
+    root_sess_dir = tmp_path / ".clawmate" / "sessions"
+    project_sess_dir = tmp_path / "project-a" / ".clawmate" / "sessions"
+    root_sess_dir.mkdir(parents=True)
+    project_sess_dir.mkdir(parents=True)
+    root_index = {
+        "version": 1,
+        "sessions": [
+            {"id": "root-session", "backend": "codex", "started_at": 20, "status": "ended"},
+        ],
+    }
+    project_index = {
+        "version": 1,
+        "sessions": [
+            {"id": "project-session", "backend": "claude", "started_at": 10, "status": "ended"},
+        ],
+    }
+    (root_sess_dir / "index.json").write_text(json.dumps(root_index), encoding="utf-8")
+    (project_sess_dir / "index.json").write_text(json.dumps(project_index), encoding="utf-8")
+    _write_session(
+        root_sess_dir,
+        "root-session",
+        [
+            {"role": "user", "content": "root turn", "ts": 20.0},
+            {"role": "assistant", "content": "root reply", "ts": 21.0},
+        ],
+    )
+    _write_session(
+        project_sess_dir,
+        "project-session",
+        [
+            {"role": "user", "content": "project turn", "ts": 10.0},
+            {"role": "assistant", "content": "project reply", "ts": 11.0},
+        ],
+    )
+
+    monkeypatch.setattr(
+        agent_routes,
+        "load_cfg",
+        lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
+    )
+
+    async def noop_cleanup():
+        return None
+
+    monkeypatch.setattr(agent_routes, "_cleanup_dead_sessions", noop_cleanup)
+    agent_routes._sessions.clear()
+
+    app = FastAPI()
+    app.include_router(agent_routes.router)
+    client = TestClient(app)
+
+    res = client.get("/api/clawmate/agent/sessions?root=root")
+
+    assert res.status_code == 200
+    sessions = {s["id"]: s for s in res.json()["sessions"]}
+    assert sessions["root-session"]["sessionKey"] == "codex:root"
+    assert sessions["project-session"]["sessionKey"] == "claude:root:project-a"

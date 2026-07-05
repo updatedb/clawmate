@@ -148,6 +148,18 @@ def _session_log_dir(key: str, cwd: str | None = None) -> Path | None:
     return root_path / project / ".clawmate" / "sessions"
 
 
+def _history_session_key(session: dict, root: str, project: str) -> str:
+    """Return the persisted session key for history rows, deriving older entries if needed."""
+    stored = str(session.get("key") or "").strip()
+    if stored:
+        return stored
+    backend = str(session.get("backend") or "").strip() or "claude"
+    base = root
+    if project:
+        base = f"{root}:{project}"
+    return f"{backend}:{base}"
+
+
 def get_agent_session(root: str, dir_: str = "", backend: str = ""):
     """Return active agent session for root+dir, or None.
 
@@ -1719,6 +1731,7 @@ async def agent_session_list(
                     **s,
                     "root": r.id,
                     "project": proj_name,
+                    "sessionKey": _history_session_key(s, r.id, proj_name),
                     "log_dir": str(sess_dir),
                     **stats,
                 })

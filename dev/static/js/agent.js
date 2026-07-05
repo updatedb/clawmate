@@ -1074,6 +1074,7 @@
         var title = s.title || s.id || 'Unknown';
         var turnCount = Number(s.turn_count || 0);
         var instrCount = Number(s.instruction_count || 0);
+        var sessionKey = s.sessionKey || s.key || ((s.backend || '?') + ':' + (s.root || '') + (s.project ? ':' + s.project : ''));
         var turnLabel = instrCount > 0 ? '<span class="agent-history-turn-count" title="用户指令数">' + instrCount + '条指令</span>' : '';
 
         var downloadIcon = (typeof iconSVG === 'function') ? iconSVG('download', 14) : '导出';
@@ -1083,7 +1084,7 @@
             '<div class="agent-history-item-title">' + escHtml(title) + '</div>' +
             '<div class="agent-history-item-meta">' +
               '<span>' + timeStr + '</span>' +
-              '<span>' + escHtml(s.backend || '?') + '</span>' +
+              '<span>' + escHtml(sessionKey) + '</span>' +
               '<span>' + turnCount + '轮对话</span>' +
               turnLabel +
               (durStr ? '<span>时长' + durStr + '</span>' : '') +
