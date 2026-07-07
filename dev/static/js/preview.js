@@ -5231,7 +5231,7 @@
 
     var parts = [];
     parts.push('---');
-    parts.push('position: ' + (positionText || ''));
+    parts.push('Location: ' + (positionText || ''));
     parts.push(quoteBlock(selectionText || ''));
     parts.push('---');
     return '\n' + parts.join('\n') + '\n';
@@ -5247,6 +5247,21 @@
       window.Agent &&
       typeof window.Agent.isOpen === 'function' &&
       window.Agent.isOpen();
+  }
+
+  function isSelectionInsideContentBody(sel, range) {
+    var body = document.getElementById('contentBody');
+    if (!body || !sel || !range) return false;
+
+    function isInside(node) {
+      if (!node) return false;
+      var el = node.nodeType === 1 ? node : node.parentElement;
+      return !!(el && (el === body || body.contains(el)));
+    }
+
+    return isInside(sel.anchorNode) &&
+      isInside(sel.focusNode) &&
+      isInside(range.commonAncestorContainer);
   }
 
   function syncAgentSelectionUI(range, selText) {
@@ -5274,8 +5289,9 @@
         if (typeof hideDesktopSelBtn === 'function') hideDesktopSelBtn(true);
         return;
       }
-      const container = findContentBody(sel.anchorNode);
-      if (!container || container.id !== 'contentBody') {
+      let range = null;
+      try { range = sel.getRangeAt(0); } catch (_) {}
+      if (!isSelectionInsideContentBody(sel, range)) {
         if (tooltip.style.display !== 'none') hideTooltip();
         if (typeof hideDesktopSelBtn === 'function') hideDesktopSelBtn(true);
         return;
@@ -5285,7 +5301,6 @@
       if (!selText) { hideTooltip(); return; }
 
       if (isAgentSelectionMode()) {
-        const range = sel.getRangeAt(0);
         syncAgentSelectionUI(range, selText);
         tooltip.style.display = 'none';
         return;
@@ -5309,7 +5324,6 @@
         currentStartLine = null;
         currentEndLine = null;
         currentSelText = selText;
-        const range = sel.getRangeAt(0);
         try { savedRange = range.cloneRange(); highlightSelection(); } catch (_) {}
 
         const heading = detectSectionFromDOM(range);
@@ -5345,7 +5359,6 @@
         currentStartLine = null;
         currentEndLine = null;
         currentSelText = selText;
-        const range = sel.getRangeAt(0);
         try { savedRange = range.cloneRange(); highlightSelection(); } catch (_) {}
         document.getElementById('pstLocationInput').value = '';
         document.getElementById('pstLocationInput').classList.add('hidden');
@@ -5440,7 +5453,6 @@
       }
       currentSelText = text;
 
-      const range = sel.getRangeAt(0);
       try { savedRange = range.cloneRange(); highlightSelection(); } catch (_) {}
 
       const posEl = document.getElementById('pstLocationInput');
@@ -6077,6 +6089,10 @@
         if (text.length < 2) { hideDesktopSelBtn(true); return; }
         var range = null;
         try { range = sel.getRangeAt(0); } catch (_) {}
+        if (!isSelectionInsideContentBody(sel, range)) {
+          hideDesktopSelBtn(true);
+          return;
+        }
         try {
           if (range) syncAgentSelectionUI(range, text);
           else hideDesktopSelBtn(true);
@@ -6343,11 +6359,8 @@
               updateGridColumns();
               _syncPanelOpenClass();
             };
-            // Pass current file context so Agent can auto-read the previewed content
-            var fileCtx = filePath ? {
-              path: filePath,
-              content: rawContent || '',
-            } : null;
+            // Pass path only; quote/content insertion is handled explicitly by selection.
+            var fileCtx = filePath ? { path: filePath } : null;
             window.Agent.open(rootId, agentDir, fileCtx);
             if (window.Agent.focus) window.Agent.focus();
           }

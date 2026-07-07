@@ -197,14 +197,50 @@ def inject_to_session(sess, text: str):
 
 
 def _build_file_context_prompt(path: str) -> tuple[str, str]:
-    """Build the PTY prompt and log text for a preview file context."""
+    """Build the PTY prompt and log text for a preview file context.
+
+    Preview open context is intentionally path-only. Selection quotes are
+    submitted through the normal terminal input path so the user sees exactly
+    what will be sent.
+    """
     path = (path or "").strip()
     if not path:
         return "", ""
-    # Ctrl+U clears the current shell input line before typing the new prompt.
-    prompt = f"\x15file: {path}"
-    clean = f"file: {path}"
+
+    if not path.startswith("@"):
+        path = f"@{path}"
+
+    parts: list[str] = ["---"]
+    parts.append(path)
+    parts.append("---")
+
+    prompt = "\n".join(parts) + "\n"
+    clean = "\n".join(parts)
     return prompt, clean
+
+
+def _write_hidden_pty(sess, text: str):
+    """Write to PTY with local echo temporarily disabled."""
+    if not text or sess.master_fd is None:
+        return
+    try:
+        attrs = termios.tcgetattr(sess.master_fd)
+    except Exception:
+        attrs = None
+    try:
+        if attrs is not None:
+            noecho = list(attrs)
+            noecho[3] &= ~termios.ECHO
+            termios.tcsetattr(sess.master_fd, termios.TCSANOW, noecho)
+        os.write(sess.master_fd, text.encode())
+    except (OSError, BlockingIOError):
+        pass
+    finally:
+        if attrs is not None:
+            try:
+                termios.tcsetattr(sess.master_fd, termios.TCSANOW, attrs)
+            except Exception:
+                pass
 
 
 async def _cleanup_dead_sessions():
@@ -853,10 +889,7 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
                                     # 写入前校验 session 仍存活，避免向已回收的 FD 写入（FD 可能已被新 session 复用）
                                     if sess.key not in _sessions:
                                         return
-                                    try:
-                                        os.write(sess.master_fd, _prompt.encode())
-                                    except (OSError, BlockingIOError):
-                                        pass
+                                    _write_hidden_pty(sess, _prompt)
                                 asyncio.create_task(_inject_analysis())
                             continue
                 except (json.JSONDecodeError, TypeError, AttributeError):

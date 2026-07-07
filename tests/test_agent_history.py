@@ -477,7 +477,14 @@ def test_session_list_falls_back_to_derived_session_key(tmp_path, monkeypatch):
 def test_file_context_prompt_prefills_file_only():
     prompt, clean = agent_routes._build_file_context_prompt("/tmp/demo.md")
 
-    assert prompt == "\x15file: /tmp/demo.md"
-    assert clean == "file: /tmp/demo.md"
+    assert prompt == "---\n@/tmp/demo.md\n---\n"
+    assert clean == "---\n@/tmp/demo.md\n---"
     assert "分析文件" not in prompt
     assert "摘要（≤100字）" not in prompt
+
+
+def test_agent_routes_has_no_colored_echo_suppression_channel():
+    source = Path(agent_routes.__file__).read_text(encoding="utf-8")
+
+    assert "suppress_echo_once" not in source
+    assert "_write_pty_with_optional_echo_suppression" not in source

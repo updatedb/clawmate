@@ -60,7 +60,7 @@
   let currentDir = '';
   let currentAgentId = '';  // kept for OpenClaw backend session routing
   let backendMode = 'claude';
-  let _pendingFileContext = null;  // {path, content} — sent on next ws.onopen
+  let _pendingFileContext = null;  // {path} sent on next ws.onopen
   let _lastFileContext = null;     // last preview file context, reused on reopen/toggle
   let _lastMousedownInPanel = false;  // tracks whether last click was inside agent panel
 
@@ -152,6 +152,25 @@
     chatView.classList.remove('hidden');
     chatView.style.display = '';
     if (chatInput) chatInput.focus();
+  }
+
+  function restoreTerminalImeTarget() {
+    if (!term || !term.textarea) {
+      if (term) term.focus();
+      return;
+    }
+    var ta = term.textarea;
+    function refocus() {
+      try { ta.focus({ preventScroll: true }); } catch (_) { ta.focus(); }
+      try {
+        ta.value = '';
+        ta.setSelectionRange(0, 0);
+      } catch (_) {}
+    }
+    refocus();
+    setTimeout(function () {
+      refocus();
+    }, 0);
   }
 
   // --- xterm.js init ---
@@ -330,7 +349,9 @@
     // Data / resize forward to WebSocket
     term.onData(function (data) {
       xlog('data', 'len=' + data.length + ' preview=' + JSON.stringify(data.slice(0, 40)) + ' ws=' + (ws ? ws.readyState : 'null'));
-      if (ws && ws.readyState === WebSocket.OPEN) { ws.send(data); }
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(data);
+      }
     });
 
     term.onResize(function (size) {
@@ -559,12 +580,12 @@
         try { ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows })); } catch (_) {}
         term.clear();
         term.writeln('\x1b[1;36m✓ 已连接 Agent 终端\x1b[0m');
-        term.writeln('\x1b[2m  ' + term.cols + '×' + term.rows + '  |  调整面板宽度后运行的程序会自动适配新宽度\x1b[0m');
+        term.writeln('\x1b[2m  Ctrl+A 行首  \x1b[0m\x1b[1;90m|\x1b[0m\x1b[2m  Ctrl+E 行尾  \x1b[0m\x1b[1;90m|\x1b[0m\x1b[2m  Ctrl+U 删除当前行  \x1b[0m\x1b[1;90m|\x1b[0m\x1b[2m  Ctrl+K 删除光标到行尾  \x1b[0m\x1b[1;90m|\x1b[0m\x1b[2m  Ctrl+L 清屏\x1b[0m');
         term.writeln('');
         var fileContext = _pendingFileContext || _lastFileContext;
         if (fileContext) {
           try {
-            ws.send(JSON.stringify({ type: 'file_context', path: fileContext.path || '', content: fileContext.content || '' }));
+            ws.send(JSON.stringify({ type: 'file_context', path: fileContext.path || '' }));
           } catch (_) {}
           _pendingFileContext = null;
         }
@@ -1692,13 +1713,17 @@
     insertText: function (text) {
       if (!text) return;
       if (isPtyBackend()) {
+        var rawText = String(text);
+        if (term && typeof term.input === 'function') {
+          restoreTerminalImeTarget();
+          term.input(rawText, true);
+          return;
+        }
         if (term && term.textarea) {
           var ta = term.textarea;
           var start = typeof ta.selectionStart === 'number' ? ta.selectionStart : ta.value.length;
           var end = typeof ta.selectionEnd === 'number' ? ta.selectionEnd : ta.value.length;
-          ta.value = ta.value.slice(0, start) + text + ta.value.slice(end);
-          var caret = start + text.length;
-          ta.selectionStart = ta.selectionEnd = caret;
+          ta.setRangeText(rawText, start, end, 'end');
           ta.focus();
           try {
             if (typeof InputEvent !== 'undefined') {
@@ -1706,12 +1731,13 @@
                 bubbles: true,
                 cancelable: true,
                 inputType: 'insertText',
-                data: text,
+                data: rawText,
               }));
             } else {
               ta.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
             }
           } catch (_) {}
+          restoreTerminalImeTarget();
         }
         if (term) term.focus();
         return;
