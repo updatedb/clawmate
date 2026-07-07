@@ -24,6 +24,7 @@ import websockets
 import re as _re
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -32,7 +33,7 @@ from starlette.websockets import WebSocketState
 
 from config import load as load_cfg
 from service import find_project_marker
-from session_logger import SessionLogger, SessionIndex, _SESSION_ALL_EXTS
+from session_logger import SessionLogger, SessionIndex, _SESSION_LOG_EXTS
 
 router = APIRouter()
 logger = logging.getLogger("clawmate.agent")
@@ -195,8 +196,22 @@ def inject_to_session(sess, text: str):
         pass
 
 
+def _build_file_context_prompt(path: str) -> tuple[str, str]:
+    """Build the PTY prompt and log text for a preview file context."""
+    path = (path or "").strip()
+    if not path:
+        return "", ""
+    # Ctrl+U clears the current shell input line before typing the new prompt.
+    prompt = f"\x15file: {path}"
+    clean = f"file: {path}"
+    return prompt, clean
+
+
 async def _cleanup_dead_sessions():
     """Remove sessions whose processes have died."""
+    # One-shot recovery for sessions orphaned by restart (guard inside)
+    await _recover_orphaned_sessions()
+
     dead = []
     for key, sess in _sessions.items():
         if sess.stop_event.is_set():
@@ -210,7 +225,7 @@ async def _cleanup_dead_sessions():
             if sess.logger and sess.log_dir:
                 _collect_transcript(sess, Path(sess.log_dir))
             if sess.logger:
-                await sess.logger.aclose("ended")
+                await sess.logger.aclose()
             try:
                 os.close(sess.master_fd)
             except OSError:
@@ -226,7 +241,13 @@ async def _idle_reaper():
 
     Never kills an active session. Only cleans up orphans after the
     idle timeout (10 min with no client) or max lifetime (24h with no client).
+
+    On first run after restart, also recovers orphaned sessions (no ended_at)
+    by scanning all roots and collecting assistant transcripts from CLI files.
     """
+    # One-shot recovery for sessions orphaned by restart
+    await _recover_orphaned_sessions()
+
     while True:
         await asyncio.sleep(60)  # check every minute
         now = time.time()
@@ -246,7 +267,7 @@ async def _idle_reaper():
                 if sess.logger and sess.log_dir:
                     _collect_transcript(sess, Path(sess.log_dir))
                 if sess.logger:
-                    await sess.logger.aclose("killed")
+                    await sess.logger.aclose()
                 sess.stop_event.set()
                 try:
                     os.killpg(os.getpgid(sess.proc.pid), signal.SIGTERM)
@@ -326,6 +347,205 @@ async def _idle_reaper():
                                 logger.debug("TTL reap error for %s: %s", sess_dir, exc)
         except Exception as exc:
             logger.warning("TTL reaper error: %s", exc)
+
+
+# ── Restart recovery: collect transcripts for orphaned sessions ──
+
+_recovered = False
+
+
+async def _recover_orphaned_sessions():
+    """One-shot recovery after restart: close orphaned sessions (no ended_at).
+
+    Scans all known root directories for sessions in index.json that
+    lack an ``ended_at`` timestamp (orphaned by restart).  For each:
+
+    1. Attempts transcript collection from CLI files (best-effort).
+    2. Computes ``ended_at`` from the latest turn timestamp in
+       ``.chat.jsonl`` (assistant → user → current time).
+    3. Updates the index with ``ended_at`` and file stats.
+
+    The ``_recovered`` flag ensures this runs at most once per process
+    lifetime, even if called from multiple entry points.
+    """
+    global _recovered
+    if _recovered:
+        return
+    _recovered = True
+
+    logger.info("recovery: scanning for orphaned sessions (no ended_at)...")
+
+    try:
+        cfg = load_cfg()
+    except Exception:
+        logger.warning("recovery: cannot load config, skipping")
+        return
+
+    recovered_count = 0
+
+    for root_cfg in cfg.roots:
+        root_dir = Path(root_cfg.dir)
+        if not root_dir.is_dir():
+            continue
+
+        # Collect session directories (root-level + project-level)
+        dirs_to_check: list[Path] = []
+        root_sess = root_dir / ".clawmate" / "sessions"
+        if root_sess.is_dir():
+            dirs_to_check.append(root_sess)
+        for proj in root_dir.iterdir():
+            if proj.is_dir():
+                proj_sess = proj / ".clawmate" / "sessions"
+                if proj_sess.is_dir():
+                    dirs_to_check.append(proj_sess)
+
+        for sess_dir in dirs_to_check:
+            idx = SessionIndex.for_dir(sess_dir)
+            sessions = await idx.load_async()
+            for entry in sessions:
+                if entry.get("ended_at"):
+                    continue  # already has end time, skip
+
+                session_id = entry.get("id", "")
+                if not session_id:
+                    continue
+
+                chat_path = sess_dir / f"{session_id}.chat.jsonl"
+
+                # ── Estimate ended_at from existing turns ──────────────
+                # Before collecting transcript, check .chat.jsonl for any
+                # existing turns so we can use the latest timestamp as an
+                # upper bound.  Sessions with no existing turns have no
+                # known end time → pass 0 (no bound, but grace-limited).
+                existing_last_ts: float | None = None
+                if chat_path.exists():
+                    try:
+                        with open(chat_path, encoding="utf-8") as f:
+                            for line in f:
+                                line = line.strip()
+                                if not line:
+                                    continue
+                                try:
+                                    turn = json.loads(line)
+                                except json.JSONDecodeError:
+                                    continue
+                                ts = turn.get("ts")
+                                if isinstance(ts, (int, float)):
+                                    if existing_last_ts is None or ts > existing_last_ts:
+                                        existing_last_ts = ts
+                    except OSError:
+                        pass
+
+                # ── Transcript collection (best-effort) ────────────────
+                cwd = _session_cwd_from_log_dir(sess_dir, session_id)
+                backend = entry.get("backend", "")
+                raw_started = entry.get("started_at", 0)
+                try:
+                    started_at = float(raw_started)
+                except (TypeError, ValueError):
+                    started_at = 0
+
+                if cwd and backend and started_at:
+                    collected = _parse_transcript(cwd, backend, started_at,
+                                                  ended_at=existing_last_ts or 0)
+                    if collected:
+                        try:
+                            with open(chat_path, "a", encoding="utf-8") as f:
+                                for t in collected:
+                                    f.write(json.dumps(t, ensure_ascii=False) + "\n")
+                        except OSError:
+                            pass
+                        logger.info(
+                            "recovery: collected %d assistant turns for session=%s (%s)",
+                            len(collected), session_id, Path(cwd).name if cwd else sess_dir.parent.parent.name,
+                        )
+
+                # ── Compute ended_at from actual turn timestamps ───────
+                # Priority: last assistant turn → last user turn → now.
+                # Re-read after appending collected turns.
+                last_ts: float | None = None
+                if chat_path.exists():
+                    try:
+                        with open(chat_path, encoding="utf-8") as f:
+                            for line in f:
+                                line = line.strip()
+                                if not line:
+                                    continue
+                                try:
+                                    turn = json.loads(line)
+                                except json.JSONDecodeError:
+                                    continue
+                                ts = turn.get("ts")
+                                if isinstance(ts, (int, float)):
+                                    if last_ts is None or ts > last_ts:
+                                        last_ts = ts
+                    except OSError:
+                        pass
+
+                ended_at = last_ts if last_ts is not None else time.time()
+
+                # ── Compute file stats (mirrors aclose logic) ──────────
+                ansi_size = text_size = line_count = 0
+                if chat_path.exists():
+                    ansi_size = chat_path.stat().st_size
+                    try:
+                        with open(chat_path, encoding="utf-8") as f:
+                            for line in f:
+                                line_count += 1
+                                try:
+                                    turn = json.loads(line)
+                                    text_size += len(turn.get("content", ""))
+                                except json.JSONDecodeError:
+                                    text_size += len(line)
+                    except OSError:
+                        pass
+
+                await idx.update_async(session_id, {
+                    "ended_at": ended_at,
+                    "last_active": ended_at,
+                    "ansi_size": ansi_size,
+                    "text_size": text_size,
+                    "line_count": line_count,
+                })
+                recovered_count += 1
+
+    if recovered_count:
+        logger.info("recovery: closed %d orphaned sessions", recovered_count)
+
+
+# ── Schedule recovery on startup ─────────────────────────────────────
+# We cannot schedule an async task at import time because the event loop
+# is not yet running (uvicorn starts it *after* module imports complete).
+# Instead, use a daemon thread to poll for the running loop and schedule
+# the recovery as a background asyncio task once it becomes available.
+# This ensures recovery runs automatically after every restart, even
+# without any WebSocket connection or history API request.
+
+import threading as _threading
+
+
+def _schedule_initial_recovery():
+    """Poll for the running event loop and schedule recovery once."""
+    import asyncio
+    import time
+
+    for _ in range(100):  # up to ~10 seconds
+        try:
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                loop.create_task(_recover_orphaned_sessions())
+                return
+        except RuntimeError:
+            pass
+        time.sleep(0.1)
+
+
+_recovery_thread = _threading.Thread(
+    target=_schedule_initial_recovery,
+    daemon=True,
+    name="recovery-bootstrap",
+)
+_recovery_thread.start()
 
 
 # Start reaper on module load
@@ -615,27 +835,17 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
                                     pass
                             continue
                         if msg.get("type") == "file_context":
-                            # When the user opens the Agent panel while previewing a
-                            # file, auto-inject a prompt asking the agent to read and
-                            # analyze it, then output 3 actionable suggestions.
-                            # Skip if we already injected for this exact file (e.g. on
-                            # WebSocket reconnect — don't re-trigger the same prompt).
                             _path = msg.get("path", "")
-                            if _path and sess.master_fd is not None and sess.last_injected_file != _path:
-                                sess.last_injected_file = _path
+                            if _path and sess.master_fd is not None:
+                                _prompt, _clean_content = _build_file_context_prompt(_path)
+                                if not _prompt:
+                                    continue
                                 # ── 从文件名设置 session title ──
                                 if sess.logger and not sess.logger._title_set:
                                     _fname = os.path.basename(_path).rsplit('.', 1)[0] if '.' in os.path.basename(_path) else os.path.basename(_path)
                                     if _fname:
-                                        await sess.logger._extract_and_set_title(f"分析: {_fname}")
-                                # 带 ANSI 青色的提示，回显即显示，同时作为 Claude 的输入
-                                _prompt = (
-                                    f"\x1b[1;36m分析文件: {_path}\x1b[0m\r\n"
-                                    f"\x1b[2m1. 摘要（≤100字）\x1b[0m\r\n"
-                                    f"\x1b[2m2. 问题与待办（≤3条）\x1b[0m\r\n"
-                                )
-                                # 记录到 .chat.jsonl 中，避免 session 因缺失 user turn 被过滤
-                                _clean_content = f"分析文件: {_path}\n1. 摘要（≤100字）\n2. 问题与待办（≤3条）"
+                                        await sess.logger._extract_and_set_title(f"文件: {_fname}")
+                                # Record the injected context so the session keeps a usable user turn.
                                 if sess.logger:
                                     await sess.logger.record_user(_clean_content)
                                 async def _inject_analysis():
@@ -1217,29 +1427,29 @@ async def agent_terminal(
                 ts = time.strftime("%Y%m%d_%H%M%S", time.localtime())
                 safe_key = key.replace(":", "_").replace("/", "_")
                 session_id = f"{safe_key}_{ts}"
+                meta = {
+                    "session_id": session_id,
+                    "key": key,
+                    "backend": backend,
+                    "cwd": cwd,
+                    "root": root,
+                    "started_at": time.time(),
+                    "title": backend,
+                }
                 sess.logger = SessionLogger(
                     session_id=session_id,
-                    meta={
-                        "session_id": session_id,
-                        "key": key,
-                        "backend": backend,
-                        "cwd": cwd,
-                        "root": root,
-                        "started_at": time.time(),
-                        "status": "active",
-                        "title": backend,
-                    },
+                    meta=meta,
                     log_dir=sess_dir,
                 )
                 await SessionIndex.for_dir(sess_dir).add_async({
                     "id": session_id,
                     "key": key,
                     "backend": backend,
+                    "cwd": cwd,
                     "root": root,
                     "started_at": time.time(),
                     "last_active": time.time(),
                     "title": backend,
-                    "status": "active",
                 })
         except Exception as exc:
             logger.warning("failed to init session logger for key=%s: %s", key, exc)
@@ -1338,8 +1548,8 @@ def _find_codex_transcript(cwd: str, started_at: float) -> Path | None:
       ~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl
 
     The first line is ``session_meta`` with ``cwd`` and ``timestamp``.
-    Candidates are filtered by cwd, then the one with timestamp closest
-    to ``started_at`` is returned.
+    Candidates are constrained to the current session cwd/project, then the
+    one with timestamp closest to ``started_at`` is returned.
     """
     import datetime as _dt
     dt = _dt.datetime.fromtimestamp(started_at)
@@ -1350,6 +1560,10 @@ def _find_codex_transcript(cwd: str, started_at: float) -> Path | None:
 
     best_path: Path | None = None
     best_distance = float('inf')
+    try:
+        expected_cwd = Path(cwd).expanduser().resolve()
+    except OSError:
+        expected_cwd = Path(cwd).expanduser().absolute()
 
     for c in candidates:
         try:
@@ -1358,7 +1572,14 @@ def _find_codex_transcript(cwd: str, started_at: float) -> Path | None:
             if first.get("type") != "session_meta":
                 continue
             meta = first.get("payload", {})
-            if meta.get("cwd") != cwd:
+            transcript_cwd = meta.get("cwd")
+            if not transcript_cwd:
+                continue
+            try:
+                transcript_path = Path(str(transcript_cwd)).expanduser().resolve()
+            except OSError:
+                transcript_path = Path(str(transcript_cwd)).expanduser().absolute()
+            if transcript_path != expected_cwd and expected_cwd not in transcript_path.parents:
                 continue
             # Match by session_meta timestamp
             ts = first.get("timestamp") if first.get("timestamp") is not None else meta.get("timestamp", 0)
@@ -1371,16 +1592,20 @@ def _find_codex_transcript(cwd: str, started_at: float) -> Path | None:
         except Exception:
             continue
 
-    return best_path if best_path else (candidates[0] if candidates else None)
+    return best_path
 
 
-def _parse_claude_transcript(path: Path, started_at: float = 0) -> list[dict]:
+def _parse_claude_transcript(path: Path, started_at: float = 0, ended_at: float = 0) -> list[dict]:
     """Parse Claude Code transcript and extract assistant text replies,
     skipping tool- call blocks and thinking blocks.
 
     Claude Code transcript format:
       {"type":"user", "message":{"role":"user", "content":[...]}}
       {"type":"assistant", "message":{"role":"assistant", "content":[{"type":"text","text":"..."}, ...]}}
+
+    Only turns whose timestamp falls within the session's time window
+    ``[started_at - 60s, ended_at + 60s]`` are returned.  This prevents
+    assistant replies from one session leaking into another session's log.
     """
     turns = []
     try:
@@ -1422,14 +1647,15 @@ def _parse_claude_transcript(path: Path, started_at: float = 0) -> list[dict]:
                     })
     except FileNotFoundError:
         pass
-    # Filter out turns that predate this session (cross-session contamination guard)
-    if started_at:
-        cutoff = started_at - 60  # 60s grace period
-        turns = [t for t in turns if t.get("ts", 0) >= cutoff]
+    # Filter turns to this session's time window (cross-session contamination guard)
+    if started_at or ended_at:
+        lower = (started_at - 60) if started_at else 0
+        upper = (ended_at + 60) if ended_at else float('inf')
+        turns = [t for t in turns if lower <= t.get("ts", 0) <= upper]
     return turns
 
 
-def _parse_codex_transcript(path: Path, started_at: float = 0) -> list[dict]:
+def _parse_codex_transcript(path: Path, started_at: float = 0, ended_at: float = 0) -> list[dict]:
     """Parse Codex CLI transcript and extract assistant messages only.
 
     User messages are already recorded at the WebSocket boundary via
@@ -1439,6 +1665,9 @@ def _parse_codex_transcript(path: Path, started_at: float = 0) -> list[dict]:
     Codex transcript format:
       {"type":"response_item","payload":{"role":"user","content":[{"type":"input_text","text":"..."}]}}
       {"type":"response_item","payload":{"role":"assistant","content":[{"type":"text","text":"..."}]}}
+
+    Only turns whose timestamp falls within the session's time window
+    ``[started_at - 60s, ended_at + 60s]`` are returned.
     """
     turns = []
     try:
@@ -1476,15 +1705,19 @@ def _parse_codex_transcript(path: Path, started_at: float = 0) -> list[dict]:
                     })
     except FileNotFoundError:
         pass
-    # Filter out turns that predate this session (cross-session contamination guard)
-    if started_at:
-        cutoff = started_at - 60  # 60s grace period
-        turns = [t for t in turns if t.get("ts", 0) >= cutoff]
+    # Filter turns to this session's time window (cross-session contamination guard)
+    if started_at or ended_at:
+        lower = (started_at - 60) if started_at else 0
+        upper = (ended_at + 60) if ended_at else float('inf')
+        turns = [t for t in turns if lower <= t.get("ts", 0) <= upper]
     return turns
 
 
-def _parse_transcript(cwd: str, backend: str, started_at: float) -> list[dict]:
+def _parse_transcript(cwd: str, backend: str, started_at: float, ended_at: float = 0) -> list[dict]:
     """Find and parse CLI transcript for a session.
+
+    Only returns assistant turns whose timestamp falls within the session's
+    time window ``[started_at - 60s, ended_at + 60s]``.
 
     Returns a list of assistant-turn dicts (``{"role": "assistant", "ts": ..., "content": ...}``),
     or an empty list if the transcript cannot be found/parsed.
@@ -1493,11 +1726,11 @@ def _parse_transcript(cwd: str, backend: str, started_at: float) -> list[dict]:
     if backend == "claude":
         transcript_path = _find_claude_transcript(cwd, started_at)
         if transcript_path:
-            turns = _parse_claude_transcript(transcript_path, started_at=started_at)
+            turns = _parse_claude_transcript(transcript_path, started_at=started_at, ended_at=ended_at)
     elif backend == "codex":
         transcript_path = _find_codex_transcript(cwd, started_at)
         if transcript_path:
-            turns = _parse_codex_transcript(transcript_path, started_at=started_at)
+            turns = _parse_codex_transcript(transcript_path, started_at=started_at, ended_at=ended_at)
     return turns
 
 
@@ -1506,14 +1739,22 @@ def _collect_transcript(sess, log_dir: Path):
 
     Called from session cleanup code. Best-effort — silently does nothing
     if transcript files cannot be found or parsed.
+
+    ``ended_at`` is set to the current time (the moment the session is being
+    cleaned up), providing an upper bound to avoid collecting assistant turns
+    from future sessions that share the same PTY process.
     """
     if not sess.logger:
         return
-    cwd = getattr(sess, "cwd", None) or ""
+    session_id = getattr(sess.logger, "session_id", "") or ""
+    cwd = getattr(sess, "cwd", None) or _session_cwd_from_log_dir(log_dir, session_id)
+    if cwd and not getattr(sess, "cwd", None):
+        sess.cwd = cwd
     backend = (sess.key or "").split(":")[0] or "claude"
     started_at = getattr(sess, "created_at", 0)
+    ended_at = time.time()
 
-    turns = _parse_transcript(cwd, backend, started_at)
+    turns = _parse_transcript(cwd, backend, started_at, ended_at)
     if turns:
         sess.logger.record_turns(turns)
         logger.info(
@@ -1529,6 +1770,27 @@ def _roots_for_session_query(cfg, root: str):
     if root:
         return [r for r in cfg.roots if r.id == root]
     return cfg.roots
+
+
+def _session_cwd_from_log_dir(log_dir: str | Path, session_id: str = "") -> str:
+    """Recover a session cwd from its log directory, preferring index.json metadata."""
+    sess_dir = Path(log_dir)
+    if session_id:
+        try:
+            for entry in SessionIndex.load(sess_dir):
+                if entry.get("id") != session_id:
+                    continue
+                stored_cwd = str(entry.get("cwd") or "").strip()
+                if stored_cwd:
+                    return stored_cwd
+                break
+        except Exception:
+            pass
+
+    try:
+        return str(sess_dir.resolve().parent.parent)
+    except OSError:
+        return str(sess_dir.absolute().parent.parent)
 
 
 def _projects_for_session_query(root_dir: Path, project: str = "", dir_: str = "") -> list[tuple[str, Path]]:
@@ -1632,21 +1894,22 @@ def _chat_log_stats(chat_path: Path) -> dict:
     """Analyse a chat JSONL log and return stats dict.
 
     Returns:
-        instruction_count: number of user instructions (条指令)
-        turn_count: number of user turns (轮对话; same as instruction_count)
+        turn_count: number of user turns (轮对话)
+        instruction_count: total entries across all roles (条指令)
         total_turns: total entries across all roles
         first_ts: timestamp of the earliest entry (epoch seconds)
         last_ts:  timestamp of the latest entry (epoch seconds)
     """
     turns = _normalize_chat_turns(_load_chat_turns(chat_path))
     user_count = sum(1 for t in turns if t.get("role") == "user")
+    total = len(turns)
     timestamps = [t.get("ts") for t in turns if t.get("ts")]
     first_ts = min(timestamps) if timestamps else None
     last_ts = max(timestamps) if timestamps else None
     return {
-        "instruction_count": user_count,
         "turn_count": user_count,
-        "total_turns": len(turns),
+        "instruction_count": total,
+        "total_turns": total,
         "first_ts": first_ts,
         "last_ts": last_ts,
     }
@@ -1658,9 +1921,9 @@ async def agent_session_list(
     project: str = "",
     dir: str = "",
     backend: str = "",
-    status: str = "",
     q: str = "",
-    limit: int = 50,
+    date: str = "",
+    limit: int = 15,
     offset: int = 0,
 ):
     """List archived agent sessions, grouped by project."""
@@ -1684,19 +1947,29 @@ async def agent_session_list(
             sessions = await SessionIndex.for_dir(sess_dir).load_async()
             # 预先收集当前活跃会话的 ID（不能用 key 判断，因为多个会话共享同一 key）
             active_ids: set[str] = set()
-            if not status:
-                for asess in _sessions.values():
-                    if asess.logger:
-                        active_ids.add(asess.logger.session_id)
+            for asess in _sessions.values():
+                if asess.logger:
+                    active_ids.add(asess.logger.session_id)
             for s in sessions:
-                # 过滤当前正在活跃运行的会话（id 在 active_ids 中），
-                # 而非依赖 status 字段（历史会话可能一直遗留为 "active"）
-                if not status and s.get("id", "") in active_ids:
-                    continue
-                if status and s.get("status", "") != status:
+                # 过滤当前正在活跃运行的会话（id 在 active_ids 中）
+                if s.get("id", "") in active_ids:
                     continue
                 if backend and s.get("backend", "") != backend:
                     continue
+
+                # ── date filter ────────────────────────────────────────
+                if date:
+                    started_at = s.get("started_at")
+                    if started_at:
+                        try:
+                            dt = datetime.fromtimestamp(float(started_at))
+                            if dt.strftime("%Y-%m-%d") != date:
+                                continue
+                        except (TypeError, ValueError):
+                            continue
+                    else:
+                        continue
+
                 if q:
                     sid = s.get("id", "")
                     chat_path = sess_dir / f"{sid}.chat.jsonl"
@@ -1773,24 +2046,33 @@ async def agent_session_log(
             if not chat_path.is_file():
                 continue
 
-            meta = {}
-            meta_path = sess_dir / f"{session_id}.meta.json"
-            if meta_path.is_file():
-                try:
-                    meta = json.loads(meta_path.read_text("utf-8"))
-                except Exception:
-                    pass
-
             turns = _load_chat_turns(chat_path)
+            session_cwd = _session_cwd_from_log_dir(sess_dir, session_id)
+            meta = {"cwd": session_cwd} if session_cwd else {}
 
             # ── On-demand transcript collection ──────────────────────────
             # If .chat.jsonl has user turns but zero assistant turns, try to
             # pull assistant responses from the CLI's own transcript files.
+            # Note: this is a secondary path — the primary recovery runs on
+            # startup via _recover_orphaned_sessions().  This endpoint handles
+            # sessions that were still live when recovery ran (no transcript
+            # available yet) or that were created after recovery.
             has_assistant = any(t.get("role") == "assistant" for t in turns)
             if turns and not has_assistant:
-                cwd = meta.get("cwd", "")
-                backend = meta.get("backend", "")
-                raw_started = meta.get("started_at", 0)
+                # Derive cwd from the project path, backend/started_at from index
+                cwd = str(proj_path) if proj_path and proj_path.is_dir() else ""
+                backend = ""
+                raw_started = 0
+                try:
+                    idx = SessionIndex.for_dir(sess_dir)
+                    for entry in await idx.load_async():
+                        if entry.get("id") == session_id:
+                            backend = entry.get("backend", "")
+                            raw_started = entry.get("started_at", 0)
+                            break
+                except Exception:
+                    pass
+
                 if cwd and backend and raw_started:
                     try:
                         started_at = float(raw_started)
@@ -1826,6 +2108,55 @@ async def agent_session_log(
     raise HTTPException(status_code=404, detail="Session not found")
 
 
+@router.get("/api/clawmate/agent/sessions/dates")
+async def agent_session_dates(
+    root: str = "",
+    dir: str = "",
+):
+    """Return available session dates sorted newest-first.
+
+    Collects dates from the ``started_at`` field of all archived sessions
+    (excluding currently active ones).  The return value is a flat list of
+    ``"YYYY-MM-DD"`` strings that the client populates its date-axis with.
+    """
+    await _cleanup_dead_sessions()
+    date_set: set[str] = set()
+
+    cfg = load_cfg()
+    roots_to_check = _roots_for_session_query(cfg, root)
+
+    for r in roots_to_check:
+        root_dir = Path(r.dir)
+        if not root_dir.is_dir():
+            continue
+        dirs_to_check = _projects_for_session_query(root_dir, "", dir)
+
+        for proj_name, proj_dir in dirs_to_check:
+            sess_dir = proj_dir / ".clawmate" / "sessions"
+            if not sess_dir.is_dir():
+                continue
+            sessions = await SessionIndex.for_dir(sess_dir).load_async()
+
+            active_ids: set[str] = set()
+            for asess in _sessions.values():
+                if asess.logger:
+                    active_ids.add(asess.logger.session_id)
+
+            for s in sessions:
+                if s.get("id", "") in active_ids:
+                    continue
+                started_at = s.get("started_at")
+                if started_at:
+                    try:
+                        dt = datetime.fromtimestamp(float(started_at))
+                        date_set.add(dt.strftime("%Y-%m-%d"))
+                    except (TypeError, ValueError):
+                        continue
+
+    dates = sorted(date_set, reverse=True)
+    return JSONResponse({"dates": dates})
+
+
 @router.get("/api/clawmate/agent/sessions/{session_id}")
 async def agent_session_detail(session_id: str, root: str = "", project: str = "", dir: str = ""):
     """Return session metadata + chat.jsonl turn count."""
@@ -1838,18 +2169,12 @@ async def agent_session_detail(session_id: str, root: str = "", project: str = "
 
         for proj_name, proj_path in projects_to_check:
             sess_dir = proj_path / ".clawmate" / "sessions"
-            meta_path = sess_dir / f"{session_id}.meta.json"
             chat_path = sess_dir / f"{session_id}.chat.jsonl"
 
-            if not meta_path.is_file() and not chat_path.is_file():
+            if not chat_path.is_file():
                 continue
 
-            meta = {}
-            if meta_path.is_file():
-                try:
-                    meta = json.loads(meta_path.read_text("utf-8"))
-                except Exception:
-                    pass
+            meta = {"cwd": _session_cwd_from_log_dir(sess_dir, session_id)}
 
             stats = _chat_log_stats(chat_path)
 
@@ -1888,12 +2213,12 @@ async def agent_session_delete(session_id: str, root: str = "", project: str = "
 
         for proj_name, proj_path in projects_to_check:
             sess_dir = proj_path / ".clawmate" / "sessions"
-            meta_path = sess_dir / f"{session_id}.meta.json"
-            if not meta_path.is_file():
+            chat_path = sess_dir / f"{session_id}.chat.jsonl"
+            if not chat_path.is_file() and not (sess_dir / "index.json").is_file():
                 continue
 
             deleted_files = []
-            for ext in _SESSION_ALL_EXTS:
+            for ext in _SESSION_LOG_EXTS:
                 p = sess_dir / f"{session_id}{ext}"
                 if p.exists():
                     p.unlink()

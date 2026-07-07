@@ -37,12 +37,7 @@ def _derive_title_from_input(content: str, max_len: int = 60) -> str:
 
 # ── Known log file extensions (for cleanup) ──
 
-# New format (structured chat logs)
-_SESSION_LOG_EXTS = [".meta.json", ".chat.jsonl"]
-# Legacy format (raw PTY logs)
-_SESSION_LEGACY_EXTS = [".ansi.log", ".text.log"]
-# All known log extensions for cleanup
-_SESSION_ALL_EXTS = _SESSION_LOG_EXTS + _SESSION_LEGACY_EXTS
+_SESSION_LOG_EXTS = [".chat.jsonl"]
 
 
 # ── SessionLogger ──
@@ -63,11 +58,6 @@ class SessionLogger:
         self._chat_fd: Optional[typing.IO] = None
         self._title_set = False
 
-        # Write meta.json
-        meta_path = self.log_dir / f"{session_id}.meta.json"
-        with open(meta_path, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
-
         # Open .chat.jsonl
         self._chat_fd = open(
             self.log_dir / f"{session_id}.chat.jsonl",
@@ -79,7 +69,7 @@ class SessionLogger:
 
         Written immediately so even incomplete sessions are captured.
         On the first user input, a meaningful title is derived from the
-        content and persisted to both meta.json and index.json.
+        content and persisted to the session index.
         """
         if not self._chat_fd:
             return
@@ -96,24 +86,13 @@ class SessionLogger:
             await self._extract_and_set_title(content)
 
     async def _extract_and_set_title(self, content: str):
-        """Derive a title from *content* and persist to meta.json + index.json."""
+        """Derive a title from *content* and persist to index.json."""
         title = _derive_title_from_input(content)
         if not title:
             self._title_set = True
             return
 
-        # Update meta.json
-        meta_path = self.log_dir / f"{self.session_id}.meta.json"
-        try:
-            with open(meta_path, "r") as f:
-                meta = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            meta = {}
-        meta["title"] = title
-        with open(meta_path, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
-
-        # Use instance-based async method with per-dir lock so we don't
+        # Persist title to index.json using the per-dir lock so we don't
         # race with update_batch / reap_async from the reaper task.
         idx = SessionIndex.for_dir(self.log_dir)
         await idx.update_async(self.session_id, {"title": title})
@@ -133,38 +112,29 @@ class SessionLogger:
         if self._chat_fd:
             self._chat_fd.flush()
 
-    def close(self, status: str = "ended"):
-        """Close .chat.jsonl handle and update meta.json.
+    def close(self):
+        """Close .chat.jsonl handle and update index.
 
-        Sync version — index is updated with basic fields (status/ended_at).
-        Prefer ``await logger.aclose(status)`` from async code for a full
-        metadata sync (file sizes, line count, title).
+        Sync version — index is updated with basic fields (ended_at).
+        Prefer ``await logger.aclose()`` from async code for a full
+        metadata sync (file sizes, line count).
         """
         self._close_chat()
-        meta_path = self.log_dir / f"{self.session_id}.meta.json"
-        try:
-            with open(meta_path, "r") as f:
-                meta = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            meta = {}
-        meta["status"] = status
-        meta["ended_at"] = time.time()
-        with open(meta_path, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
+        now = time.time()
         SessionIndex.update(self.log_dir, self.session_id, {
-            "status": status,
-            "ended_at": time.time(),
-            "last_active": time.time(),
+            "ended_at": now,
+            "last_active": now,
         })
 
-    async def aclose(self, status: str = "ended"):
+    async def aclose(self):
         """Async close — computes file stats and updates index atomically.
 
         Prefer this over the sync ``close()`` when in an async context
-        so the index receives full metadata (title, ansi_size, text_size,
+        so the index receives full metadata (ansi_size, text_size,
         line_count) under a per-directory lock.
         """
         self._close_chat()
+        now = time.time()
 
         chat_path = self.log_dir / f"{self.session_id}.chat.jsonl"
         ansi_size = text_size = line_count = 0
@@ -182,23 +152,10 @@ class SessionLogger:
             except OSError:
                 pass
 
-        meta_path = self.log_dir / f"{self.session_id}.meta.json"
-        try:
-            with open(meta_path, "r") as f:
-                meta = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            meta = {}
-        meta["status"] = status
-        meta["ended_at"] = time.time()
-        with open(meta_path, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
-
         idx = SessionIndex.for_dir(self.log_dir)
         await idx.update_async(self.session_id, {
-            "status": status,
-            "ended_at": time.time(),
-            "last_active": time.time(),
-            "title": meta.get("title", ""),
+            "ended_at": now,
+            "last_active": now,
             "ansi_size": ansi_size,
             "text_size": text_size,
             "line_count": line_count,
@@ -297,8 +254,8 @@ class SessionIndex:
         """Synchronous reap — prefer the async instance method when possible.
 
         *active_keys*: a set of session keys that are currently running.
-        When provided, sessions whose key is in this set are never reaped
-        (replaces the ``status == "active"`` heuristic).
+        Sessions whose key is in this set are never reaped.
+        When *active_keys* is None, no sessions are protected (use with care).
         """
         log_dir = Path(log_dir)
         idx = SessionIndex.for_dir(log_dir)
@@ -308,18 +265,13 @@ class SessionIndex:
         kept = []
         removed = 0
         for s in sessions:
-            if active_keys is not None:
-                if s.get("key", "") in active_keys:
-                    kept.append(s)
-                    continue
-            else:
-                if s.get("status") == "active":
-                    kept.append(s)
-                    continue
+            if active_keys is not None and s.get("key", "") in active_keys:
+                kept.append(s)
+                continue
             if s.get("last_active", 0) < cutoff:
                 sid = s.get("id", "")
                 if sid:
-                    for ext in _SESSION_ALL_EXTS:
+                    for ext in _SESSION_LOG_EXTS:
                         p = log_dir / f"{sid}{ext}"
                         if p.exists():
                             p.unlink()
@@ -409,9 +361,8 @@ class SessionIndex:
         """Remove sessions whose last_active is older than *ttl_days*.
 
         *active_keys*: a set of session keys that are currently running.
-        When provided, sessions whose key is in this set are never reaped
-        (replaces the ``status == "active"`` heuristic which fails for
-        sessions that crashed without calling ``aclose()``).
+        Sessions whose key is in this set are never reaped.
+        When *active_keys* is None, no sessions are protected (use with care).
         Returns count removed.
         """
         async with self._lock:
@@ -421,18 +372,13 @@ class SessionIndex:
             kept = []
             removed = 0
             for s in sessions:
-                if active_keys is not None:
-                    if s.get("key", "") in active_keys:
-                        kept.append(s)
-                        continue
-                else:
-                    if s.get("status") == "active":
-                        kept.append(s)
-                        continue
+                if active_keys is not None and s.get("key", "") in active_keys:
+                    kept.append(s)
+                    continue
                 if s.get("last_active", 0) < cutoff:
                     sid = s.get("id", "")
                     if sid:
-                        for ext in _SESSION_ALL_EXTS:
+                        for ext in _SESSION_LOG_EXTS:
                             p = self._log_dir / f"{sid}{ext}"
                             if p.exists():
                                 p.unlink()

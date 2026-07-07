@@ -15,6 +15,34 @@
 .mobile-fb-panel,
 .mobile-sel-btn { display: none; }
 
+/* Desktop selection action button shown when agent panel is open */
+#selAddToAgent {
+  position: fixed;
+  z-index: 99;
+  display: none;
+  align-items: center;
+  gap: 4px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+  white-space: nowrap;
+  line-height: 1;
+}
+#selAddToAgent svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+#selAddToAgent:hover {
+  filter: brightness(1.15);
+}
+
 
     /* Three-column grid */
     .preview-three-col {
@@ -944,10 +972,8 @@
       font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
     }
 
-    /* ── Line numbers (CSS Grid) ─────────────────────────────────── */
+    /* ── Line numbers (per-row flex, supports wrapping) ──────────── */
     .code-with-lines {
-      display: grid;
-      grid-template-columns: auto 1fr;
       position: relative;
       background: var(--bg-code);
       border: 1px solid var(--border-color);
@@ -957,31 +983,61 @@
       min-width: 0;
       box-sizing: border-box;
     }
-    .code-line-numbers {
-      grid-column: 1;
-      user-select: none;
-      white-space: pre;
+    .code-row {
+      display: flex;
+      align-items: stretch;
+      min-height: 0;
+    }
+    .code-row-num {
+      flex-shrink: 0;
+      width: 48px;
       text-align: right;
-      padding: 16px 10px 16px 14px;
+      padding: 0 10px 0 14px;
       font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
       font-size: 13px;
       line-height: 1.6;
+      padding-top: 0;
+      padding-bottom: 0;
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-end;
       color: var(--text-muted);
       background: var(--bg-tertiary);
       border-right: 1px solid var(--border-color);
-      overflow: hidden;
+      user-select: none;
       pointer-events: none;
     }
-    .code-with-lines > pre.raw-text,
-    .code-with-lines > pre.code-highlighted,
-    .code-with-lines > pre.raw-text {
-      grid-column: 2;
-      border: none;
-      border-radius: 0;
-      margin: 0;
+    .code-row-num::after {
+      content: '';
+      display: inline-block;
+      width: 10px; /* spacing after number, replaces padding-right gap */
+    }
+    .code-row-text {
+      white-space: pre-wrap;
+      word-break: break-all;
+      font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      padding: 0 16px;
+      flex: 1;
+      min-width: 0;
+      display: block;
+      unicode-bidi: embed;
+    }
+    .code-row:first-child .code-row-num {
+      padding-top: 16px;
+    }
+    .code-row:last-child .code-row-num {
+      padding-bottom: 16px;
+    }
+    .code-row:first-child .code-row-text {
+      padding-top: 16px;
+    }
+    .code-row:last-child .code-row-text {
+      padding-bottom: 16px;
     }
 
-    [data-theme="dark"] .code-line-numbers {
+    [data-theme="dark"] .code-row-num {
       background: rgba(255,255,255,0.03);
       color: rgba(255,255,255,0.25);
     }
@@ -1013,8 +1069,7 @@
     }
 
     @media (max-width: 768px) {
-      .code-line-numbers { display: none; }
-      .code-with-lines { grid-template-columns: 1fr; }
+      .code-row-num { display: none; }
     }
 
 
@@ -1153,6 +1208,38 @@
       }
       /* Hide desktop tooltip on mobile */
       .preview-selection-tooltip { display: none !important; }
+
+      /* ── Desktop "添加到会话" floating button ── */
+      #selAddToAgent {
+        position: fixed;
+        z-index: 99;
+        display: none;
+        align-items: center;
+        gap: 4px;
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        border-radius: 20px;
+        padding: 8px 14px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+        white-space: nowrap;
+        line-height: 1;
+      }
+      #selAddToAgent svg {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+      }
+      #selAddToAgent:hover {
+        filter: brightness(1.15);
+      }
+      /* Hidden on mobile — use existing feedback flow */
+      @media (max-width: 767px) {
+        #selAddToAgent { display: none !important; }
+      }
 
 /* ── Bottom feedback add panel ── */
       .mobile-fb-overlay {

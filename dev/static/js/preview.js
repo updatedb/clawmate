@@ -687,36 +687,36 @@
             ta.setSelectionRange(pos, pos);
             ta.focus();
           }
-        } else if (srcPre && isRawMode && (isMarkdownMode || isHtmlMode)) {
-          // Source view (pre) mode: scroll contentBody to the heading line + select heading text
+        } else if (isRawMode && (isMarkdownMode || isHtmlMode)) {
+          // Source view mode: scroll to the target row
           if (foundLine) {
-            var lh2 = parseFloat(getComputedStyle(srcPre).lineHeight) || 22;
+            var wrapper2 = document.querySelector('.code-with-lines');
             var container = document.getElementById('contentBody');
-            var preTop = srcPre.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
-            container.scrollTo({ top: preTop + (foundLine - 3) * lh2, behavior: 'smooth' });
-            // Highlight by selecting the heading text in the pre
-            var codeEl = srcPre.querySelector('code');
-            var textNode = codeEl || srcPre;
-            var fullText = textNode.textContent || '';
-            var idx = fullText.indexOf(headingText);
-            if (idx >= 0 && document.createRange) {
-              try {
-                var range = document.createRange();
-                // Walk to find the text node containing the heading
-                var walker = document.createTreeWalker(textNode, NodeFilter.SHOW_TEXT);
-                var node, offset = 0;
-                while (node = walker.nextNode()) {
-                  var ni = node.textContent.indexOf(headingText);
-                  if (ni >= 0) {
-                    range.setStart(node, ni);
-                    range.setEnd(node, ni + headingText.length);
-                    var sel = window.getSelection();
-                    sel.removeAllRanges();
-                    sel.addRange(range);
-                    break;
-                  }
+            if (wrapper2 && container) {
+              var rows2 = wrapper2.querySelectorAll('.code-row');
+              var targetRow2 = rows2[foundLine - 1];
+              if (targetRow2) {
+                var rowTop2 = targetRow2.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+                container.scrollTo({ top: Math.max(0, rowTop2 - 60), behavior: 'smooth' });
+                // Try to select the heading text within the target row
+                var textEl = targetRow2.querySelector('.code-row-text');
+                if (textEl && document.createRange) {
+                  try {
+                    var walker2 = document.createTreeWalker(textEl, NodeFilter.SHOW_TEXT);
+                    while (node = walker2.nextNode()) {
+                      var ni2 = node.textContent.indexOf(headingText);
+                      if (ni2 >= 0) {
+                        var range2 = document.createRange();
+                        range2.setStart(node, ni2);
+                        range2.setEnd(node, ni2 + headingText.length);
+                        window.getSelection().removeAllRanges();
+                        window.getSelection().addRange(range2);
+                        break;
+                      }
+                    }
+                  } catch(_) {}
                 }
-              } catch(_) {}
+              }
             }
           }
         } else {
@@ -900,64 +900,49 @@
       return;
     }
 
-    // Find the right pre: prefer sourceRawPre (md/html source), fallback to any visible pre
     var srcPre = document.getElementById('sourceRawPre');
-    var pre = null;
-    var wrapper = null;
+    var wrapper = document.querySelector('.code-with-lines');
     var wasHidden = false;
 
-    if (srcPre) {
-      // Markdown/HTML file — use the source pre
-      wrapper = srcPre.closest('.code-with-lines');
-      if (wrapper && window.getComputedStyle(wrapper).display === 'none') {
-        // Rendered mode for markdown: scroll rendered content, don't switch views
-        if (!isRawMode && document.getElementById('markdownRenderedDiv')) {
-          _scrollRenderedMarkdownToLine(lineNum);
-          return;
-        }
-        // Source view is hidden but user is in source mode — show it
-        // Also hide the rendered view
-        var mdDiv = document.getElementById('markdownRenderedDiv');
-        var htmlIframe = document.getElementById('htmlIframe');
-        if (mdDiv) mdDiv.style.display = 'none';
-        if (htmlIframe) htmlIframe.style.display = 'none';
-        // Show source view buttons
-        var editBtn = document.getElementById('btnSourceEdit');
-        var srcToggle = document.getElementById('btnSrcToggle');
-        if (editBtn) editBtn.style.display = '';
-        if (srcToggle) { srcToggle.textContent = '📝 渲染'; srcToggle.classList.add('active'); }
-        wrapper.style.display = '';
-        if (srcPre) srcPre.style.display = '';
-        wasHidden = true;
+    if (srcPre && wrapper && window.getComputedStyle(wrapper).display === 'none') {
+      // Rendered mode for markdown: scroll rendered content, don't switch views
+      if (!isRawMode && document.getElementById('markdownRenderedDiv')) {
+        _scrollRenderedMarkdownToLine(lineNum);
+        return;
       }
-      pre = srcPre;
-    } else {
-      // Plain text/code file — find the pre in contentBody
-      var ct = document.getElementById('contentBody');
-      if (ct) pre = ct.querySelector('pre');
+      // Source view is hidden but user is in source mode — show it
+      var mdDiv = document.getElementById('markdownRenderedDiv');
+      var htmlIframe = document.getElementById('htmlIframe');
+      if (mdDiv) mdDiv.style.display = 'none';
+      if (htmlIframe) htmlIframe.style.display = 'none';
+      var editBtn = document.getElementById('btnSourceEdit');
+      var srcToggle = document.getElementById('btnSrcToggle');
+      if (editBtn) editBtn.style.display = '';
+      if (srcToggle) { srcToggle.textContent = '📝 渲染'; srcToggle.classList.add('active'); }
+      wrapper.style.display = '';
+      wasHidden = true;
     }
 
-    if (!pre) return;
-
     var ct = document.getElementById('contentBody');
-    if (!ct) return;
-    var lineHeight = parseFloat(getComputedStyle(pre).lineHeight) || 22;
-    // Scroll contentBody to bring the target line near the top (with 4-line margin)
-    var preTop = pre.getBoundingClientRect().top - ct.getBoundingClientRect().top + ct.scrollTop;
-    var scrollTarget = Math.max(0, preTop + (lineNum - 4) * lineHeight);
-    ct.scrollTop = scrollTarget;
+    if (!ct || !wrapper) return;
+
+    var rows = wrapper.querySelectorAll('.code-row');
+    var targetRow = rows[lineNum - 1];
+    if (!targetRow) return;
+
+    // Scroll to the target row
+    var rowTop = targetRow.getBoundingClientRect().top - ct.getBoundingClientRect().top + ct.scrollTop;
+    var rowHeight = targetRow.offsetHeight;
+    ct.scrollTop = Math.max(0, rowTop - 4 * rowHeight);
 
     // Flash highlight bar
-    if (!wrapper) wrapper = pre.closest('.code-with-lines') || pre.parentElement;
-    var preRect = pre.getBoundingClientRect();
-    var wrapperRect = wrapper.getBoundingClientRect();
-    var flashTop = (lineNum - 1) * lineHeight + (preRect.top - wrapperRect.top);
     var flash = document.createElement('div');
     flash.className = 'code-line-flash';
-    flash.style.top = flashTop + 'px';
-    flash.style.height = lineHeight + 'px';
+    flash.style.top = targetRow.offsetTop + 'px';
+    flash.style.height = rowHeight + 'px';
+    flash.style.left = '0';
+    flash.style.right = '0';
     wrapper.appendChild(flash);
-    // Remove after animation completes
     setTimeout(function() { if (flash.parentNode) flash.remove(); }, 1600);
   }
 
@@ -1213,40 +1198,133 @@
   let isPlainTextEditMode = false;
   let sourceDirty = false;
 
-  // ── Line numbers for code / source views ──────────────────────────
+  // ── Line numbers for code / source views (per-row flex layout) ──
   function renderCodeWithLineNumbers(rawContent, preEl) {
-    const lineCount = (rawContent || '').split('\n').length;
     const wrapper = document.createElement('div');
     wrapper.className = 'code-with-lines';
-
-    const lineNumDiv = document.createElement('div');
-    lineNumDiv.className = 'code-line-numbers';
-    lineNumDiv.textContent = Array.from({ length: lineCount }, (_, i) => i + 1).join('\n');
-
-    wrapper.appendChild(lineNumDiv);
-    wrapper.appendChild(preEl);
-
+    const lines = (rawContent || '').split('\n');
+    for (var i = 0; i < lines.length; i++) {
+      wrapper.appendChild(createCodeRow(i + 1, lines[i]));
+    }
     return wrapper;
+  }
+
+  function createCodeRow(num, text) {
+    var row = document.createElement('div');
+    row.className = 'code-row';
+
+    var numSpan = document.createElement('span');
+    numSpan.className = 'code-row-num';
+    numSpan.textContent = num;
+
+    var textSpan = document.createElement('code');
+    textSpan.className = 'code-row-text';
+    textSpan.textContent = text;
+
+    row.appendChild(numSpan);
+    row.appendChild(textSpan);
+    return row;
   }
 
   function updateCodeLineNumbers(wrapper, rawContent) {
     if (!wrapper) return;
-    const lineNumDiv = wrapper.querySelector('.code-line-numbers');
-    if (!lineNumDiv) return;
-    const lineCount = (rawContent || '').split('\n').length;
-    lineNumDiv.textContent = Array.from({ length: lineCount }, (_, i) => i + 1).join('\n');
+    var lines = (rawContent || '').split('\n');
+    var rows = wrapper.querySelectorAll('.code-row');
+
+    // Update existing rows
+    for (var i = 0; i < lines.length; i++) {
+      if (i < rows.length) {
+        rows[i].querySelector('.code-row-num').textContent = i + 1;
+        rows[i].querySelector('.code-row-text').textContent = lines[i];
+      } else {
+        wrapper.appendChild(createCodeRow(i + 1, lines[i]));
+      }
+    }
+
+    // Remove excess rows
+    while (wrapper.querySelectorAll('.code-row').length > lines.length) {
+      wrapper.removeChild(wrapper.lastChild);
+    }
+  }
+
+  // ── Transform hljs-highlighted code blocks to line-numbered rows ──
+  // Used on rendered markdown pages (not source view)
+  function addLineNumbersToRenderedCodeBlocks(container) {
+    if (!container) return;
+    var pres = container.querySelectorAll('pre');
+    pres.forEach(function(pre) {
+      var code = pre.querySelector('code');
+      if (!code) return;
+      // Skip mermaid blocks
+      if (code.className.indexOf('language-mermaid') >= 0) return;
+      transformCodeBlockToLineNumbered(pre, code);
+    });
+  }
+
+  function transformCodeBlockToLineNumbered(pre, code) {
+    var lineHtmls = splitHighlightedHtmlByLines(code);
+    var wrapper = document.createElement('div');
+    wrapper.className = 'code-with-lines code-block-inline';
+
+    for (var i = 0; i < lineHtmls.length; i++) {
+      var row = document.createElement('div');
+      row.className = 'code-row';
+
+      var num = document.createElement('span');
+      num.className = 'code-row-num';
+      num.textContent = i + 1;
+
+      var text = document.createElement('code');
+      text.className = 'code-row-text';
+      text.innerHTML = lineHtmls[i] || '&nbsp;';
+
+      row.appendChild(num);
+      row.appendChild(text);
+      wrapper.appendChild(row);
+    }
+
+    pre.parentNode.replaceChild(wrapper, pre);
+  }
+
+  function splitHighlightedHtmlByLines(codeEl) {
+    var lines = [];
+    var currentLine = [];
+
+    function collect(nodes) {
+      for (var i = 0; i < nodes.length; i++) {
+        var node = nodes[i];
+        if (node.nodeType === Node.TEXT_NODE) {
+          var parts = node.textContent.split('\n');
+          for (var j = 0; j < parts.length; j++) {
+            if (j > 0) {
+              lines.push(currentLine.join(''));
+              currentLine = [];
+            }
+            currentLine.push(escHtml(parts[j]));
+          }
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+          var tag = node.tagName.toLowerCase();
+          var cls = node.className ? ' class="' + node.className + '"' : '';
+          currentLine.push('<' + tag + cls + '>');
+          collect(node.childNodes);
+          currentLine.push('</' + tag + '>');
+        }
+      }
+    }
+
+    collect(codeEl.childNodes);
+    if (currentLine.length > 0) {
+      lines.push(currentLine.join(''));
+    }
+
+    return lines;
   }
 
   function _updateSourcePre(pre, content) {
-    if (!pre) return;
-    var code = pre.querySelector('code');
-    if (code) {
-      code.innerHTML = content;
-    } else {
-      pre.textContent = content;
-    }
-    // Sync line numbers if wrapped
-    var wrapper = pre.closest('.code-with-lines');
+    // pre is kept as a hidden element; sync its text for backward compat
+    if (pre) pre.textContent = content;
+    // Update the visual rows
+    var wrapper = document.querySelector('.code-with-lines');
     if (wrapper) updateCodeLineNumbers(wrapper, content);
   }
 
@@ -1255,9 +1333,9 @@
     if (!srcPre) return;
     isPlainTextEditMode = true;
     sourceDirty = false;
-    const wrapper = srcPre.closest('.code-with-lines');
+    var wrapper = document.querySelector('.code-with-lines');
     if (wrapper) wrapper.style.display = 'none';
-    else srcPre.style.display = 'none';
+    else if (srcPre) srcPre.style.display = 'none';
     // Also hide the HTML iframe when entering edit mode (HTML mode only)
     if (isHtmlMode) {
       const htmlIframe = document.getElementById('htmlIframe');
@@ -1297,15 +1375,12 @@
     const banner = document.getElementById('sourceEditBanner');
     if (ta) ta.remove();
     if (banner) banner.style.display = 'none';
-    if (srcPre) {
-      const wrapper = srcPre.closest('.code-with-lines');
-      if (wrapper) {
-        wrapper.style.display = isRawMode ? '' : 'none';
-        // Update line numbers
-        updateCodeLineNumbers(wrapper, rawContent);
-      } else {
-        srcPre.style.display = isRawMode ? '' : 'none';
-      }
+    var wrapper = document.querySelector('.code-with-lines');
+    if (wrapper) {
+      wrapper.style.display = isRawMode ? '' : 'none';
+      updateCodeLineNumbers(wrapper, rawContent);
+    } else if (srcPre) {
+      srcPre.style.display = isRawMode ? '' : 'none';
     }
     // Restore iframe visibility when exiting HTML edit mode
     if (isHtmlMode) {
@@ -1513,18 +1588,17 @@
         // Switch to source view
         if (mdDiv) mdDiv.style.display = 'none';
         if (htmlIframe) htmlIframe.style.display = 'none';
-        if (srcPre) {
-          const wrapper = srcPre.closest('.code-with-lines');
-          if (wrapper) {
-            wrapper.style.display = '';
-            srcPre.style.display = '';  // HTML: pre has its own inline display:none
-            // Refresh source content and line numbers
+        var wrapper = document.querySelector('.code-with-lines');
+        if (wrapper) {
+          wrapper.style.display = '';
+          // Refresh source content and line numbers
+          if (srcPre) {
             if (srcPre.textContent !== rawContent) _updateSourcePre(srcPre, rawContent);
             updateCodeLineNumbers(wrapper, rawContent);
-          } else {
-            srcPre.style.display = '';
-            if (srcPre.textContent !== rawContent) _updateSourcePre(srcPre, rawContent);
           }
+        } else if (srcPre) {
+          srcPre.style.display = '';
+          if (srcPre.textContent !== rawContent) _updateSourcePre(srcPre, rawContent);
         }
       } else {
         // Switch to rendered view — 重新加载内容确保渲染最新
@@ -1544,28 +1618,27 @@
     const srcPre = document.getElementById('sourceRawPre');
     const htmlIframe = document.getElementById('htmlIframe');
     if (!mdDiv && !srcPre && !htmlIframe) return;
+    var wrapper = document.querySelector('.code-with-lines');
     if (isRawMode) {
       if (mdDiv) mdDiv.style.display = 'none';
       if (htmlIframe) htmlIframe.style.display = 'none';
-      if (srcPre) {
-        const wrapper = srcPre.closest('.code-with-lines');
-        if (wrapper) {
-          wrapper.style.display = '';
-          srcPre.style.display = '';  // HTML: pre has its own inline display:none
+      if (wrapper) {
+        wrapper.style.display = '';
+        if (srcPre) {
           _updateSourcePre(srcPre, rawContent);
           updateCodeLineNumbers(wrapper, rawContent);
-        } else {
-          srcPre.style.display = '';
-          _updateSourcePre(srcPre, rawContent);
         }
+      } else if (srcPre) {
+        srcPre.style.display = '';
+        _updateSourcePre(srcPre, rawContent);
       }
     } else {
       if (mdDiv) mdDiv.style.display = '';
       if (htmlIframe) htmlIframe.style.display = '';
-      if (srcPre) {
-        const wrapper = srcPre.closest('.code-with-lines');
-        if (wrapper) wrapper.style.display = 'none';
-        else srcPre.style.display = 'none';
+      if (wrapper) {
+        wrapper.style.display = 'none';
+      } else if (srcPre) {
+        srcPre.style.display = 'none';
       }
     }
   }
@@ -2082,9 +2155,10 @@
         banner.style.display = 'none';
         contentBody.appendChild(banner);
 
-        // Create source view (raw pre, hidden by default unless isRawMode)
+        // Create source view (per-line rows, hidden by default unless isRawMode)
         const srcPre = document.createElement('pre');
         srcPre.id = 'sourceRawPre';
+        srcPre.style.display = 'none';  // hidden content holder for backward compat
         if (window.hljs) {
           try {
             const highlighted = window.hljs.highlight(content, { language: 'markdown', ignoreIllegals: true }).value;
@@ -2101,7 +2175,8 @@
           srcPre.textContent = content;
           srcPre.className = 'raw-text';
         }
-        const mdSrcWrapper = renderCodeWithLineNumbers(content, srcPre);
+        contentBody.appendChild(srcPre);
+        const mdSrcWrapper = renderCodeWithLineNumbers(content);
         mdSrcWrapper.style.display = isRawMode ? '' : 'none';
         contentBody.appendChild(mdSrcWrapper);
 
@@ -2153,6 +2228,8 @@
         if (window.hljs) {
           try { window.hljs.highlightAll(); } catch (_) {}
         }
+        // Add line numbers to code blocks in rendered markdown
+        addLineNumbersToRenderedCodeBlocks(mdDiv);
 
         if (window.renderMathInElement) {
           try {
@@ -2210,15 +2287,10 @@
         htmlIframe.style.display = isRawMode ? 'none' : '';
         htmlWrap.appendChild(htmlIframe);
 
-        // Source view (highlighted pre, hidden by default unless isRawMode)
+        // Source view (per-line rows, hidden by default unless isRawMode)
         const srcPre = document.createElement('pre');
         srcPre.id = 'sourceRawPre';
-        srcPre.className = 'code-highlighted';
-        srcPre.style.display = isRawMode ? '' : 'none';
-        srcPre.style.flex = '1';
-        srcPre.style.overflow = 'auto';
-        srcPre.style.margin = '0';
-        srcPre.style.borderRadius = '0';
+        srcPre.style.display = 'none';  // hidden content holder
         if (window.hljs) {
           try {
             const highlighted = window.hljs.highlight(content, { language: 'html', ignoreIllegals: true }).value;
@@ -2232,8 +2304,11 @@
         } else {
           srcPre.textContent = content;
         }
-        var htmlSrcWrapper = renderCodeWithLineNumbers(content, srcPre);
+        htmlWrap.appendChild(srcPre);
+        var htmlSrcWrapper = renderCodeWithLineNumbers(content);
         htmlSrcWrapper.style.display = isRawMode ? '' : 'none';
+        htmlSrcWrapper.style.flex = '1';
+        htmlSrcWrapper.style.borderRadius = '0';
         htmlWrap.appendChild(htmlSrcWrapper);
 
         removeLoading();
@@ -2275,23 +2350,8 @@
           }
           updatePlainTextDynamicButtons();
         } else {
-          // Display mode: syntax-highlighted pre
-          const pre = document.createElement('pre');
-          pre.className = 'code-highlighted';
-          const langMap = { json: 'json', xml: 'xml', yaml: 'yaml', yml: 'yaml', py: 'python', js: 'javascript', ts: 'typescript', tsx: 'typescript', sql: 'sql', sh: 'bash', bash: 'bash', css: 'css', log: 'plaintext', txt: 'plaintext', csv: 'plaintext', kml: 'xml', gpx: 'xml', srt: 'plaintext', toml: 'ini', ini: 'ini', conf: 'plaintext', cfg: 'ini', env: 'bash', yaml: 'yaml' };
-          const lang = langMap[ext] || 'plaintext';
-          if (lang !== 'plaintext' && window.hljs) {
-            try {
-              const highlighted = window.hljs.highlight(rawContent, { language: lang, ignoreIllegals: true }).value;
-              const code = document.createElement('code');
-              code.className = `language-${lang}`;
-              code.innerHTML = highlighted;
-              pre.appendChild(code);
-            } catch (_) { pre.textContent = rawContent; }
-          } else {
-            pre.textContent = rawContent;
-          }
-          contentBody.appendChild(renderCodeWithLineNumbers(rawContent, pre));
+          // Display mode: per-line rows with line numbers
+          contentBody.appendChild(renderCodeWithLineNumbers(rawContent));
           removeLoading();
           // Render outline sidebar for code (display mode: auto-open on desktop only)
           if (codeOutlineItems.length >= 2) {
@@ -5093,27 +5153,145 @@
     return null;
   }
 
+  function buildSelectionPosition(range, selText) {
+    if (!range || !selText) return '';
+
+    if (isMarkdownMode && !isRawMode && !isPlainTextEditMode) {
+      var heading = detectSectionFromDOM(range);
+      return heading ? 'Section ' + heading : '';
+    }
+
+    if (isHtmlMode && !isRawMode) {
+      return '';
+    }
+
+    var startLine = 0;
+    var endLine = 0;
+    var selLines = selText.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l; });
+
+    if (rawContent) {
+      var idx = rawContent.indexOf(selText);
+      if (idx !== -1) {
+        var tb = rawContent.substring(0, idx);
+        startLine = (tb.match(/\n/g) || []).length + 1;
+        endLine = startLine + (selText.match(/\n/g) || []).length;
+      }
+
+      if (!startLine && selLines.length > 0) {
+        var firstMatch = rawContent.indexOf(selLines[0]);
+        if (firstMatch !== -1) {
+          var tb2 = rawContent.substring(0, firstMatch);
+          startLine = (tb2.match(/\n/g) || []).length + 1;
+          var lastMatch = rawContent.indexOf(selLines[selLines.length - 1]);
+          if (lastMatch !== -1) {
+            var tbl = rawContent.substring(0, lastMatch);
+            endLine = (tbl.match(/\n/g) || []).length + 1;
+          } else {
+            endLine = startLine + selLines.length - 1;
+          }
+        }
+      }
+
+      if (!startLine && selLines.length > 0) {
+        for (var i = 0; i < rawContent.length - 10; i++) {
+          if (rawContent.substring(i, i + selLines[0].length) === selLines[0]) {
+            var tb3 = rawContent.substring(0, i);
+            startLine = (tb3.match(/\n/g) || []).length + 1;
+            endLine = startLine + selLines.length - 1;
+            break;
+          }
+        }
+      }
+
+      if (!startLine) {
+        var mdBody = document.querySelector('.markdown-body');
+        if (mdBody) {
+          var renderedText = mdBody.textContent;
+          var ridx = renderedText.indexOf(selLines[0]);
+          if (ridx !== -1) {
+            var rtb = renderedText.substring(0, ridx);
+            startLine = (rtb.match(/\n/g) || []).length + 1;
+            endLine = startLine + selLines.length - 1;
+          }
+        }
+      }
+    }
+
+    if (!startLine) return '';
+    return getPosValue(ext, startLine, endLine);
+  }
+
+  function buildAgentInsertText(positionText, selectionText) {
+    function quoteBlock(text) {
+      return String(text || '')
+        .split('\n')
+        .map(function(line) { return '> ' + line; })
+        .join('\n');
+    }
+
+    var parts = [];
+    parts.push('---');
+    parts.push('position: ' + (positionText || ''));
+    parts.push(quoteBlock(selectionText || ''));
+    parts.push('---');
+    return '\n' + parts.join('\n') + '\n';
+  }
+
+  let desktopSelText = '';
+  let desktopSelPosition = '';
+  let showDesktopSelBtn = null;
+  let hideDesktopSelBtn = null;
+
+  function isAgentSelectionMode() {
+    return window.innerWidth >= 768 &&
+      window.Agent &&
+      typeof window.Agent.isOpen === 'function' &&
+      window.Agent.isOpen();
+  }
+
+  function syncAgentSelectionUI(range, selText) {
+    if (!range || !selText) return;
+    desktopSelText = selText;
+    desktopSelPosition = buildSelectionPosition(range, selText);
+    try { savedRange = range.cloneRange(); highlightSelection(); } catch (_) {}
+    if (typeof showDesktopSelBtn === 'function') {
+      showDesktopSelBtn(range);
+    }
+  }
+
   document.addEventListener('mouseup', function(e) {
     // Mobile: selection handling is done by touchend + mobileSelBtn flow;
     // skip desktop auto-copy + auto-highlight on small screens so users
     // can select text without immediately copying/highlighting it.
     if (window.innerWidth < 768) return;
+    if (tooltip.contains(e.target)) return;
     setTimeout(() => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || !sel.toString().trim()) {
         if (tooltip.style.display !== 'none' && !tooltip.contains(e.target)) {
           hideTooltip();
         }
+        if (typeof hideDesktopSelBtn === 'function') hideDesktopSelBtn(true);
         return;
       }
       const container = findContentBody(sel.anchorNode);
       if (!container || container.id !== 'contentBody') {
         if (tooltip.style.display !== 'none') hideTooltip();
+        if (typeof hideDesktopSelBtn === 'function') hideDesktopSelBtn(true);
         return;
       }
 
       const selText = sel.toString().trim();
       if (!selText) { hideTooltip(); return; }
+
+      if (isAgentSelectionMode()) {
+        const range = sel.getRangeAt(0);
+        syncAgentSelectionUI(range, selText);
+        tooltip.style.display = 'none';
+        return;
+      }
+
+      if (typeof hideDesktopSelBtn === 'function') hideDesktopSelBtn(true);
 
       // 桌面端选中文本时自动复制到剪贴板（仅新选中时触发，tooltip 已显示时不重复复制）
       if (tooltip.style.display === 'none') copyText(selText, '已复制到剪贴板');
@@ -5294,6 +5472,11 @@
 
   document.addEventListener('click', function(e) {
     if (tooltip.style.display !== 'none' && !tooltip.contains(e.target)) {
+      // Don't hide if user just selected text (avoid race with mouseup's setTimeout)
+      var sel = window.getSelection();
+      if (sel && !sel.isCollapsed && sel.toString().trim()) {
+        return;
+      }
       hideTooltip();
     }
   });
@@ -5842,6 +6025,99 @@
     // Overlay tap: hide panel but preserve text (user may re-open)
     if (overlay) overlay.addEventListener('click', function() { hidePanel(true); });
 
+    // ── Desktop "添加到会话" selection handler ──
+    // Independent from the mobile selection flow; only activates on desktop with agent panel open.
+    (function() {
+      var agentBtn = document.getElementById('selAddToAgent');
+      if (!agentBtn) return;
+      var desktopSelTimer = null;
+
+      hideDesktopSelBtn = function(clearState) {
+        agentBtn.style.display = 'none';
+        if (clearState) {
+          desktopSelText = '';
+          desktopSelPosition = '';
+        }
+      };
+
+      showDesktopSelBtn = function(range) {
+        var rect = range.getBoundingClientRect();
+        var top = rect.top - 42;
+        if (top < 8) top = rect.bottom + 8;
+        // Avoid overlapping the feedback tooltip if visible
+        var fbTooltip = document.getElementById('selectionTooltip');
+        if (fbTooltip && fbTooltip.style.display !== 'none' && fbTooltip.style.display !== '') {
+          var fbRect = fbTooltip.getBoundingClientRect();
+          var gap = 6;
+          if (top < fbRect.bottom + gap) {
+            top = fbRect.bottom + gap;
+          }
+        }
+        var left = Math.max(8, Math.min(window.innerWidth - 140, rect.left + rect.width / 2 - 60));
+        agentBtn.style.top = top + 'px';
+        agentBtn.style.left = left + 'px';
+        agentBtn.style.display = 'flex';
+      };
+
+      function checkDesktopSelection() {
+        // Desktop only, and only when agent panel is open
+        if (window.innerWidth < 768) return;
+        var agentOpen = false;
+        try { agentOpen = window.Agent && typeof window.Agent.isOpen === 'function' && window.Agent.isOpen(); } catch (_) {}
+        if (!agentOpen) {
+          hideDesktopSelBtn(true);
+          return;
+        }
+        var sel = window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.toString().trim()) {
+          hideDesktopSelBtn(true);
+          return;
+        }
+        var text = sel.toString().trim();
+        if (text.length < 2) { hideDesktopSelBtn(true); return; }
+        var range = null;
+        try { range = sel.getRangeAt(0); } catch (_) {}
+        try {
+          if (range) syncAgentSelectionUI(range, text);
+          else hideDesktopSelBtn(true);
+        } catch (_) { hideDesktopSelBtn(true); }
+      }
+
+      // Desktop selection detection
+      document.addEventListener('selectionchange', function() {
+        clearTimeout(desktopSelTimer);
+        desktopSelTimer = setTimeout(checkDesktopSelection, 200);
+      });
+
+      // Hide on scroll
+      document.addEventListener('scroll', function() { hideDesktopSelBtn(); }, { passive: true });
+
+      // Hide when clicking outside the button
+      document.addEventListener('mousedown', function(e) {
+        if (agentBtn.style.display !== 'none' && !agentBtn.contains(e.target)) {
+          hideDesktopSelBtn(true);
+          savedRange = null;
+          clearHL();
+          try { window.getSelection().removeAllRanges(); } catch (_) {}
+        }
+      });
+
+      // Click handler: send selected text to agent
+      agentBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var text = desktopSelText;
+        if (!text) return;
+        if (window.Agent && typeof window.Agent.insertText === 'function') {
+          window.Agent.insertText(buildAgentInsertText(desktopSelPosition, text));
+        }
+        savedRange = null;
+        clearHL();
+        hideDesktopSelBtn(true);
+        // Clear selection
+        try { window.getSelection().removeAllRanges(); } catch (_) {}
+      });
+    })();
+
     // ── 轮询提交的任务状态 ──
     function _startPolling() {
       if (_pollTimer) clearInterval(_pollTimer);
@@ -6081,6 +6357,7 @@
         });
       } else {
         // Closing
+        if (typeof hideDesktopSelBtn === 'function') hideDesktopSelBtn(true);
         agentPanel.classList.add('hidden');
         btnToggleAgent.classList.remove('active');
         updateGridColumns();
@@ -6096,6 +6373,7 @@
   var btnClosePreviewAgent = document.getElementById('previewBtnCloseAgent');
   if (btnClosePreviewAgent) {
     btnClosePreviewAgent.addEventListener('click', function() {
+      if (typeof hideDesktopSelBtn === 'function') hideDesktopSelBtn(true);
       if (agentPanel) { agentPanel.classList.add('hidden'); agentPanel.style.display = 'none'; }
       if (btnToggleAgent) btnToggleAgent.classList.remove('active');
       updateGridColumns();

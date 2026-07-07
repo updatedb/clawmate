@@ -1327,6 +1327,14 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
         addItem('copy', '复制文件名', function () {
           copyText(entry.name, "已复制文件名");
         });
+        // 添加到会话 (agent panel open 时显示)
+        if (window.Agent && window.Agent.isOpen && window.Agent.isOpen()) {
+          addItem('terminal', '添加到会话', function () {
+            if (window.Agent && typeof window.Agent.sendText === 'function') {
+              window.Agent.sendText(entry.relPath + ' ');
+            }
+          });
+        }
         addItem('move', '移动到...', function () {
           openDirPicker('选择目标目录 — ' + entry.name);
           dirPickerCallback = function (destDir) {
@@ -1509,6 +1517,23 @@ function renderList(markdownEntries, folderEntries, otherEntries) {
         setTimeout(function () { copyBtn.classList.remove("copied"); }, 1200);
       });
       name.appendChild(copyBtn);
+      // 添加到会话 button (agent panel open 时显示)
+      if (window.Agent && window.Agent.isOpen && window.Agent.isOpen()) {
+        (function(relPath) {
+          var agentBtn = document.createElement("button");
+          agentBtn.className = "list-copy-btn";
+          agentBtn.innerHTML = iconSVG('terminal', 12);
+          agentBtn.title = "添加到会话";
+          agentBtn.style.marginLeft = "4px";
+          agentBtn.addEventListener("click", function(e) {
+            e.stopPropagation();
+            if (window.Agent && typeof window.Agent.sendText === 'function') {
+              window.Agent.sendText(relPath + ' ');
+            }
+          });
+          name.appendChild(agentBtn);
+        })(entry.relPath);
+      }
       const type = document.createElement("span");
       type.textContent = entry.is_dir ? "目录" : entry.category;
       const size = document.createElement("span");

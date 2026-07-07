@@ -61,6 +61,8 @@
   let currentAgentId = '';  // kept for OpenClaw backend session routing
   let backendMode = 'claude';
   let _pendingFileContext = null;  // {path, content} — sent on next ws.onopen
+  let _lastFileContext = null;     // last preview file context, reused on reopen/toggle
+  let _lastMousedownInPanel = false;  // tracks whether last click was inside agent panel
 
   function isPtyBackend() {
     return backendMode === 'claude' || backendMode === 'codex';
@@ -77,10 +79,16 @@
   // --- Session history state ---
   var historyState = {
     sessions: [],
-    page: 0,
-    total: 0,
+    page: 0,              // per-date page index
+    pageSize: 15,         // sessions per page for pagination
+    total: 0,             // total sessions in current query
     query: '',
     currentSessionId: null,
+
+    // Date axis fields (when not searching)
+    availableDates: [],   // ["2026-07-06", "2026-07-05", ...] sorted newest-first
+    selectedDateIndex: 0, // index into availableDates
+    axisScrollIndex: 0,   // first visible date index in the axis bar
   };
   var historyOverlay = null;
   var historyOverlayOpen = false;
@@ -251,14 +259,22 @@
       });
       textarea.addEventListener('blur', function (e) {
         var rtTag = e.relatedTarget ? (e.relatedTarget.tagName || 'unknown') : 'null';
-        xlog('focus', 'textarea blur relatedTarget=' + rtTag + ' panel.hidden=' + panel.classList.contains('hidden'));
+        xlog('focus', 'textarea blur relatedTarget=' + rtTag + ' panel.hidden=' + panel.classList.contains('hidden') + ' lastMousedownInPanel=' + _lastMousedownInPanel);
         if (panel.classList.contains('hidden')) return;
-        if (e.relatedTarget === null) {
-          xlog('focus', 'refocus (IME window stole focus)');
+        // Only refocus if the user clicked inside the agent panel.
+        // When clicking on non-focusable content (markdown body), relatedTarget is null
+        // and refocusing would steal focus back, breaking text selection.
+        if (e.relatedTarget === null && _lastMousedownInPanel) {
+          xlog('focus', 'refocus (IME window or panel click)');
           setTimeout(function () { term.focus(); }, 0);
         }
       });
       textarea.addEventListener('focus', function () { xlog('focus', 'textarea gained focus'); });
+
+      // Track whether last click was inside the agent panel (capture phase)
+      document.addEventListener('mousedown', function(e) {
+        _lastMousedownInPanel = !!(panel && panel.contains(e.target));
+      }, true);
     }
 
     // Fit after layout (with font-ready guard)
@@ -545,9 +561,10 @@
         term.writeln('\x1b[1;36m✓ 已连接 Agent 终端\x1b[0m');
         term.writeln('\x1b[2m  ' + term.cols + '×' + term.rows + '  |  调整面板宽度后运行的程序会自动适配新宽度\x1b[0m');
         term.writeln('');
-        if (_pendingFileContext) {
+        var fileContext = _pendingFileContext || _lastFileContext;
+        if (fileContext) {
           try {
-            ws.send(JSON.stringify({ type: 'file_context', path: _pendingFileContext.path || '', content: _pendingFileContext.content || '' }));
+            ws.send(JSON.stringify({ type: 'file_context', path: fileContext.path || '', content: fileContext.content || '' }));
           } catch (_) {}
           _pendingFileContext = null;
         }
@@ -777,7 +794,10 @@
     historyOverlay.innerHTML =
       '<div class="agent-history-overlay-header">' +
         '<span class="agent-history-overlay-title">历史会话</span>' +
-        '<input type="text" class="agent-header-search" placeholder="搜索会话...">' +
+        '<span class="agent-header-search-wrap">' +
+          '<input type="text" class="agent-header-search" placeholder="搜索会话...">' +
+          '<button class="agent-header-search-clear" title="清除搜索">' + iconSVG('broom', 14) + '</button>' +
+        '</span>' +
         '<button class="agent-history-overlay-close" title="关闭历史会话">&times;</button>' +
       '</div>' +
       '<div class="agent-history-overlay-body"></div>';
@@ -794,6 +814,21 @@
     // Bind overlay close
     historyOverlay.querySelector('.agent-history-overlay-close').addEventListener('click', closeHistoryOverlay);
 
+    // Bind clear search button
+    var clearBtn = historyOverlay.querySelector('.agent-header-search-clear');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        var input = historyOverlay.querySelector('.agent-header-search');
+        if (input) input.value = '';
+        historyState.query = '';
+        historyState.page = 0;
+        loadHistorySessions();
+        if (input) input.focus();
+      });
+    }
+
+    historyOverlay.querySelector('.agent-history-overlay-header')._overlayHeaderMode = 'list';
+
     return historyOverlay;
   }
 
@@ -802,6 +837,9 @@
     var overlay = ensureHistoryOverlay();
     historyState.page = 0;
     historyState.query = '';
+    historyState.selectedDateIndex = 0;
+    historyState.axisScrollIndex = 0;
+    historyState.availableDates = [];
     var searchInput = overlay.querySelector('.agent-header-search');
     if (searchInput) searchInput.value = '';
     historyOverlayOpen = true;
@@ -821,11 +859,22 @@
     var xIcon = typeof iconSVG === 'function' ? iconSVG('x', 14) : '×';
     var backIcon = typeof iconSVG === 'function' ? iconSVG('chevron-left', 14) : '←';
     var clockIcon = typeof iconSVG === 'function' ? iconSVG('clock', 14) : '';
+    // Skip rebuild if already in list mode — avoids destroying the search input (and losing focus)
+    if (mode === 'list' && header._overlayHeaderMode === 'list') {
+      var searchInput = header.querySelector('.agent-header-search');
+      if (searchInput && searchInput.value !== historyState.query) {
+        searchInput.value = historyState.query || '';
+      }
+      return;
+    }
     if (mode === 'list') {
       header.innerHTML =
         clockIcon +
         '<span class="agent-history-overlay-title">历史会话</span>' +
-        '<input type="text" class="agent-header-search" placeholder="搜索会话..." value="' + escHtml(historyState.query || '') + '">' +
+        '<span class="agent-header-search-wrap">' +
+          '<input type="text" class="agent-header-search" placeholder="搜索会话..." value="' + escHtml(historyState.query || '') + '">' +
+          '<button class="agent-header-search-clear" title="清除搜索">' + iconSVG('broom', 14) + '</button>' +
+        '</span>' +
         '<button class="agent-history-overlay-close" title="关闭历史会话">' + xIcon + '</button>';
       var searchInput = header.querySelector('.agent-header-search');
       searchInput.addEventListener('input', function () {
@@ -833,7 +882,18 @@
         historyState.page = 0;
         loadHistorySessions();
       });
+      var clearBtn = header.querySelector('.agent-header-search-clear');
+      if (clearBtn) {
+        clearBtn.addEventListener('click', function () {
+          searchInput.value = '';
+          historyState.query = '';
+          historyState.page = 0;
+          loadHistorySessions();
+          searchInput.focus();
+        });
+      }
       header.querySelector('.agent-history-overlay-close').addEventListener('click', closeHistoryOverlay);
+      header._overlayHeaderMode = 'list';
     } else if (mode === 'detail') {
       header.innerHTML =
         '<button class="agent-history-overlay-back" title="返回列表">' + backIcon + '</button>' +
@@ -843,28 +903,102 @@
         renderOverlayList();
       });
       header.querySelector('.agent-history-overlay-close').addEventListener('click', closeHistoryOverlay);
+      header._overlayHeaderMode = 'detail';
     }
   }
 
   function loadHistorySessions() {
-    var params = new URLSearchParams();
-    params.set('limit', '50');
-    params.set('offset', String(historyState.page * 50));
-    if (historyState.query) params.set('q', historyState.query);
+    if (historyState.query) {
+      // Search mode: offset-based pagination across all sessions
+      doSearchSessions();
+    } else {
+      // Date-axis mode: load available dates, then sessions for selected date
+      doLoadAvailableDates();
+    }
+  }
 
+  function doLoadAvailableDates() {
+    var params = new URLSearchParams();
     if (currentRootId) params.set('root', currentRootId);
     if (currentDir) params.set('dir', currentDir);
 
-    var url = '/api/clawmate/agent/sessions?' + params.toString();
-    (typeof authFetch === 'function' ? authFetch(url) : fetch(url))
+    var fetcher = (typeof authFetch === 'function') ? authFetch : fetch;
+    fetcher('/api/clawmate/agent/sessions/dates?' + params.toString())
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        historyState.total = data.total || 0;
+        var dates = data.dates || [];
+        historyState.availableDates = dates;
+        historyState.page = 0;  // reset page when entering date-axis mode
+        // Keep selectedDateIndex valid
+        if (historyState.selectedDateIndex >= dates.length) {
+          historyState.selectedDateIndex = dates.length > 0 ? 0 : -1;
+        }
+        historyState.axisScrollIndex = 0;
+        // If we have a selected date, load its sessions
+        if (dates.length > 0 && historyState.selectedDateIndex >= 0) {
+          doLoadSessionsForDate(dates[historyState.selectedDateIndex]);
+        } else {
+          historyState.sessions = [];
+          historyState.total = 0;
+          renderOverlayList();
+        }
+      })
+      .catch(function(err) {
+        console.error('Failed to load session dates:', err);
+        historyState.availableDates = [];
+        historyState.sessions = [];
+        renderOverlayList();
+      });
+  }
+
+  function doLoadSessionsForDate(dateStr) {
+    if (!dateStr) {
+      historyState.sessions = [];
+      historyState.total = 0;
+      renderOverlayList();
+      return;
+    }
+    var params = new URLSearchParams();
+    params.set('date', dateStr);
+    params.set('offset', String(historyState.page * historyState.pageSize));
+    params.set('limit', String(historyState.pageSize));
+    if (currentRootId) params.set('root', currentRootId);
+    if (currentDir) params.set('dir', currentDir);
+
+    var fetcher = (typeof authFetch === 'function') ? authFetch : fetch;
+    fetcher('/api/clawmate/agent/sessions?' + params.toString())
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
         historyState.sessions = data.sessions || [];
+        historyState.total = data.total || 0;
         renderOverlayList();
       })
       .catch(function(err) {
         console.error('Failed to load sessions:', err);
+        historyState.sessions = [];
+        renderOverlayList();
+      });
+  }
+
+  function doSearchSessions() {
+    var params = new URLSearchParams();
+    params.set('limit', String(historyState.pageSize));
+    params.set('offset', String(historyState.page * historyState.pageSize));
+    params.set('q', historyState.query);
+    if (currentRootId) params.set('root', currentRootId);
+    if (currentDir) params.set('dir', currentDir);
+
+    var fetcher = (typeof authFetch === 'function') ? authFetch : fetch;
+    fetcher('/api/clawmate/agent/sessions?' + params.toString())
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        historyState.sessions = data.sessions || [];
+        historyState.total = data.total || 0;
+        renderOverlayList();
+      })
+      .catch(function(err) {
+        console.error('Failed to search sessions:', err);
+        historyState.sessions = [];
         renderOverlayList();
       });
   }
@@ -1014,8 +1148,166 @@
 
     setOverlayHeaderMode('list');
 
+    if (historyState.query) {
+      // ── Search mode ──
+      renderSearchResults(body);
+    } else if (!historyState.availableDates.length) {
+      // ── No dates at all ──
+      body.innerHTML = '<div class="agent-history-empty">无会话记录</div>';
+    } else {
+      // ── Date-axis mode ──
+      renderDateAxisBar(body);
+      renderDateSessionList(body);
+      if (historyState.total > historyState.pageSize) {
+        renderDatePagination(body);
+      }
+    }
+  }
+
+  // ── Date-axis mode helpers ──
+
+  function getDateLabel(dateStr) {
+    if (!dateStr) return '';
+    var now = new Date();
+    var todayStr = now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate());
+    if (dateStr === todayStr) return '今天';
+    var yesterdayTs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000 - 86400;
+    var yesterdayDate = new Date(yesterdayTs * 1000);
+    var yesterdayStr = yesterdayDate.getFullYear() + '-' + pad2(yesterdayDate.getMonth() + 1) + '-' + pad2(yesterdayDate.getDate());
+    if (dateStr === yesterdayStr) return '昨天';
+    var parts = dateStr.split('-');
+    return parseInt(parts[1], 10) + '/' + parseInt(parts[2], 10);
+  }
+
+  function renderDateAxisBar(body) {
+    var axisWrap = document.createElement('div');
+    axisWrap.className = 'agent-history-date-axis';
+
+    // Compute how many date buttons fit in the axis bar
+    var panelWidth = panel ? panel.clientWidth : 750;
+    var axisAvailWidth = panelWidth - 60; // overlay padding + axis padding + margin
+    var approxBtnWidth = 52; // ~42-52px per button (label + padding + gap)
+    var maxVisible = Math.max(3, Math.floor(axisAvailWidth / approxBtnWidth));
+
+    // Clamp axisScrollIndex so we don't go past the end
+    var total = historyState.availableDates.length;
+    if (historyState.axisScrollIndex + maxVisible > total) {
+      historyState.axisScrollIndex = Math.max(0, total - maxVisible);
+    }
+
+    // Prev arrow
+    var prevBtn = document.createElement('button');
+    prevBtn.className = 'agent-history-date-arrow';
+    prevBtn.innerHTML = '&lsaquo;';
+    prevBtn.title = '更早日期';
+    prevBtn.disabled = historyState.axisScrollIndex <= 0;
+    prevBtn.addEventListener('click', function () {
+      if (historyState.axisScrollIndex > 0) {
+        historyState.axisScrollIndex = Math.max(0, historyState.axisScrollIndex - maxVisible);
+        renderOverlayList();
+      }
+    });
+    axisWrap.appendChild(prevBtn);
+
+    // Date buttons
+    var btnContainer = document.createElement('div');
+    btnContainer.className = 'agent-history-date-btns';
+
+    var visibleDates = historyState.availableDates.slice(
+      historyState.axisScrollIndex,
+      historyState.axisScrollIndex + maxVisible
+    );
+
+    visibleDates.forEach(function(dateStr, idx) {
+      var actualIdx = historyState.axisScrollIndex + idx;
+      var btn = document.createElement('button');
+      btn.className = 'agent-history-date-btn';
+      if (actualIdx === historyState.selectedDateIndex) btn.classList.add('active');
+
+      btn.textContent = getDateLabel(dateStr);
+      btn.addEventListener('click', function () {
+        if (actualIdx !== historyState.selectedDateIndex) {
+          historyState.selectedDateIndex = actualIdx;
+          historyState.page = 0;
+          doLoadSessionsForDate(historyState.availableDates[actualIdx]);
+        }
+      });
+      btnContainer.appendChild(btn);
+    });
+
+    axisWrap.appendChild(btnContainer);
+
+    // Next arrow
+    var nextBtn = document.createElement('button');
+    nextBtn.className = 'agent-history-date-arrow';
+    nextBtn.innerHTML = '&rsaquo;';
+    nextBtn.title = '更晚日期';
+    nextBtn.disabled = historyState.axisScrollIndex + maxVisible >= total;
+    nextBtn.addEventListener('click', function () {
+      if (historyState.axisScrollIndex + maxVisible < total) {
+        historyState.axisScrollIndex = Math.min(historyState.axisScrollIndex + maxVisible, total - maxVisible);
+        renderOverlayList();
+      }
+    });
+    axisWrap.appendChild(nextBtn);
+
+    body.appendChild(axisWrap);
+  }
+
+  function renderDateSessionList(body) {
+    var listEl = document.createElement('div');
+    listEl.className = 'agent-history-list';
+    body.appendChild(listEl);
+
     if (!historyState.sessions.length) {
-      body.innerHTML = '<div class="agent-history-empty">暂无历史会话</div>';
+      listEl.innerHTML = '<div class="agent-history-empty">该日期无会话记录</div>';
+      return;
+    }
+
+    // Date-axis mode: no group title needed — pagination handles navigation
+    historyState.sessions.forEach(function(s) {
+      listEl.appendChild(createSessionItem(s));
+    });
+  }
+
+  function renderDatePagination(body) {
+    var totalPages = Math.ceil(historyState.total / historyState.pageSize);
+    var pag = document.createElement('div');
+    pag.className = 'agent-history-pagination';
+    pag.innerHTML =
+      '<button class="agent-hist-prev"' + (historyState.page <= 0 ? ' disabled' : '') + '>&larr; 上一页</button>' +
+      '<span class="agent-history-page-info">第' + (historyState.page + 1) + '/' + totalPages + '页</span>' +
+      '<button class="agent-hist-next"' + ((historyState.page + 1) * historyState.pageSize >= historyState.total ? ' disabled' : '') + '>下一页 &rarr;</button>';
+
+    body.appendChild(pag);
+
+    var prevBtn = pag.querySelector('.agent-hist-prev');
+    var nextBtn = pag.querySelector('.agent-hist-next');
+    if (prevBtn) prevBtn.addEventListener('click', function () {
+      if (historyState.page > 0) {
+        historyState.page--;
+        var selectedDate = historyState.availableDates[historyState.selectedDateIndex];
+        if (selectedDate) doLoadSessionsForDate(selectedDate);
+      }
+    });
+    if (nextBtn) nextBtn.addEventListener('click', function () {
+      if ((historyState.page + 1) * historyState.pageSize < historyState.total) {
+        historyState.page++;
+        var selectedDate = historyState.availableDates[historyState.selectedDateIndex];
+        if (selectedDate) doLoadSessionsForDate(selectedDate);
+      }
+    });
+  }
+
+  // ── Search mode helpers ──
+
+  function renderSearchResults(body) {
+    var listEl = document.createElement('div');
+    listEl.className = 'agent-history-list';
+    body.appendChild(listEl);
+
+    if (!historyState.sessions.length) {
+      listEl.innerHTML = '<div class="agent-history-empty">无匹配的搜索结果</div>';
       return;
     }
 
@@ -1035,12 +1327,6 @@
       groups[label].push(s);
     });
 
-    // Create scrollable list wrapper
-    var listEl = document.createElement('div');
-    listEl.className = 'agent-history-list';
-    body.appendChild(listEl);
-
-    // Render groups
     var groupKeys = Object.keys(groups);
     groupKeys.sort(function(a, b) {
       var order = ['今天', '昨天'];
@@ -1049,7 +1335,7 @@
       if (ai !== -1 && bi !== -1) return ai - bi;
       if (ai !== -1) return -1;
       if (bi !== -1) return 1;
-      return a < b ? 1 : -1; // reverse date strings (newer first)
+      return a < b ? 1 : -1;
     });
 
     groupKeys.forEach(function(label) {
@@ -1058,83 +1344,96 @@
       groupEl.innerHTML = '<div class="agent-history-group-title">' + escHtml(label) + '</div>';
 
       groups[label].forEach(function(s) {
-        var item = document.createElement('div');
-        item.className = 'agent-history-item';
-        item.dataset.sid = s.id;
-
-        var startDate = new Date((s.started_at || 0) * 1000);
-        var timeStr = pad2(startDate.getHours()) + ':' + pad2(startDate.getMinutes());
-        var durStr = '';
-        if (s.first_ts && s.last_ts) {
-          var durMin = Math.round((s.last_ts - s.first_ts) / 60);
-          if (durMin >= 1) durStr = durMin + '分钟';
-          else durStr = '<1分钟';
-        }
-
-        var title = s.title || s.id || 'Unknown';
-        var turnCount = Number(s.turn_count || 0);
-        var instrCount = Number(s.instruction_count || 0);
-        var sessionKey = s.sessionKey || s.key || ((s.backend || '?') + ':' + (s.root || '') + (s.project ? ':' + s.project : ''));
-        var turnLabel = instrCount > 0 ? '<span class="agent-history-turn-count" title="用户指令数">' + instrCount + '条指令</span>' : '';
-
-        var downloadIcon = (typeof iconSVG === 'function') ? iconSVG('download', 14) : '导出';
-        var deleteIcon = (typeof iconSVG === 'function') ? iconSVG('trash-2', 14) : '删除';
-        item.innerHTML =
-          '<div class="agent-history-item-main">' +
-            '<div class="agent-history-item-title">' + escHtml(title) + '</div>' +
-            '<div class="agent-history-item-meta">' +
-              '<span>' + timeStr + '</span>' +
-              '<span>' + escHtml(sessionKey) + '</span>' +
-              '<span>' + turnCount + '轮对话</span>' +
-              turnLabel +
-              (durStr ? '<span>时长' + durStr + '</span>' : '') +
-            '</div>' +
-          '</div>' +
-          '<div class="agent-history-item-actions">' +
-            '<button type="button" class="agent-history-action agent-history-export" title="导出会话" aria-label="导出会话">' + downloadIcon + '</button>' +
-            '<button type="button" class="agent-history-action agent-history-delete" title="删除会话" aria-label="删除会话">' + deleteIcon + '</button>' +
-          '</div>';
-
-        item.addEventListener('click', function() {
-          openSessionView(s.id, s.root, s.project);
-        });
-
-        item.querySelector('.agent-history-export').addEventListener('click', function(evt) {
-          evt.stopPropagation();
-          exportSessionMarkdown(s.id, s.root, s.project);
-        });
-
-        item.querySelector('.agent-history-delete').addEventListener('click', function(evt) {
-          evt.stopPropagation();
-          deleteHistorySession(s.id, s.root, s.project);
-        });
-
-        groupEl.appendChild(item);
+        groupEl.appendChild(createSessionItem(s));
       });
 
       listEl.appendChild(groupEl);
     });
 
-    // Pagination
-    if (historyState.total > 50) {
-      var pag = document.createElement('div');
-      pag.className = 'agent-history-pagination';
-      var totalPages = Math.ceil(historyState.total / 50);
-      pag.innerHTML =
-        '<button class="agent-hist-prev"' + (historyState.page === 0 ? ' disabled' : '') + '>&larr;</button>' +
-        '<span>' + (historyState.page + 1) + '/' + totalPages + '</span>' +
-        '<button class="agent-hist-next"' + ((historyState.page + 1) * 50 >= historyState.total ? ' disabled' : '') + '>&rarr;</button>';
-      body.appendChild(pag);
+    // Search pagination
+    var totalPages = Math.ceil(historyState.total / historyState.pageSize);
+    var pag = document.createElement('div');
+    pag.className = 'agent-history-pagination';
+    pag.innerHTML =
+      '<button class="agent-hist-prev"' + (historyState.page <= 0 ? ' disabled' : '') + '>&larr; 上一页</button>' +
+      '<span class="agent-history-page-info">第' + (historyState.page + 1) + '/' + totalPages + '页</span>' +
+      '<button class="agent-hist-next"' + ((historyState.page + 1) * historyState.pageSize >= historyState.total ? ' disabled' : '') + '>下一页 &rarr;</button>';
+    body.appendChild(pag);
 
-      var prevBtn = pag.querySelector('.agent-hist-prev');
-      var nextBtn = pag.querySelector('.agent-hist-next');
-      if (prevBtn) prevBtn.addEventListener('click', function() {
-        if (historyState.page > 0) { historyState.page--; loadHistorySessions(); }
-      });
-      if (nextBtn) nextBtn.addEventListener('click', function() {
-        if ((historyState.page + 1) * 50 < historyState.total) { historyState.page++; loadHistorySessions(); }
-      });
+    bindPaginationHandlers(pag);
+  }
+
+  function bindPaginationHandlers(pag) {
+    var prevBtn = pag.querySelector('.agent-hist-prev');
+    var nextBtn = pag.querySelector('.agent-hist-next');
+    if (prevBtn) prevBtn.addEventListener('click', function () {
+      if (historyState.page > 0) {
+        historyState.page--;
+        loadHistorySessions();
+      }
+    });
+    if (nextBtn) nextBtn.addEventListener('click', function () {
+      var pageSize = historyState.pageSize;
+      if ((historyState.page + 1) * pageSize < historyState.total) {
+        historyState.page++;
+        loadHistorySessions();
+      }
+    });
+  }
+
+  function createSessionItem(s) {
+    var item = document.createElement('div');
+    item.className = 'agent-history-item';
+    item.dataset.sid = s.id;
+
+    var startDate = new Date((s.started_at || 0) * 1000);
+    var timeStr = pad2(startDate.getHours()) + ':' + pad2(startDate.getMinutes());
+    var durStr = '';
+    if (s.first_ts && s.last_ts) {
+      var durMin = Math.round((s.last_ts - s.first_ts) / 60);
+      if (durMin >= 1) durStr = durMin + '分钟';
+      else durStr = '<1分钟';
     }
+
+    var title = s.title || s.id || 'Unknown';
+    var turnCount = Number(s.turn_count || 0);
+    var instrCount = Number(s.instruction_count || 0);
+    var sessionKey = s.sessionKey || s.key || ((s.backend || '?') + ':' + (s.root || '') + (s.project ? ':' + s.project : ''));
+    var turnLabel = instrCount > 0 ? '<span class="agent-history-turn-count" title="用户指令数">' + instrCount + '条指令</span>' : '';
+
+    var downloadIcon = (typeof iconSVG === 'function') ? iconSVG('download', 14) : '导出';
+    var deleteIcon = (typeof iconSVG === 'function') ? iconSVG('trash-2', 14) : '删除';
+    item.innerHTML =
+      '<div class="agent-history-item-main">' +
+        '<div class="agent-history-item-title">' + escHtml(title) + '</div>' +
+        '<div class="agent-history-item-meta">' +
+          '<span>' + timeStr + '</span>' +
+          '<span>' + escHtml(sessionKey) + '</span>' +
+          '<span>' + turnCount + '轮对话</span>' +
+          turnLabel +
+          (durStr ? '<span>时长' + durStr + '</span>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="agent-history-item-actions">' +
+        '<button type="button" class="agent-history-action agent-history-export" title="导出会话" aria-label="导出会话">' + downloadIcon + '</button>' +
+        '<button type="button" class="agent-history-action agent-history-delete" title="删除会话" aria-label="删除会话">' + deleteIcon + '</button>' +
+      '</div>';
+
+    item.addEventListener('click', function() {
+      openSessionView(s.id, s.root, s.project);
+    });
+
+    item.querySelector('.agent-history-export').addEventListener('click', function(evt) {
+      evt.stopPropagation();
+      exportSessionMarkdown(s.id, s.root, s.project);
+    });
+
+    item.querySelector('.agent-history-delete').addEventListener('click', function(evt) {
+      evt.stopPropagation();
+      deleteHistorySession(s.id, s.root, s.project);
+    });
+
+    return item;
   }
 
   function openSessionView(sessionId, root, project) {
@@ -1247,7 +1546,12 @@
     open: function (rootId, dir, fileContext) {
       if (rootId) currentRootId = rootId;
       if (dir !== undefined) currentDir = dir;
-      if (fileContext) _pendingFileContext = fileContext;
+      if (fileContext) {
+        _lastFileContext = fileContext;
+        _pendingFileContext = fileContext;
+      } else if (_lastFileContext) {
+        _pendingFileContext = _lastFileContext;
+      }
 
       animatingOut = false;
       clearTimeout(collapseTimer);
@@ -1329,7 +1633,7 @@
 
     toggle: function () {
       if (panel.classList.contains('hidden')) {
-        window.Agent.open(currentRootId, currentDir);
+        window.Agent.open(currentRootId, currentDir, _lastFileContext);
         if (toggleBtn) toggleBtn.classList.add('active');
       } else {
         window.Agent.close();
@@ -1346,12 +1650,18 @@
       }
       if (historyOverlayOpen && (previousRootId !== currentRootId || previousDir !== currentDir)) {
         historyState.page = 0;
+        historyState.selectedDateIndex = 0;
+        historyState.axisScrollIndex = 0;
+        historyState.availableDates = [];
+        historyState.query = '';
+        var searchInput = ensureHistoryOverlay().querySelector('.agent-header-search');
+        if (searchInput) searchInput.value = '';
         loadHistorySessions();
       }
     },
 
     isOpen: function () {
-      return !panel.classList.contains('hidden');
+      return panel && !panel.classList.contains('hidden');
     },
 
     focus: function () {
@@ -1359,6 +1669,57 @@
         term.focus();
       } else if (chatInput && !chatView.classList.contains('hidden')) {
         chatInput.focus();
+      }
+    },
+
+    sendText: function (text) {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        if (typeof showToast === 'function') showToast('Agent 未连接', 2000);
+        return;
+      }
+      if (isPtyBackend()) {
+        // PTY mode: send raw text through WebSocket to the shell
+        ws.send(text);
+        if (term) term.focus();
+      } else {
+        // Chat mode: append to chat input textarea
+        chatInput.value += text;
+        chatInput.focus();
+        chatInput.selectionStart = chatInput.selectionEnd = chatInput.value.length;
+      }
+    },
+
+    insertText: function (text) {
+      if (!text) return;
+      if (isPtyBackend()) {
+        if (term && term.textarea) {
+          var ta = term.textarea;
+          var start = typeof ta.selectionStart === 'number' ? ta.selectionStart : ta.value.length;
+          var end = typeof ta.selectionEnd === 'number' ? ta.selectionEnd : ta.value.length;
+          ta.value = ta.value.slice(0, start) + text + ta.value.slice(end);
+          var caret = start + text.length;
+          ta.selectionStart = ta.selectionEnd = caret;
+          ta.focus();
+          try {
+            if (typeof InputEvent !== 'undefined') {
+              ta.dispatchEvent(new InputEvent('input', {
+                bubbles: true,
+                cancelable: true,
+                inputType: 'insertText',
+                data: text,
+              }));
+            } else {
+              ta.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+            }
+          } catch (_) {}
+        }
+        if (term) term.focus();
+        return;
+      }
+      if (chatInput) {
+        chatInput.value += text;
+        chatInput.focus();
+        chatInput.selectionStart = chatInput.selectionEnd = chatInput.value.length;
       }
     },
 
