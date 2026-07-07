@@ -1330,8 +1330,8 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
         // 添加到会话 (agent panel open 时显示)
         if (window.Agent && window.Agent.isOpen && window.Agent.isOpen()) {
           addItem('terminal', '添加到会话', function () {
-            if (window.Agent && typeof window.Agent.sendText === 'function') {
-              window.Agent.sendText(entry.relPath + ' ');
+            if (window.Agent && typeof window.Agent.insertText === 'function') {
+              window.Agent.insertText('@' + entry.relPath + '\n');
             }
           });
         }
@@ -1527,8 +1527,8 @@ function renderList(markdownEntries, folderEntries, otherEntries) {
           agentBtn.style.marginLeft = "4px";
           agentBtn.addEventListener("click", function(e) {
             e.stopPropagation();
-            if (window.Agent && typeof window.Agent.sendText === 'function') {
-              window.Agent.sendText(relPath + ' ');
+            if (window.Agent && typeof window.Agent.insertText === 'function') {
+              window.Agent.insertText('@' + relPath + '\n');
             }
           });
           name.appendChild(agentBtn);
