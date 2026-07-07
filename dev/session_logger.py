@@ -64,7 +64,7 @@ class SessionLogger:
             "a", encoding="utf-8",
         )
 
-    async def record_user(self, content: str):
+    async def record_user(self, content: str, ts: float | None = None):
         """Record a user input turn (called from WebSocket boundary).
 
         Written immediately so even incomplete sessions are captured.
@@ -75,7 +75,7 @@ class SessionLogger:
             return
         turn = {
             "role": "user",
-            "ts": time.time(),
+            "ts": time.time() if ts is None else ts,
             "content": content,
         }
         self._chat_fd.write(json.dumps(turn, ensure_ascii=False) + "\n")

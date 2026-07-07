@@ -84,7 +84,7 @@ class _AgentSession:
     created_at: float = 0.0
     last_active: float = 0.0
     last_input_time: float = 0.0  # timestamp of last user keystroke (for output coordination)
-    last_injected_file: str = ""   # path of the last file_context injected (avoid dupes on reconnect)
+    known_files: set[str] = field(default_factory=set)  # file refs already introduced in this session
     logger: Optional[SessionLogger] = None  # session log writer (.chat.jsonl)
     cwd: str = ""                            # working directory (for transcript matching)
     log_dir: str = ""                        # .clawmate/sessions/ path (for transcript collection)
@@ -197,12 +197,7 @@ def inject_to_session(sess, text: str):
 
 
 def _build_file_context_prompt(path: str) -> tuple[str, str]:
-    """Build the PTY prompt and log text for a preview file context.
-
-    Preview open context is intentionally path-only. Selection quotes are
-    submitted through the normal terminal input path so the user sees exactly
-    what will be sent.
-    """
+    """Build the PTY prompt and log text for a preview file reference."""
     path = (path or "").strip()
     if not path:
         return "", ""
@@ -210,13 +205,25 @@ def _build_file_context_prompt(path: str) -> tuple[str, str]:
     if not path.startswith("@"):
         path = f"@{path}"
 
-    parts: list[str] = ["---"]
-    parts.append(path)
-    parts.append("---")
-
-    prompt = "\n".join(parts) + "\n"
-    clean = "\n".join(parts)
+    prompt = path + "\n"
+    clean = path
     return prompt, clean
+
+
+def _normalize_known_file_path(path: str) -> str:
+    value = str(path or "").strip()
+    if not value:
+        return ""
+    if value.startswith("@"):
+        value = value[1:].strip()
+    return value
+
+
+def _extract_known_file_path(text: str) -> str:
+    line = _clean_terminal_input(str(text or "")).strip()
+    if not line.startswith("@"):
+        return ""
+    return _normalize_known_file_path(line)
 
 
 def _write_hidden_pty(sess, text: str):
@@ -819,14 +826,8 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
     async def ws_to_pty():
         """Forward WebSocket → PTY (keyboard input)."""
         _input_buf = ""  # accumulate raw characters until newline
-        _input_batch = []  # cleaned lines waiting to be flushed as one user turn
-        _last_batch_ts = 0.0  # timestamp of the last line added to _input_batch
         try:
             while not sess.stop_event.is_set():
-                # ── Flush input batch if idle for >1.5s ──
-                if _input_batch and (time.time() - _last_batch_ts) > 1.5:
-                    await sess.logger.record_user('\n'.join(_input_batch))
-                    _input_batch = []
                 try:
                     data = await asyncio.wait_for(ws.receive_text(), timeout=0.1)
                 except asyncio.TimeoutError:
@@ -871,26 +872,26 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
                                     pass
                             continue
                         if msg.get("type") == "file_context":
-                            _path = msg.get("path", "")
+                            _path = _normalize_known_file_path(msg.get("path", ""))
                             if _path and sess.master_fd is not None:
+                                if _path in sess.known_files:
+                                    continue
                                 _prompt, _clean_content = _build_file_context_prompt(_path)
                                 if not _prompt:
                                     continue
+                                sess.known_files.add(_path)
                                 # ── 从文件名设置 session title ──
                                 if sess.logger and not sess.logger._title_set:
                                     _fname = os.path.basename(_path).rsplit('.', 1)[0] if '.' in os.path.basename(_path) else os.path.basename(_path)
                                     if _fname:
                                         await sess.logger._extract_and_set_title(f"文件: {_fname}")
-                                # Record the injected context so the session keeps a usable user turn.
-                                if sess.logger:
-                                    await sess.logger.record_user(_clean_content)
-                                async def _inject_analysis():
+                                async def _inject_file_context():
                                     await asyncio.sleep(2.5)
                                     # 写入前校验 session 仍存活，避免向已回收的 FD 写入（FD 可能已被新 session 复用）
                                     if sess.key not in _sessions:
                                         return
                                     _write_hidden_pty(sess, _prompt)
-                                asyncio.create_task(_inject_analysis())
+                                asyncio.create_task(_inject_file_context())
                             continue
                 except (json.JSONDecodeError, TypeError, AttributeError):
                     pass
@@ -903,13 +904,11 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
                     for part in parts[:-1]:
                         cleaned = _clean_terminal_input(part)
                         if cleaned and sess.logger:
+                            _known_file = _extract_known_file_path(cleaned)
+                            if _known_file:
+                                sess.known_files.add(_known_file)
                             now = time.time()
-                            # Gap exceeded flush threshold → flush previous batch as one record
-                            if _input_batch and (now - _last_batch_ts) > 1.5:
-                                await sess.logger.record_user('\n'.join(_input_batch))
-                                _input_batch = []
-                            _input_batch.append(cleaned)
-                            _last_batch_ts = now
+                            await sess.logger.record_user(cleaned, ts=now)
                     _input_buf = parts[-1]  # keep incomplete fragment
                 try:
                     os.write(sess.master_fd, data.encode())
@@ -919,9 +918,6 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
                 sess.last_active = time.time()
         except Exception:
             pass
-        finally:
-            if _input_batch and sess.logger:
-                await sess.logger.record_user('\n'.join(_input_batch))
 
     async def pty_to_ws():
         """Forward PTY output → WebSocket + buffer (60fps flush to prevent interleaving)."""

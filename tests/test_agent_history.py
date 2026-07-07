@@ -477,10 +477,31 @@ def test_session_list_falls_back_to_derived_session_key(tmp_path, monkeypatch):
 def test_file_context_prompt_prefills_file_only():
     prompt, clean = agent_routes._build_file_context_prompt("/tmp/demo.md")
 
-    assert prompt == "---\n@/tmp/demo.md\n---\n"
-    assert clean == "---\n@/tmp/demo.md\n---"
+    assert prompt == "@/tmp/demo.md\n"
+    assert clean == "@/tmp/demo.md"
     assert "分析文件" not in prompt
     assert "摘要（≤100字）" not in prompt
+
+
+def test_known_file_helpers_normalize_and_extract():
+    assert agent_routes._normalize_known_file_path("@/tmp/demo.md") == "/tmp/demo.md"
+    assert agent_routes._normalize_known_file_path(" /tmp/demo.md ") == "/tmp/demo.md"
+    assert agent_routes._extract_known_file_path("@/tmp/demo.md") == "/tmp/demo.md"
+    assert agent_routes._extract_known_file_path("echo @/tmp/demo.md") == ""
+
+
+def test_session_logger_record_user_accepts_explicit_timestamp(tmp_path):
+    logger = agent_routes.SessionLogger("demo", {"started_at": 1}, tmp_path)
+    try:
+        import asyncio
+        asyncio.run(logger.record_user("hello", ts=123.456))
+    finally:
+        logger.close()
+
+    chat_path = tmp_path / "demo.chat.jsonl"
+    lines = [json.loads(line) for line in chat_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert lines[0]["ts"] == 123.456
+    assert lines[0]["content"] == "hello"
 
 
 def test_agent_routes_has_no_colored_echo_suppression_channel():

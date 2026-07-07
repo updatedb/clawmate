@@ -63,6 +63,8 @@
   let _pendingFileContext = null;  // {path} sent on next ws.onopen
   let _lastFileContext = null;     // last preview file context, reused on reopen/toggle
   let _lastMousedownInPanel = false;  // tracks whether last click was inside agent panel
+  let _knownFilesBySession = Object.create(null);  // sessionKey or pending scope -> { normalizedPath: true }
+  let _typedInputBuffer = '';
 
   function isPtyBackend() {
     return backendMode === 'claude' || backendMode === 'codex';
@@ -171,6 +173,70 @@
     setTimeout(function () {
       refocus();
     }, 0);
+  }
+
+  function normalizeKnownFilePath(path) {
+    var value = String(path || '').trim();
+    if (!value) return '';
+    if (value.charAt(0) === '@') value = value.slice(1).trim();
+    return value;
+  }
+
+  function pendingFileScopeKey() {
+    return 'pending:' + backendMode + ':' + (currentRootId || '') + ':' + (currentDir || '');
+  }
+
+  function currentFileScopeKey() {
+    return currentSessionKey || pendingFileScopeKey();
+  }
+
+  function ensureKnownFileBucket(scopeKey) {
+    if (!_knownFilesBySession[scopeKey]) {
+      _knownFilesBySession[scopeKey] = Object.create(null);
+    }
+    return _knownFilesBySession[scopeKey];
+  }
+
+  function rememberKnownFile(path, scopeKey) {
+    var normalized = normalizeKnownFilePath(path);
+    if (!normalized) return '';
+    ensureKnownFileBucket(scopeKey || currentFileScopeKey())[normalized] = true;
+    return normalized;
+  }
+
+  function hasKnownFile(path, scopeKey) {
+    var normalized = normalizeKnownFilePath(path);
+    if (!normalized) return false;
+    var bucket = _knownFilesBySession[scopeKey || currentFileScopeKey()];
+    return !!(bucket && bucket[normalized]);
+  }
+
+  function migrateKnownFiles(fromScopeKey, toScopeKey) {
+    if (!fromScopeKey || !toScopeKey || fromScopeKey === toScopeKey) return;
+    var fromBucket = _knownFilesBySession[fromScopeKey];
+    if (!fromBucket) return;
+    var toBucket = ensureKnownFileBucket(toScopeKey);
+    Object.keys(fromBucket).forEach(function (path) {
+      toBucket[path] = true;
+    });
+    delete _knownFilesBySession[fromScopeKey];
+  }
+
+  function extractKnownFilePath(text) {
+    var line = cleanTerminalInput(String(text || '')).trim();
+    if (!line || line.charAt(0) !== '@') return '';
+    return normalizeKnownFilePath(line);
+  }
+
+  function trackTypedFileReferences(data) {
+    _typedInputBuffer += String(data || '');
+    if (_typedInputBuffer.indexOf('\r') === -1 && _typedInputBuffer.indexOf('\n') === -1) return;
+    var parts = _typedInputBuffer.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    for (var i = 0; i < parts.length - 1; i++) {
+      var path = extractKnownFilePath(parts[i]);
+      if (path) rememberKnownFile(path);
+    }
+    _typedInputBuffer = parts[parts.length - 1];
   }
 
   // --- xterm.js init ---
@@ -349,6 +415,7 @@
     // Data / resize forward to WebSocket
     term.onData(function (data) {
       xlog('data', 'len=' + data.length + ' preview=' + JSON.stringify(data.slice(0, 40)) + ' ws=' + (ws ? ws.readyState : 'null'));
+      trackTypedFileReferences(data);
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(data);
       }
@@ -584,9 +651,13 @@
         term.writeln('');
         var fileContext = _pendingFileContext || _lastFileContext;
         if (fileContext) {
-          try {
-            ws.send(JSON.stringify({ type: 'file_context', path: fileContext.path || '' }));
-          } catch (_) {}
+          var filePath = normalizeKnownFilePath(fileContext.path || '');
+          if (filePath && !hasKnownFile(filePath)) {
+            try {
+              ws.send(JSON.stringify({ type: 'file_context', path: fileContext.path || '' }));
+              rememberKnownFile(filePath);
+            } catch (_) {}
+          }
           _pendingFileContext = null;
         }
       }
@@ -600,6 +671,9 @@
       try {
         var msg = JSON.parse(e.data);
         if (msg.type === 'session' && msg.key) {
+          if (!currentSessionKey) {
+            migrateKnownFiles(pendingFileScopeKey(), msg.key);
+          }
           if (panelTitleEl) panelTitleEl.textContent = msg.key;
           // Write session info to terminal for PTY backends (claude/codex)
           if (isPtyBackend() && term) {
@@ -662,7 +736,6 @@
 
   function disconnectWs() {
     clearReconnect();
-    currentSessionKey = '';
     if (panelTitleEl) panelTitleEl.textContent = 'Agent';
     if (ws) { ws.onclose = null; ws.close(); ws = null; }
     if (term) {
@@ -1712,6 +1785,8 @@
 
     insertText: function (text) {
       if (!text) return;
+      var insertedPath = extractKnownFilePath(text);
+      if (insertedPath) rememberKnownFile(insertedPath);
       if (isPtyBackend()) {
         var rawText = String(text);
         if (term && typeof term.input === 'function') {
