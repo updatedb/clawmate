@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.50 (2026-07-07)
+### 会话历史增强 — cwd 恢复、Transcript 路径匹配、文件上下文保留
+- **cwd 恢复**：`_session_cwd_from_log_dir()` 从 index.json 或日志目录结构恢复 session cwd，`agent_session_log`/`agent_session_detail` 同步返回
+- **Transcript 作用域限定**：`_find_codex_transcript()` 路径匹配改用 `expanduser().resolve()` 全路径比较 + `parents` 遍历，消除符号链接别名匹配错误
+- **cwd 索引持久化**：session 创建时 `cwd` 字段写入 index.json，供后续恢复和 `_collect_transcript()` 使用
+- **文件上下文保留**：Agent 关闭后重开自动恢复上次注入的文件上下文（`_lastFileContext`），WebSocket 重连不再用 `last_injected_file` 去重（每次重连重新注入）
+
+### 代码预览行号重构（CSS Grid → 逐行 Flex）
+- **布局重构**：`.code-with-lines` 从 CSS Grid 双列改为逐行 `.code-row` flex 布局，解决代码换行时行号错位
+- **行号精准**：`.code-row-num` / `.code-row-text` 逐行独立，行高差异不影响对齐
+- **标题滚动**：`&line=N` 源码模式改用 `.code-row` DOM 查找替代 `lineHeight` 算术运算，滚动精度 ±0px
+- **Flash 高亮**：闪烁条使用 `row.offsetTop` 而非绝对位置计算，行号间无间隙
+
+### "添加到会话" 桌面浮层
+- **预览页浮层**：选中文本时显示 `#selAddToAgent` 浮动按钮（`→` 图标），点击将路径发送到 Agent 终端
+- **画廊/列表菜单**：Agent 面板打开时，右键/⋮ 菜单显示"添加到会话"，列表行内显示终端图标按钮
+- **API 暴露**：`Agent.sendText()` / `Agent.insertText()` 公开方法，PTY 模式下直接发送文本/插入输入缓冲区
+
+### Agent 焦点修复
+- 点击面板外非可聚焦元素不再抢回焦点（`_lastMousedownInPanel` 守卫），避免预览页选中文本被中断
+
+### 测试
+- 新增 `tests/test_agent_insert_and_file_context.py` — 文件上下文注入与保留
+- 新增 `tests/test_preview_agent_panel_layout.py` — 预览面板布局
+- 新增 `tests/test_preview_agent_selection.py` — 预览选中与浮层
+
 ## v1.49 (2026-07-05)
 ### Session History 增强 — 根级会话、输入批处理、跨 session 防护
 - **根级会话支持**：无 project 标记的 session 存储在 root 自身 `.clawmate/sessions/`，TTL reaper 同步覆盖
