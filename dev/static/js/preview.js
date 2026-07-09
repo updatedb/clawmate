@@ -1409,6 +1409,7 @@
         const srcPre = document.getElementById('sourceRawPre');
         if (srcPre) _updateSourcePre(srcPre, newContent);
         exitSourceEditMode();
+        commitAfterSave();
       } else {
         const isSyntaxErr = data.error && data.error.includes('syntax_error');
         showToast('❌ ' + (data.detail || '未知错误'), isSyntaxErr ? 8000 : 3000);
@@ -1453,6 +1454,7 @@
         isPlainTextEditMode = false;
         sourceDirty = false;
         loadContent();
+        commitAfterSave();
         // loadContent already calls updatePlainTextDynamicButtons for non-edit mode
       } else {
         const isSyntaxErr = data.error && data.error.includes('syntax_error');
@@ -4171,6 +4173,268 @@
     }
   });
 
+  // ============ Version History (git) ============
+  var _versionInfo = null;
+  var _versionCommits = null;
+  var _versionSelIdx = null;
+  var _versionSelCommit = null;  // the commit being compared (from)
+
+  async function fetchVersionInfo() {
+    var pill = document.getElementById('versionPill');
+    var pillHash = document.getElementById('versionPillHash');
+    var pillDirty = document.getElementById('versionPillDirty');
+    _versionInfo = null;
+    if (pill) pill.classList.add('hidden');
+    try {
+      var res = await fetch('/api/clawmate/version/info?root=' + encodeURIComponent(rootId) + '&path=' + encodeURIComponent(filePath));
+      if (!res.ok) return;
+      var data = await res.json();
+      if (!data.in_git) return;
+      _versionInfo = data;
+      // Show version pill in topbar
+      if (pill && pillHash) {
+        if (data.tracked) {
+          pillHash.textContent = data.short_hash;
+          if (pillDirty) {
+            pillDirty.classList.toggle('hidden', !data.is_dirty);
+          }
+          pill.title = data.message + '\n' + data.author + ' · ' + (data.date ? data.date.substring(0, 10) : '');
+        } else {
+          pillHash.textContent = 'new';
+          pillDirty.classList.add('hidden');
+          pill.title = '文件尚未提交';
+        }
+        pill.classList.remove('hidden');
+        pill.onclick = openVersionModal;
+      }
+      // Version info is shown in topbar pill — no separate button needed
+    } catch (_) {}
+  }
+
+  async function commitAfterSave() {
+    // Git commit after successful file save
+    try {
+      const res = await fetch('/api/clawmate/version/commit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ root: rootId, path: filePath }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        if (data.note === 'no_changes') {
+          // Nothing changed, just refresh pill
+        } else if (data.short_hash) {
+          showToast('✅ 已版本存储 ' + data.short_hash, 2000);
+        } else {
+          showToast('✅ 已版本存储', 2000);
+        }
+        // Refresh version pill in topbar
+        fetchVersionInfo();
+      } else if (data.detail) {
+        // Don't show toast for "not in git" — too noisy for non-git files
+        if (data.detail.includes('不在 Git')) return;
+        showToast('⚠️ ' + data.detail, 3000);
+      }
+    } catch (_) {
+      // Silently ignore commit errors — save succeeded, commit is optional
+    }
+  }
+
+  function initVersionModal() {
+    var modal = document.getElementById('versionModal');
+    var closeBtn = document.getElementById('versionModalClose');
+    if (!modal || !closeBtn) return;
+    closeBtn.addEventListener('click', closeVersionModal);
+    modal.addEventListener('click', function(e) {
+      if (e.target === modal) closeVersionModal();
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && modal.style.display !== 'none' && modal.style.display !== '') {
+        closeVersionModal();
+      }
+    });
+  }
+
+  function closeVersionModal() {
+    var modal = document.getElementById('versionModal');
+    if (modal) modal.style.display = 'none';
+    _versionSelIdx = null;
+    _versionSelCommit = null;
+  }
+
+  async function openVersionModal() {
+    var modal = document.getElementById('versionModal');
+    var fnEl = document.getElementById('versionModalFileName');
+    if (!modal) return;
+    if (fnEl) fnEl.textContent = fileName;
+    modal.style.display = 'flex';
+
+    // Reset diff pane
+    var dc = document.getElementById('versionDiffContent');
+    var dh = document.getElementById('versionDiffHeader');
+    if (dh) dh.textContent = '加载中...';
+    if (dc) dc.innerHTML = '<div class="version-diff-placeholder">加载差异...</div>';
+
+    // Latest info card
+    var lc = document.getElementById('versionLatestCard');
+    if (lc && _versionInfo) {
+      if (_versionInfo.tracked) {
+        var c = _versionInfo;
+        var dirtyHtml = c.is_dirty ? ' <span style="color:#f59e0b;">(有未提交变更)</span>' : '';
+        lc.innerHTML =
+          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">' +
+            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
+            '<span style="font-weight:600;font-size:13px;color:var(--text-primary);">最新版本</span>' +
+            '<span style="font-family:monospace;font-size:11px;color:var(--accent);">' + escHtml(c.short_hash) + '</span>' +
+          '</div>' +
+          '<div style="font-size:12px;color:var(--text-secondary);">' + escHtml(c.message) + '</div>' +
+          '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">' +
+            escHtml(c.author) + ' · ' + (c.date ? c.date.substring(0, 10) : '') + dirtyHtml +
+          '</div>';
+      } else {
+        lc.innerHTML = '<div style="color:var(--text-muted);font-size:13px;text-align:center;padding:8px;">📄 新文件，尚未提交</div>';
+      }
+    }
+
+    // Dirty warning
+    var dw = document.getElementById('versionDirtyWarning');
+    if (dw) dw.classList.toggle('hidden', !(_versionInfo && _versionInfo.tracked && _versionInfo.is_dirty));
+
+    // Footer
+    var footer = document.getElementById('versionModalFooter');
+    if (footer && _versionInfo) {
+      if (_versionInfo.tracked) {
+        footer.textContent = '点击单个 commit 查看该版本引入的变更';
+      } else {
+        footer.textContent = '文件尚未提交到 Git 仓库';
+      }
+    }
+
+    // Load commit list
+    await loadVersionCommitList();
+  }
+
+  async function loadVersionCommitList() {
+    var listEl = document.getElementById('versionCommitList');
+    if (!listEl) return;
+    listEl.innerHTML = '<div class="version-commit-empty">加载中...</div>';
+
+    try {
+      var res = await fetch('/api/clawmate/version/log?root=' + encodeURIComponent(rootId) + '&path=' + encodeURIComponent(filePath) + '&max_count=30');
+      if (!res.ok) { listEl.innerHTML = '<div class="version-commit-empty">加载失败</div>'; return; }
+      var data = await res.json();
+      if (!data.in_git || !data.commits || data.commits.length === 0) {
+        listEl.innerHTML = '<div class="version-commit-empty">' + (data.in_git ? '新文件，尚无提交历史' : '此文件不在 Git 仓库中') + '</div>';
+        return;
+      }
+      _versionCommits = data.commits;
+
+      var html = '';
+      for (var i = 0; i < data.commits.length; i++) {
+        var c = data.commits[i];
+        var dateStr = c.date ? c.date.substring(0, 10) : '';
+        html += '<div class="version-commit-item" data-idx="' + i + '">' +
+          '<div class="version-commit-message">' + escHtml(c.message) + '</div>' +
+          '<div class="version-commit-meta">' +
+            '<span class="version-commit-hash">' + escHtml(c.short_hash) + '</span>' +
+            '<span class="version-commit-author">' + escHtml(c.author) + '</span>' +
+            '<span>' + dateStr + '</span>' +
+          '</div>' +
+        '</div>';
+      }
+      listEl.innerHTML = html;
+
+      listEl.querySelectorAll('.version-commit-item').forEach(function(el) {
+        el.addEventListener('click', function() {
+          var idx = parseInt(this.dataset.idx);
+          selectVersionCommit(idx);
+        });
+      });
+
+      // Auto-select first commit (HEAD)
+      _versionSelIdx = null;
+      _versionSelCommit = null;
+      selectVersionCommit(0);
+    } catch (e) {
+      listEl.innerHTML = '<div class="version-commit-empty">加载失败: ' + escHtml(e.message) + '</div>';
+    }
+  }
+
+  async function selectVersionCommit(idx) {
+    if (!_versionCommits || idx < 0 || idx >= _versionCommits.length) return;
+    _versionSelIdx = idx;
+    _versionSelCommit = _versionCommits[idx];
+
+    // Highlight selected
+    document.querySelectorAll('.version-commit-item').forEach(function(el, i) {
+      el.classList.toggle('selected', i === idx);
+    });
+
+    var commit = _versionCommits[idx];
+
+    // Determine diff range: show what THIS commit introduced (commit vs parent)
+    var fromHash = commit.hash;
+    var parentIdx = idx + 1;
+    var url = '/api/clawmate/version/diff?root=' + encodeURIComponent(rootId) +
+      '&path=' + encodeURIComponent(filePath) +
+      '&from=' + encodeURIComponent(fromHash);
+
+    if (parentIdx < _versionCommits.length) {
+      url += '&to=' + encodeURIComponent(_versionCommits[parentIdx].hash);
+    }
+
+    // Update diff header
+    var dh = document.getElementById('versionDiffHeader');
+    if (dh) dh.textContent = commit.short_hash + ' — ' + commit.message;
+
+    // Load diff
+    await loadVersionDiff(url);
+  }
+
+  async function loadVersionDiff(url) {
+    var dc = document.getElementById('versionDiffContent');
+    if (!dc) return;
+    dc.innerHTML = '<div class="version-diff-placeholder">加载差异...</div>';
+
+    try {
+      var res = await fetch(url);
+      if (!res.ok) { dc.innerHTML = '<div class="version-diff-placeholder">加载差异失败</div>'; return; }
+      var data = await res.json();
+      if (!data.in_git) { dc.innerHTML = '<div class="version-diff-placeholder">无差异信息</div>'; return; }
+      if (data.binary) { dc.innerHTML = '<div class="version-diff-placeholder">二进制文件，无法显示差异</div>'; return; }
+      if (!data.diff || data.diff.trim() === '') { dc.innerHTML = '<div class="version-diff-placeholder">无变更内容</div>'; return; }
+
+      dc.innerHTML = renderVersionDiff(data.diff);
+    } catch (e) {
+      dc.innerHTML = '<div class="version-diff-placeholder">加载失败: ' + escHtml(e.message) + '</div>';
+    }
+  }
+
+  function renderVersionDiff(diffText) {
+    var lines = diffText.split('\n');
+    var html = '<pre class="version-diff-pre">';
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      // Skip file header lines (--- a/... and +++ b/...)
+      if (line.startsWith('--- ') || line.startsWith('+++ ')) continue;
+
+      var cls = 'version-diff-line';
+      if (line.startsWith('@@')) {
+        cls += ' version-diff-line-hunk';
+      } else if (line.charAt(0) === '+') {
+        cls += ' version-diff-line-add';
+      } else if (line.charAt(0) === '-') {
+        cls += ' version-diff-line-del';
+      }
+
+      html += '<div class="' + cls + '">' + escHtml(line) + '</div>';
+    }
+
+    html += '</pre>';
+    return html;
+  }
+
   // ============ Feedback Panel ============
   let pendingItems = [];  // { id, text, startLine, endLine, note, type }
   let completedItems = [];
@@ -5800,6 +6064,9 @@
   // ── Init ────────────────────────────────────────────────────────
   loadContent();
   checkShareStatus();
+  // Version info (git) — load after a short delay to not compete with content
+  setTimeout(fetchVersionInfo, 300);
+  setTimeout(initVersionModal, 500);
   // 加载 task_templates 到 _taskTemplates 并初始化标签按钮
   getRootsConfig().then(function(cfg) {
     if (cfg && cfg.task_templates) { _taskTemplates = cfg.task_templates; initPstTags(); }
