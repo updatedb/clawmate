@@ -25,6 +25,11 @@ FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
+# runtime dependencies: ripgrep for content search, ffmpeg for subtitle extraction
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ripgrep \
+    && rm -rf /var/lib/apt/lists/*
+
 # copy python packages from builder
 COPY --from=builder /usr/local/lib/python3.11/site-packages/ /usr/local/lib/python3.11/site-packages/
 COPY --from=builder /usr/local/bin/uvicorn /usr/local/bin/uvicorn

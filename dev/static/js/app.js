@@ -3217,7 +3217,7 @@ async function unifiedSearch() {
   // Run filename search and content search in parallel
   var [nameRes, contentRes] = await Promise.allSettled([
     authFetch('/api/clawmate/search?root=' + encodeURIComponent(state.rootId) + '&q=' + encodeURIComponent(q) + '&dir=' + encodeURIComponent(state.dir) + '&recursive=true'),
-    fetch('/api/clawmate/search/content?q=' + encodeURIComponent(q) + '&root=' + encodeURIComponent(state.rootId) + '&dir=' + encodeURIComponent(state.dir))
+    authFetch('/api/clawmate/search/content?q=' + encodeURIComponent(q) + '&root=' + encodeURIComponent(state.rootId) + '&dir=' + encodeURIComponent(state.dir))
   ]);
 
   // Parse filename results
@@ -3226,10 +3226,19 @@ async function unifiedSearch() {
     try { nameData = await nameRes.value.json(); } catch (_) {}
   }
 
-  // Parse content results
+  // Parse content results — show error detail on failure (e.g. ripgrep not installed)
   var contentData = null;
-  if (contentRes.status === 'fulfilled' && contentRes.value.ok) {
-    try { contentData = await contentRes.value.json(); } catch (_) {}
+  if (contentRes.status === 'fulfilled') {
+    if (contentRes.value.ok) {
+      try { contentData = await contentRes.value.json(); } catch (_) {}
+    } else if (contentRes.value.status >= 400) {
+      try {
+        var errBody = await contentRes.value.json();
+        setStatus(errBody.detail || '内容搜索失败 (' + contentRes.value.status + ')');
+      } catch (_) {
+        setStatus('内容搜索失败 (' + contentRes.value.status + ')');
+      }
+    }
   }
 
   var nameCount = nameData ? (nameData.results || []).length : 0;

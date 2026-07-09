@@ -30,7 +30,31 @@ router = APIRouter()
 #  字幕提取核心模块（原 subtitle.py）
 # ═══════════════════════════════════════════════════════════════════
 
+_FFMPEG_CHECKED: Optional[bool] = None
+_FFPROBE_CHECKED: Optional[bool] = None
 _WHISPER_MODEL: Optional[object] = None
+
+
+def _check_ffmpeg() -> str:
+    """检查 ffmpeg 是否可用，返回消息。空字符串表示可用。"""
+    global _FFMPEG_CHECKED
+    if _FFMPEG_CHECKED is None:
+        import shutil
+        _FFMPEG_CHECKED = shutil.which("ffmpeg")
+    if _FFMPEG_CHECKED:
+        return ""
+    return "ffmpeg 未安装，请执行: sudo apt install ffmpeg"
+
+
+def _check_ffprobe() -> str:
+    """检查 ffprobe 是否可用，返回消息。空字符串表示可用。"""
+    global _FFPROBE_CHECKED
+    if _FFPROBE_CHECKED is None:
+        import shutil
+        _FFPROBE_CHECKED = shutil.which("ffprobe")
+    if _FFPROBE_CHECKED:
+        return ""
+    return "ffprobe 未安装，请执行: sudo apt install ffmpeg"
 
 
 def _format_time(seconds: float) -> str:
@@ -69,6 +93,9 @@ def _get_whisper_model(size: str = "small"):
 
 def has_audio_stream(input_path: Path) -> bool:
     """用 ffprobe 检查文件是否包含音频流。"""
+    msg = _check_ffprobe()
+    if msg:
+        raise RuntimeError(msg)
     cmd = [
         "ffprobe", "-v", "error",
         "-select_streams", "a",
@@ -82,6 +109,9 @@ def has_audio_stream(input_path: Path) -> bool:
 
 def extract_audio(input_path: Path) -> Path:
     """用 ffmpeg 提取 16kHz mono wav 到临时文件，返回 wav 路径。"""
+    msg = _check_ffmpeg()
+    if msg:
+        raise RuntimeError(msg)
     if not has_audio_stream(input_path):
         raise RuntimeError("文件中没有音频轨道，无法提取字幕")
 
