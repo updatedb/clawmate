@@ -1391,6 +1391,10 @@ async def agent_terminal(
             except Exception:
                 pass
 
+        # Clear known files on reconnect so the client can re-inject
+        # the current preview file context into the restored session.
+        sess.known_files.clear()
+
         await ws.send_text(
             f"\x1b[1;32m⟳ 重新连接到已有会话\x1b[0m\r\n"
             f"\x1b[2m   backend: {backend}  cwd: {cwd}\x1b[0m\r\n"
@@ -2088,8 +2092,9 @@ async def agent_session_log(
             # available yet) or that were created after recovery.
             has_assistant = any(t.get("role") == "assistant" for t in turns)
             if turns and not has_assistant:
-                # Derive cwd from the project path, backend/started_at from index
-                cwd = str(proj_path) if proj_path and proj_path.is_dir() else ""
+                # Derive cwd from stored session cwd (prefer over proj_path for
+                # sessions started from nested subdirectories)
+                cwd = session_cwd if session_cwd else str(proj_path) if proj_path and proj_path.is_dir() else ""
                 backend = ""
                 raw_started = 0
                 try:

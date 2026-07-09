@@ -652,7 +652,10 @@
         var fileContext = _pendingFileContext || _lastFileContext;
         if (fileContext) {
           var filePath = normalizeKnownFilePath(fileContext.path || '');
-          if (filePath && !hasKnownFile(filePath)) {
+          // On reconnect (currentSessionKey already set), always re-inject
+          // so the agent knows about the previewed file even if the path
+          // was already known from a previous WS connection.
+          if (filePath && (!hasKnownFile(filePath) || currentSessionKey)) {
             try {
               ws.send(JSON.stringify({ type: 'file_context', path: fileContext.path || '' }));
               rememberKnownFile(filePath);
