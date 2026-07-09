@@ -3672,10 +3672,12 @@
     return filePath || null;
   }
 
-  document.getElementById('btnPath').addEventListener('click', async () => {
+  document.getElementById('btnPath').addEventListener('click', () => {
     const relPath = getRelativePath();
     if (relPath) {
-      await copyText(relPath, '✅ 路径已复制');
+      const parentDir = relPath.split('/').slice(0, -1).join('/');
+      const root = rootId || '';
+      window.location.href = `/clawmate/?root=${encodeURIComponent(root)}&dir=${encodeURIComponent(parentDir)}`;
     } else {
       showToast('无法获取路径', 2000);
     }
