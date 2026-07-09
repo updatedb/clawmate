@@ -1,5 +1,5 @@
 """
-搜索服务层 — 文件名搜索、内容搜索、文本提取、AI 摘要。
+搜索服务层 — 文件名搜索、内容搜索、文本提取。
 
 所有搜索逻辑独立于此模块，不依赖 routes 层。
 """
@@ -14,24 +14,16 @@ from service import safe_path, file_info
 
 logger = logging.getLogger("clawmate.search_service")
 
-# ── AI Summary cache (in-memory, TTL-based) ─────────────────────────────
-import hashlib
-import time as _time
-import threading as _threading
-
-_ai_summary_cache: dict[str, dict] = {}
-_ai_summary_lock = _threading.Lock()
-_AI_SUMMARY_CACHE_TTL = 600  # 10 minutes
-_AI_SUMMARY_CACHE_MAX = 128
-
 
 def search_media(query: str, root_id: str, rel_dir: str = "", recursive: bool = True,
-                 limit: int = 200, max_depth: int = 8, timeout: float = 10.0) -> Dict:
+                 limit: int = 200, max_depth: int = 8, timeout: float = 10.0,
+                 exclude_dir: list = None) -> Dict:
     """搜索文件/目录名，支持递归深度限制和硬超时。
 
     Args:
         max_depth: 递归最大深度（从 start_dir 算起），默认 8 层
         timeout: 搜索超时秒数，默认 10s；超时后返回已有结果并标记 truncated=True
+        exclude_dir: 要排除的目录名列表（不区分大小写），排除隐藏目录和临时目录
     """
     import time as _time
     _deadline = _time.time() + timeout
@@ -45,6 +37,8 @@ def search_media(query: str, root_id: str, rel_dir: str = "", recursive: bool = 
     truncated = False
     if not query_lower:
         return {"query": query, "results": results, "truncated": False}
+
+    exclude_dir_set = set(d.lower() for d in (exclude_dir or []))
 
     if recursive:
         queue: deque = deque([(target, 0)])  # (dir_path, depth)
@@ -68,8 +62,15 @@ def search_media(query: str, root_id: str, rel_dir: str = "", recursive: bool = 
                 break
             if depth < max_depth:
                 for entry in entries:
-                    if entry.is_dir():
-                        queue.append((entry, depth + 1))
+                    if not entry.is_dir():
+                        continue
+                    # Skip hidden directories
+                    if entry.name.startswith("."):
+                        continue
+                    # Skip excluded directories (e.g. __pycache__, node_modules)
+                    if entry.name.lower() in exclude_dir_set:
+                        continue
+                    queue.append((entry, depth + 1))
     else:
         for entry in target.iterdir():
             if _time.time() > _deadline:
@@ -349,6 +350,9 @@ def _find_projects(root_path: Path, target: Path, max_depth: int,
                 continue
             if entry.name.startswith(".") and entry.name in exclude_dir:
                 continue
+            # Skip all hidden directories (not in exclude list)
+            if entry.name.startswith("."):
+                continue
             if entry.name.lower() in exclude_dir:
                 continue
 
@@ -480,6 +484,9 @@ def search_content(query: str, root_id: str, rel_dir: str = "",
 
     # Also exclude .clawmate/ itself from search
     cmd.extend(["-g", "!.clawmate/**"])
+
+    # Skip all hidden directories (those starting with '.')
+    cmd.extend(["-g", "!.*/**"])
 
     cmd.append(query)
     cmd.extend(search_paths)
@@ -646,12 +653,15 @@ def search_content(query: str, root_id: str, rel_dir: str = "",
             f"?root={quote(root_id, safe='')}"
             f"&file={quote(rel_path, safe='')}"
         )
-        # Gather file mtime for display in collapsed source rows
+        # Gather file mtime & size for display in search results
         file_mtime = 0
+        file_size = 0
         try:
             abs_path = root_path / rel_path
             if abs_path.exists():
-                file_mtime = int(abs_path.stat().st_mtime)
+                st = abs_path.stat()
+                file_mtime = int(st.st_mtime)
+                file_size = st.st_size
         except (OSError, ValueError):
             pass
         results_by_file.append({
@@ -660,6 +670,7 @@ def search_content(query: str, root_id: str, rel_dir: str = "",
             "preview_url": preview_url,
             "matches": info["matches"],
             "mtime": file_mtime,
+            "size": file_size,
         })
 
     # Step 8: Check extractor availability for notice
@@ -681,359 +692,5 @@ def search_content(query: str, root_id: str, rel_dir: str = "",
         "elapsed_ms": int((_time.time() - _start) * 1000),
         "results_by_file": results_by_file,
         "projects_found": len(projects),
-        "summary": None,  # filled by caller (search_routes) when summary=true
         "unavailable_types": unavailable,  # file types skipped due to missing deps
     }
-
-
-# ── AI Summary ──────────────────────────────────────────────────────────────────
-
-def summarize_search(query: str, results_by_file: List[Dict], root_id: str = "") -> Dict:
-    """Generate a concise content-focused summary of search results.
-
-    Produces:
-      - overview: 50-100字总结 + 3-5条要点
-      - insights: 5-8条核心洞察
-
-    Falls back to AI agent summary for richer analysis.
-    """
-    if not results_by_file:
-        return {"overview": "", "insights": ""}
-
-    total_files = len(results_by_file)
-    total_matches = sum(r.get("match_count", 0) for r in results_by_file)
-
-    top_n = min(10, len(results_by_file))
-    top_files = sorted(results_by_file, key=lambda r: r.get("match_count", 0), reverse=True)[:top_n]
-
-    def _best_snippet(matches: list, max_len: int = 100) -> str:
-        best = ""
-        for m in (matches or [])[:3]:
-            t = m.get("text", "").strip()
-            if len(t) > len(best) and len(t) >= 8:
-                best = t
-        if len(best) > max_len:
-            best = best[:max_len] + "..."
-        return best
-
-    def _dirname(fpath: str) -> str:
-        return str(Path(fpath).parent)
-
-    # ── Detect primary module/directory ──────────────────────────────
-    dir_hits: Dict[str, int] = {}
-    for r in results_by_file:
-        d = _dirname(r["file"])
-        dir_hits[d] = dir_hits.get(d, 0) + r.get("match_count", 0)
-    top_dirs = sorted(dir_hits.items(), key=lambda x: x[1], reverse=True)[:3]
-    primary_dirs = [d for d, _ in top_dirs]
-
-    # ── Build overview ───────────────────────────────────────────────
-    primary_dir_str = "、".join(f"`{d}/`" for d in primary_dirs)
-    overview_line = (
-        f"关键词「**{query}**」共命中 {total_files} 个文件 {total_matches} 处，"
-        f"主要分布在 {primary_dir_str} 等模块。"
-    )
-
-    # 3-5 bullet points from top files
-    bullets = []
-    for f in top_files[:5]:
-        fname = Path(f["file"]).name
-        s = _best_snippet(f.get("matches", []), max_len=80)
-        if s:
-            bullets.append(f"- `{fname}` 中匹配到相关代码：`{s}`")
-        else:
-            bullets.append(f"- `{fname}` 包含 {f.get('match_count', 0)} 处匹配")
-
-    overview = overview_line + "\n\n" + "\n".join(bullets)
-
-    # ── Build insights ───────────────────────────────────────────────
-    CODE_EXTS = {"py", "js", "ts", "tsx", "jsx", "go", "rs", "java", "c", "cpp",
-                 "h", "hpp", "vue", "rb", "php", "swift", "kt", "sh", "bash"}
-    DOC_EXTS = {"md", "markdown", "mdx", "txt", "rst", "tex", "log"}
-    CONFIG_EXTS = {"json", "yaml", "yml", "toml", "ini", "cfg", "conf", "env"}
-
-    code_files = [f for f in top_files if Path(f["file"]).suffix.lower().lstrip(".") in CODE_EXTS]
-    doc_files = [f for f in top_files if Path(f["file"]).suffix.lower().lstrip(".") in DOC_EXTS]
-    config_files = [f for f in top_files if Path(f["file"]).suffix.lower().lstrip(".") in CONFIG_EXTS]
-
-    insight_lines = []
-
-    if code_files:
-        names = "、".join(f"`{Path(f['file']).name}`" for f in code_files[:3])
-        insight_lines.append(f"- 核心代码集中在 {names} 等文件，建议优先阅读这些文件理解整体逻辑")
-
-    if config_files:
-        names = "、".join(f"`{Path(f['file']).name}`" for f in config_files[:2])
-        insight_lines.append(f"- 配置相关文件 {names} 包含关键参数定义，修改时需注意影响范围")
-
-    if doc_files:
-        insight_lines.append(f"- 文档文件共 {len(doc_files)} 个命中，可作为理解上下文的参考")
-
-    if len(primary_dirs) >= 2:
-        insight_lines.append(f"- 匹配分布在 {len(dir_hits)} 个目录，涉及 {primary_dirs[0]}/、{primary_dirs[1] if len(primary_dirs) > 1 else ''}/ 等模块")
-
-    top3_total = sum(f.get("match_count", 0) for f in top_files[:3])
-    if total_matches > 0 and top3_total / total_matches > 0.5:
-        insight_lines.append(f"- 匹配高度集中在前 3 个文件（占比 {top3_total / total_matches * 100:.0f}%），重点审查这些文件即可覆盖大部分相关逻辑")
-    else:
-        insight_lines.append(f"- 匹配分布较均匀，建议按模块逐目录审查")
-
-    for f in top_files[:1]:
-        s = _best_snippet(f.get("matches", []), max_len=120)
-        if s:
-            insight_lines.append(f"- `{Path(f['file']).name}` 中典型匹配：`{s}`")
-
-    insights = "\n".join(insight_lines[:8])
-
-    return {"overview": overview, "insights": insights}
-
-def _best_snippet_for_prompt(matches: list, max_len: int = 200) -> str:
-    """Pick the most informative match line for the AI prompt (longest non-trivial)."""
-    best = ""
-    for m in (matches or [])[:5]:
-        t = m.get("text", "").strip()
-        if len(t) > len(best) and len(t) >= 10:
-            best = t
-    if len(best) > max_len:
-        best = best[:max_len] + "..."
-    return best
-
-
-def _build_ai_summary_prompt(
-    query: str,
-    results_by_file: list,
-    max_files: int = 10,
-    max_snippets: int = 3,
-) -> str:
-    """Build a concise prompt for the AI agent to generate search summary."""
-    # Select top N files
-    top_files = sorted(
-        results_by_file,
-        key=lambda r: r.get("match_count", 0),
-        reverse=True,
-    )[:max_files]
-
-    total_files = len(results_by_file)
-    total_matches = sum(r.get("match_count", 0) for r in results_by_file)
-
-    # Build file listing for the prompt
-    file_list_lines = []
-    for i, f in enumerate(top_files):
-        fname = f["file"]
-        mcount = f.get("match_count", 0)
-        matches = f.get("matches", [])
-        snippets = []
-        for m in matches[:max_snippets]:
-            t = m.get("text", "").strip()
-            if len(t) > 200:
-                t = t[:200] + "..."
-            if t:
-                snippets.append(f"  L{m.get('line', '?')}: {t}")
-        file_list_lines.append(f"{i + 1}. `{fname}` — {mcount} match(es)")
-        file_list_lines.extend(snippets)
-        file_list_lines.append("")
-
-    file_list = "\n".join(file_list_lines)
-
-    prompt = f"""<task>
-Analyze the top {min(len(top_files), max_files)} codebase search results below and produce a structured Chinese summary.
-Focus on analyzing and synthesizing the CONTENT of matching lines — do NOT produce statistical tables or match counts.
-The summary will be displayed in a modal under two sections: "内容概览" and "核心洞察".
-</task>
-
-<context>
-Search query: "{query}"
-You are shown the top {min(len(top_files), max_files)} files (out of {total_files} total, {total_matches} total matches).
-</context>
-
-<files>
-{file_list}
-</files>
-
-<output_format>
-Respond with a single JSON object (no markdown fences, no commentary) containing exactly two keys:
-
-- "overview": 内容概览 — A plain Chinese paragraph of 50-100 characters total, followed by 3-5 bullet points (one per line, "- " prefix).
-  The paragraph should summarize what the search reveals about the codebase in one sentence.
-  Each bullet point should be a concise finding about WHERE and HOW the keyword is used, focusing on patterns, modules, and context revealed by the matching lines. Be specific — cite concrete examples from the snippets.
-
-- "insights": 核心洞察 — 5-8 bullet points (one per line, "- " prefix) based on deep analysis of the matching content.
-  Group related points together. Each point should be a meaningful observation, not a statistic.
-  Focus on: architectural patterns, code organization, recurring themes, potential issues, relationships between files, usage patterns, and notable implementation details revealed by the actual code/content.
-  Reference specific file names in backticks when relevant.
-
-Example:
-{{
-  "overview": "搜索「auth」揭示了认证逻辑主要集中在 api/ 和 middleware/ 模块，涉及 JWT 令牌验证、OAuth 流程和会话管理。\\n\\n- JWT 验证逻辑集中在 `auth/jwt.py`，覆盖令牌生成、验证和刷新三个环节\\n- OAuth 回调处理分散在 `api/oauth.py` 和 `middleware/auth.py`，存在逻辑重复\\n- 会话管理通过 Redis 实现，`session.py` 包含完整的 CRUD 操作",
-  "insights": "- 认证中间件 `middleware/auth.py` 被 12 个路由文件引用，是系统最核心的安全组件\\n- `auth/jwt.py` 中的令牌过期逻辑使用了硬编码的 3600 秒，建议提取为配置项\\n- OAuth 流程在 `api/oauth.py` 和 `middleware/auth.py` 中重复实现，可抽取公共模块\\n- 测试文件 `test_auth.py` 覆盖了主要认证路径，但缺少令牌刷新失败的边界测试\\n- `config.py` 中 OAuth 密钥通过环境变量注入，符合安全最佳实践\\n- 日志记录在认证失败时仅输出通用错误，缺少用于调试的详细上下文"
-}}
-</output_format>
-
-<constraints>
-- overview: Start with one 50-100 character summary sentence, then 3-5 bullet points. Each bullet: one concrete finding with file/module context.
-- insights: 5-8 analytical bullet points. NO statistics, NO match counts, NO tables. Focus on MEANING: architecture, patterns, issues, relationships, quality observations.
-- ALL content must be in Chinese.
-- Reference specific file names in backticks.
-- Output valid JSON only. No markdown code fences, no commentary, no ```json``` wrapper.
-</constraints>"""
-
-    return prompt
-
-
-def _parse_ai_summary_output(output: str) -> dict | None:
-    """Parse the AI agent's stdout into {overview, findings} dict."""
-    import json as _json
-
-    # Strip markdown code fences if present
-    text = output.strip()
-    if text.startswith("```"):
-        idx = text.find("\n")
-        if idx != -1:
-            text = text[idx + 1:]
-        if text.endswith("```"):
-            text = text[:-3]
-        text = text.strip()
-
-    # Try to find JSON object boundaries
-    start = text.find("{")
-    end = text.rfind("}")
-    if start != -1 and end != -1 and end > start:
-        text = text[start:end + 1]
-
-    try:
-        parsed = _json.loads(text)
-        overview = str(parsed.get("overview", "")).strip()
-        insights = str(parsed.get("insights", "")).strip()
-        findings = str(parsed.get("findings", "")).strip()
-        if overview or insights:
-            return {"overview": overview, "insights": insights}
-        if overview or findings:
-            return {"overview": overview, "insights": findings}
-    except (_json.JSONDecodeError, ValueError):
-        pass
-
-    # Fallback: use raw output as overview if it looks like text
-    if len(output) > 50 and not output.startswith("{"):
-        return {"overview": output[:2000], "insights": ""}
-
-    logger.warning("[ai-summary] could not parse agent output: %s", output[:200])
-    return None
-
-
-# ── AI Summary cache ───────────────────────────────────────────────────
-
-def _summary_cache_key(root_id: str, query: str) -> str:
-    """Deterministic cache key from root+query."""
-    raw = f"{root_id}\x00{query.strip().lower()}"
-    return hashlib.sha256(raw.encode()).hexdigest()[:16]
-
-
-def get_cached_ai_summary(root_id: str, query: str) -> dict | None:
-    """Return cached summary dict or None if expired/missing."""
-    key = _summary_cache_key(root_id, query)
-    with _ai_summary_lock:
-        entry = _ai_summary_cache.get(key)
-        if entry and (_time.time() - entry["ts"]) < _AI_SUMMARY_CACHE_TTL and entry.get("summary"):
-            return entry["summary"]
-    return None
-
-
-def set_cached_ai_summary(root_id: str, query: str, summary: dict) -> None:
-    """Store summary in cache, evicting oldest if over limit."""
-    key = _summary_cache_key(root_id, query)
-    with _ai_summary_lock:
-        if len(_ai_summary_cache) >= _AI_SUMMARY_CACHE_MAX:
-            oldest = min(_ai_summary_cache, key=lambda k: _ai_summary_cache[k]["ts"])
-            del _ai_summary_cache[oldest]
-        _ai_summary_cache[key] = {"summary": summary, "ts": _time.time()}
-
-
-def generate_ai_summary(
-    query: str,
-    results_by_file: list,
-    binary_path: str,
-    backend: str = "claude",
-    cwd: str = "",
-    timeout: int = 45,
-    max_files: int = 10,
-    max_snippets: int = 3,
-    extra_env: dict | None = None,
-) -> dict | None:
-    """Generate search summary using the AI agent backend.
-
-    Runs synchronously via ``<binary> -p``; intended to be called from a
-    background daemon thread so it does not block the HTTP response.
-
-    Only supports ``backend="claude"`` and ``backend="codex"`` (direct
-    subprocess).  The ``openclaw`` backend is handled separately via
-    webhook in search_routes (same pattern as feedback processing).
-
-    Args:
-        query: The original search query
-        results_by_file: List of per-file match results from search_content()
-        binary_path: Absolute path to the CLI binary
-        backend: "claude" or "codex" (default "claude")
-        cwd: Working directory for the subprocess (project root)
-        timeout: Max seconds to wait for the subprocess
-        max_files: Top N files to include in the prompt
-        max_snippets: Snippets per file in the prompt
-        extra_env: Extra environment variables for the subprocess
-
-    Returns:
-        {"overview": str, "findings": str} or None on failure
-    """
-    import subprocess
-    import os as _os
-
-    if not results_by_file:
-        return None
-
-    if backend not in ("claude", "codex"):
-        logger.warning("[ai-summary] unsupported backend '%s', only claude/codex supported", backend)
-        return None
-
-    # Build the AI prompt
-    prompt = _build_ai_summary_prompt(
-        query=query,
-        results_by_file=results_by_file,
-        max_files=max_files,
-        max_snippets=max_snippets,
-    )
-
-    # Prepare environment
-    env = _os.environ.copy()
-    if backend == "claude":
-        env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
-    if extra_env:
-        env.update(extra_env)
-
-    actual_cwd = cwd or _os.path.expanduser("~")
-
-    # Build args: claude needs --dangerously-skip-permissions, codex does not
-    args = [binary_path, "-p"]
-    if backend == "claude":
-        args.append("--dangerously-skip-permissions")
-
-    try:
-        result = subprocess.run(
-            args,
-            cwd=actual_cwd,
-            input=prompt,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env=env,
-        )
-        output = result.stdout.strip()
-        if not output:
-            logger.warning("[ai-summary] empty output from agent (backend=%s)", backend)
-            return None
-
-        parsed = _parse_ai_summary_output(output)
-        return parsed
-    except subprocess.TimeoutExpired:
-        logger.warning("[ai-summary] agent timed out after %ds (backend=%s)", timeout, backend)
-        return None
-    except Exception as e:
-        logger.warning("[ai-summary] agent failed (backend=%s): %s", backend, e)
-        return None

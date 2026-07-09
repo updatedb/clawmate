@@ -46,7 +46,7 @@ const state = {
   sortKey: "time",
   sortDir: "desc",
   page: 1,
-  pageSize: 60,
+  pageSize: 66,       // grid 模式每页 66 条; list 模式下使用 21
   total: 0,
   hasMore: false,
   loadingMore: false,
@@ -1210,11 +1210,12 @@ function applyFilterSort(entries) {
 }
 
 function paginate(entries) {
-  const totalPages = Math.max(1, Math.ceil(entries.length / state.pageSize));
+  const size = state.view === 'list' ? 21 : state.pageSize;
+  const totalPages = Math.max(1, Math.ceil(entries.length / size));
   state.page = Math.min(Math.max(state.page, 1), totalPages);
-  const start = (state.page - 1) * state.pageSize;
+  const start = (state.page - 1) * size;
   return {
-    paged: entries.slice(start, start + state.pageSize),
+    paged: entries.slice(start, start + size),
     totalPages,
   };
 }
@@ -1849,6 +1850,7 @@ async function loadDir(dir) {
   }
   state.searchResults = null;
   state.searchQuery = "";
+  els.searchInput.value = "";
   state.page = 1;
   state.loadingMore = false;
   _hideContentResults();
@@ -1979,6 +1981,7 @@ async function search() {
 function clearSearch() {
   state.searchResults = null;
   state.searchQuery = "";
+  els.searchInput.value = "";
   state.page = 1;
   els.searchInput.value = "";
   render();
@@ -2095,6 +2098,9 @@ if (els.rootSelect) {
     }
     state.dir = "";
     state.page = 1;
+    state.searchResults = null;
+    state.searchQuery = "";
+    els.searchInput.value = "";
     loadDir("");
   });
 }
@@ -3331,16 +3337,16 @@ function _openContentMatchModal(filePath) {
   // Render results
   _renderContentMatchModalBody(results, query);
 
-  els.contentMatchModal.style.display = 'flex';
-
-  // Center the modal accounting for agent panel width on the right
+  // Shrink overlay right edge to exclude agent panel, so justify-content:center
+  // naturally centers in the remaining visible area
   var _agentPanel = document.getElementById('agentPanel');
-  var _modalBox = els.contentMatchModal.querySelector('.modal-box');
-  if (_agentPanel && !_agentPanel.classList.contains('hidden') && _modalBox) {
-    _modalBox.style.transform = 'translateX(-375px)'; // 750/2 = agent panel half-width
-  } else if (_modalBox) {
-    _modalBox.style.transform = '';
+  if (_agentPanel && !_agentPanel.classList.contains('hidden')) {
+    els.contentMatchModal.style.right = '750px';
+  } else {
+    els.contentMatchModal.style.right = '';
   }
+
+  els.contentMatchModal.style.display = 'flex';
 
   // Auto-select file after modal is visible
   setTimeout(function () {
@@ -3358,10 +3364,8 @@ function _openContentMatchModal(filePath) {
 }
 
 function _closeContentMatchModal() {
+  els.contentMatchModal.style.right = '';
   els.contentMatchModal.style.display = 'none';
-  // Reset agent-panel-aware centering offset
-  var _modalBox = els.contentMatchModal.querySelector('.modal-box');
-  if (_modalBox) _modalBox.style.transform = '';
 }
 
 /**

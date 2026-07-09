@@ -95,21 +95,13 @@ class SearchContentConfig:
     exclude_dir: list[str] = field(default_factory=lambda: [
         ".git", "node_modules", "__pycache__", ".venv", "venv",
         ".clawmate", "vendor", ".next", "dist", "build",
+        "__MACOSX", "__MACOS__",
     ])
-
-
-@dataclass
-class AISummaryConfig:
-    enabled: bool = True
-    timeout_seconds: int = 45
-    max_input_files: int = 10
-    max_snippets_per_file: int = 3
 
 
 @dataclass
 class SearchConfig:
     content: SearchContentConfig = field(default_factory=SearchContentConfig)
-    ai_summary: AISummaryConfig = field(default_factory=AISummaryConfig)
 
 
 @dataclass
@@ -288,7 +280,6 @@ def _parse_config(raw: dict) -> AppConfig:
 def _parse_search_config(raw: dict) -> SearchConfig:
     """Parse search section from config dict."""
     sc = raw.get("content") or {}
-    ai = raw.get("ai_summary") or {}
     return SearchConfig(
         content=SearchContentConfig(
             enabled=bool(sc.get("enabled", True)),
@@ -297,11 +288,5 @@ def _parse_search_config(raw: dict) -> SearchConfig:
             max_filesize_mb=int(sc.get("max_filesize_mb", 5)),
             exclude_ext=[str(e) for e in (sc.get("exclude_ext") or [])] or SearchContentConfig().exclude_ext,
             exclude_dir=[str(d) for d in (sc.get("exclude_dir") or [])] or SearchContentConfig().exclude_dir,
-        ),
-        ai_summary=AISummaryConfig(
-            enabled=bool(ai.get("enabled", True)),
-            timeout_seconds=int(ai.get("timeout_seconds", 45)),
-            max_input_files=int(ai.get("max_input_files", 10)),
-            max_snippets_per_file=int(ai.get("max_snippets_per_file", 3)),
         ),
     )

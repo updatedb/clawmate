@@ -82,7 +82,7 @@
   var historyState = {
     sessions: [],
     page: 0,              // per-date page index
-    pageSize: 15,         // sessions per page for pagination
+    pageSize: 20,         // sessions per page for pagination
     total: 0,             // total sessions in current query
     query: '',
     currentSessionId: null,

@@ -280,7 +280,8 @@ if __name__ == "__main__":
 
     uvicorn.run(
         app, host="0.0.0.0", port=port, log_level="info",
-        ws_ping_interval=30,      # send ping every 30s to keep connection alive
-        ws_ping_timeout=60,       # wait 60s for pong before closing (generous for slow clients)
-        timeout_keep_alive=120,   # HTTP keep-alive for WebSocket upgrade
+        ws_ping_interval=30,
+        ws_ping_timeout=60,
+        timeout_keep_alive=120,
+        reload=os.environ.get("CLAWMATE_AUTO_RELOAD", "").lower() in ("1", "true", "yes"),
     )
