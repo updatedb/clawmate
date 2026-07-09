@@ -646,20 +646,36 @@ button svg, .btn svg, a svg {
 .sort-pill.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 .sort-pill.active:hover { background: var(--accent); }
 
-.status { display: inline; font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+.status { display: inline; font-size: 12px; color: var(--text-secondary); white-space: nowrap; padding: 4px 0; margin-top: 2px; }
 
 /* Content match detail button (next to status text) */
-.content-match-detail-link {
+/* Content match chip in status bar */
+.content-match-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 1px 10px;
   font-size: 12px;
-  font-weight: 500;
-  color: var(--accent);
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 12px;
   cursor: pointer;
+  user-select: none;
   white-space: nowrap;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  transition: opacity 0.15s, transform 0.12s;
+  line-height: 1.6;
 }
-.content-match-detail-link:hover {
-  color: var(--accent-hover, #0d9488);
+.content-match-chip:hover {
+  opacity: 0.85;
+  transform: translateY(-1px);
+}
+.content-match-chip::after {
+  content: '▸';
+  font-size: 10px;
+  opacity: 0.8;
+  margin-left: 2px;
 }
 
 /* ===== Drag-and-Drop Upload Zone ===== */
@@ -742,6 +758,58 @@ button svg, .btn svg, a svg {
   transition: background 0.1s;
 }
 .card-menu-item:hover { background: var(--bg-tertiary); }
+
+/* Content match badge on gallery card thumb (bottom-right overlay) */
+.card-match-badge {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 9px;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.12s, box-shadow 0.12s;
+  line-height: 1;
+}
+.card-match-badge:hover {
+  transform: scale(1.15);
+  box-shadow: 0 1px 6px rgba(0,0,0,0.25);
+}
+
+/* Content match badge in list view row (inline after filename) */
+.list-item .list-match-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 9px;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.12s;
+  line-height: 1;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.list-item .list-match-badge:hover {
+  transform: scale(1.15);
+}
 .card-menu-item span { white-space: nowrap; }
 
 /* Toolbar create dropdown */
@@ -2000,70 +2068,6 @@ pre:hover .code-copy-btn,
   background: rgba(255,193,7,0.25);
 }
 
-.cs-summary-section {
-  margin-top: 12px;
-  border-top: 1px solid var(--border-color);
-  padding-top: 12px;
-}
-.cs-summary-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.cs-summary-header span {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-.cs-summary-status {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-.cs-summary-status.generating {
-  color: var(--accent);
-  animation: pulse 1.5s ease-in-out infinite;
-}
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-.cs-summary-content {
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--text-primary);
-}
-.cs-summary-content h4 {
-  font-size: 13px;
-  font-weight: 600;
-  margin: 8px 0 4px;
-}
-.cs-summary-content table {
-  font-size: 12px;
-  border-collapse: collapse;
-  width: 100%;
-  margin: 4px 0;
-}
-.cs-summary-content table th,
-.cs-summary-content table td {
-  border: 1px solid var(--border-color);
-  padding: 4px 8px;
-  text-align: left;
-}
-.cs-summary-content table th {
-  background: var(--bg-secondary);
-  font-weight: 600;
-}
-.cs-summary-content ul {
-  padding-left: 20px;
-  margin: 4px 0;
-}
-.cs-summary-content code {
-  background: var(--bg-code);
-  padding: 1px 5px;
-  border-radius: 3px;
-  font-size: 12px;
-}
 .cs-empty {
   text-align: center;
   color: var(--text-muted);
@@ -2077,101 +2081,102 @@ pre:hover .code-copy-btn,
 
 /* ── Content Match Detail Modal ───────────────────────────────────── */
 .content-match-modal-box {
-  min-width: 560px;
-  max-width: 900px;
+  min-width: 640px;
+  max-width: 960px;
   width: 80vw;
   max-height: 85vh;
 }
 
-/* ── AI Summary in modal ─────────────────────────────────────────── */
-.cmd-ai-summary {
-  margin-bottom: 16px;
-  border: 1px solid var(--accent);
-  border-radius: 8px;
-  overflow: hidden;
+/* Two-column layout inside modal body */
+.cmd-modal-body {
+  display: flex;
+  flex: 1;
+  min-height: 200px;
+  min-width: 0;
 }
-.cmd-ai-summary-header {
+
+/* Override default modal-body padding when in sidebar mode */
+.content-match-modal-box .modal-body {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+}
+
+/* ── Left nav sidebar ────────────────────────────────────────────── */
+.cmd-file-nav {
+  width: 220px;
+  min-width: 220px;
+  border-right: 1px solid var(--border-color);
+  overflow-y: auto;
+  padding: 8px 0;
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.cmd-file-nav-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: var(--bg-tertiary);
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.cmd-ai-summary-status {
+  gap: 6px;
+  padding: 7px 12px;
+  cursor: pointer;
   font-size: 12px;
-  font-weight: 400;
-  color: var(--text-muted);
-  margin-left: 4px;
-}
-.cmd-ai-summary-status.generating {
-  color: var(--accent);
-  animation: cmdPulse 1.2s ease-in-out infinite;
-}
-@keyframes cmdPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-.cmd-ai-summary-body {
-  padding: 12px 14px;
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--text-primary);
-  border-top: 1px solid var(--border-color);
-  max-height: 320px;
-  overflow-y: auto;
-}
-.cmd-ai-summary-body h4 {
-  font-size: 13px;
-  font-weight: 600;
-  margin: 14px 0 6px;
-  color: var(--text-primary);
-}
-.cmd-ai-summary-body table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-  margin: 8px 0;
-}
-.cmd-ai-summary-body th,
-.cmd-ai-summary-body td {
-  padding: 4px 8px;
-  text-align: left;
-  border: 1px solid var(--border-color);
-}
-.cmd-ai-summary-body th { background: var(--bg-tertiary); font-weight: 600; }
-.cmd-ai-summary-body ul { padding-left: 20px; margin: 6px 0; }
-.cmd-ai-summary-body li { margin: 3px 0; }
-.cmd-ai-summary-body blockquote {
-  border-left: 3px solid var(--accent);
-  margin: 8px 0;
-  padding: 4px 12px;
   color: var(--text-secondary);
+  transition: background 0.1s, color 0.1s;
+  border-left: 3px solid transparent;
+  user-select: none;
+}
+.cmd-file-nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.cmd-file-nav-item.active {
+  color: var(--text-primary);
   background: var(--bg-tertiary);
-  border-radius: 0 4px 4px 0;
+  border-left-color: var(--accent);
+  font-weight: 500;
 }
 
-/* AI summary section titles (内容概览 / 核心洞察) */
-.cmd-ai-section {
-  margin-bottom: 18px;
+.cmd-file-nav-num {
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 24px;
+  flex-shrink: 0;
+  font-size: 11px;
 }
-.cmd-ai-section:last-child { margin-bottom: 0; }
-.cmd-ai-section-title {
-  font-size: 14px;
-  font-weight: 700;
+.cmd-file-nav-item.active .cmd-file-nav-num {
   color: var(--accent);
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 2px solid var(--accent);
 }
-.cmd-ai-section-content {
-  font-size: 13px;
-  line-height: 1.8;
-  color: var(--text-primary);
+
+.cmd-file-nav-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.cmd-file-nav-meta {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-primary);
+  padding: 1px 6px;
+  border-radius: 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1.5;
+}
+.cmd-file-nav-item.active .cmd-file-nav-meta {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ── Right content area ──────────────────────────────────────────── */
+.cmd-file-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  min-width: 0;
 }
 
 /* ── Collapsible file section ────────────────────────────────────── */
@@ -2258,34 +2263,33 @@ pre:hover .code-copy-btn,
   padding: 4px 0;
   font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
   font-size: 12px;
-  line-height: 1.6;
-  max-height: 280px;
-  overflow-y: auto;
 }
+
 .cmd-match-row {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px;
-  padding: 2px 12px;
+  flex-direction: column;
+  padding: 4px 12px;
+  line-height: 1.55;
   border-bottom: 1px solid var(--border-color);
 }
 .cmd-match-row:last-child { border-bottom: none; }
-.cmd-match-row:hover { background: var(--bg-tertiary); }
+.cmd-match-row:hover { background: var(--bg-hover); }
 
 .cmd-match-line {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 38px;
+  min-width: 32px;
+  height: 20px;
   font-size: 10px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-muted);
-  background: var(--bg-tertiary);
+  background: var(--bg-secondary);
   border-radius: 3px;
-  padding: 0 4px;
+  padding: 0 5px;
   cursor: pointer;
-  flex-shrink: 0;
+  align-self: flex-start;
+  margin-bottom: 2px;
   transition: color 0.12s, background 0.12s;
 }
 .cmd-match-line:hover {
@@ -2294,17 +2298,23 @@ pre:hover .code-copy-btn,
 }
 
 .cmd-match-context {
+  display: block;
   color: var(--text-muted);
-  white-space: pre;
+  white-space: pre-wrap;
+  word-break: break-all;
   font-size: 12px;
+  padding: 0 0 0 20px;
 }
 
 .cmd-match-text {
+  display: block;
   white-space: pre-wrap;
   word-break: break-all;
   color: var(--text-primary);
-  flex: 1;
-  min-width: 200px;
+  font-weight: 500;
+  padding: 3px 0 1px 20px;
+  border-left: 3px solid var(--accent);
+  margin-top: 1px;
 }
 .cmd-match-hl {
   background: var(--accent);

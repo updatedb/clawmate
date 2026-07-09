@@ -1292,6 +1292,22 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
       card.appendChild(title);
       card.appendChild(meta);
 
+      // ── Content match badge (only during search mode) ──
+      if (state.searchResults) {
+        var _matchData = _getContentMatchForEntry(entry.relPath);
+        if (_matchData && _matchData.match_count > 0) {
+          var matchBadge = document.createElement('span');
+          matchBadge.className = 'card-match-badge';
+          matchBadge.textContent = _matchData.match_count;
+          matchBadge.title = _matchData.match_count + ' 处内容匹配，点击查看';
+          matchBadge.addEventListener('click', function (e) {
+            e.stopPropagation();
+            _openContentMatchModal(entry.relPath);
+          });
+          thumb.appendChild(matchBadge);
+        }
+      }
+
       // ── ⋯ Menu button (overlaid on thumb) ──
       var menuBtn = document.createElement("button");
       menuBtn.className = "card-menu-btn";
@@ -1534,6 +1550,21 @@ function renderList(markdownEntries, folderEntries, otherEntries) {
           name.appendChild(agentBtn);
         })(entry.relPath);
       }
+      // Content match badge (only during search mode)
+      if (state.searchResults) {
+        var _matchData2 = _getContentMatchForEntry(entry.relPath);
+        if (_matchData2 && _matchData2.match_count > 0) {
+          var listBadge = document.createElement('span');
+          listBadge.className = 'list-match-badge';
+          listBadge.textContent = _matchData2.match_count;
+          listBadge.title = _matchData2.match_count + ' 处内容匹配，点击查看';
+          listBadge.addEventListener('click', function (e) {
+            e.stopPropagation();
+            _openContentMatchModal(entry.relPath);
+          });
+          name.appendChild(listBadge);
+        }
+      }
       const type = document.createElement("span");
       type.textContent = entry.is_dir ? "目录" : entry.category;
       const size = document.createElement("span");
@@ -1607,8 +1638,8 @@ function render() {
   if (!state.searchResults && baseCount === 0) {
     setStatus("目录为空");
   } else {
-    const searchPrefix = state.searchResults ? `搜索 "${state.searchQuery}"，找到 ${baseCount} 项` : `${baseCount} 项`;
-    const filterInfo = filteredCount !== baseCount ? `，筛选后 ${filteredCount} 项` : "";
+    const searchPrefix = state.searchResults ? `搜索 "${state.searchQuery}"，综合匹配 ${baseCount} 项` : `${baseCount} 项`;
+    const filterInfo = filteredCount !== baseCount ? `，显示 ${filteredCount} 项` : "";
     setStatus(`${searchPrefix}${filterInfo} · 第 ${state.page}/${totalPages} 页`);
   }
 }
@@ -1821,7 +1852,6 @@ async function loadDir(dir) {
   state.page = 1;
   state.loadingMore = false;
   _hideContentResults();
-  _stopContentSummaryPoll();
 
   const cacheKey = state.rootId + ':' + (safeDir || '');
   const cached = _getCachedDir(cacheKey);
@@ -2035,7 +2065,6 @@ async function loadConfig() {
   var origClearSearch = clearSearch;
   clearSearch = function() {
     _hideContentResults();
-    _stopContentSummaryPoll();
     origClearSearch();
   };
 })();
@@ -3170,9 +3199,7 @@ document.addEventListener('click', function (e) {
   }
 });
 
-// ===== Unified Search — 文件名 + ripgrep 内容搜索 + AI 摘要 =====
-
-var _csSummaryPollTimer = null;
+// ===== Unified Search — 文件名 + ripgrep 内容搜索 =====
 
 async function unifiedSearch() {
   if (!state.rootId) { setStatus('请先选择根目录'); return; }
@@ -3184,7 +3211,7 @@ async function unifiedSearch() {
   // Run filename search and content search in parallel
   var [nameRes, contentRes] = await Promise.allSettled([
     authFetch('/api/clawmate/search?root=' + encodeURIComponent(state.rootId) + '&q=' + encodeURIComponent(q) + '&dir=' + encodeURIComponent(state.dir) + '&recursive=true'),
-    fetch('/api/clawmate/search/content?q=' + encodeURIComponent(q) + '&root=' + encodeURIComponent(state.rootId) + '&dir=' + encodeURIComponent(state.dir) + '&summary=true')
+    fetch('/api/clawmate/search/content?q=' + encodeURIComponent(q) + '&root=' + encodeURIComponent(state.rootId) + '&dir=' + encodeURIComponent(state.dir))
   ]);
 
   // Parse filename results
@@ -3203,34 +3230,67 @@ async function unifiedSearch() {
   var contentMatchCount = contentData ? (contentData.total_matches || 0) : 0;
   var contentFileCount = contentData ? (contentData.total_files || 0) : 0;
 
-  // Update state with filename results for grid/list rendering
-  state.searchResults = nameData ? (nameData.results || []).map(mapEntry) : [];
+  // Store content results BEFORE render() so gallery/list badges can read them
+  if (contentData && contentFileCount > 0) {
+    state.contentResults = contentData;
+  } else {
+    state.contentResults = null;
+  }
+
+  // Merge content-only files into search results for gallery display
+  var mergedResults = nameData ? (nameData.results || []).map(mapEntry) : [];
+  if (contentData && contentData.results_by_file) {
+    var existingPaths = new Set(mergedResults.map(function(e) { return e.relPath; }));
+    contentData.results_by_file.forEach(function(cr) {
+      if (!existingPaths.has(cr.file)) {
+        var fileName = cr.file.split('/').pop() || cr.file;
+        var ext = fileName.includes('.') ? '.' + fileName.split('.').pop() : '';
+        mergedResults.push({
+          name: fileName,
+          path: cr.file,
+          relPath: cr.file,
+          is_dir: false,
+          size: cr.size || 0,
+          mtime: cr.mtime || 0,
+          ext: ext,
+          mime: 'text/plain',
+          category: 'text',
+          broken_link: false,
+          _contentOnly: true,
+        });
+      }
+    });
+    // Re-sort by name for consistent display
+    mergedResults.sort(function(a, b) { return a.relPath.localeCompare(b.relPath); });
+  }
+  state.searchResults = mergedResults;
   state.searchQuery = q;
   state.page = 1;
   render();
 
-  // Show content results — store data and show detail button only (no inline panel)
-  _stopContentSummaryPoll();
+  // Show/hide the content match chip in status bar
   if (contentData && contentFileCount > 0) {
-    _showContentResults(contentData);
+    if (els.contentMatchDetailBtn) {
+      els.contentMatchDetailBtn.textContent = '内容匹配 ' + contentMatchCount + ' 处 / ' + contentFileCount + ' 个文件';
+      els.contentMatchDetailBtn.classList.remove('hidden');
+    }
   } else {
-    _hideContentResults();
+    if (els.contentMatchDetailBtn) els.contentMatchDetailBtn.classList.add('hidden');
+    _closeContentMatchModal();
   }
 
-  // Build status message
-  var parts = [];
-  if (nameCount > 0) parts.push('文件名匹配 ' + nameCount + ' 项');
-  if (contentFileCount > 0) parts.push('内容匹配 ' + contentMatchCount + ' 处 / ' + contentFileCount + ' 个文件');
-  if (!parts.length) parts.push('未找到匹配');
-  setStatus(parts.join(' · '));
+  // Status is handled by render() — shows "搜索 "query"，找到 N 项 · 第 N/N 页"
+  // and the chip shows the content match info separately
 }
 
 function _showContentResults(data) {
   var totalFiles = data.total_files || 0;
+  var totalMatches = data.total_matches || 0;
 
-  // Store raw data for detail modal & show detail button
+  // Store raw data for detail modal & show detail chip
   state.contentResults = data;
   if (els.contentMatchDetailBtn && totalFiles > 0) {
+    els.contentMatchDetailBtn.textContent = '内容匹配 ' + totalMatches + ' 处 / ' + totalFiles + ' 个文件';
     els.contentMatchDetailBtn.classList.remove('hidden');
   }
 }
@@ -3238,184 +3298,25 @@ function _showContentResults(data) {
 function _hideContentResults() {
   if (els.contentMatchDetailBtn) els.contentMatchDetailBtn.classList.add('hidden');
   state.contentResults = null;
-  _stopContentSummaryPoll();
   _closeContentMatchModal();
 }
 
-function _ensureContentResultsPanel() {
-  var panel = document.getElementById('csResultsPanel');
-  if (panel) return panel;
-  panel = document.createElement('div');
-  panel.id = 'csResultsPanel';
-  panel.className = 'cs-results-panel';
-
-  var header = document.createElement('div');
-  header.className = 'cs-results-header';
-  header.innerHTML = '<span id="csResultsHeaderText">内容概览</span>';
-  var headerRight = document.createElement('div');
-  headerRight.style.cssText = 'display:flex;align-items:center;gap:8px;';
-  var openBtn = document.createElement('button');
-  openBtn.className = 'cs-results-open-btn';
-  openBtn.title = '查看完整匹配详情';
-  openBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg><span> 查看全部</span>';
-  openBtn.addEventListener('click', function(e) {
-    e.stopPropagation();
-    _openContentMatchModal();
-  });
-  headerRight.appendChild(openBtn);
-  var closeBtn = document.createElement('button');
-  closeBtn.className = 'cs-results-close';
-  closeBtn.textContent = '✕';
-  closeBtn.addEventListener('click', _hideContentResults);
-  headerRight.appendChild(closeBtn);
-  header.appendChild(headerRight);
-  panel.appendChild(header);
-
-  var body = document.createElement('div');
-  body.className = 'cs-results-body';
-  body.id = 'csResultsBody';
-  panel.appendChild(body);
-
-  return panel;
-}
-
-function _renderContentResults(container, results, query) {
-  if (!results.length) return;
-  results.forEach(function(r) {
-    var item = document.createElement('div');
-    item.className = 'cs-result-item';
-
-    var fileRow = document.createElement('div');
-    fileRow.className = 'cs-result-file';
-    var link = document.createElement('a');
-    link.href = '/clawmate/preview.html?root=' + encodeURIComponent(state.rootId) + '&file=' + encodeURIComponent(r.file);
-    link.textContent = r.file;
-    link.target = '_blank';
-    fileRow.appendChild(link);
-    var count = document.createElement('span');
-    count.className = 'cs-result-count';
-    count.textContent = (r.match_count || 0) + ' 处匹配';
-    fileRow.appendChild(count);
-    item.appendChild(fileRow);
-
-    var snippets = document.createElement('div');
-    snippets.className = 'cs-result-snippets';
-    var matches = r.matches || [];
-    var lowerQ = query.toLowerCase();
-    matches.slice(0, 3).forEach(function(m) {
-      var snip = document.createElement('div');
-      snip.className = 'cs-snippet';
-      var text = (m.text || '').trim();
-      if (text.length > 200) text = text.substring(0, 200) + '...';
-      var idx = text.toLowerCase().indexOf(lowerQ);
-      if (idx >= 0) {
-        snip.innerHTML = escHtml(text.substring(0, idx)) +
-          '<span class="hl">' + escHtml(text.substring(idx, idx + query.length)) + '</span>' +
-          escHtml(text.substring(idx + query.length));
-      } else {
-        snip.textContent = text;
-      }
-      snippets.appendChild(snip);
-    });
-    if (matches.length > 3) {
-      var more = document.createElement('div');
-      more.className = 'cs-snippet';
-      more.textContent = '... 还有 ' + (matches.length - 3) + ' 处匹配';
-      more.style.cssText = 'color:var(--text-muted);font-style:italic;';
-      snippets.appendChild(more);
-    }
-    item.appendChild(snippets);
-    container.appendChild(item);
-  });
-}
-
-function _renderContentSummary(section, summary) {
-  section.style.display = '';
-  section.innerHTML = '';
-  var header = document.createElement('div');
-  header.className = 'cs-summary-header';
-  header.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M12 2a10 10 0 0 1 10 10h-10V2z"/></svg>' +
-    '<span>AI 内容概览</span>';
-  section.appendChild(header);
-
-  var content = document.createElement('div');
-  content.className = 'cs-summary-content';
-  var md = '';
-  if (summary.overview) md += summary.overview;
-  var details = summary.insights || summary.findings;
-  if (details) {
-    if (md) md += '\n\n';
-    md += details;
+/**
+ * Look up content match info for a given relative path.
+ * Returns the results_by_file entry or null.
+ */
+function _getContentMatchForEntry(relPath) {
+  if (!state.contentResults || !state.contentResults.results_by_file) return null;
+  var list = state.contentResults.results_by_file;
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].file === relPath) return list[i];
   }
-  content.innerHTML = _csMdToHtml(md);
-  section.appendChild(content);
-}
-
-function _csMdToHtml(md) {
-  if (!md) return '';
-  var html = escHtml(md);
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-  html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
-  html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
-  html = html.replace(/^\|(.+)\|$/gm, function(line) {
-    var cells = line.split('|').filter(function(c) { return c.trim(); });
-    if (cells.length < 2) return line;
-    var isHeader = line.indexOf('---') === -1;
-    var tag = isHeader ? 'th' : 'td';
-    return '<tr>' + cells.map(function(c) { return '<' + tag + '>' + c.trim() + '</' + tag + '>'; }).join('') + '</tr>';
-  });
-  html = html.replace(/(<tr>[\s\S]*?<\/tr>)/g, function(m) { return '<table>' + m + '</table>'; });
-  html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
-  html = html.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>');
-  html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
-  html = html.replace(/\n\n/g, '<br><br>');
-  return html;
-}
-
-function _startContentSummaryPoll(q) {
-  _stopContentSummaryPoll();
-  var summarySection = document.getElementById('csMainSummarySection');
-  if (!summarySection) return;
-
-  summarySection.style.display = '';
-  summarySection.innerHTML = '<div class="cs-summary-header"><span>AI 内容概览</span>' +
-    '<span class="cs-summary-status generating">AI 正在生成摘要...</span></div>';
-
-  var pollCount = 0;
-  var maxPolls = 60; // 2 minutes max (2s interval)
-  _csSummaryPollTimer = setInterval(async function() {
-    pollCount++;
-    if (pollCount > maxPolls) {
-      _stopContentSummaryPoll();
-      return;
-    }
-    try {
-      var res = await fetch('/api/clawmate/search/summary?q=' + encodeURIComponent(q) + '&root=' + encodeURIComponent(state.rootId));
-      var data = await res.json();
-      if (data.status === 'ready' && data.summary) {
-        _stopContentSummaryPoll();
-        var section = document.getElementById('csMainSummarySection');
-        if (section) _renderContentSummary(section, data.summary);
-      } else if (data.status === 'not_found') {
-        _stopContentSummaryPoll();
-        var s = document.getElementById('csMainSummarySection');
-        if (s) { s.innerHTML = ''; s.style.display = 'none'; }
-      }
-    } catch (_) {}
-  }, 2000);
-}
-
-function _stopContentSummaryPoll() {
-  if (_csSummaryPollTimer) {
-    clearInterval(_csSummaryPollTimer);
-    _csSummaryPollTimer = null;
-  }
+  return null;
 }
 
 // ── Content Match Detail Modal ──────────────────────────────────────
 
-function _openContentMatchModal() {
+function _openContentMatchModal(filePath) {
   var data = state.contentResults;
   if (!data) return;
 
@@ -3425,17 +3326,138 @@ function _openContentMatchModal() {
   var query = state.searchQuery || '';
 
   els.contentMatchModalTitle.textContent = '内容匹配详情 — "' + query + '"';
-  els.contentMatchModalCount.textContent = '共 ' + totalMatches + ' 处匹配 / ' + totalFiles + ' 个文件';
+  els.contentMatchModalCount.textContent = '内容匹配 ' + totalMatches + '处/' + totalFiles + '个文件';
 
   // Render results
   _renderContentMatchModalBody(results, query);
 
   els.contentMatchModal.style.display = 'flex';
+
+  // Auto-select file after modal is visible
+  setTimeout(function () {
+    // filePath may be a MouseEvent object when called as click handler — treat it as absent
+    var targetPath = (typeof filePath === 'string') ? filePath : '';
+    if (!targetPath) {
+      var firstItem = els.contentMatchModalBody.querySelector('.cmd-file-nav-item');
+      if (firstItem) targetPath = firstItem.dataset.filePath;
+    }
+    if (targetPath) {
+      var item = els.contentMatchModalBody.querySelector('.cmd-file-nav-item[data-file-path="' + targetPath + '"]');
+      if (item) item.click();
+    }
+  }, 16);
 }
 
 function _closeContentMatchModal() {
-  _stopModalSummaryPoll();
   els.contentMatchModal.style.display = 'none';
+}
+
+/**
+ * Build a single file-section DOM element (header + matches).
+ */
+function _buildFileSection(r, fileIndex, lowerQ, query) {
+  var filePath = r.file;
+  var fileSection = document.createElement('div');
+  fileSection.className = 'cmd-file-section';
+  fileSection.dataset.filePath = filePath;
+
+  // ── Header ──
+  var fileHeader = document.createElement('div');
+  fileHeader.className = 'cmd-file-header';
+
+  var numBadge = document.createElement('span');
+  numBadge.className = 'cmd-file-num';
+  numBadge.textContent = '#' + fileIndex;
+  fileHeader.appendChild(numBadge);
+
+  var fileLink = document.createElement('a');
+  fileLink.href = '/clawmate/preview.html?root=' + encodeURIComponent(state.rootId) + '&file=' + encodeURIComponent(filePath);
+  fileLink.target = '_blank';
+  fileLink.className = 'cmd-file-link';
+  fileLink.textContent = filePath;
+  fileLink.addEventListener('click', function(e) { e.stopPropagation(); });
+  fileHeader.appendChild(fileLink);
+
+  var spacer = document.createElement('span');
+  spacer.style.cssText = 'flex:1;min-width:0;';
+  fileHeader.appendChild(spacer);
+
+  var fileMeta = document.createElement('span');
+  fileMeta.className = 'cmd-file-meta';
+  fileMeta.textContent = (r.match_count || 0) + ' 处匹配';
+  fileHeader.appendChild(fileMeta);
+
+  var chevron = document.createElement('span');
+  chevron.className = 'cmd-section-chevron';
+  fileHeader.appendChild(chevron);
+
+  var matchesContainer = document.createElement('div');
+  matchesContainer.className = 'cmd-matches';
+
+  fileHeader.addEventListener('click', function() {
+    var collapsed = fileSection.classList.toggle('collapsed');
+    matchesContainer.style.display = collapsed ? 'none' : '';
+  });
+
+  fileSection.appendChild(fileHeader);
+
+  // ── Match rows ──
+  (r.matches || []).forEach(function(m) {
+    var matchRow = document.createElement('div');
+    matchRow.className = 'cmd-match-row';
+
+    var lineNum = document.createElement('span');
+    lineNum.className = 'cmd-match-line';
+    lineNum.textContent = 'L' + (m.line || '?');
+    lineNum.title = '跳转到预览第 ' + (m.line || '?') + ' 行';
+    lineNum.addEventListener('click', function(e) {
+      e.stopPropagation();
+      window.open(
+        '/clawmate/preview.html?root=' + encodeURIComponent(state.rootId) +
+        '&file=' + encodeURIComponent(filePath) +
+        '&line=' + (m.line || ''),
+        '_blank'
+      );
+    });
+    matchRow.appendChild(lineNum);
+
+    if (m.context_before && m.context_before.length) {
+      m.context_before.forEach(function(ctx) {
+        var ctxSpan = document.createElement('span');
+        ctxSpan.className = 'cmd-match-context';
+        ctxSpan.textContent = ctx;
+        matchRow.appendChild(ctxSpan);
+      });
+    }
+
+    var matchText = document.createElement('span');
+    matchText.className = 'cmd-match-text';
+    var text = (m.text || '').trim();
+    var idx2 = text.toLowerCase().indexOf(lowerQ);
+    if (idx2 >= 0) {
+      matchText.innerHTML =
+        escHtml(text.substring(0, idx2)) +
+        '<span class="cmd-match-hl">' + escHtml(text.substring(idx2, idx2 + query.length)) + '</span>' +
+        escHtml(text.substring(idx2 + query.length));
+    } else {
+      matchText.textContent = text;
+    }
+    matchRow.appendChild(matchText);
+
+    if (m.context_after && m.context_after.length) {
+      m.context_after.forEach(function(ctx) {
+        var ctxSpan = document.createElement('span');
+        ctxSpan.className = 'cmd-match-context';
+        ctxSpan.textContent = ctx;
+        matchRow.appendChild(ctxSpan);
+      });
+    }
+
+    matchesContainer.appendChild(matchRow);
+  });
+
+  fileSection.appendChild(matchesContainer);
+  return fileSection;
 }
 
 function _renderContentMatchModalBody(results, query) {
@@ -3447,233 +3469,62 @@ function _renderContentMatchModalBody(results, query) {
     return;
   }
 
-  // ── AI Summary section ──────────────────────────────────────────
-  var summarySection = document.createElement('div');
-  summarySection.className = 'cmd-ai-summary';
-  summarySection.id = 'cmdModalSummarySection';
-  summarySection.innerHTML = '<div class="cmd-ai-summary-header">' +
-    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M12 2a10 10 0 0 1 10 10h-10V2z"/></svg>' +
-    '<span>AI 内容概览</span>' +
-    '<span class="cmd-ai-summary-status" id="cmdModalSummaryStatus"></span>' +
-    '</div>' +
-    '<div class="cmd-ai-summary-body" id="cmdModalSummaryBody"></div>';
-  body.appendChild(summarySection);
-
-  // ── File sections (numbered, collapsed) ─────────────────────────
   var lowerQ = query.toLowerCase();
+
+  // ── Flex wrapper: left nav + right content (initially empty) ──
+  var wrapper = document.createElement('div');
+  wrapper.className = 'cmd-modal-body';
+
+  var nav = document.createElement('div');
+  nav.className = 'cmd-file-nav';
+
+  var content = document.createElement('div');
+  content.className = 'cmd-file-content';
 
   results.forEach(function(r, idx) {
     var fileIndex = idx + 1;
-    var fileSection = document.createElement('div');
-    fileSection.className = 'cmd-file-section collapsed';
+    var filePath = r.file;
 
-    // Clickable header
-    var fileHeader = document.createElement('div');
-    fileHeader.className = 'cmd-file-header';
+    // ── Nav item only — file section is built on demand ──
+    var navItem = document.createElement('div');
+    navItem.className = 'cmd-file-nav-item';
+    navItem.dataset.filePath = filePath;
 
-    var numBadge = document.createElement('span');
-    numBadge.className = 'cmd-file-num';
-    numBadge.textContent = '#' + fileIndex;
-    fileHeader.appendChild(numBadge);
+    var numSpan = document.createElement('span');
+    numSpan.className = 'cmd-file-nav-num';
+    numSpan.textContent = '#' + fileIndex;
+    navItem.appendChild(numSpan);
 
-    var fileLink = document.createElement('a');
-    fileLink.href = '/clawmate/preview.html?root=' + encodeURIComponent(state.rootId) + '&file=' + encodeURIComponent(r.file);
-    fileLink.target = '_blank';
-    fileLink.className = 'cmd-file-link';
-    fileLink.textContent = r.file;
-    fileLink.addEventListener('click', function(e) { e.stopPropagation(); });
-    fileHeader.appendChild(fileLink);
+    var nameSpan = document.createElement('span');
+    nameSpan.className = 'cmd-file-nav-name';
+    nameSpan.textContent = filePath.split('/').pop();
+    nameSpan.title = filePath;
+    navItem.appendChild(nameSpan);
 
-    // Spacer to absorb flex space so only the link text opens preview
-    var spacer = document.createElement('span');
-    spacer.style.cssText = 'flex:1;min-width:0;';
-    fileHeader.appendChild(spacer);
+    var metaSpan = document.createElement('span');
+    metaSpan.className = 'cmd-file-nav-meta';
+    metaSpan.textContent = r.match_count || 0;
+    navItem.appendChild(metaSpan);
 
-    var fileMeta = document.createElement('span');
-    fileMeta.className = 'cmd-file-meta';
-    fileMeta.textContent = (r.match_count || 0) + ' 处匹配';
-    fileHeader.appendChild(fileMeta);
-
-    var chevron = document.createElement('span');
-    chevron.className = 'cmd-section-chevron';
-    fileHeader.appendChild(chevron);
-
-    // Toggle on header click
-    fileHeader.addEventListener('click', function() {
-      var collapsed = fileSection.classList.toggle('collapsed');
-      matchesContainer.style.display = collapsed ? 'none' : '';
+    // Click → activate this file (build its section, replace content)
+    navItem.addEventListener('click', function(e) {
+      e.stopPropagation();
+      nav.querySelectorAll('.cmd-file-nav-item').forEach(function(n) { n.classList.remove('active'); });
+      navItem.classList.add('active');
+      content.innerHTML = '';
+      content.appendChild(_buildFileSection(r, fileIndex, lowerQ, query));
     });
 
-    fileSection.appendChild(fileHeader);
-
-    // Matches (collapsed by default)
-    var matches = r.matches || [];
-    var matchesContainer = document.createElement('div');
-    matchesContainer.className = 'cmd-matches';
-    matchesContainer.style.display = 'none';
-
-    matches.forEach(function(m) {
-      var matchRow = document.createElement('div');
-      matchRow.className = 'cmd-match-row';
-
-      var lineNum = document.createElement('span');
-      lineNum.className = 'cmd-match-line';
-      lineNum.textContent = 'L' + (m.line || '?');
-      lineNum.title = '跳转到预览第 ' + (m.line || '?') + ' 行';
-      lineNum.addEventListener('click', function(e) {
-        e.stopPropagation();
-        window.open(
-          '/clawmate/preview.html?root=' + encodeURIComponent(state.rootId) +
-          '&file=' + encodeURIComponent(r.file) +
-          '&line=' + (m.line || ''),
-          '_blank'
-        );
-      });
-      matchRow.appendChild(lineNum);
-
-      if (m.context_before && m.context_before.length) {
-        m.context_before.forEach(function(ctx) {
-          var ctxSpan = document.createElement('span');
-          ctxSpan.className = 'cmd-match-context';
-          ctxSpan.textContent = ctx;
-          matchRow.appendChild(ctxSpan);
-        });
-      }
-
-      var matchText = document.createElement('span');
-      matchText.className = 'cmd-match-text';
-      var text = (m.text || '').trim();
-      var idx2 = text.toLowerCase().indexOf(lowerQ);
-      if (idx2 >= 0) {
-        matchText.innerHTML =
-          escHtml(text.substring(0, idx2)) +
-          '<span class="cmd-match-hl">' + escHtml(text.substring(idx2, idx2 + query.length)) + '</span>' +
-          escHtml(text.substring(idx2 + query.length));
-      } else {
-        matchText.textContent = text;
-      }
-      matchRow.appendChild(matchText);
-
-      if (m.context_after && m.context_after.length) {
-        m.context_after.forEach(function(ctx) {
-          var ctxSpan = document.createElement('span');
-          ctxSpan.className = 'cmd-match-context';
-          ctxSpan.textContent = ctx;
-          matchRow.appendChild(ctxSpan);
-        });
-      }
-
-      matchesContainer.appendChild(matchRow);
-    });
-
-    fileSection.appendChild(matchesContainer);
-    body.appendChild(fileSection);
+    nav.appendChild(navItem);
   });
 
-  // ── Load AI summary ────────────────────────────────────────────
-  _loadModalAISummary(query);
+  wrapper.appendChild(nav);
+  wrapper.appendChild(content);
+  body.appendChild(wrapper);
 }
 
 // ── Modal AI Summary ─────────────────────────────────────────────
 
-var _modalSummaryPollTimer = null;
-
-function _loadModalAISummary(query) {
-  // Try cached summary from content results
-  var data = state.contentResults;
-  if (data && data.summary) {
-    _renderModalAISummary(data.summary);
-    return;
-  }
-  // Start polling
-  _startModalSummaryPoll(query);
-}
-
-function _renderModalAISummary(summary) {
-  _stopModalSummaryPoll();
-  var statusEl = document.getElementById('cmdModalSummaryStatus');
-  var bodyEl = document.getElementById('cmdModalSummaryBody');
-  if (!bodyEl) return;
-  if (statusEl) { statusEl.textContent = ''; statusEl.className = 'cmd-ai-summary-status'; }
-
-  bodyEl.innerHTML = '';
-
-  // Section 1: 内容概览 (50-100字, 3-5条)
-  if (summary.overview) {
-    var ovSection = document.createElement('div');
-    ovSection.className = 'cmd-ai-section';
-    var ovTitle = document.createElement('div');
-    ovTitle.className = 'cmd-ai-section-title';
-    ovTitle.textContent = '内容概览';
-    ovSection.appendChild(ovTitle);
-    var ovContent = document.createElement('div');
-    ovContent.className = 'cmd-ai-section-content';
-    ovContent.innerHTML = _csMdToHtml(summary.overview);
-    ovSection.appendChild(ovContent);
-    bodyEl.appendChild(ovSection);
-  }
-
-  // Section 2: 核心洞察 (5-8条)
-  if (summary.insights) {
-    var inSection = document.createElement('div');
-    inSection.className = 'cmd-ai-section';
-    var inTitle = document.createElement('div');
-    inTitle.className = 'cmd-ai-section-title';
-    inTitle.textContent = '核心洞察';
-    inSection.appendChild(inTitle);
-    var inContent = document.createElement('div');
-    inContent.className = 'cmd-ai-section-content';
-    inContent.innerHTML = _csMdToHtml(summary.insights);
-    inSection.appendChild(inContent);
-    bodyEl.appendChild(inSection);
-  }
-
-  // Fallback: old format with findings
-  if (!summary.overview && !summary.insights && summary.findings) {
-    bodyEl.innerHTML = _csMdToHtml(summary.findings);
-  }
-
-  // Summary body is always visible
-  bodyEl.style.display = '';
-}
-
-function _startModalSummaryPoll(q) {
-  _stopModalSummaryPoll();
-  var statusEl = document.getElementById('cmdModalSummaryStatus');
-  if (statusEl) { statusEl.textContent = 'AI 正在生成摘要...'; statusEl.className = 'cmd-ai-summary-status generating'; }
-
-  var pollCount = 0;
-  var maxPolls = 60;
-  _modalSummaryPollTimer = setInterval(async function() {
-    pollCount++;
-    if (pollCount > maxPolls) {
-      _stopModalSummaryPoll();
-      var s = document.getElementById('cmdModalSummaryStatus');
-      if (s) { s.textContent = '摘要生成超时'; s.className = 'cmd-ai-summary-status'; }
-      return;
-    }
-    try {
-      var res = await fetch('/api/clawmate/search/summary?q=' + encodeURIComponent(q) + '&root=' + encodeURIComponent(state.rootId));
-      var data = await res.json();
-      if (data.status === 'ready' && data.summary) {
-        _renderModalAISummary(data.summary);
-      } else if (data.status === 'not_found') {
-        _stopModalSummaryPoll();
-        var st = document.getElementById('cmdModalSummaryStatus');
-        if (st) { st.textContent = ''; st.className = 'cmd-ai-summary-status'; }
-      }
-    } catch (_) {}
-  }, 2000);
-}
-
-function _stopModalSummaryPoll() {
-  if (_modalSummaryPollTimer) {
-    clearInterval(_modalSummaryPollTimer);
-    _modalSummaryPollTimer = null;
-  }
-}
-
-// ── Modal event bindings ─────────────────────────────────────────────
 
 if (els.contentMatchDetailBtn) {
   els.contentMatchDetailBtn.addEventListener('click', _openContentMatchModal);
