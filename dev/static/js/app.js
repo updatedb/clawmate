@@ -3333,6 +3333,15 @@ function _openContentMatchModal(filePath) {
 
   els.contentMatchModal.style.display = 'flex';
 
+  // Center the modal accounting for agent panel width on the right
+  var _agentPanel = document.getElementById('agentPanel');
+  var _modalBox = els.contentMatchModal.querySelector('.modal-box');
+  if (_agentPanel && !_agentPanel.classList.contains('hidden') && _modalBox) {
+    _modalBox.style.transform = 'translateX(-375px)'; // 750/2 = agent panel half-width
+  } else if (_modalBox) {
+    _modalBox.style.transform = '';
+  }
+
   // Auto-select file after modal is visible
   setTimeout(function () {
     // filePath may be a MouseEvent object when called as click handler — treat it as absent
@@ -3350,6 +3359,9 @@ function _openContentMatchModal(filePath) {
 
 function _closeContentMatchModal() {
   els.contentMatchModal.style.display = 'none';
+  // Reset agent-panel-aware centering offset
+  var _modalBox = els.contentMatchModal.querySelector('.modal-box');
+  if (_modalBox) _modalBox.style.transform = '';
 }
 
 /**
