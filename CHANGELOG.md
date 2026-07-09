@@ -1,5 +1,34 @@
 # Changelog
 
+## v1.51 (2026-07-09)
+### 分页阈值调整
+- **主列表** grid 卡片模式分页：60 → **66** 条/页
+- **主列表** list 模式分页：22 → **21** 条/页
+- **Agent 会话历史**分页：15 → **20** 条/页
+- **卡片徽标统一**：`card-match-badge` 大小/padding/margin 对齐 `.card-menu-btn`（22px 方形、padding 0、offset 6px）
+
+### 搜索与内容匹配优化
+- **搜索结果文案统一**：状态栏改为"综合匹配 X 项，显示 Y 项"，弹窗匹配数改为"内容匹配 X处/Y个文件"
+- **列表徽标颜色修复**：`.list-match-badge` 亮色主题下文字颜色被覆盖
+- **内容匹配弹窗居中**：Agent 面板打开时自动左移半个面板宽度，在剩余视口中视觉居中
+- **行号可点击性提升**：accent 色 + 浅背景 + 下划线 hint
+
+### 文件上下文去重（后端 + 前端）
+- **后端**：`last_injected_file` → `known_files` Set，`_build_file_context_prompt` 输出简化（移除 `---` 包裹）
+- **后端**：新增 `_normalize_known_file_path` / `_extract_known_file_path` 辅助函数，路径统一处理
+- **后端**：`_input_batch` 批量队列移除，逐条记录 user turn；`SessionLogger.record_user()` 可选 `ts` 参数
+- **前端**：`_knownFilesBySession` 去重机制 + typed-input 跟踪 + pending→session_key 作用域迁移
+
+### 修复
+- **WS 重连文件上下文保留**：重连时绕过 `hasKnownFile` 检查强制重新注入，服务端 `known_files` 同步清理
+- **Transcript 收集路径修复**：on-demand transcript 使用 session 存储的 cwd（而非 project root）
+- **"路径" → "位置"**：按钮重命名，点击改为跳转到文件所在目录（而非复制路径）
+
+### 清理
+- 移除 `.playwright-mcp/` 浏览器调试临时文件（22MB）
+- 移除 `test/DeepSeek如何赋能职场应用？...pdf` 测试 fixture（9.6MB）
+- 归档已完成 superpowers 计划/规格文档
+
 ## v1.50 (2026-07-07)
 ### 会话历史增强 — cwd 恢复、Transcript 路径匹配、文件上下文保留
 - **cwd 恢复**：`_session_cwd_from_log_dir()` 从 index.json 或日志目录结构恢复 session cwd，`agent_session_log`/`agent_session_detail` 同步返回
