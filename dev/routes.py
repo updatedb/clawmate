@@ -556,42 +556,6 @@ async def clawmate_mkdir(request: Request):
     })
 
 
-@router.post("/api/clawmate/move")
-async def clawmate_move(request: Request):
-    """Move a file or directory to a new directory within the same root.
-
-    Request body: {root, path, destDir}
-    Returns: {ok: true, newName: "xxx", newPath: "yyy/xxx"}
-    """
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
-    root_id = str(body.get("root") or request.query_params.get("root", "")).strip()
-    rel_path = str(body.get("path") or request.query_params.get("path", "")).strip()
-    dest_dir = str(body.get("destDir") or body.get("dest_dir") or request.query_params.get("destDir") or "").strip()
-
-    if not root_id or not rel_path:
-        raise HTTPException(status_code=422, detail="Missing root/path")
-    # Allow empty destDir to mean root directory (explicitly provided key)
-    _has_dest = "destDir" in body or "dest_dir" in body or "destDir" in request.query_params
-    if not _has_dest:
-        raise HTTPException(status_code=422, detail="Missing destDir")
-
-    try:
-        from service import move_file
-        result = move_file(root_id, rel_path, dest_dir)
-        return JSONResponse(content=result)
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except FileExistsError as e:
-        raise HTTPException(status_code=409, detail=str(e))
-    except PermissionError:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except OSError as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/api/clawmate/extract")

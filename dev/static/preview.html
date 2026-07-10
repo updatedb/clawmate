@@ -36,6 +36,10 @@
         <button class="preview-copy-filename" id="btnRefreshContent" title="刷新大纲和内容">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
         </button>
+        <span class="version-pill hidden" id="versionPill" title="">
+          <span id="versionPillHash"></span>
+          <span id="versionPillDirty" class="version-pill-dirty hidden">●</span>
+        </span>
       </span>
       <div class="topbar-actions">
         <button class="topbar-btn" id="btnToggleLeft" title="切换大纲面板">
@@ -94,6 +98,7 @@
             <option value="openclaw">OpenClaw</option>
           </select>
           <span class="agent-panel-title" id="previewAgentTitle">Agent</span>
+          <button class="agent-panel-btn" id="previewBtnNewAgentSession" title="新建会话"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 新会话</button>
           <button class="agent-panel-close" id="previewBtnCloseAgent" title="关闭 Agent"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
         </div>
         <div id="previewXtermContainer" class="xterm-container"></div>
@@ -189,6 +194,39 @@
       <div class="mobile-fb-tags" id="mobileFbTags"></div>
       <button class="mobile-fb-submit" id="mobileFbSubmit">提交反馈</button>
       <div class="mobile-fb-status" id="mobileFbStatus"></div>
+    </div>
+  </div>
+
+  <!-- Version history modal -->
+  <div id="versionModal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.45);align-items:center;justify-content:center;">
+    <div class="version-modal-dialog">
+      <!-- Header -->
+      <div class="version-modal-header">
+        <span>📋 版本历史 — <span id="versionModalFileName"></span></span>
+        <button id="versionModalClose" class="version-modal-close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+      </div>
+      <div class="version-modal-body">
+        <!-- Left: commit list -->
+        <div class="version-commit-pane">
+          <div class="version-latest-card" id="versionLatestCard">
+            <div class="version-latest-loading">加载版本信息...</div>
+          </div>
+          <div class="version-dirty-warning hidden" id="versionDirtyWarning">⚠️ 文件有未提交的修改</div>
+          <div class="version-commit-list" id="versionCommitList">
+            <div class="version-commit-empty">加载中...</div>
+          </div>
+        </div>
+        <!-- Right: diff viewer -->
+        <div class="version-diff-pane" id="versionDiffPane">
+          <div class="version-diff-header" id="versionDiffHeader">
+            选择一个版本查看变更
+          </div>
+          <div class="version-diff-content" id="versionDiffContent">
+            <div class="version-diff-placeholder">点击左侧任意提交以查看变更</div>
+          </div>
+        </div>
+      </div>
+      <div class="version-modal-footer" id="versionModalFooter"></div>
     </div>
   </div>
 

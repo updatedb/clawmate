@@ -77,6 +77,7 @@
   let chatStatusEl = null; // reconnection status element
   let currentSessionKey = '';  // tracks last session key from backend
   let flowPaused = false;    // xterm.js flow control: true when write buffer > HIGH watermark
+  var _flowBuffer = null;    // buffered writes while flow is paused
 
   // --- Session history state ---
   var historyState = {
@@ -100,6 +101,29 @@
   function bindHeaderControls() {
     if (closeBtn) {
       closeBtn.onclick = function () { window.Agent.close(); };
+    }
+    // "新建会话" button — ends current session and starts a fresh one
+    var newSessionBtn = document.getElementById('btnNewAgentSession') || document.getElementById('previewBtnNewAgentSession');
+    if (newSessionBtn) {
+      newSessionBtn.onclick = function () {
+        clearReconnect();
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          try { ws.send(JSON.stringify({ type: 'terminate' })); } catch (_) {}
+        }
+        if (term) {
+          try { term.reset(); } catch (_) {}
+          term.writeln('\x1b[1;36m📋 正在新建会话...\x1b[0m');
+        }
+        if (ws) {
+          ws.onclose = null;
+          ws.onerror = null;
+          try { ws.close(); } catch (_) {}
+          ws = null;
+        }
+        currentSessionKey = '';
+        reconnectAttempts = 0;
+        if (wsUrl) connectWs();
+      };
     }
 
     if (!closeBtn || !closeBtn.parentNode) return;
@@ -291,6 +315,7 @@
       fontSize: 14, fontFamily: '"JetBrains Mono", "Cascadia Code", "Fira Code", "Consolas", "SF Mono", "DejaVu Sans Mono", monospace',
       letterSpacing: 0, lineHeight: 1.4,
       allowTransparency: false,
+      convertEol: true,
       drawBoldTextInBrightColors: false,
       theme: {
         background: bg, foreground: fg, cursor: cursor,
@@ -337,6 +362,18 @@
 
     var textarea = term.textarea;
     if (textarea) {
+      // Intercept paste on the textarea to prevent xterm.js from buffering pasted
+      // content in its hidden textarea, which can corrupt subsequent input.
+      textarea.addEventListener('paste', function (e) {
+        var pasted = (e.clipboardData || window.clipboardData).getData('text');
+        if (!pasted) return;
+        e.preventDefault();
+        xlog('paste', 'length=' + pasted.length);
+        // Send directly to WS (not through term.onData) to bypass xterm.js input queue
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          try { ws.send(pasted); } catch (err) { xlog('paste', 'ws.send error: ' + err.message); }
+        }
+      });
       textarea.addEventListener('compositionstart', function () { xlog('ime', 'compositionstart'); });
       textarea.addEventListener('compositionend', function () {
         xlog('ime', 'compositionend → refocus');
@@ -417,7 +454,7 @@
       xlog('data', 'len=' + data.length + ' preview=' + JSON.stringify(data.slice(0, 40)) + ' ws=' + (ws ? ws.readyState : 'null'));
       trackTypedFileReferences(data);
       if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(data);
+        try { ws.send(data); } catch (e) { xlog('data', 'ws.send error: ' + e.message); }
       }
     });
 
@@ -454,7 +491,16 @@
     // Flow control
     if (term.onFlowControlPause) {
       term.onFlowControlPause(function () { flowPaused = true; xlog('flow', 'PAUSE'); });
-      term.onFlowControlResume(function () { flowPaused = false; xlog('flow', 'RESUME'); });
+      term.onFlowControlResume(function () {
+        flowPaused = false;
+        // Flush buffered data that arrived while flow was paused
+        var buf = _flowBuffer;
+        _flowBuffer = null;
+        if (buf && buf.length) {
+          xlog('flow', 'flushing ' + buf.length + ' buffered writes');
+          for (var j = 0; j < buf.length; j++) { if (term) term.write(buf[j]); }
+        }
+      });
       xlog('init', 'Flow control handlers registered');
     }
   }
@@ -697,7 +743,11 @@
       } catch (_) {}
 
       if (isPtyBackend() && term) {
-        if (flowPaused) { return; }
+        if (flowPaused) {
+          if (!_flowBuffer) _flowBuffer = [];
+          _flowBuffer.push(e.data);
+          return;
+        }
         term.write(e.data);
         return;
       }
@@ -739,6 +789,7 @@
 
   function disconnectWs() {
     clearReconnect();
+    _flowBuffer = null;
     if (panelTitleEl) panelTitleEl.textContent = 'Agent';
     if (ws) { ws.onclose = null; ws.close(); ws = null; }
     if (term) {

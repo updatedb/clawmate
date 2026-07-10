@@ -182,6 +182,7 @@ import httpx
 
 from config import load as _config
 from store import list_items, scan_all
+from pathlib import Path
 
 
 _action_desc_cache: dict[str, str] | None = None
@@ -395,12 +396,36 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
 
 @router.post("/api/clawmate/feedback/cron-tick")
 async def cron_tick():
-    """cron 入口：扫所有 root 的 pending feedback，逐 root 唤醒 agent。"""
-    result = scan_all()
-    for root_id in result.pending_roots:
-        _wake_agent_for_root(root_id)
+    """cron 入口：扫所有 root 下各 project 的 pending feedback，逐 project 唤醒 agent。
+
+    scan_all() 只统计 pending 总数，但 _wake_agent_for_root() 需要 project 参数
+    才能读到正确的 project 级 .clawmate/feedback.json。这里走逐 project 扫描。
+    """
+    cfg = _config()
+    total_pending = 0
+    total_woken = 0
+    errors = 0
+    for root in cfg.roots:
+        root_dir = Path(root.dir).expanduser().resolve()
+        if not root_dir.is_dir():
+            continue
+        for entry in sorted(root_dir.iterdir()):
+            if not entry.is_dir():
+                continue
+            fb_path = entry / ".clawmate" / "feedback.json"
+            if not fb_path.exists():
+                continue
+            proj = entry.name
+            try:
+                _, pending = list_items(root.id, proj, status="pending")
+            except (ValueError, FileNotFoundError):
+                continue
+            if pending > 0:
+                total_pending += pending
+                _wake_agent_for_root(root.id, project=proj)
+                total_woken += 1
     logger.info(
-        "[cron-tick] checked=%d pending=%d woken=%d errors=%d",
-        result.checked_roots, result.pending_total, len(result.pending_roots), len(result.errors),
+        "[cron-tick] pending=%d woken=%d roots=%d errors=%d",
+        total_pending, total_woken, len(cfg.roots), errors,
     )
     return {"ok": True}

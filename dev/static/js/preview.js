@@ -106,6 +106,10 @@
       if (src.indexOf('&theme=') === -1) src += '&theme=' + resolved;
       ooIframe.src = src;
     }
+    // Re-render Mermaid diagrams with the new theme
+    if (window._mermaidStore && window._mermaidContainer) {
+      try { renderMermaid(window._mermaidContainer, window._mermaidStore); } catch (_) {}
+    }
   };
 
   // Initial theme — apply immediately (topbar.js already set data-theme before this script ran)
@@ -273,13 +277,21 @@
       var resolvedTheme = window._topbarResolvedTheme ? window._topbarResolvedTheme() : 'light';
       var mermaidTheme = resolvedTheme === 'dark' ? 'dark' : 'default';
 
-      window.mermaid.initialize({
+      var mermaidConfig = {
         startOnLoad: false,
         securityLevel: 'strict',
         fontFamily: 'ui-monospace, SF Mono, Cascadia Code, Consolas, monospace',
         maxWidth: 800,
         theme: mermaidTheme
-      });
+      };
+      if (mermaidTheme === 'dark') {
+        mermaidConfig.themeVariables = {
+          nodeTextColor: '#f0f6fc',
+          primaryTextColor: '#f0f6fc',
+          titleColor: '#f0f6fc',
+        };
+      }
+      window.mermaid.initialize(mermaidConfig);
 
       // Restore stored code into each .mermaid block before calling mermaid.run()
       for (var i = 0; i < blocks.length; i++) {
@@ -313,7 +325,6 @@
           if (stroke.indexOf('NaN%') !== -1) el.setAttribute('stroke', stroke.replace(/hsl\([^)]*NaN%[^)]*\)/g, resolvedTheme === 'dark' ? '#58a6ff' : '#4f46e5'));
         });
       }
-    } catch (err) {
       var errMsg = err && (err.message || err.str || String(err));
       console.error('[ClawMate] Mermaid \u6e32\u67d3\u5931\u8d25:', errMsg, err);
       for (var i = 0; i < blocks.length; i++) {
@@ -2199,6 +2210,7 @@
           const result = createMarkdownRenderer(filePath);
           const md = result.md;
           mermaidStore = result.mermaidStore;
+          window._mermaidStore = mermaidStore;
           html = md.render(content);
           if (window.DOMPurify) {
             html = DOMPurify.sanitize(html, { ADD_ATTR: ['class', 'target', 'data-highlighted'] });
@@ -2222,6 +2234,7 @@
         // Parse succeeded — render markdown
         mdDiv.innerHTML = html;
         contentBody.appendChild(mdDiv);
+        window._mermaidContainer = mdDiv;
 
         buildTOC(mdDiv);
         openLinksInNewTab(mdDiv);
@@ -3443,6 +3456,7 @@
   // ============ Media Feedback Panel ============
   function renderMediaFeedbackPanel() {
     const body = document.getElementById('feedbackBody');
+    var savedScrollTop = body.scrollTop;
     body.innerHTML = '';
 
     var topBar = document.createElement('div');
@@ -3499,6 +3513,7 @@
       empty.style.marginTop = '12px';
       empty.textContent = '点击「+ 添加反馈」开始';
       cardList.appendChild(empty);
+      body.scrollTop = savedScrollTop;
       return;
     }
 
@@ -3524,6 +3539,7 @@
       cardList.appendChild(sep);
       doneOrFailed.forEach(item => cardList.appendChild(renderCompletedFeedbackCard(item)));
     }
+    body.scrollTop = savedScrollTop;
   }
 
   async function loadMediaCompletedFeedback() {
@@ -3560,6 +3576,7 @@
 
   function renderOfficePdfFeedbackPanel() {
     const body = document.getElementById('feedbackBody');
+    var savedScrollTop = body.scrollTop;
     body.innerHTML = '';
 
     var topBar = document.createElement('div');
@@ -3617,6 +3634,7 @@
       empty.style.marginTop = '12px';
       empty.textContent = '点击「+ 添加反馈」开始';
       cardList.appendChild(empty);
+      body.scrollTop = savedScrollTop;
       return;
     }
 
@@ -3634,6 +3652,7 @@
       cardList.appendChild(sep);
       officePdfCompletedItems.forEach(item => cardList.appendChild(renderCompletedFeedbackCard(item)));
     }
+    body.scrollTop = savedScrollTop;
   }
 
   async function loadOfficePdfCompletedFeedback() {
@@ -3708,6 +3727,7 @@
         _skipFeedbackLoad = false;
         btnRefreshContent.classList.remove('spinning');
       }
+      fetchVersionInfo();
     });
   }
 
@@ -4372,15 +4392,20 @@
 
     var commit = _versionCommits[idx];
 
-    // Determine diff range: show what THIS commit introduced (commit vs parent)
-    var fromHash = commit.hash;
-    var parentIdx = idx + 1;
+    // Determine diff range: show what THIS commit introduced (parent → commit)
+    // git diff <parent>..<commit> so additions show green, deletions red
+    var commitHash = commit.hash;  // selected commit (newer = ending state)
+    var parentIdx = idx + 1;       // parent (older = starting state)
     var url = '/api/clawmate/version/diff?root=' + encodeURIComponent(rootId) +
-      '&path=' + encodeURIComponent(filePath) +
-      '&from=' + encodeURIComponent(fromHash);
+      '&path=' + encodeURIComponent(filePath);
 
     if (parentIdx < _versionCommits.length) {
-      url += '&to=' + encodeURIComponent(_versionCommits[parentIdx].hash);
+      // from=parent, to=commit → green = added by this commit, red = removed
+      url += '&from=' + encodeURIComponent(_versionCommits[parentIdx].hash);
+      url += '&to=' + encodeURIComponent(commitHash);
+    } else {
+      // Oldest commit in range, no parent — diff against empty tree
+      url += '&from=' + encodeURIComponent(commitHash);
     }
 
     // Update diff header
@@ -4647,6 +4672,7 @@
 
   function renderFeedbackPanel() {
     var body = document.getElementById('feedbackBody');
+    var savedScrollTop = body.scrollTop;
     body.innerHTML = '';
 
     // Fixed top row: buttons stay at top
@@ -4715,6 +4741,7 @@
       empty.style.marginTop = '12px';
       empty.textContent = '选中文本后点击「📋 加入待办」即可累积';
       cardList.appendChild(empty);
+      body.scrollTop = savedScrollTop;
       return;
     }
 
@@ -4731,6 +4758,7 @@
         cardList.appendChild(renderCompletedFeedbackCard(item));
       });
     }
+    body.scrollTop = savedScrollTop;
   }
 
   // ============ Unified Feedback Input Card (add-feedback popup) ============
@@ -4994,6 +5022,7 @@
 
   function renderImageFeedbackPanel() {
     const body = document.getElementById('feedbackBody');
+    var savedScrollTop = body.scrollTop;
     body.innerHTML = '';
 
     var topBar = document.createElement('div');
@@ -5048,6 +5077,7 @@
       empty.style.marginTop = '12px';
       empty.textContent = '点击「+ 添加反馈」开始';
       cardList.appendChild(empty);
+      body.scrollTop = savedScrollTop;
       return;
     }
 
@@ -5064,6 +5094,7 @@
       cardList.appendChild(sep);
       imageCompletedItems.forEach(item => cardList.appendChild(renderCompletedFeedbackCard(item)));
     }
+    body.scrollTop = savedScrollTop;
   }
 
   async function loadImageCompletedFeedback() {

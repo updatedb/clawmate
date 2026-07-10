@@ -1355,6 +1355,7 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
         addItem('move', '移动到...', function () {
           openDirPicker('选择目标目录 — ' + entry.name);
           dirPickerCallback = function (destDir) {
+            if (!destDir) return;
             authFetch('/api/clawmate/move', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -3029,7 +3030,7 @@ async function openDirPicker(title) {
 
   try {
     // Level 0: fetch root directory listing (directories only)
-    var res = await authFetch('/api/clawmate/list?root=' + encodeURIComponent(state.rootId) + '&dir=&limit=500&dirs_only=true');
+    var res = await authFetch('/api/clawmate/list?root=' + encodeURIComponent(state.rootId) + '&dir=&limit=200&dirs_only=true');
     var data = await res.json();
     dirPickerCache[''] = _filterDirsForPicker(data.entries || []);
 
@@ -3037,17 +3038,20 @@ async function openDirPicker(title) {
     // sees context immediately without having to manually expand every level.
     if (dirPickerSelectedDir) {
       var parts = dirPickerSelectedDir.split('/');
+      var paths = [];
       var accumulated = '';
       for (var i = 0; i < parts.length; i++) {
         accumulated = accumulated ? accumulated + '/' + parts[i] : parts[i];
         dirPickerExpanded[accumulated] = true;
-        var childRes = await authFetch('/api/clawmate/list?root=' + encodeURIComponent(state.rootId)
-          + '&dir=' + encodeURIComponent(accumulated) + '&limit=500&dirs_only=true');
-        if (childRes.ok) {
-          var childData = await childRes.json();
-          dirPickerCache[accumulated] = _filterDirsForPicker(childData.entries || []);
-        }
+        paths.push(accumulated);
       }
+      // 并行预展开所有层级，减少串行 API 开销
+      await Promise.all(paths.map(function(p) {
+        return authFetch('/api/clawmate/list?root=' + encodeURIComponent(state.rootId)
+          + '&dir=' + encodeURIComponent(p) + '&limit=200&dirs_only=true')
+          .then(function(r) { return r.ok ? r.json() : null; })
+          .then(function(d) { dirPickerCache[p] = d ? _filterDirsForPicker(d.entries || []) : []; });
+      }));
     }
 
     // Root node is always expanded
@@ -3107,7 +3111,7 @@ function _renderDirPickerTreeLazy(container, rootName) {
           dirPickerLoading[dir] = true;
           _renderDirPickerTreeLazy(container, rootName); // show ⏳ indicator
           authFetch('/api/clawmate/list?root=' + encodeURIComponent(state.rootId)
-            + '&dir=' + encodeURIComponent(dir) + '&limit=500&dirs_only=true')
+            + '&dir=' + encodeURIComponent(dir) + '&limit=200&dirs_only=true')
             .then(function(r) { return r.ok ? r.json() : null; })
             .then(function(d) {
               dirPickerCache[dir] = d ? _filterDirsForPicker(d.entries || []) : [];

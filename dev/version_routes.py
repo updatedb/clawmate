@@ -116,6 +116,10 @@ def _git_log(file_path: Path, max_count: int = 30) -> list[dict] | None:
 def _git_diff(file_path: Path, from_hash: str, to_hash: str | None = None) -> str | None:
     """Run git diff between two commits (or one commit vs working tree).
 
+    Note: ``git diff A..B`` shows changes from A to B.
+    When from_hash is the parent and to_hash is the child commit,
+    additions display in green and deletions in red (natural direction).
+
     Returns the unified diff text, or None on failure.
     """
     git_root = _find_git_root(file_path)

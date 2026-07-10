@@ -656,10 +656,9 @@ def spawn_background_agent(
 ) -> bool:
     """Spawn a one-shot non-interactive agent process for feedback execution.
 
-    Uses ``claude -p`` / ``codex -p`` (non-interactive mode).  The prompt
-    is piped via stdin to avoid ARG_MAX limits.  Runs in a daemon thread;
-    fire-and-forget — the process communicates results back via the
-    batch-update HTTP API embedded in *message*.
+    Uses ``claude -p <message>`` / ``codex -p <message>`` (non-interactive).
+    Runs in a daemon thread; fire-and-forget — the process communicates
+    results back via the batch-update HTTP API embedded in *message*.
 
     Returns True if the process started, False if the binary was not found.
     """
@@ -683,27 +682,23 @@ def spawn_background_agent(
     if extra_env:
         env.update(extra_env)
 
-    args = [binary, "-p"]
     if backend == "claude":
-        args.append("--dangerously-skip-permissions")
+        # --dangerously-skip-permissions 必须在 -p 之前，否则会被 -p 当作 prompt 参数吞掉
+        args = [binary, "--dangerously-skip-permissions", "-p", message]
+    else:
+        args = [binary, "-p", message]
 
     def _run():
         try:
             proc = subprocess.Popen(
                 args,
                 cwd=cwd,
-                stdin=subprocess.PIPE,
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 env=env,
                 start_new_session=True,
             )
-            # Pipe prompt via stdin — no ARG_MAX limit
-            try:
-                proc.stdin.write(message.encode())
-                proc.stdin.close()
-            except (BrokenPipeError, OSError):
-                pass
             logger.info(
                 "[bg-agent] spawned pid=%d backend=%s cwd=%s msg_len=%d",
                 proc.pid, backend, cwd, len(message),
@@ -870,6 +865,18 @@ async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
                                         }, ensure_ascii=False))
                                 except Exception:
                                     pass
+                            continue
+                        if msg.get("type") == "terminate":
+                            _log("info", "[terminate] key=%s", sess.key)
+                            sess.stop_event.set()
+                            if sess.proc and sess.proc.returncode is None:
+                                try:
+                                    sess.proc.terminate()
+                                except Exception:
+                                    try: sess.proc.kill()
+                                    except Exception: pass
+                            # Don't close WS here — the loop will exit via stop_event,
+                            # and the WebSocket disconnect handler cleans up naturally.
                             continue
                         if msg.get("type") == "file_context":
                             _path = _normalize_known_file_path(msg.get("path", ""))

@@ -170,6 +170,7 @@ from subtitle_routes import router as subtitle_router  # noqa: E402
 from share_routes import router as share_router  # noqa: E402
 from agent_routes import router as agent_router  # noqa: E402
 from search_routes import router as search_router  # noqa: E402
+from version_routes import router as version_router  # noqa: E402
 
 app.include_router(clawmate_router)
 app.include_router(task_router)
@@ -177,6 +178,7 @@ app.include_router(subtitle_router)
 app.include_router(share_router)
 app.include_router(agent_router)
 app.include_router(search_router)
+app.include_router(version_router)
 
 # mount static files under /clawmate/
 if STATIC_DIR.exists() and STATIC_DIR.is_dir():
