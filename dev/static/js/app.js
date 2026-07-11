@@ -38,6 +38,7 @@ const state = {
   rootId: "",
   rootLabel: "",
   dir: "",
+  project: "",
   entries: [],
   searchResults: null,
   searchQuery: "",
@@ -1863,11 +1864,12 @@ async function loadDir(dir) {
     state.entries = cached.entries;
     state.total = cached.total;
     state.hasMore = cached.hasMore;
+    state.project = cached.project;
     updateUrl();
     await loadSidebarParent(state.dir);
     await loadActiveShares();
     render();
-    if (window.Agent) window.Agent.updateRoot(state.rootId, state.dir);
+    if (window.Agent) window.Agent.updateRoot(state.rootId, state.dir, state.project);
     return;
   }
 
@@ -1885,12 +1887,13 @@ async function loadDir(dir) {
     return;
   }
   const data = await res.json();  state.dir = data.path || "";
-  if (window.Agent) window.Agent.updateRoot(state.rootId, state.dir);
+  state.project = data.project;  // null = 无 project，string = project 名
+  if (window.Agent) window.Agent.updateRoot(state.rootId, state.dir, state.project);
   state.entries = (data.entries || []).map(mapEntry);
   state.total = data.total || 0;
   state.hasMore = state.entries.length < state.total;
   _setCachedDir(cacheKey, {
-    dir: state.dir, entries: state.entries, total: state.total, hasMore: state.hasMore
+    dir: state.dir, entries: state.entries, total: state.total, hasMore: state.hasMore, project: state.project
   });
   updateUrl();
   // Also load parent dir for sidebar
@@ -2085,6 +2088,12 @@ if (els.rootSelect) {
       setStatus("根目录无效");
       return;
     }
+    // Reset state.dir before _initAgent to avoid stale dir from old root
+    state.dir = "";
+    state.page = 1;
+    state.searchResults = null;
+    state.searchQuery = "";
+    els.searchInput.value = "";
     _initAgent();
     // Reset multi-select state on root change
     if (state.multiSelectEnabled) {
@@ -2097,11 +2106,6 @@ if (els.rootSelect) {
       updateBatchBar();
       if (els.batchBar) els.batchBar.classList.add("hidden");
     }
-    state.dir = "";
-    state.page = 1;
-    state.searchResults = null;
-    state.searchQuery = "";
-    els.searchInput.value = "";
     loadDir("");
   });
 }
@@ -2216,7 +2220,7 @@ if (btnToggleSidebar) {
 
 // Update content grid columns when sidebar/agent panel change
 function _updateContentGrid() {
-  // Delegate to agent.js for consistent grid management
+  // Delegate to the xterm 6 Agent facade for consistent grid management
   if (window.Agent && window.Agent.updateGrid) {
     window.Agent.updateGrid();
   }
@@ -2892,8 +2896,6 @@ function _initAgent() {
     window.Agent.init({
       backend: state.agentConfig.backend || "claude",
       wsUrl: state.agentConfig.ws_url || "",
-      terminalV2: !!state.agentConfig.terminal_v2,
-      renderer: state.agentConfig.renderer || "auto",
       scrollback: state.agentConfig.scrollback || 10000,
       rootId: state.rootId || "",
       dir: state.dir || "",

@@ -5,9 +5,18 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_backend_select_routes_through_public_agent_facade():
-    agent_js = (ROOT / "dev" / "static" / "js" / "agent.js").read_text(encoding="utf-8")
     terminal_index = (ROOT / "dev" / "frontend" / "terminal" / "index.ts").read_text(encoding="utf-8")
+    adapter = (ROOT / "dev" / "frontend" / "terminal" / "agent-panel-adapter.ts").read_text(encoding="utf-8")
 
-    assert "window.Agent.setBackend(bm)" in agent_js
     assert "setBackend(backend" in terminal_index
-    assert "v2Agent.setBackend" in terminal_index
+    assert "agent.setBackend" in terminal_index
+    assert "select.onchange = () => this.setBackend" in adapter
+
+
+def test_backend_preference_is_persisted_by_root_project_scope():
+    adapter = (ROOT / "dev" / "frontend" / "terminal" / "agent-panel-adapter.ts").read_text(encoding="utf-8")
+
+    assert "clawmate.agent.backend-preferences.v1" in adapter
+    assert "saveBackendPreference" in adapter
+    assert "_scopeKey(rootId: string, dir: string, project?" in adapter
+    assert "this.config.backend = this.readBackendPreference" in adapter

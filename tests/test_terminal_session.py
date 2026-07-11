@@ -60,7 +60,7 @@ async def test_binary_input_is_serialized_and_acknowledged():
 
 
 @pytest.mark.asyncio
-async def test_slow_subscriber_is_removed_without_blocking_reader():
+async def test_slow_subscriber_skips_chunks_instead_of_closing():
     pty = FakePty()
     session = TerminalSession("s1", pty, replay_bytes=4096, connection_queue_bytes=4)
     await session.start()
@@ -70,8 +70,13 @@ async def test_slow_subscriber_is_removed_without_blocking_reader():
     await pty.emit(b"def")
     await asyncio.sleep(0)
 
-    assert connection.closed is True
-    assert connection.id not in session.connections
+    # Connection stays alive — the second chunk is silently dropped instead
+    # of hard‑closing the WebSocket and triggering a reconnect cycle.
+    assert connection.closed is False
+    assert connection.id in session.connections
+    # The first chunk made it into the queue; the second was skipped.
+    assert connection.queued_bytes == 3
+    # Replay always captures everything regardless of per‑connection drops.
     assert session.replay.latest_sequence == 6
     await session.close("test_complete")
 

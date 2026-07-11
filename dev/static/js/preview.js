@@ -2419,7 +2419,11 @@
   // --- Right panel resize ---
   const resizeHandle = document.getElementById('previewResizeHandle');
   let rightPanelWidth = 380;   // feedback panel default
-  const AGENT_PANEL_WIDTH = 750; // fixed: ~86 cols PTY at 14px monospace, matches terminal
+  const AGENT_PANEL_WIDTH = 750;
+  function getAgentPanelWidth() {
+    const stored = Number(localStorage.getItem('clawmate.agentPanelWidth') || 0);
+    return Number.isFinite(stored) && stored >= 420 && stored <= 1153 ? stored : AGENT_PANEL_WIDTH;
+  }
   let dragStartX = 0;
   let dragStartWidth = 0;
 
@@ -2438,9 +2442,9 @@
       threeCol.style.gridTemplateColumns = `${lW} 1fr 0px 0px`;
       if (resizeHandle) resizeHandle.classList.add('hidden');
     } else {
-      // Hide resize handle when agent panel (fixed width) is open
-      if (resizeHandle) resizeHandle.classList.toggle('hidden', !agentHidden);
-      var panelW = !agentHidden ? AGENT_PANEL_WIDTH : rightPanelWidth;
+      // Both the feedback and Agent panels use the same draggable boundary.
+      if (resizeHandle) resizeHandle.classList.remove('hidden');
+      var panelW = !agentHidden ? getAgentPanelWidth() : rightPanelWidth;
       threeCol.style.gridTemplateColumns = `${lW} 1fr 5px ${panelW}px`;
     }
   }
@@ -6534,7 +6538,7 @@
   })();
 
   // ============ Agent Overlay (preview page) ============
-  var _agentConfig = { backend: 'claude', wsUrl: '', agentId: '', terminalV2: false, renderer: 'auto', scrollback: 10000 };
+  var _agentConfig = { backend: 'claude', wsUrl: '', agentId: '', scrollback: 10000 };
 
   /** Fetch agent config from getRootsConfig cached data */
   async function _fetchAgentConfig() {
@@ -6543,8 +6547,6 @@
       if (cfg && cfg.agent) {
         _agentConfig.backend = cfg.agent.backend || 'claude';
         _agentConfig.wsUrl = cfg.agent.ws_url || '';
-        _agentConfig.terminalV2 = !!cfg.agent.terminal_v2;
-        _agentConfig.renderer = cfg.agent.renderer || 'auto';
         _agentConfig.scrollback = cfg.agent.scrollback || 10000;
       }
       if (cfg && cfg.roots) {
@@ -6597,8 +6599,6 @@
               domPrefix: 'preview',  // use #previewXtermContainer etc.
               backend: _agentConfig.backend,
               wsUrl: _agentConfig.wsUrl,
-              terminalV2: _agentConfig.terminalV2,
-              renderer: _agentConfig.renderer,
               scrollback: _agentConfig.scrollback,
               rootId: rootId,
               dir: agentDir,
@@ -6640,7 +6640,7 @@
     });
   }
 
-  // Close button inside agent panel (also handled by agent.js closeBtn handler after init)
+  // Close button inside agent panel
   var btnClosePreviewAgent = document.getElementById('previewBtnCloseAgent');
   if (btnClosePreviewAgent) {
     btnClosePreviewAgent.addEventListener('click', function() {

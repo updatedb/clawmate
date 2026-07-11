@@ -20,12 +20,12 @@ import signal
 import struct
 import termios
 import time
-import websockets
 import re as _re
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
@@ -61,18 +61,31 @@ _MAX_SESSION_LIFETIME = 24 * 3600  # 24 hours
 
 # ── Terminal input cleanup ──
 
+# Pre-compiled ANSI escape patterns shared by all cleaners
+_RE_OSC = _re.compile(r'\x1b\][^\x1b\x07]*(?:\x1b\\|\x07)')
+_RE_CSI = _re.compile(r'\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]')
+_RE_BARE_ESC = _re.compile(r'\x1b.')
+
+
+def _strip_ansi_escapes(raw: str) -> str:
+    """Remove OSC, CSI, and bare-ESC sequences from raw terminal input."""
+    s = _RE_OSC.sub('', raw)
+    s = _RE_CSI.sub('', s)
+    s = _RE_BARE_ESC.sub('', s)
+    return s
+
 
 def _clean_terminal_input(raw: str) -> str:
     """Strip ANSI escape codes and process backspace from raw terminal input."""
-    # OSC: ESC ] ... (ST = ESC \ or BEL)
-    s = _re.sub(r'\x1b\][^\x1b\x07]*(?:\x1b\\|\x07)', '', raw)
-    # CSI: ESC [ param* intermediate* byte
-    s = _re.sub(r'\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]', '', s)
-    # Remaining bare ESC + any char
-    s = _re.sub(r'\x1b.', '', s)
+    s = _strip_ansi_escapes(raw)
     # Strip non-printable control chars (keep tab)
     s = ''.join(c for c in s if c >= ' ' or c in '\t')
     # Process backspace (DEL = \x7f; BS \b is already stripped above)
+    return _apply_backspace(s).strip()
+
+
+def _apply_backspace(s: str) -> str:
+    """Apply backspace (DEL = \\x7f) by dropping the preceding character."""
     buf = []
     for c in s:
         if c == '\x7f':
@@ -80,7 +93,72 @@ def _clean_terminal_input(raw: str) -> str:
                 buf.pop()
         else:
             buf.append(c)
-    return ''.join(buf).strip()
+    return ''.join(buf)
+
+
+def _clean_input_for_history(raw: str) -> str:
+    """Clean terminal input for session history display.
+
+    Like _clean_terminal_input but preserves \\n so multi-line paste
+    and inline line breaks appear naturally in the history log.
+    """
+    s = _strip_ansi_escapes(raw)
+    # Normalise \r\n → \n; drop standalone \r
+    s = s.replace('\r\n', '\n').replace('\r', '')
+    # Keep printable, tab, and newline
+    s = ''.join(c for c in s if c >= ' ' or c in '\t' or c == '\n')
+    # Process backspace (DEL = \x7f)
+    return _apply_backspace(s).strip()
+
+
+def _append_v2_history_input(buffer: str, raw: str) -> tuple[str, bool]:
+    """Apply a raw xterm input frame to a pending history line.
+
+    The returned boolean is true only when the frame contains an actual
+    terminal submission (the final CR/LF).  Editing controls update the
+    pending line but never create a history turn by themselves.
+    """
+    text = _strip_ansi_escapes(raw).replace('\r\n', '\n')
+    submitted = False
+    for index, char in enumerate(text):
+        is_final_char = index == len(text) - 1
+        if char in '\r\n':
+            if is_final_char:
+                submitted = True
+            else:
+                buffer += '\n'
+        elif char in ('\x7f', '\b'):
+            buffer = buffer[:-1]
+        elif char in ('\x03', '\x15'):
+            buffer = ''
+        elif char >= ' ' or char == '\t':
+            buffer += char
+    return buffer, submitted
+
+
+def _extract_openclaw_text(value) -> str:
+    """Extract assistant text from the gateway's delta/final payload variants."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return ''.join(_extract_openclaw_text(item) for item in value)
+    if not isinstance(value, dict):
+        return ''
+    for key in ('deltaText', 'text'):
+        if isinstance(value.get(key), str):
+            return value[key]
+    if 'content' in value:
+        return _extract_openclaw_text(value['content'])
+    if 'message' in value:
+        return _extract_openclaw_text(value['message'])
+    return ''
+
+
+def _openclaw_session_key(agent_id: str, root: str, dir_: str, session_id: str = "") -> str:
+    """Give each ClawMate backend/root/project scope its own gateway session."""
+    scope = _session_key(root, dir_, "openclaw").replace(":", "-").replace("/", "-")
+    suffix = f":{session_id}" if session_id else ""
+    return f"agent:{agent_id or 'default'}:clawmate:{scope}{suffix}"
 
 @dataclass
 class _AgentSession:
@@ -106,9 +184,10 @@ class _AgentSession:
             self.last_active = time.time()
 
 
-# session registry: key → _AgentSession
-_sessions: dict[str, _AgentSession] = {}
 _terminal_v2_manager: TerminalManager | None = None
+_v2_loggers: dict[str, SessionLogger] = {}  # session.id → SessionLogger
+_v2_input_buffers: dict[str, str] = {}     # session.id → accumulated display text
+_v2_session_contexts: dict[str, tuple[str, str, float]] = {}
 
 
 def _session_key(root: str, dir_: str = "", backend: str = "claude") -> str:
@@ -172,39 +251,13 @@ def _history_session_key(session: dict, root: str, project: str) -> str:
     return f"{backend}:{base}"
 
 
-def get_agent_session(root: str, dir_: str = "", backend: str = ""):
-    """Return active agent session for root+dir, or None.
-
-    Uses .clawmate/ marker walking to determine session key.
-    If backend is specified, only searches that backend.
-    If not, searches all PTY backends (claude, codex).
-    Only returns session if:
-    - It exists and stop_event is not set
-    - It has at least one active WebSocket (someone is viewing the terminal)
-    - The agent process is still running
-    """
-    backends = [backend] if backend else ["claude", "codex"]
-    for bk in backends:
-        key = _session_key(root, dir_, bk)
-        sess = _sessions.get(key)
-        if not sess:
-            continue
-        if sess.stop_event.is_set():
-            continue
-        if not sess.ws_set:
-            continue
-        if sess.proc and hasattr(sess.proc, "returncode") and sess.proc.returncode is not None:
-            continue
-        return sess
-    return None
-
-
-def inject_to_session(sess, text: str):
-    """Write text into a Claude Code PTY session (non-blocking)."""
-    try:
-        os.write(sess.master_fd, text.encode())
-    except (OSError, BlockingIOError):
-        pass
+def _active_history_session_ids() -> set[str]:
+    """Return archived-log IDs that still belong to live backend sessions."""
+    return {
+        logger_obj.session_id
+        for logger_obj in _v2_loggers.values()
+        if getattr(logger_obj, "session_id", "")
+    }
 
 
 def _build_file_context_prompt(path: str) -> tuple[str, str]:
@@ -261,40 +314,19 @@ def _write_hidden_pty(sess, text: str):
                 pass
 
 
-async def _cleanup_dead_sessions():
-    """Remove sessions whose processes have died."""
-    # One-shot recovery for sessions orphaned by restart (guard inside)
-    await _recover_orphaned_sessions()
-
-    dead = []
-    for key, sess in _sessions.items():
-        if sess.stop_event.is_set():
-            dead.append(key)
-        elif sess.proc and hasattr(sess.proc, 'returncode') and sess.proc.returncode is not None:
-            dead.append(key)
-    for key in dead:
-        try:
-            sess = _sessions.pop(key)
-            # Collect assistant turns from CLI transcript before closing
-            if sess.logger and sess.log_dir:
-                _collect_transcript(sess, Path(sess.log_dir))
-            if sess.logger:
-                await sess.logger.aclose()
-            try:
-                os.close(sess.master_fd)
-            except OSError:
-                pass
-        except KeyError:
-            pass
-    if dead:
-        logger.debug("cleaned %d dead sessions, %d remain", len(dead), len(_sessions))
+async def _expire_v2_sessions() -> int:
+    """Run the v2 manager's idle/lifetime expiry sweep, if initialized."""
+    manager = _terminal_v2_manager
+    if manager is None:
+        return 0
+    return await manager.expire_idle()
 
 
 async def _idle_reaper():
-    """Periodically kill sessions that have been idle with NO WebSocket attached.
+    """Periodically kill idle v2 sessions and expire old session logs.
 
-    Never kills an active session. Only cleans up orphans after the
-    idle timeout (10 min with no client) or max lifetime (24h with no client).
+    v2 sessions are managed by TerminalManager.expire_idle().  TTL checks
+    scan all configured root directories for old session logs.
 
     On first run after restart, also recovers orphaned sessions (no ended_at)
     by scanning all roots and collecting assistant transcripts from CLI files.
@@ -304,77 +336,23 @@ async def _idle_reaper():
 
     while True:
         await asyncio.sleep(60)  # check every minute
-        now = time.time()
-        dead = []
-        for key, sess in list(_sessions.items()):
-            # Skip sessions that still have active WebSockets — never kill them
-            if sess.ws_set:
-                continue
-            # No WebSocket attached: kill if idle too long OR exceeded max lifetime
-            if ((now - sess.last_active) > _IDLE_TIMEOUT_SECONDS or
-                (now - sess.created_at) > _MAX_SESSION_LIFETIME):
-                dead.append(key)
-        for key in dead:
-            sess = _sessions.pop(key, None)
-            if sess:
-                # Collect assistant turns from CLI transcript before closing
-                if sess.logger and sess.log_dir:
-                    _collect_transcript(sess, Path(sess.log_dir))
-                if sess.logger:
-                    await sess.logger.aclose()
-                sess.stop_event.set()
-                try:
-                    os.killpg(os.getpgid(sess.proc.pid), signal.SIGTERM)
-                    idle_sec = now - sess.last_active
-                    lifetime_sec = now - sess.created_at
-                    logger.info(
-                        "reaper killed session key=%s pid=%d idle=%.0fs lifetime=%.0fs (%d sessions remain)",
-                        key, sess.proc.pid, idle_sec, lifetime_sec, len(_sessions),
-                    )
-                except (ProcessLookupError, OSError):
-                    logger.info(
-                        "reaper cleaned dead session key=%s pid=%d (process already gone)",
-                        key, sess.proc.pid,
-                    )
-                try:
-                    os.close(sess.master_fd)
-                except OSError:
-                    pass
-
-        # ── Sync last_active for live sessions before TTL reap ──
         try:
-            dir_updates: dict[str, dict[str, dict]] = defaultdict(dict)
-            for key, sess in _sessions.items():
-                if sess.log_dir and sess.logger:
-                    dir_updates[sess.log_dir][sess.logger.session_id] = {
-                        "last_active": sess.last_active,
-                    }
-            for log_dir, updates in dir_updates.items():
-                idx = SessionIndex.for_dir(log_dir)
-                await idx.update_batch(updates)
+            await _expire_v2_sessions()
         except Exception as exc:
-            logger.debug("last_active sync error: %s", exc)
+            logger.warning("v2 terminal expiry failed: %s", exc)
 
         # ── TTL: 清理过期会话日志 ──
         try:
             cfg = load_cfg()
             ttl = getattr(cfg.agent, "session_log_ttl_days", 30)
-            seen_roots = set()
-            for key in list(_sessions.keys()):
-                parts = key.split(":")
-                if len(parts) >= 2:
-                    seen_roots.add(parts[1])
-            for rid in seen_roots:
-                rp = _resolve_root_dir(rid)
+            for root_cfg in cfg.roots:
+                rp = _resolve_root_dir(root_cfg.id)
                 if rp and rp.is_dir():
-                    # ── Root-level sessions (no project marker) ──
                     root_sess_dir = rp / ".clawmate" / "sessions"
                     if root_sess_dir.is_dir():
                         try:
                             idx = SessionIndex.for_dir(root_sess_dir)
-                            removed = await idx.reap_async(
-                                ttl, active_keys=set(_sessions.keys()),
-                            )
+                            removed = await idx.reap_async(ttl)
                             if removed:
                                 logger.info(
                                     "TTL reaper: removed %d expired sessions from %s",
@@ -389,9 +367,7 @@ async def _idle_reaper():
                         if sess_dir.is_dir():
                             try:
                                 idx = SessionIndex.for_dir(sess_dir)
-                                removed = await idx.reap_async(
-                                    ttl, active_keys=set(_sessions.keys()),
-                                )
+                                removed = await idx.reap_async(ttl)
                                 if removed:
                                     logger.info(
                                         "TTL reaper: removed %d expired sessions from %s",
@@ -800,553 +776,6 @@ async def _spawn_codex(cwd: str, cols: int = 0, rows: int = 0,
     return await _spawn_pt(cwd, cols, rows, binary, extra_env=extra_env)
 
 
-async def _attach_session(sess: _AgentSession, ws: WebSocket, root: str = "",
-                          cols: int = 0, rows: int = 0):
-    """Bridge a WebSocket to an existing PTY session.
-
-    If cols/rows are provided (>0), applies TIOCSWINSZ BEFORE replaying
-    buffered output so that history aligns with the new client dimensions.
-    """
-    sess.ws_set.add(ws)
-    sess.last_active = time.time()
-
-    # Apply new dimensions BEFORE replaying buffer and sending output,
-    # so everything the new client sees matches its current viewport.
-    if cols > 0 and rows > 0:
-        try:
-            os.set_blocking(sess.master_fd, True)
-            fcntl.ioctl(sess.master_fd, termios.TIOCSWINSZ,
-                        struct.pack("HHHH", rows, cols, 0, 0))
-            os.set_blocking(sess.master_fd, False)
-        except Exception:
-            pass
-
-    # Replay buffered output so the new client sees history
-    for chunk in list(sess.output_buffer):
-        try:
-            if ws.client_state == WebSocketState.CONNECTED:
-                await ws.send_text(chunk)
-        except WebSocketDisconnect:
-            break
-
-    async def ws_to_pty():
-        """Forward WebSocket → PTY (keyboard input)."""
-        _input_buf = ""  # accumulate raw characters until newline
-        try:
-            while not sess.stop_event.is_set():
-                try:
-                    data = await asyncio.wait_for(ws.receive_text(), timeout=0.1)
-                except asyncio.TimeoutError:
-                    continue
-                except WebSocketDisconnect:
-                    break
-
-                # Control messages — only {} objects with a "type" key
-                try:
-                    msg = json.loads(data)
-                    if isinstance(msg, dict):
-                        if msg.get("type") == "resize":
-                            cols = msg.get("cols", 80)
-                            rows = msg.get("rows", 24)
-                            try:
-                                os.set_blocking(sess.master_fd, True)
-                                # TIOCSWINSZ → SIGWINCH.  All modern TUI programs
-                                # (Claude Code, Codex, etc.) use ioctl(TIOCGWINSZ),
-                                # not $COLUMNS/$LINES, so no env-var injection needed.
-                                fcntl.ioctl(sess.master_fd, termios.TIOCSWINSZ,
-                                            struct.pack("HHHH", rows, cols, 0, 0))
-                                os.set_blocking(sess.master_fd, False)
-                            except Exception:
-                                pass
-                            continue
-                        if msg.get("type") == "chdir":
-                            new_root = msg.get("root", root)
-                            new_dir = msg.get("dir", "")
-                            _bk = sess.key.split(":")[0] if sess.key and ":" in sess.key else "claude"
-                            new_key = _session_key(new_root, new_dir, _bk)
-                            # Skip if key unchanged — same project, no reconnect needed
-                            if new_key == sess.key:
-                                continue
-                            for w in list(sess.ws_set):
-                                try:
-                                    if w.client_state == WebSocketState.CONNECTED:
-                                        await w.send_text(json.dumps({
-                                            "type": "session",
-                                            "key": new_key,
-                                        }, ensure_ascii=False))
-                                except Exception:
-                                    pass
-                            continue
-                        if msg.get("type") == "terminate":
-                            _log("info", "[terminate] key=%s", sess.key)
-                            sess.stop_event.set()
-                            if sess.proc and sess.proc.returncode is None:
-                                try:
-                                    sess.proc.terminate()
-                                except Exception:
-                                    try: sess.proc.kill()
-                                    except Exception: pass
-                            # Don't close WS here — the loop will exit via stop_event,
-                            # and the WebSocket disconnect handler cleans up naturally.
-                            continue
-                        if msg.get("type") == "file_context":
-                            _path = _normalize_known_file_path(msg.get("path", ""))
-                            if _path and sess.master_fd is not None:
-                                if _path in sess.known_files:
-                                    continue
-                                _prompt, _clean_content = _build_file_context_prompt(_path)
-                                if not _prompt:
-                                    continue
-                                sess.known_files.add(_path)
-                                # ── 从文件名设置 session title ──
-                                if sess.logger and not sess.logger._title_set:
-                                    _fname = os.path.basename(_path).rsplit('.', 1)[0] if '.' in os.path.basename(_path) else os.path.basename(_path)
-                                    if _fname:
-                                        await sess.logger._extract_and_set_title(f"文件: {_fname}")
-                                async def _inject_file_context():
-                                    await asyncio.sleep(2.5)
-                                    # 写入前校验 session 仍存活，避免向已回收的 FD 写入（FD 可能已被新 session 复用）
-                                    if sess.key not in _sessions:
-                                        return
-                                    _write_hidden_pty(sess, _prompt)
-                                asyncio.create_task(_inject_file_context())
-                            continue
-                except (json.JSONDecodeError, TypeError, AttributeError):
-                    pass
-
-                # Raw terminal input
-                # Accumulate user input and record complete lines for chat log
-                _input_buf += data
-                if '\n' in _input_buf or '\r' in _input_buf:
-                    parts = _input_buf.replace('\r\n', '\n').replace('\r', '\n').split('\n')
-                    for part in parts[:-1]:
-                        cleaned = _clean_terminal_input(part)
-                        if cleaned and sess.logger:
-                            _known_file = _extract_known_file_path(cleaned)
-                            if _known_file:
-                                sess.known_files.add(_known_file)
-                            now = time.time()
-                            await sess.logger.record_user(cleaned, ts=now)
-                    _input_buf = parts[-1]  # keep incomplete fragment
-                try:
-                    os.write(sess.master_fd, data.encode())
-                except (OSError, BlockingIOError):
-                    pass
-                sess.last_input_time = time.time()
-                sess.last_active = time.time()
-        except Exception:
-            pass
-
-    async def pty_to_ws():
-        """Forward PTY output → WebSocket + buffer (60fps flush to prevent interleaving)."""
-        out_buf = ""
-        last_flush = time.monotonic()
-        FLUSH_INTERVAL = 0.016  # ~60fps, groups tiny reads into smooth chunks
-        try:
-            while not sess.stop_event.is_set():
-                try:
-                    data = os.read(sess.master_fd, 4096)
-                    if not data:
-                        break  # PTY closed — Claude Code exited
-                    text = data.decode("utf-8", errors="replace")
-                    sess.output_buffer.append(text)
-                    out_buf += text
-                    now = time.monotonic()
-                    # Brief yield after user input so echo arrives before output
-                    if sess.last_input_time and (now - sess.last_input_time) < 0.05:
-                        await asyncio.sleep(0.01)
-                    if now - last_flush >= FLUSH_INTERVAL and out_buf:
-                        batch = out_buf
-                        out_buf = ""
-                        last_flush = now
-                        for w in list(sess.ws_set):
-                            try:
-                                if w.client_state == WebSocketState.CONNECTED:
-                                    await w.send_text(batch)
-                            except WebSocketDisconnect:
-                                sess.ws_set.discard(w)
-                            except Exception:
-                                pass
-                except BlockingIOError:
-                    # Flush any pending output on idle
-                    if out_buf:
-                        batch = out_buf
-                        out_buf = ""
-                        last_flush = time.monotonic()
-                        for w in list(sess.ws_set):
-                            try:
-                                if w.client_state == WebSocketState.CONNECTED:
-                                    await w.send_text(batch)
-                            except WebSocketDisconnect:
-                                sess.ws_set.discard(w)
-                            except Exception:
-                                pass
-                    await asyncio.sleep(0.01)
-                except OSError:
-                    break  # master_fd closed — session is shutting down
-        except Exception:
-            pass
-        finally:
-            # Final flush
-            if out_buf:
-                for w in list(sess.ws_set):
-                    try:
-                        if w.client_state == WebSocketState.CONNECTED:
-                            await w.send_text(out_buf)
-                    except Exception:
-                        pass
-
-    await asyncio.gather(ws_to_pty(), pty_to_ws())
-
-    # WebSocket disconnected — detach but keep session alive
-    sess.ws_set.discard(ws)
-    sess.last_active = time.time()
-
-
-# --- Markdown → ANSI terminal converter ---
-
-# --- OpenClaw backend ---
-
-async def _connect_openclaw(oc_url: str, oc_token: str):
-    """Connect and authenticate to the OpenClaw Gateway.
-
-    Tries localhost first (Gateway auto-grants scopes to local clients),
-    then the configured URL.  Each URL is tried for BOTH connection AND
-    authentication; if auth fails we try the next URL instead of giving up.
-
-    Returns (oc_ws, hello, req_id) on success, or (None, error_text, 0) on failure.
-    """
-    try_urls = []
-    local_url = "ws://127.0.0.1:18789"
-    if oc_url != local_url:
-        try_urls.append(local_url)
-    try_urls.append(oc_url)
-
-    oc_ws = None
-    req_id = 0
-    last_auth_error = None
-
-    for url in try_urls:
-        if oc_ws is not None:
-            try:
-                await oc_ws.close()
-            except Exception:
-                pass
-            oc_ws = None
-
-        # Connect
-        try:
-            oc_ws = await asyncio.wait_for(
-                websockets.connect(url, ping_interval=30, ping_timeout=60),
-                timeout=5,
-            )
-        except Exception:
-            continue
-
-        # Handshake
-        try:
-            raw = await asyncio.wait_for(oc_ws.recv(), timeout=5)
-            challenge = json.loads(raw)
-            if challenge.get("event") != "connect.challenge":
-                last_auth_error = "Unexpected OpenClaw handshake"
-                continue
-        except Exception as e:
-            last_auth_error = f"Handshake failed: {e}"
-            continue
-
-        # Authenticate
-        req_id += 1
-        await oc_ws.send(json.dumps({
-            "type": "req", "id": str(req_id), "method": "connect",
-            "params": {
-                "minProtocol": 4, "maxProtocol": 4,
-                "client": {"id": "gateway-client", "version": "1.0.0", "platform": "linux", "mode": "backend"},
-                "role": "operator",
-                "scopes": ["operator.read", "operator.write", "operator.admin"],
-                "auth": {"token": oc_token},
-                "locale": "en-US",
-                "userAgent": "clawmate-agent/1.0.0",
-            },
-        }))
-
-        try:
-            hello_raw = await asyncio.wait_for(oc_ws.recv(), timeout=5)
-            hello = json.loads(hello_raw)
-        except Exception as e:
-            last_auth_error = f"Auth response failed: {e}"
-            continue
-
-        if hello.get("ok"):
-            return (oc_ws, hello, req_id)
-
-        err = hello.get("error", {}).get("message", "unknown")
-        last_auth_error = err
-
-    # All URLs failed
-    error_text = (
-        f"✕ OpenClaw 鉴权失败: {last_auth_error}\r\n"
-        f"  已尝试 {', '.join(try_urls)}，均未通过鉴权。\r\n"
-        f"  请确认 openclaw_token 有效，且 Gateway 已授予 operator.write 权限。"
-    ) if oc_ws is not None else (
-        f"✕ Cannot connect to OpenClaw gateway\r\n"
-        f"  Tried: {', '.join(try_urls)}"
-    )
-    if oc_ws is not None:
-        try:
-            await oc_ws.close()
-        except Exception:
-            pass
-    return (None, error_text, 0)
-
-
-async def _openclaw_backend(
-    ws: WebSocket,
-    cwd: str,
-    cfg,
-    root: str,
-    agent_id: str,
-):
-    """Connect to OpenClaw gateway WebSocket and bridge to xterm.js."""
-    agent_cfg = cfg.agent
-    oc_url = agent_cfg.openclaw_ws_url
-    oc_token = agent_cfg.openclaw_token
-
-    if not oc_url:
-        await ws.send_text(
-            "\x1b[1;31m✕ OpenClaw WebSocket URL not configured\x1b[0m\r\n"
-            "\x1b[2m  Set agent.openclaw_ws_url in config.json\x1b[0m\r\n"
-        )
-        return
-    if not oc_token:
-        await ws.send_text(
-            "\x1b[1;31m✕ OpenClaw token not configured\x1b[0m\r\n"
-            "\x1b[2m  Set agent.openclaw_token in config.json\x1b[0m\r\n"
-        )
-        return
-
-    oc_ws, hello_or_error, req_id = await _connect_openclaw(oc_url, oc_token)
-    if oc_ws is None:
-        await ws.send_text(json.dumps({
-            "type": "error",
-            "text": hello_or_error,
-        }, ensure_ascii=False))
-        return
-
-    hello = hello_or_error
-
-    line_buf = ""
-    async def oc_send(method, params=None):
-        nonlocal req_id
-        req_id += 1
-        msg = {"type": "req", "id": str(req_id), "method": method}
-        if params:
-            msg["params"] = params
-        raw = json.dumps(msg)
-        await oc_ws.send(raw)
-        return req_id
-
-    try:
-
-        # Save device token if returned (pairing approved)
-        new_device_token = hello.get("payload", {}).get("auth", {}).get("deviceToken", "")
-        if new_device_token and new_device_token != agent_cfg.openclaw_device_token:
-            await ws.send_text(json.dumps({
-                "type": "info",
-                "text": f"Device paired! Token saved. Add to config.json: agent.openclaw_device_token"
-            }, ensure_ascii=False))
-            # Log for user to save
-            import sys
-            print(f"[clawmate] OpenClaw device paired. Add to config.json: \"openclaw_device_token\": \"{new_device_token}\"", file=sys.stderr)
-
-        # Log granted scopes
-        granted = hello.get("payload", {}).get("auth", {}).get("scopes", [])
-
-        server_ver = hello.get("payload", {}).get("server", {}).get("version", "?")
-        conn_id = hello.get("payload", {}).get("server", {}).get("connId", "?")
-        await ws.send_text(json.dumps({
-            "type": "info",
-            "text": f"✓ 已连接 OpenClaw Gateway v{server_ver}\ncwd: {cwd}\n输入消息后按 Enter 发送",
-            "serverVer": server_ver,
-            "connId": conn_id,
-            "sessionKey": f"agent:{agent_id or 'default'}:main",
-            "cwd": cwd,
-        }, ensure_ascii=False))
-
-        # Step 3: load history (if any) — drain response before bridge
-        history_req_id = await oc_send("chat.history", {
-            "sessionKey": f"agent:{agent_id or 'default'}:main",
-            "limit": 20,
-        })
-        # Drain gateway messages until we find the matching res for chat.history.
-        # Other events (health, tick, etc.) are skipped.  Max ~10s total wait.
-        await ws.send_text(json.dumps({"type": "info", "text": "Loading history..."}, ensure_ascii=False))
-        try:
-            for _ in range(40):
-                raw = await asyncio.wait_for(oc_ws.recv(), timeout=0.5)
-                evt = json.loads(raw)
-                if evt.get("type") == "res" and evt.get("id") == str(history_req_id):
-                    messages = evt.get("payload", {}).get("messages", [])
-                    if messages:
-                        for msg in messages[-10:]:
-                            role = msg.get("role", "")
-                            # content is [{type: "text", text: "..."}, ...]
-                            content_blocks = msg.get("content", [])
-                            if isinstance(content_blocks, list):
-                                text = " ".join(
-                                    c.get("text", "") for c in content_blocks
-                                    if isinstance(c, dict) and c.get("type") == "text"
-                                )
-                            else:
-                                text = str(content_blocks)
-                            text = text.strip()
-                            if not text:
-                                continue
-                            # Map roles to frontend message types
-                            if role == "assistant":
-                                msg_type = "assistant"
-                            elif role == "toolResult":
-                                # Show tool results as a compact system note
-                                tool_name = msg.get("toolName", "")
-                                label = f"[{tool_name}]" if tool_name else "[tool]"
-                                text = f"{label} {text[:500]}"
-                                msg_type = "assistant"
-                            else:
-                                msg_type = "user"
-                            await ws.send_text(json.dumps({
-                                "type": msg_type,
-                                "text": text[:2000],
-                                "final": True,
-                            }, ensure_ascii=False))
-                    break
-        except (asyncio.TimeoutError, Exception):
-            pass
-
-        # Step 4: bidirectional bridge — structured JSON for chat UI
-        first_msg = True
-        done = False
-
-        async def send_json(obj):
-            """Send structured JSON to frontend."""
-            try:
-                await ws.send_text(json.dumps(obj, ensure_ascii=False))
-            except Exception:
-                pass
-
-        while not done:
-            # --- Read line from xterm.js ---
-            try:
-                while True:
-                    try:
-                        data = await asyncio.wait_for(ws.receive_text(), timeout=0.5)
-                        break
-                    except asyncio.TimeoutError:
-                        continue
-            except WebSocketDisconnect:
-                break
-
-            # Skip control messages — only {} objects with a "type" key
-            try:
-                ctrl = json.loads(data)
-                if isinstance(ctrl, dict):
-                    if ctrl.get("type") == "resize":
-                        continue
-                    if ctrl.get("type") == "chdir":
-                        new_root = ctrl.get("root", root)
-                        new_dir = ctrl.get("dir", "")
-                        new_key = _session_key(new_root, new_dir, "openclaw")
-                        try:
-                            await ws.send_text(json.dumps({
-                                "type": "session",
-                                "key": new_key,
-                            }, ensure_ascii=False))
-                        except Exception:
-                            pass
-                        continue
-            except (json.JSONDecodeError, TypeError, AttributeError):
-                pass
-
-            # Buffer characters into lines
-            for ch in data:
-                if ch == '\r' or ch == '\n':
-                    line = line_buf.strip()
-                    line_buf = ""
-                    if line:
-                        msg = line
-                        if first_msg:
-                            pass  # work dir shown in info banner
-                            first_msg = False
-                        await send_json({"type": "user", "text": line})
-                        await oc_send("chat.send", {
-                            "sessionKey": f"agent:{agent_id or 'default'}:main",
-                            "message": msg,
-                            "idempotencyKey": f"clawmate-{int(time.time()*1000)}",
-                        })
-
-                        # --- Wait for agent response ---
-                        while True:
-                            try:
-                                raw = await asyncio.wait_for(oc_ws.recv(), timeout=45)
-                            except asyncio.TimeoutError:
-                                await send_json({"type": "error", "text": "Agent response timed out"})
-                                break
-                            except websockets.exceptions.ConnectionClosed:
-                                done = True
-                                break
-                            except Exception:
-                                done = True
-                                break
-
-                            try:
-                                evt = json.loads(raw)
-                            except json.JSONDecodeError:
-                                continue
-
-                            event = evt.get("event", "")
-                            payload = evt.get("payload", {})
-                            t = evt.get("type", "")
-
-                            if t == "res" and not evt.get("ok"):
-                                err = evt.get("error", {}).get("message", "?")
-                                await send_json({"type": "error", "text": err})
-                                break
-
-                            if event == "chat":
-                                state = payload.get("state", "")
-                                if state == "delta":
-                                    delta = payload.get("deltaText", "")
-                                    if delta:
-                                        await send_json({"type": "assistant", "text": delta, "final": False})
-                                elif state == "final":
-                                    await send_json({"type": "assistant", "text": "", "final": True})
-                                continue
-
-                            if event == "agent" and payload.get("stream") == "lifecycle":
-                                phase = payload.get("data", {}).get("phase", "")
-                                if phase == "end":
-                                    reason = payload.get("data", {}).get("stopReason", "")
-                                    await send_json({"type": "assistant", "text": "", "final": True, "stopReason": reason})
-                                    for _ in range(5):
-                                        try:
-                                            await asyncio.wait_for(oc_ws.recv(), timeout=0.3)
-                                        except (asyncio.TimeoutError, Exception):
-                                            break
-                                    break
-                                continue
-                elif ch == '\x7f':
-                    if line_buf:
-                        line_buf = line_buf[:-1]
-                else:
-                    line_buf += ch
-
-    except Exception as e:
-        await send_json({"type": "error", "text": f"OpenClaw backend error: {e}"})
-    finally:
-        if oc_ws:
-            try:
-                await oc_ws.close()
-            except Exception:
-                pass
-
 # --- Main WebSocket endpoint ---
 
 
@@ -1373,15 +802,65 @@ def _get_terminal_v2_manager() -> TerminalManager:
             connection_queue_bytes=cfg.connection_queue_bytes,
             input_queue_bytes=cfg.input_queue_bytes,
             resize_lease_seconds=cfg.resize_lease_seconds,
+            idle_seconds=cfg.terminal_idle_seconds,
+            max_lifetime_seconds=cfg.terminal_max_lifetime_seconds,
             max_sessions=cfg.max_sessions,
+            on_session_removed=_on_v2_session_removed,
         )
     return _terminal_v2_manager
 
 
+async def _flush_input_buffer_lines(logger, buf: str):
+    """Flush buffered input as one user instruction.
+
+    Pasted content (with internal ``\\n``) is preserved as a single turn.
+    Empty or whitespace-only buffers are silently skipped.
+    """
+    if not logger or not buf:
+        return
+    line = buf.strip()
+    if line:
+        try:
+            await logger.record_user(line)
+        except Exception:
+            pass
+
+
+async def _on_v2_session_removed(session_id: str, reason: str) -> None:
+    """Close and clean up SessionLogger when a v2 terminal session is removed."""
+    # Unsubmitted terminal text is intentionally discarded: only an Enter
+    # submission represents a user instruction in history.
+    _v2_input_buffers.pop(session_id, None)
+    key, cwd, started_at = _v2_session_contexts.pop(session_id, ("", "", 0.0))
+    logger = _v2_loggers.pop(session_id, None)
+    if logger:
+        try:
+            log_dir = Path(getattr(logger, "log_dir", ""))
+            _collect_transcript(
+                SimpleNamespace(
+                    logger=logger,
+                    key=key,
+                    cwd=cwd,
+                    created_at=started_at,
+                ),
+                log_dir,
+            )
+            await logger.aclose()
+        except Exception as exc:
+            logger_module = logging.getLogger("clawmate.agent")
+            logger_module.warning("v2 session logger aclose failed for %s: %s", session_id, exc)
+
+
 async def _send_terminal_v2_frames(ws: WebSocket, session, connection) -> None:
-    while not connection.closed:
-        chunk = await session.next_output(connection.id)
-        await ws.send_bytes(encode_binary_frame(chunk.start, chunk.data))
+    try:
+        while not connection.closed:
+            chunk = await session.next_output(connection.id)
+            await ws.send_bytes(encode_binary_frame(chunk.start, chunk.data))
+    except ConnectionError:
+        pass
+    finally:
+        if ws.client_state == WebSocketState.CONNECTED:
+            await ws.close(code=1000, reason=session.close_reason or "terminated")
 
 
 @router.get("/api/clawmate/agent/diagnostics")
@@ -1403,10 +882,10 @@ async def agent_terminal_diagnostics():
 async def agent_terminal_v2(ws: WebSocket):
     """Protocol-v2 PTY endpoint with separate control and binary data frames."""
     await ws.accept()
-    if _terminal_v2_manager is None and not load_cfg().agent.terminal_v2:
-        error = ProtocolError("terminal_v2_disabled", "Terminal v2 is not enabled", True)
-        await ws.send_text(json.dumps(error.as_message()))
-        return
+    _ensure_reaper()
+    # xterm 6 is now the only browser terminal implementation.  Keep the
+    # config field for deployment compatibility, but never fall back to the
+    # removed legacy browser protocol.
     manager = _get_terminal_v2_manager()
     connection = None
     session = None
@@ -1423,13 +902,55 @@ async def agent_terminal_v2(ws: WebSocket):
         backend = str(hello.get("backend") or "claude")
         if not client_id or backend not in {"claude", "codex"}:
             raise ProtocolError("invalid_hello", "Hello must include a client ID and PTY backend", True)
+        _hello_root = str(hello.get("root") or "")
+        _hello_dir = str(hello.get("dir") or "")
+        _root_path = _resolve_root_dir(_hello_root)
+        _project = find_project_marker(_root_path, _hello_dir) if _root_path and _hello_dir else ""
         request = SessionRequest(
             backend=backend,
-            root=str(hello.get("root") or ""),
-            project=str(hello.get("dir") or ""),
-            cwd=resolve_session_cwd(str(hello.get("root") or ""), str(hello.get("dir") or "")),
+            root=_hello_root,
+            project=_project,
+            cwd=resolve_session_cwd(_hello_root, _hello_dir),
         )
         session = await manager.get_or_create(request)
+        # ── Initialize v2 session logger (.chat.jsonl) ─────────────
+        if session.id not in _v2_loggers:
+            try:
+                key = _session_key(str(hello.get("root") or ""), str(hello.get("dir") or ""), backend)
+                sess_dir = _session_log_dir(key, request.cwd)
+                if sess_dir:
+                    ts = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+                    safe_key = key.replace(":", "_").replace("/", "_")
+                    log_session_id = f"{safe_key}_{ts}"
+                    meta = {
+                        "session_id": log_session_id,
+                        "key": key,
+                        "backend": backend,
+                        "cwd": request.cwd,
+                        "root": str(hello.get("root") or ""),
+                        "started_at": time.time(),
+                        "title": backend,
+                    }
+                    v2_logger = SessionLogger(
+                        session_id=log_session_id,
+                        meta=meta,
+                        log_dir=sess_dir,
+                    )
+                    await SessionIndex.for_dir(sess_dir).add_async({
+                        "id": log_session_id,
+                        "key": key,
+                        "backend": backend,
+                        "cwd": request.cwd,
+                        "root": str(hello.get("root") or ""),
+                        "started_at": time.time(),
+                        "last_active": time.time(),
+                        "title": backend,
+                    })
+                    _v2_loggers[session.id] = v2_logger
+                    _v2_session_contexts[session.id] = (key, request.cwd, meta["started_at"])
+            except Exception as exc:
+                logger.warning("failed to init v2 session logger for session=%s: %s", session.id, exc)
+        # ─────────────────────────────────────────────────────────────
         connection = await manager.subscribe(session.id, client_id, int(hello.get("last_output_ack") or 0))
         await session.resize(client_id, cols, rows)
         await ws.send_text(json.dumps({
@@ -1449,6 +970,24 @@ async def agent_terminal_v2(ws: WebSocket):
             if message.get("bytes") is not None:
                 sequence, payload = decode_binary_frame(message["bytes"])
                 await session.enqueue_input(connection.id, sequence, payload)
+                # Record only actual terminal submissions.  xterm sends
+                # ordinary typing one key at a time, so idle/disconnect must
+                # never turn an unfinished command into history.
+                v2_logger = _v2_loggers.get(session.id)
+                if v2_logger:
+                    try:
+                        buf = _v2_input_buffers.get(session.id, "")
+                        buf, submitted = _append_v2_history_input(
+                            buf,
+                            payload.decode("utf-8", errors="replace"),
+                        )
+                        if submitted:
+                            await _flush_input_buffer_lines(v2_logger, buf)
+                            _v2_input_buffers.pop(session.id, None)
+                        elif buf:
+                            _v2_input_buffers[session.id] = buf
+                    except Exception:
+                        pass
                 await session.wait_input_ack(connection.id, sequence)
                 await ws.send_text(json.dumps({"v": PROTOCOL_VERSION, "type": "input_ack", "sequence": sequence}))
                 continue
@@ -1466,7 +1005,10 @@ async def agent_terminal_v2(ws: WebSocket):
             elif kind == "lock_input":
                 await session.set_input_lock(connection.id if control.get("locked") else None)
             elif kind == "terminate":
-                await manager.terminate(session.id, "manual")
+                reason = str(control.get("reason") or "manual")
+                await manager.terminate(session.id, reason)
+                if ws.client_state == WebSocketState.CONNECTED:
+                    await ws.close(code=1000, reason=reason)
                 return
             elif kind == "heartbeat":
                 await ws.send_text(json.dumps({"v": PROTOCOL_VERSION, "type": "heartbeat_ack"}))
@@ -1477,187 +1019,23 @@ async def agent_terminal_v2(ws: WebSocket):
     except RuntimeError as exc:
         error = ProtocolError("terminal_unavailable", str(exc), True)
         await ws.send_text(json.dumps(error.as_message()))
+        try:
+            await ws.close(code=1011, reason="terminal_unavailable")
+        except Exception:
+            pass
     finally:
         if sender_task:
             sender_task.cancel()
             await asyncio.gather(sender_task, return_exceptions=True)
+        if session:
+            _v2_input_buffers.pop(session.id, None)
         if connection and session:
-            await manager.unsubscribe(session.id, connection.id)
-
-@router.websocket("/api/clawmate/agent/terminal")
-async def agent_terminal(
-    ws: WebSocket,
-    root: str = Query(""),
-    agentId: str = Query(""),
-    dir: str = Query(""),
-            backend: str = Query(""),
-    cols: int = Query(0),
-    rows: int = Query(0),
-):
-    """
-    WebSocket endpoint for xterm.js Agent panel.
-
-    Sessions persist across WebSocket disconnects:
-    - First connect: spawn Claude Code
-    - Disconnect/reconnect: reattach to same process
-    - Idle 10min with no client: auto-kill
-
-    Session key = {root}:{project} when .clawmate/ marker found,
-    else just {root}. agentId is kept for OpenClaw backend only.
-    """
-    await ws.accept()
-    _ensure_reaper()
-    await _cleanup_dead_sessions()
-
-    cfg = load_cfg()
-    agent_cfg = getattr(cfg, "agent", None)
-    config_backend = getattr(agent_cfg, "backend", "claude") if agent_cfg else "claude"
-    # Client-side backend override (from badge click passing ?backend=...)
-    if backend and backend in ("claude", "codex", "openclaw"):
-        pass  # use client-provided backend
-    else:
-        backend = config_backend
-
-    cwd = resolve_session_cwd(root, dir)
-    key = _session_key(root, dir, backend)
-
-    # Send session key to frontend so it can display it
-    await ws.send_text(json.dumps({
-        "type": "session",
-        "key": key,
-    }, ensure_ascii=False))
-
-    # Check for existing session
-    sess = _sessions.get(key)
-
-    if sess and not sess.stop_event.is_set() and sess.proc.returncode is None:
-        # Existing session — apply new dimensions BEFORE sending any output.
-        # Without this, the reconnected banner and buffered history would be
-        # formatted for the OLD PTY dimensions, causing misalignment with the
-        # agent panel's current viewport.
-        if cols > 0 and rows > 0:
             try:
-                os.set_blocking(sess.master_fd, True)
-                fcntl.ioctl(sess.master_fd, termios.TIOCSWINSZ,
-                            struct.pack("HHHH", rows, cols, 0, 0))
-                os.set_blocking(sess.master_fd, False)
-            except Exception:
+                await manager.unsubscribe(session.id, connection.id)
+            except KeyError:
+                # A CLI exit or explicit terminate removes the session before
+                # this websocket's cleanup runs.
                 pass
-
-        # Clear known files on reconnect so the client can re-inject
-        # the current preview file context into the restored session.
-        sess.known_files.clear()
-
-        await ws.send_text(
-            f"\x1b[1;32m⟳ 重新连接到已有会话\x1b[0m\r\n"
-            f"\x1b[2m   backend: {backend}  cwd: {cwd}\x1b[0m\r\n"
-            f"\x1b[2m   session: {key}\x1b[0m\r\n"
-            f"\x1b[2m   会话已运行 {(time.time() - sess.created_at):.0f}s\x1b[0m\r\n"
-            f"\x1b[2m   term: {cols}×{rows}\x1b[0m\r\n\r\n"
-        )
-        await _attach_session(sess, ws, root, cols, rows)
-        return
-
-    # No existing session — send banner
-    if backend == "openclaw":
-        await ws.send_text(json.dumps({
-            "type": "info",
-            "text": f"ClawMate Agent Terminal\nbackend: {backend}\ncwd: {cwd}",
-            "backend": backend,
-            "cwd": cwd,
-        }, ensure_ascii=False))
-    else:
-        await ws.send_text(
-            f"\x1b[1;36m╔══════════════════════════════════════╗\x1b[0m\r\n"
-            f"\x1b[1;36m║     ClawMate Agent Terminal         ║\x1b[0m\r\n"
-            f"\x1b[1;36m║     backend: {backend.ljust(24)}║\x1b[0m\r\n"
-            f"\x1b[1;36m║     cwd:    {cwd[:24].ljust(24)}║\x1b[0m\r\n"
-            f"\x1b[1;36m╚══════════════════════════════════════╝\x1b[0m\r\n\r\n"
-        )
-
-    if backend in ("claude", "codex"):
-        # Enforce session limit to prevent process accumulation.
-        # Only count active sessions (with attached WebSocket) -- idle sessions
-        # without clients don't consume resources and will be reaped shortly.
-        max_sessions = cfg.agent.max_sessions
-        active_count = sum(1 for s in _sessions.values() if s.ws_set)
-        if active_count >= max_sessions:
-            logger.warning(
-                "session limit reached: %d active sessions (max %d), rejecting new connection for key=%s",
-                active_count, max_sessions, key,
-            )
-            await ws.send_text(
-                "\x1b[1;31m✕ 会话数已达上限 (%d)，请关闭其他终端后重试\x1b[0m\r\n" % max_sessions
-            )
-            await ws.close()
-            return
-        if backend == "codex":
-            sess = await _spawn_codex(cwd, cols=cols, rows=rows, extra_env=cfg.agent.env)
-            if sess is None:
-                await ws.send_text("\x1b[1;31m✕ Codex CLI not found\x1b[0m\r\n")
-                return
-        else:
-            sess = await _spawn_claude(cwd, cols=cols, rows=rows, extra_env=cfg.agent.env)
-            if sess is None:
-                await ws.send_text("\x1b[1;31m✕ Claude CLI not found\x1b[0m\r\n")
-                return
-        sess.key = key
-        sess.cwd = cwd
-        _sessions[key] = sess
-
-        # Initialize session logger (.chat.jsonl)
-        try:
-            sess_dir = _session_log_dir(key, cwd)
-            if sess_dir:
-                sess.log_dir = str(sess_dir)
-                ts = time.strftime("%Y%m%d_%H%M%S", time.localtime())
-                safe_key = key.replace(":", "_").replace("/", "_")
-                session_id = f"{safe_key}_{ts}"
-                meta = {
-                    "session_id": session_id,
-                    "key": key,
-                    "backend": backend,
-                    "cwd": cwd,
-                    "root": root,
-                    "started_at": time.time(),
-                    "title": backend,
-                }
-                sess.logger = SessionLogger(
-                    session_id=session_id,
-                    meta=meta,
-                    log_dir=sess_dir,
-                )
-                await SessionIndex.for_dir(sess_dir).add_async({
-                    "id": session_id,
-                    "key": key,
-                    "backend": backend,
-                    "cwd": cwd,
-                    "root": root,
-                    "started_at": time.time(),
-                    "last_active": time.time(),
-                    "title": backend,
-                })
-        except Exception as exc:
-            logger.warning("failed to init session logger for key=%s: %s", key, exc)
-
-        logger.info(
-            "session created key=%s pid=%d cols=%d rows=%d (%d total sessions)",
-            key, sess.proc.pid, cols or 0, rows or 0, len(_sessions),
-        )
-        await _attach_session(sess, ws, root, cols, rows)
-    elif backend == "openclaw":
-        try:
-            await _openclaw_backend(ws, cwd, cfg, root, agentId)
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            try:
-                await ws.send_text(f"\r\n\x1b[1;31m✕ OpenClaw backend error: {e}\x1b[0m\r\n")
-            except Exception:
-                pass
-    else:
-        await ws.send_text(f"\x1b[1;31m✕ Unknown agent backend: {backend}\x1b[0m\r\n")
-
 
 # ── Transcript collection (from CLI's own on-disk .jsonl transcripts) ──
 
@@ -2114,7 +1492,6 @@ async def agent_session_list(
     cursor: str = "",
 ):
     """List archived agent sessions, grouped by project."""
-    await _cleanup_dead_sessions()
     results: list[dict] = []
     seen: set[str] = set()
 
@@ -2132,11 +1509,7 @@ async def agent_session_list(
             if not sess_dir.is_dir():
                 continue
             sessions = await SessionIndex.for_dir(sess_dir).load_async()
-            # 预先收集当前活跃会话的 ID（不能用 key 判断，因为多个会话共享同一 key）
-            active_ids: set[str] = set()
-            for asess in _sessions.values():
-                if asess.logger:
-                    active_ids.add(asess.logger.session_id)
+            active_ids = _active_history_session_ids()
             for s in sessions:
                 # 过滤当前正在活跃运行的会话（id 在 active_ids 中）
                 if s.get("id", "") in active_ids:
@@ -2146,10 +1519,10 @@ async def agent_session_list(
 
                 # ── date filter ────────────────────────────────────────
                 if date:
-                    started_at = s.get("started_at")
-                    if started_at:
+                    session_end = s.get("ended_at") or s.get("started_at")
+                    if session_end:
                         try:
-                            dt = datetime.fromtimestamp(float(started_at))
+                            dt = datetime.fromtimestamp(float(session_end))
                             if dt.strftime("%Y-%m-%d") != date:
                                 continue
                         except (TypeError, ValueError):
@@ -2196,7 +1569,7 @@ async def agent_session_list(
                     **stats,
                 })
 
-    results.sort(key=lambda x: x.get("started_at", 0), reverse=True)
+    results.sort(key=lambda x: x.get("ended_at") or x.get("started_at", 0), reverse=True)
     if cursor:
         page = SessionHistoryService(results).list(
             limit=limit,
@@ -2225,9 +1598,6 @@ async def agent_session_log(
     codex).  Collected turns are appended back to ``.chat.jsonl`` so
     subsequent views are fast.
     """
-    # Pre-clean any in-memory dead sessions so their transcripts are flushed
-    await _cleanup_dead_sessions()
-
     cfg = load_cfg()
     for r in _roots_for_session_query(cfg, root):
         root_dir = Path(r.dir)
@@ -2311,15 +1681,16 @@ async def agent_session_dates(
 ):
     """Return available session dates sorted newest-first.
 
-    Collects dates from the ``started_at`` field of all archived sessions
+    Collects dates from the ``ended_at`` field of all archived sessions
+    (falling back to ``started_at`` for older logs)
     (excluding currently active ones).  The return value is a flat list of
     ``"YYYY-MM-DD"`` strings that the client populates its date-axis with.
     """
-    await _cleanup_dead_sessions()
     date_set: set[str] = set()
 
     cfg = load_cfg()
     roots_to_check = _roots_for_session_query(cfg, root)
+    active_ids = _active_history_session_ids()
 
     for r in roots_to_check:
         root_dir = Path(r.dir)
@@ -2333,18 +1704,13 @@ async def agent_session_dates(
                 continue
             sessions = await SessionIndex.for_dir(sess_dir).load_async()
 
-            active_ids: set[str] = set()
-            for asess in _sessions.values():
-                if asess.logger:
-                    active_ids.add(asess.logger.session_id)
-
             for s in sessions:
                 if s.get("id", "") in active_ids:
                     continue
-                started_at = s.get("started_at")
-                if started_at:
+                session_end = s.get("ended_at") or s.get("started_at")
+                if session_end:
                     try:
-                        dt = datetime.fromtimestamp(float(started_at))
+                        dt = datetime.fromtimestamp(float(session_end))
                         date_set.add(dt.strftime("%Y-%m-%d"))
                     except (TypeError, ValueError):
                         continue
@@ -2392,13 +1758,12 @@ async def agent_session_delete(session_id: str, root: str = "", project: str = "
     if not _re.match(r"^[A-Za-z0-9_.-]+$", session_id):
         raise HTTPException(status_code=400, detail="Invalid session_id format")
 
-    # Reject deletion of active sessions
-    for sess in _sessions.values():
-        if sess.logger and sess.logger.session_id == session_id:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Session {session_id} is currently active; kill it before deleting logs",
-            )
+    # Reject deletion of active legacy and v2 sessions.
+    if session_id in _active_history_session_ids():
+        raise HTTPException(
+            status_code=409,
+            detail=f"Session {session_id} is currently active; kill it before deleting logs",
+        )
 
     cfg = load_cfg()
     for r in _roots_for_session_query(cfg, root):
