@@ -2088,6 +2088,12 @@ if (els.rootSelect) {
       setStatus("根目录无效");
       return;
     }
+    // Reset state.dir before _initAgent to avoid stale dir from old root
+    state.dir = "";
+    state.page = 1;
+    state.searchResults = null;
+    state.searchQuery = "";
+    els.searchInput.value = "";
     _initAgent();
     // Reset multi-select state on root change
     if (state.multiSelectEnabled) {
@@ -2100,11 +2106,6 @@ if (els.rootSelect) {
       updateBatchBar();
       if (els.batchBar) els.batchBar.classList.add("hidden");
     }
-    state.dir = "";
-    state.page = 1;
-    state.searchResults = null;
-    state.searchQuery = "";
-    els.searchInput.value = "";
     loadDir("");
   });
 }

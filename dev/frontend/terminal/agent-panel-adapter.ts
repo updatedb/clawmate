@@ -22,6 +22,17 @@ export interface AgentFileContext {
   path?: string;
 }
 
+const AGENT_BACKEND_PREFERENCES_STORAGE_KEY = 'clawmate.agent.backend-preferences.v1';
+const VALID_AGENT_BACKENDS: readonly AgentInitOptions['backend'][] = ['claude', 'codex', 'openclaw'];
+
+function isAgentBackend(value: unknown): value is AgentInitOptions['backend'] {
+  return typeof value === 'string' && VALID_AGENT_BACKENDS.includes(value as AgentInitOptions['backend']);
+}
+
+function agentProjectScope(dir: string, project?: string): string {
+  return project || dir.split('/').filter(Boolean)[0] || 'root';
+}
+
 export function formatAgentScope(backend: AgentInitOptions['backend'], rootId: string, dir: string): string {
   const project = dir.split('/').filter(Boolean)[0] || 'root';
   return `${backend}:${rootId || 'root'}:${project}`;
@@ -244,6 +255,7 @@ export class AgentPanelAdapter {
   private wsRetryCount = 0;
   private wsRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private wsClosedByUser = false;
+  private defaultBackend: AgentInitOptions['backend'] = 'claude';
   private pendingFreshSession: (() => void) | null = null;
   private readonly wsMaxRetries = DEFAULT_RETRY.maxRetries;
   private readonly wsRetryBaseDelay = DEFAULT_RETRY.baseDelay;
@@ -253,18 +265,33 @@ export class AgentPanelAdapter {
    *  the session can skip replaying already‑delivered data. */
   private lastOutputAck = 0;
 
+  /** OpenClaw chat message buffer — accumulates every message so we can
+   *  replays across project‑switch reconnect cycles. */
+  private readonly _openClawMessages: OpenClawMessage[] = [];
+  /** Per‑scope cache of saved OpenClaw chat messages, keyed by backend:rootId:project. */
+  private readonly _savedOpenClawMessages = new Map<string, OpenClawMessage[]>();
+
   /** Application‑layer heartbeat timer (every 25 s) to keep intermediate
    *  proxies from closing the WebSocket during idle phases. */
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   init(config: AgentInitOptions): void {
-    this.config = { ...config };
-    this.updateTitle();
-    this.bindResizeHandle(config.domPrefix === 'preview' ? 'preview' : '');
+    const previousConfig = this.config;
+    const previousScope = previousConfig ? this._scopeKey(previousConfig.rootId, previousConfig.dir, previousConfig.project) : '';
+    const nextScope = this._scopeKey(config.rootId, config.dir, config.project);
     const prefix = config.domPrefix === 'preview' ? 'preview' : '';
+    const reopenAfterScopeChange = !!previousConfig && previousScope !== nextScope && this.isOpen();
+    if (reopenAfterScopeChange) {
+      this.resetScopeState(prefix, this._openClawScopeKey());
+    }
+    this.config = { ...config };
+    this.defaultBackend = config.backend;
+    this.config.backend = this.readBackendPreference(nextScope, config.backend);
+    this.updateTitle();
+    this.bindResizeHandle(prefix);
     const select = document.getElementById(prefix ? 'previewAgentBackendSelect' : 'agentBackendSelect') as HTMLSelectElement | null;
     if (select) {
-      select.value = config.backend;
+      select.value = this.config.backend;
       select.onchange = () => this.setBackend(select.value as AgentInitOptions['backend']);
     }
     const close = document.getElementById(prefix ? 'previewBtnCloseAgent' : 'btnCloseAgent');
@@ -273,14 +300,18 @@ export class AgentPanelAdapter {
     if (fresh) fresh.onclick = () => this.startFreshSession();
     const history = document.getElementById(prefix ? 'previewBtnAgentHistory' : 'btnAgentHistory');
     if (history) history.onclick = () => this.toggleHistory(prefix);
+    if (reopenAfterScopeChange) this.open();
   }
 
   setBackend(backend: AgentInitOptions['backend']): void {
     if (!this.config || this.config.backend === backend) return;
     const wasOpen = this.isOpen();
     const prefix = this.config.domPrefix === 'preview' ? 'preview' : '';
+    const oldScopeKey = this._openClawScopeKey();
     const historyOverlay = document.getElementById(prefix ? 'previewAgentHistoryOverlay' : 'agentHistoryOverlay');
     const historyWasOpen = !!historyOverlay && !historyOverlay.classList.contains('hidden');
+    this.saveBackendPreference(this._scopeKey(this.config.rootId, this.config.dir, this.config.project), backend);
+    this.clearOpenClawMessages(prefix, oldScopeKey);
     this.openclaw.close();
     this.config.backend = backend;
     this.updateTitle();
@@ -290,6 +321,9 @@ export class AgentPanelAdapter {
     this.socket = null;
     this.disposeTerminal();
     this.setStatus('未连接');
+    // Reset ack so the server replays buffered output from the ReplayRing
+    // on the new backend's session.
+    this.lastOutputAck = 0;
     if (wasOpen) this.open();
     if (historyWasOpen && historyOverlay) this.loadHistory(historyOverlay, true);
   }
@@ -300,6 +334,8 @@ export class AgentPanelAdapter {
     if (dir !== undefined) this.config.dir = dir;
     this.updateTitle();
     const prefix = this.config.domPrefix === 'preview' ? 'preview' : '';
+    const select = document.getElementById(prefix ? 'previewAgentBackendSelect' : 'agentBackendSelect') as HTMLSelectElement | null;
+    if (select) select.value = this.config.backend;
     const panel = document.getElementById(prefix ? 'previewAgentPanel' : 'agentPanel');
     const host = document.getElementById(prefix ? 'previewXtermContainer' : 'xtermContainer');
     const chat = document.getElementById(prefix ? 'previewAgentChatView' : 'agentChatView');
@@ -317,6 +353,13 @@ export class AgentPanelAdapter {
         (message) => this.handleOpenClawMessage(message, prefix),
         (status) => this.setStatus(status === 'connected' ? '已连接' : status === 'connecting' ? '连接中' : '连接断开'),
       );
+      // Restore cached OpenClaw messages for this scope so that switching
+      // back to a project shows the previous session's content.
+      const savedKey = this._openClawScopeKey();
+      const saved = this._savedOpenClawMessages.get(savedKey);
+      if (saved?.length) {
+        for (const msg of saved) this.handleOpenClawMessage(msg, prefix);
+      }
     } else {
       panel.classList.add('agent-panel-v2');
       panel.classList.remove('hidden');
@@ -385,26 +428,28 @@ export class AgentPanelAdapter {
     const rootChanged = this.config.rootId !== rootId;
     const projectChanged = this.config.project !== nextProject;
     if (!rootChanged && !projectChanged) return;
+    // Save the old scope key BEFORE updating config, so clearOpenClawMessages
+    // caches messages under the correct (old) scope key.
+    const prefix = this.config.domPrefix === 'preview' ? 'preview' : '';
+    const oldScopeKey = this._openClawScopeKey();
+    const nextScope = this._scopeKey(rootId, nextDir, nextProject);
+    const nextBackend = this.readBackendPreference(nextScope, this.defaultBackend);
     this.config.rootId = rootId;
     this.config.dir = nextDir;
     this.config.project = nextProject;
+    this.config.backend = nextBackend;
     this.updateTitle();
-    if (!this.isOpen()) return;
-    const prefix = this.config.domPrefix === 'preview' ? 'preview' : '';
-    // root 或 project 变了 → 断开重连；同 project 内切换子目录 → 保持连接
+    // root 或 project 变了 → 无论 panel 当前是否打开，都必须清理旧
+    // terminal/socket/ack 状态。否则 panel 关闭时切换 scope，重新打开
+    // 会复用旧 terminal buffer，把旧 backend/session 的内容带到新 scope。
     const needsReconnect = rootChanged || projectChanged;
     if (needsReconnect) {
       const historyOverlay = document.getElementById(prefix ? 'previewAgentHistoryOverlay' : 'agentHistoryOverlay');
       const historyWasOpen = !!historyOverlay && !historyOverlay.classList.contains('hidden');
-      this.contextGeneration += 1;
-      this.openclaw.close();
-      this.wsClosedByUser = true;
-      this.clearWsRetryTimer();
-      this.socket?.close();
-      this.socket = null;
-      this.disposeTerminal();
-      this.clearOpenClawMessages(prefix);
-      this.setStatus('未连接');
+      this.resetScopeState(prefix, oldScopeKey);
+      if (!this.isOpen()) return;
+      // Reset ack so the server replays all buffered output from the ReplayRing,
+      // restoring the previous session's content in the new terminal instance.
       this.open();
       if (historyWasOpen && historyOverlay) this.loadHistory(historyOverlay, true);
     }
@@ -649,7 +694,72 @@ export class AgentPanelAdapter {
     }
   }
 
-  private clearOpenClawMessages(prefix: string): void {
+  /** Derive a stable scope key from the current config for message caching. */
+  private _openClawScopeKey(): string {
+    const cfg = this.config;
+    if (!cfg) return '';
+    return this._scopeKey(cfg.rootId, cfg.dir, cfg.project, cfg.backend);
+  }
+
+  private _scopeKey(rootId: string, dir: string, project?: string, backend?: AgentInitOptions['backend']): string {
+    const scope = `${rootId || 'root'}:${agentProjectScope(dir, project)}`;
+    return backend ? `${backend}:${scope}` : scope;
+  }
+
+  private readBackendPreference(scopeKey: string, fallback: AgentInitOptions['backend']): AgentInitOptions['backend'] {
+    if (!isAgentBackend(fallback)) return 'claude';
+    try {
+      const raw = localStorage.getItem(AGENT_BACKEND_PREFERENCES_STORAGE_KEY);
+      if (!raw) return fallback;
+      const values: unknown = JSON.parse(raw);
+      if (!values || typeof values !== 'object' || Array.isArray(values)) return fallback;
+      const preferred = (values as Record<string, unknown>)[scopeKey];
+      return isAgentBackend(preferred) ? preferred : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  private saveBackendPreference(scopeKey: string, backend: AgentInitOptions['backend']): void {
+    if (!scopeKey || !isAgentBackend(backend)) return;
+    try {
+      const raw = localStorage.getItem(AGENT_BACKEND_PREFERENCES_STORAGE_KEY);
+      const values: Record<string, unknown> = raw ? JSON.parse(raw) : {};
+      if (!values || typeof values !== 'object' || Array.isArray(values)) return;
+      values[scopeKey] = backend;
+      localStorage.setItem(AGENT_BACKEND_PREFERENCES_STORAGE_KEY, JSON.stringify(values));
+    } catch {
+      // localStorage is optional; backend switching must still work without it.
+    }
+  }
+
+  private resetScopeState(prefix: string, oldScopeKey?: string): void {
+    this.contextGeneration += 1;
+    this.openclaw.close();
+    this.wsClosedByUser = true;
+    this.stopHeartbeat();
+    this.clearWsRetryTimer();
+    this.socket?.close();
+    this.socket = null;
+    this.disposeTerminal();
+    this.clearOpenClawMessages(prefix, oldScopeKey);
+    this.lastOutputAck = 0;
+    this.setStatus('未连接');
+  }
+
+  /** Save current messages to per‑scope cache and clear the message list.
+   *
+   *  @param prefix - DOM prefix for the chat messages container.
+   *  @param scopeKey - Optional explicit scope key to save under.
+   *         When omitted, uses the current config's scope (caller must
+   *         ensure config hasn't been changed yet, or pass the old key).
+   */
+  private clearOpenClawMessages(prefix: string, scopeKey?: string): void {
+    const key = scopeKey ?? this._openClawScopeKey();
+    if (key && this._openClawMessages.length) {
+      this._savedOpenClawMessages.set(key, [...this._openClawMessages]);
+    }
+    this._openClawMessages.length = 0;
     const messages = document.getElementById(prefix ? 'previewAgentChatMessages' : 'agentChatMessages');
     if (messages) messages.replaceChildren();
     this.openclawInfo = null;
@@ -657,6 +767,8 @@ export class AgentPanelAdapter {
   }
 
   private handleOpenClawMessage(message: OpenClawMessage, prefix: string): void {
+    // Buffer every message so we can replay on reconnect.
+    this._openClawMessages.push({ ...message });
     const messages = document.getElementById(prefix ? 'previewAgentChatMessages' : 'agentChatMessages');
     if (!messages) return;
     const type = String(message.type || '');

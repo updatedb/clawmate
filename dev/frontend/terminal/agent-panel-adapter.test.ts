@@ -13,6 +13,89 @@ vi.mock('@xterm/addon-fit', () => ({
 import { AgentPanelAdapter, formatAgentScope, getAgentPanelWidthBounds, getFontSizeForAgentPanelWidth, renderOpenClawMarkdown, scaleAgentPanelWidth, syncMainAgentPanelLayout } from './agent-panel-adapter';
 
 describe('main agent panel layout', () => {
+  it('uses the configured backend when no project preference exists', () => {
+    localStorage.clear();
+    document.body.innerHTML = '<select id="agentBackendSelect"><option value="claude">Claude</option><option value="codex">Codex</option><option value="openclaw">OpenClaw</option></select>';
+
+    const adapter = new AgentPanelAdapter();
+    adapter.init({ backend: 'codex', wsUrl: 'ws://test', rootId: 'root1', dir: 'project' });
+
+    expect((document.getElementById('agentBackendSelect') as HTMLSelectElement).value).toBe('codex');
+  });
+
+  it('restores and persists the backend preference for a project scope', () => {
+    localStorage.clear();
+    localStorage.setItem('clawmate.agent.backend-preferences.v1', JSON.stringify({
+      'root1:project': 'claude',
+    }));
+    document.body.innerHTML = '<select id="agentBackendSelect"><option value="claude">Claude</option><option value="codex">Codex</option><option value="openclaw">OpenClaw</option></select>';
+
+    const first = new AgentPanelAdapter();
+    first.init({ backend: 'codex', wsUrl: 'ws://test', rootId: 'root1', dir: 'project' });
+    expect((document.getElementById('agentBackendSelect') as HTMLSelectElement).value).toBe('claude');
+
+    first.setBackend('openclaw');
+    expect(JSON.parse(localStorage.getItem('clawmate.agent.backend-preferences.v1') || '{}')['root1:project']).toBe('openclaw');
+
+    const second = new AgentPanelAdapter();
+    second.init({ backend: 'codex', wsUrl: 'ws://test', rootId: 'root1', dir: 'project' });
+    expect((document.getElementById('agentBackendSelect') as HTMLSelectElement).value).toBe('openclaw');
+  });
+
+  it('ignores malformed or unsupported project backend preferences', () => {
+    localStorage.setItem('clawmate.agent.backend-preferences.v1', '{bad json');
+    document.body.innerHTML = '<select id="agentBackendSelect"><option value="claude">Claude</option><option value="codex">Codex</option><option value="openclaw">OpenClaw</option></select>';
+    const adapter = new AgentPanelAdapter();
+    adapter.init({ backend: 'codex', wsUrl: 'ws://test', rootId: 'root1', dir: 'project' });
+    expect((document.getElementById('agentBackendSelect') as HTMLSelectElement).value).toBe('codex');
+
+    localStorage.setItem('clawmate.agent.backend-preferences.v1', JSON.stringify({ 'root1:project': 'invalid' }));
+    adapter.init({ backend: 'codex', wsUrl: 'ws://test', rootId: 'root1', dir: 'project' });
+    expect((document.getElementById('agentBackendSelect') as HTMLSelectElement).value).toBe('codex');
+  });
+
+  it('clears the old root chat before opening the new root scope', () => {
+    localStorage.clear();
+    class FakeWebSocket {
+      static OPEN = 1;
+      readyState = 0;
+      close = vi.fn();
+      send = vi.fn();
+    }
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+    document.body.innerHTML = `
+      <aside id="agentPanel"></aside>
+      <div id="agentChatView"></div>
+      <div id="agentChatMessages"></div>
+      <textarea id="agentChatInput"></textarea>
+      <select id="agentBackendSelect"><option value="openclaw">OpenClaw</option></select>
+      <span id="agentPanelTitle"></span><span id="agentStatus"></span>
+    `;
+    const adapter = new AgentPanelAdapter();
+    adapter.init({ backend: 'openclaw', wsUrl: 'ws://test', rootId: 'root1', dir: 'project' });
+    document.getElementById('agentPanel')?.classList.remove('hidden');
+    (adapter as any).handleOpenClawMessage({ type: 'user', text: 'root1 message' }, '');
+    expect(document.getElementById('agentChatMessages')?.textContent).toContain('root1 message');
+
+    adapter.updateRoot('root2', '', '');
+
+    expect(document.getElementById('agentChatMessages')?.textContent).toBe('');
+    vi.unstubAllGlobals();
+  });
+
+  it('resets the terminal scope when root changes while the panel is closed', () => {
+    localStorage.clear();
+    document.body.innerHTML = '<aside id="agentPanel" class="hidden"></aside><span id="agentPanelTitle"></span><span id="agentStatus"></span>';
+    const adapter = new AgentPanelAdapter();
+    adapter.init({ backend: 'codex', wsUrl: 'ws://test', rootId: 'root1', dir: 'project' });
+    const resetScopeState = vi.spyOn(adapter as any, 'resetScopeState');
+
+    adapter.updateRoot('root2', '', '');
+
+    expect(resetScopeState).toHaveBeenCalledOnce();
+    expect(resetScopeState).toHaveBeenCalledWith('', 'codex:root1:project');
+  });
+
   it('formats the visible backend root project scope', () => {
     expect(formatAgentScope('claude', 'webprojects', 'clawmate/src')).toBe('claude:webprojects:clawmate');
     expect(formatAgentScope('openclaw', 'webprojects', '')).toBe('openclaw:webprojects:root');
