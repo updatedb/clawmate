@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass, field
-from collections.abc import Awaitable, Callable
 from typing import Protocol
 
 try:  # FastAPI imports modules from dev/, while tests import dev.* packages.
@@ -27,14 +26,11 @@ class PtyAdapter(Protocol):
 @dataclass(slots=True)
 class TerminalConnection:
     id: str
-    output_queue: asyncio.Queue[OutputChunk | None]
+    output_queue: asyncio.Queue[OutputChunk]
     queued_bytes: int = 0
     last_output_ack: int = 0
     input_locked_out: bool = False
     closed: bool = False
-    replay_earliest: int = 0
-    replay_latest: int = 0
-    replay_chunk_count: int = 0
 
 
 @dataclass(slots=True)
@@ -56,7 +52,6 @@ class TerminalSession:
         connection_queue_bytes: int = 4 * 1024 * 1024,
         input_queue_bytes: int = 2 * 1024 * 1024,
         resize_lease_seconds: int = 15,
-        on_process_exited: Callable[[str], Awaitable[None]] | None = None,
     ):
         self.id = session_id
         self.pty = pty
@@ -79,7 +74,6 @@ class TerminalSession:
         self._resize_owner: str | None = None
         self._resize_lease_expires_at = 0.0
         self._terminated = False
-        self._on_process_exited = on_process_exited
 
     async def start(self) -> None:
         if self.closed:
@@ -97,17 +91,13 @@ class TerminalSession:
             raise RuntimeError("terminal session is closed")
         await self.start()
         await self.unsubscribe(connection_id)
-        replay = self.replay.after(max(0, last_output_ack))
         connection = TerminalConnection(
             id=connection_id,
             output_queue=asyncio.Queue(),
             last_output_ack=max(0, last_output_ack),
-            replay_earliest=replay.earliest_sequence,
-            replay_latest=replay.latest_sequence,
-            replay_chunk_count=len(replay.chunks),
         )
         self.connections[connection_id] = connection
-        for chunk in replay.chunks:
+        for chunk in self.replay.after(connection.last_output_ack).chunks:
             self._offer_output(connection, chunk)
             if connection.closed:
                 break
@@ -126,8 +116,6 @@ class TerminalSession:
     async def next_output(self, connection_id: str) -> OutputChunk:
         connection = self.connections[connection_id]
         chunk = await connection.output_queue.get()
-        if chunk is None:
-            raise ConnectionError("terminal session closed")
         connection.queued_bytes -= len(chunk.data)
         return chunk
 
@@ -196,7 +184,6 @@ class TerminalSession:
         self.close_reason = reason
         for connection in self.connections.values():
             connection.closed = True
-            connection.output_queue.put_nowait(None)
         self.connections.clear()
         for future in self._input_acks.values():
             if not future.done():
@@ -216,7 +203,6 @@ class TerminalSession:
             while not self.closed:
                 data = await self.pty.read(64 * 1024)
                 if not data:
-                    await self._notify_process_exited()
                     return
                 self.replay.append(data)
                 chunk = OutputChunk(self.replay.latest_sequence - len(data), self.replay.latest_sequence, data)
@@ -224,13 +210,6 @@ class TerminalSession:
                     self._offer_output(connection, chunk)
         except asyncio.CancelledError:
             raise
-        except OSError:
-            if not self.closed:
-                await self._notify_process_exited()
-
-    async def _notify_process_exited(self) -> None:
-        if not self.closed and self._on_process_exited:
-            await self._on_process_exited(self.id)
 
     async def _write_loop(self) -> None:
         try:
@@ -252,14 +231,13 @@ class TerminalSession:
         if connection.closed:
             return
         if connection.queued_bytes + len(chunk.data) > self.connection_queue_bytes:
-            # Connection send queue is full (WS sender can't keep up with PTY
-            # output rate).  Instead of hard‑closing the WebSocket — which loses
-            # input capability and triggers a disruptive reconnect cycle — skip
-            # the chunk for this connection.  The sender will continue draining
-            # older chunks, and once it catches up new output will be delivered
-            # normally.  Skipped content is available from the replay buffer on
-            # reconnect, and the terminal's own scrollback captures the PTY
-            # output via the ReadLoop → terminal data path.
+            connection.closed = True
+            self.connections.pop(connection.id, None)
+            if self._resize_owner == connection.id:
+                self._resize_owner = None
+                self._resize_lease_expires_at = 0.0
+            if self._input_lock_owner == connection.id:
+                self._input_lock_owner = None
             return
         connection.output_queue.put_nowait(chunk)
         connection.queued_bytes += len(chunk.data)

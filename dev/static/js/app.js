@@ -38,7 +38,6 @@ const state = {
   rootId: "",
   rootLabel: "",
   dir: "",
-  project: "",
   entries: [],
   searchResults: null,
   searchQuery: "",
@@ -80,8 +79,7 @@ const els = {
   contentMatchModalBody: document.getElementById("contentMatchModalBody"),
   contentMatchModalCount: document.getElementById("contentMatchModalCount"),
   searchInput: document.getElementById("searchInput"),
-  fileSearchBtn: document.getElementById("fileSearchBtn"),
-  contentSearchBtn: document.getElementById("contentSearchBtn"),
+  searchBtn: document.getElementById("searchBtn"),
   clearSearchBtn: document.getElementById("clearSearchBtn"),
   viewGrid: document.getElementById("viewGrid"),
   viewList: document.getElementById("viewList"),
@@ -98,7 +96,6 @@ const els = {
   // Multi-select
   multiSelectToggle: document.getElementById("multiSelectToggle"),
   btnCreate: document.getElementById("btnCreate"),
-  createFileInput: document.getElementById("createFileInput"),
   batchBar: document.getElementById("batchBar"),
   batchCount: document.getElementById("batchCount"),
   batchSelectAllBtn: document.getElementById("batchSelectAllBtn"),
@@ -120,9 +117,9 @@ function getMermaidTheme() {
 // 排序标签更新函数
 function updateSortPills() {
   const pills = [
-    { el: els.sortTime, key: "time", descIcon: "↓", descLabel: "最新", ascIcon: "↑", ascLabel: "最早" },
-    { el: els.sortName, key: "name", descIcon: "↓", descLabel: "Z→A", ascIcon: "↑", ascLabel: "A→Z" },
-    { el: els.sortSize, key: "size", descIcon: "↓", descLabel: "最大", ascIcon: "↑", ascLabel: "最小" },
+    { el: els.sortTime, key: "time", desc: "↓ 最新", asc: "↑ 最早" },
+    { el: els.sortName, key: "name", desc: "↓ Z→A", asc: "↑ A→Z" },
+    { el: els.sortSize, key: "size", desc: "↓ 最大", asc: "↑ 最小" },
   ];
   pills.forEach(p => {
     if (!p.el) return;
@@ -130,14 +127,7 @@ function updateSortPills() {
     p.el.classList.toggle("active", active);
     if (active) {
       const isDesc = state.sortDir === "desc";
-      const icon = p.el.querySelector(".sort-icon");
-      const label = p.el.querySelector(".sort-label");
-      if (icon && label) {
-        icon.textContent = isDesc ? p.descIcon : p.ascIcon;
-        label.textContent = isDesc ? p.descLabel : p.ascLabel;
-      } else {
-        p.el.textContent = `${isDesc ? p.descIcon : p.ascIcon} ${isDesc ? p.descLabel : p.ascLabel}`;
-      }
+      p.el.textContent = isDesc ? p.desc : p.asc;
       p.el.dataset.dir = state.sortDir;
     }
   });
@@ -1436,17 +1426,10 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
             } else {
               // Create share link
               try {
-                var expiryInput = prompt("请输入分享有效期（天）：1 / 3 / 7 / 30", "1");
-                if (expiryInput === null) return;
-                var expiresDays = Number(expiryInput.trim());
-                if (![1, 3, 7, 30].includes(expiresDays)) {
-                  if (typeof showToast === "function") showToast("❌ 有效期只能是 1、3、7 或 30 天", 3000);
-                  return;
-                }
                 var res = await authFetch("/api/clawmate/share/create", {
                   method: "POST",
                   headers: {"Content-Type": "application/json"},
-                  body: JSON.stringify({root: state.rootId, path: entry.relPath, expires_days: expiresDays}),
+                  body: JSON.stringify({root: state.rootId, path: entry.relPath}),
                 });
                 if (res.ok) {
                   var data = await res.json();
@@ -1461,7 +1444,7 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
                     state.activeShares[state.rootId].push(entry.relPath);
                   }
                   setStatus("已生成分享链接");
-                  if (typeof showToast === "function") showToast("🔗 已复制分享链接 · " + expiresDays + "天有效", 3000);
+                  if (typeof showToast === "function") showToast("🔗 已复制分享链接 · 24小时有效", 3000);
                 }
               } catch (_) {}
             }
@@ -1880,12 +1863,11 @@ async function loadDir(dir) {
     state.entries = cached.entries;
     state.total = cached.total;
     state.hasMore = cached.hasMore;
-    state.project = cached.project;
     updateUrl();
     await loadSidebarParent(state.dir);
     await loadActiveShares();
     render();
-    if (window.Agent) window.Agent.updateRoot(state.rootId, state.dir, state.project);
+    if (window.Agent) window.Agent.updateRoot(state.rootId, state.dir);
     return;
   }
 
@@ -1903,13 +1885,12 @@ async function loadDir(dir) {
     return;
   }
   const data = await res.json();  state.dir = data.path || "";
-  state.project = data.project;  // null = 无 project，string = project 名
-  if (window.Agent) window.Agent.updateRoot(state.rootId, state.dir, state.project);
+  if (window.Agent) window.Agent.updateRoot(state.rootId, state.dir);
   state.entries = (data.entries || []).map(mapEntry);
   state.total = data.total || 0;
   state.hasMore = state.entries.length < state.total;
   _setCachedDir(cacheKey, {
-    dir: state.dir, entries: state.entries, total: state.total, hasMore: state.hasMore, project: state.project
+    dir: state.dir, entries: state.entries, total: state.total, hasMore: state.hasMore
   });
   updateUrl();
   // Also load parent dir for sidebar
@@ -1975,7 +1956,7 @@ function teardownInfiniteScroll() {
   if (_scrollObserver) { _scrollObserver.disconnect(); _scrollObserver = null; }
 }
 
-async function fileSearch() {
+async function search() {
   if (!state.rootId) {
     setStatus("请先选择根目录");
     return;
@@ -1983,7 +1964,6 @@ async function fileSearch() {
   const q = els.searchInput.value.trim();
   if (!q) return;
   setStatus("搜索中...");
-  _hideContentResults();
   const recursive = "true";
   const res = await authFetch(
     `/api/clawmate/search?root=${encodeURIComponent(state.rootId)}&q=${encodeURIComponent(q)}&dir=${encodeURIComponent(state.dir)}&recursive=${recursive}`
@@ -2094,11 +2074,10 @@ async function loadConfig() {
 })();
 
 // ===== Event Listeners =====
-els.fileSearchBtn && els.fileSearchBtn.addEventListener("click", fileSearch);
-els.contentSearchBtn && els.contentSearchBtn.addEventListener("click", contentSearch);
-els.clearSearchBtn && els.clearSearchBtn.addEventListener("click", clearSearch);
+els.searchBtn.addEventListener("click", search);
+els.clearSearchBtn.addEventListener("click", clearSearch);
 els.searchInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") fileSearch();
+  if (e.key === "Enter") search();
 });
 if (els.rootSelect) {
   els.rootSelect.addEventListener("change", (e) => {
@@ -2106,12 +2085,6 @@ if (els.rootSelect) {
       setStatus("根目录无效");
       return;
     }
-    // Reset state.dir before _initAgent to avoid stale dir from old root
-    state.dir = "";
-    state.page = 1;
-    state.searchResults = null;
-    state.searchQuery = "";
-    els.searchInput.value = "";
     _initAgent();
     // Reset multi-select state on root change
     if (state.multiSelectEnabled) {
@@ -2124,6 +2097,11 @@ if (els.rootSelect) {
       updateBatchBar();
       if (els.batchBar) els.batchBar.classList.add("hidden");
     }
+    state.dir = "";
+    state.page = 1;
+    state.searchResults = null;
+    state.searchQuery = "";
+    els.searchInput.value = "";
     loadDir("");
   });
 }
@@ -2238,7 +2216,7 @@ if (btnToggleSidebar) {
 
 // Update content grid columns when sidebar/agent panel change
 function _updateContentGrid() {
-  // Delegate to the xterm 6 Agent facade for consistent grid management
+  // Delegate to agent.js for consistent grid management
   if (window.Agent && window.Agent.updateGrid) {
     window.Agent.updateGrid();
   }
@@ -2344,10 +2322,6 @@ function toggleCreateMenu() {
     }
   });
 
-  addItem('file-output', '选择文件上传', function () {
-    els.createFileInput && els.createFileInput.click();
-  });
-
   addItem('file', '创建 Markdown', async function () {
     var name = prompt("请输入文件名（自动添加 .md 后缀）：");
     if (!name) return;
@@ -2389,40 +2363,6 @@ function toggleCreateMenu() {
 // Multi-select
 els.multiSelectToggle && els.multiSelectToggle.addEventListener("click", toggleMultiSelect);
 els.btnCreate && els.btnCreate.addEventListener("click", toggleCreateMenu);
-els.createFileInput && els.createFileInput.addEventListener("change", async function () {
-  const file = this.files && this.files[0];
-  if (!file) return;
-  if (!state.rootId) {
-    setStatus("请先选择根目录");
-    this.value = "";
-    return;
-  }
-
-  setStatus("正在上传 " + file.name + "...");
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-    const res = await authFetch(
-      '/api/clawmate/upload?root=' + encodeURIComponent(state.rootId) + '&dir=' + encodeURIComponent(state.dir),
-      { method: 'POST', body: formData }
-    );
-    if (res.ok) {
-      let data = {};
-      try { data = await res.json(); } catch (_) {}
-      setStatus("文件已上传: " + (data.filename || file.name));
-      invalidateDirCache();
-      loadDir(state.dir);
-    } else {
-      let detail = "";
-      try { const err = await res.json(); detail = err.detail || ""; } catch (_) {}
-      setStatus("上传失败: " + (detail || res.status));
-    }
-  } catch (e) {
-    setStatus("上传出错: " + (e.message || e));
-  } finally {
-    this.value = "";
-  }
-});
 els.batchSelectAllBtn && els.batchSelectAllBtn.addEventListener("click", selectAll);
 
 // Batch operations
@@ -2952,6 +2892,8 @@ function _initAgent() {
     window.Agent.init({
       backend: state.agentConfig.backend || "claude",
       wsUrl: state.agentConfig.ws_url || "",
+      terminalV2: !!state.agentConfig.terminal_v2,
+      renderer: state.agentConfig.renderer || "auto",
       scrollback: state.agentConfig.scrollback || 10000,
       rootId: state.rootId || "",
       dir: state.dir || "",
@@ -3272,34 +3214,41 @@ document.addEventListener('click', function (e) {
 
 // ===== Unified Search — 文件名 + ripgrep 内容搜索 =====
 
-async function contentSearch() {
+async function unifiedSearch() {
   if (!state.rootId) { setStatus('请先选择根目录'); return; }
   var q = els.searchInput.value.trim();
   if (!q) return;
 
   setStatus('搜索中...');
 
-  var contentRes;
-  try {
-    contentRes = await authFetch('/api/clawmate/search/content?q=' + encodeURIComponent(q) + '&root=' + encodeURIComponent(state.rootId) + '&dir=' + encodeURIComponent(state.dir));
-  } catch (_) {
-    setStatus('内容搜索失败');
-    return;
+  // Run filename search and content search in parallel
+  var [nameRes, contentRes] = await Promise.allSettled([
+    authFetch('/api/clawmate/search?root=' + encodeURIComponent(state.rootId) + '&q=' + encodeURIComponent(q) + '&dir=' + encodeURIComponent(state.dir) + '&recursive=true'),
+    authFetch('/api/clawmate/search/content?q=' + encodeURIComponent(q) + '&root=' + encodeURIComponent(state.rootId) + '&dir=' + encodeURIComponent(state.dir))
+  ]);
+
+  // Parse filename results
+  var nameData = null;
+  if (nameRes.status === 'fulfilled' && nameRes.value.ok) {
+    try { nameData = await nameRes.value.json(); } catch (_) {}
   }
 
+  // Parse content results — show error detail on failure (e.g. ripgrep not installed)
   var contentData = null;
-  if (contentRes.ok) {
-    try { contentData = await contentRes.json(); } catch (_) {}
-  } else {
-    try {
-      var errBody = await contentRes.json();
-      setStatus(errBody.detail || '内容搜索失败 (' + contentRes.status + ')');
-    } catch (_) {
-      setStatus('内容搜索失败 (' + contentRes.status + ')');
+  if (contentRes.status === 'fulfilled') {
+    if (contentRes.value.ok) {
+      try { contentData = await contentRes.value.json(); } catch (_) {}
+    } else if (contentRes.value.status >= 400) {
+      try {
+        var errBody = await contentRes.value.json();
+        setStatus(errBody.detail || '内容搜索失败 (' + contentRes.value.status + ')');
+      } catch (_) {
+        setStatus('内容搜索失败 (' + contentRes.value.status + ')');
+      }
     }
-    return;
   }
 
+  var nameCount = nameData ? (nameData.results || []).length : 0;
   var contentMatchCount = contentData ? (contentData.total_matches || 0) : 0;
   var contentFileCount = contentData ? (contentData.total_files || 0) : 0;
 
@@ -3310,25 +3259,28 @@ async function contentSearch() {
     state.contentResults = null;
   }
 
-  // Present content-matched files through the existing gallery/list surfaces.
-  var mergedResults = [];
+  // Merge content-only files into search results for gallery display
+  var mergedResults = nameData ? (nameData.results || []).map(mapEntry) : [];
   if (contentData && contentData.results_by_file) {
+    var existingPaths = new Set(mergedResults.map(function(e) { return e.relPath; }));
     contentData.results_by_file.forEach(function(cr) {
-      var fileName = cr.file.split('/').pop() || cr.file;
-      var ext = fileName.includes('.') ? '.' + fileName.split('.').pop() : '';
-      mergedResults.push({
-        name: fileName,
-        path: cr.file,
-        relPath: cr.file,
-        is_dir: false,
-        size: cr.size || 0,
-        mtime: cr.mtime || 0,
-        ext: ext,
-        mime: 'text/plain',
-        category: 'text',
-        broken_link: false,
-        _contentOnly: true,
-      });
+      if (!existingPaths.has(cr.file)) {
+        var fileName = cr.file.split('/').pop() || cr.file;
+        var ext = fileName.includes('.') ? '.' + fileName.split('.').pop() : '';
+        mergedResults.push({
+          name: fileName,
+          path: cr.file,
+          relPath: cr.file,
+          is_dir: false,
+          size: cr.size || 0,
+          mtime: cr.mtime || 0,
+          ext: ext,
+          mime: 'text/plain',
+          category: 'text',
+          broken_link: false,
+          _contentOnly: true,
+        });
+      }
     });
     // Re-sort by name for consistent display
     mergedResults.sort(function(a, b) { return a.relPath.localeCompare(b.relPath); });
@@ -3400,6 +3352,15 @@ function _openContentMatchModal(filePath) {
 
   // Render results
   _renderContentMatchModalBody(results, query);
+
+  // Shrink overlay right edge to exclude agent panel, so justify-content:center
+  // naturally centers in the remaining visible area
+  var _agentPanel = document.getElementById('agentPanel');
+  if (_agentPanel && !_agentPanel.classList.contains('hidden')) {
+    els.contentMatchModal.style.right = '750px';
+  } else {
+    els.contentMatchModal.style.right = '';
+  }
 
   els.contentMatchModal.style.display = 'flex';
 
@@ -3618,5 +3579,23 @@ if (els.contentMatchModal) {
     }
   });
 }
+
+// Hook into existing search button — replace click handler with unified search
+els.searchBtn.addEventListener('click', function(e) {
+  e.stopPropagation();
+  e.preventDefault();
+  unifiedSearch();
+});
+// Also replace the original click listener on searchBtn
+els.searchBtn.onclick = function(e) { unifiedSearch(); };
+
+// Also hook Enter key
+els.searchInput.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    e.stopPropagation();
+    e.preventDefault();
+    unifiedSearch();
+  }
+});
 
 init();
