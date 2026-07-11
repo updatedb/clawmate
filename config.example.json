@@ -23,6 +23,13 @@
     "openclaw_ws_url": "ws://openclaw.lan:18789",
     "openclaw_token": "",
     "max_sessions": 10,
+    "terminal_v2": false,
+    "renderer": "auto",
+    "replay_bytes": 4194304,
+    "scrollback": 10000,
+    "input_queue_bytes": 2097152,
+    "connection_queue_bytes": 4194304,
+    "resize_lease_seconds": 15,
     "env": {
       "DEEPSEEK_API_KEY": ""
     }

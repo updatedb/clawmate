@@ -17,7 +17,7 @@ def test_agent_reopen_reuses_last_file_context_and_insert_triggers_input():
     assert "return 'pending:' + backendMode + ':' + (currentRootId || '') + ':' + (currentDir || '');" in js
     assert "function normalizeKnownFilePath(path)" in js
     assert "function trackTypedFileReferences(data)" in js
-    assert "if (filePath && !hasKnownFile(filePath)) {" in js
+    assert "if (filePath && (!hasKnownFile(filePath) || currentSessionKey)) {" in js
     assert "migrateKnownFiles(pendingFileScopeKey(), msg.key);" in js
     assert "trackTypedFileReferences(data);" in js
     assert "function stripAnsiText(text)" not in js
@@ -36,7 +36,7 @@ def test_agent_reopen_reuses_last_file_context_and_insert_triggers_input():
     assert "ta.value = ta.value.slice(0, start) + rawText + ta.value.slice(end);" not in js
     assert "if (_pendingInsertEcho && (data.indexOf('\\r') !== -1 || data.indexOf('\\n') !== -1))" not in js
     assert "type: 'suppress_echo_once'" not in js
-    assert "if (filePath && !hasKnownFile(filePath)) {" in js
+    assert "if (filePath && (!hasKnownFile(filePath) || currentSessionKey)) {" in js
     assert "ws.send(JSON.stringify({ type: 'file_context', path: fileContext.path || '' }));" in js
     assert "rememberKnownFile(filePath);" in js
     assert "insertFileReference: function (path)" not in js

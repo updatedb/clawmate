@@ -11,6 +11,14 @@
 #   docker build --build-arg CLAWMATE_ENABLE_SUBTITLE=1 -t clawmate:latest .
 ARG CLAWMATE_ENABLE_SUBTITLE=0
 
+FROM node:22-alpine AS frontend
+
+WORKDIR /src
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY dev/frontend ./dev/frontend
+RUN npm run build:terminal
+
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
@@ -38,6 +46,7 @@ COPY --from=builder /usr/local/bin/uvicorn /usr/local/bin/uvicorn
 COPY dev/*.py ./
 COPY task_templates.json ./
 COPY dev/static/ static/
+COPY --from=frontend /src/dev/static/dist/ static/dist/
 
 ENV CLAWMATE_PORT=5533
 EXPOSE 5533

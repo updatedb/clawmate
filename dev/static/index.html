@@ -18,8 +18,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./css/style.css" />
   <link rel="stylesheet" href="./vendor/github-markdown-dark.min.css" id="github-markdown-css" />
-  <!-- xterm.js version — keep in sync with agent.js XTERM_VERSION -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css" />
+  <link rel="stylesheet" href="./dist/terminal.css" />
 </head>
 <body>
   <div class="app">
@@ -182,14 +181,10 @@
   <script src="./vendor/markdown-it-task-lists.min.js" defer></script>
   <script src="./vendor/highlight.min.js" defer></script>
   <!-- KaTeX + Mermaid loaded conditionally by app.js (CSS+JS) -->
-  <!-- xterm.js version — keep in sync with agent.js XTERM_VERSION -->
-  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js" defer></script>
-  <!-- xterm addons use independent semver (not tied to @xterm/xterm version).
-       addon-fit 0.11.0 / addon-webgl 0.19.0 are compatible with xterm 5.x -->
-  <script src="./vendor/addon-fit.min.js?v=20260622" defer></script>
   <script src="./js/icons.js" defer></script>
   <script src="./js/topbar.js" defer></script>
   <script src="./js/agent.js" defer></script>
+  <script src="./dist/terminal.js" defer></script>
   <script src="./js/app.js?v=1782996122" defer></script>
   <!-- Service Worker registration for PWA -->
   <script>

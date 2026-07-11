@@ -2892,6 +2892,9 @@ function _initAgent() {
     window.Agent.init({
       backend: state.agentConfig.backend || "claude",
       wsUrl: state.agentConfig.ws_url || "",
+      terminalV2: !!state.agentConfig.terminal_v2,
+      renderer: state.agentConfig.renderer || "auto",
+      scrollback: state.agentConfig.scrollback || 10000,
       rootId: state.rootId || "",
       dir: state.dir || "",
       agentId: curRoot.agent_id || "",

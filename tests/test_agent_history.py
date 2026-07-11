@@ -4,8 +4,9 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+import httpx
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
 DEV = ROOT / "dev"
@@ -45,7 +46,8 @@ def test_find_codex_transcript_does_not_fallback_across_project_cwd(tmp_path, mo
     assert agent_routes._find_codex_transcript("/home/openclaw/helper/3gpp/notes", started_at) is None
 
 
-def test_session_list_filters_empty_chat_logs_and_returns_instruction_count(tmp_path, monkeypatch):
+@pytest.mark.asyncio
+async def test_session_list_filters_empty_chat_logs_and_returns_instruction_count(tmp_path, monkeypatch):
     sess_dir = tmp_path / ".clawmate" / "sessions"
     sess_dir.mkdir(parents=True)
     index = {
@@ -81,9 +83,9 @@ def test_session_list_filters_empty_chat_logs_and_returns_instruction_count(tmp_
 
     app = FastAPI()
     app.include_router(agent_routes.router)
-    client = TestClient(app)
-
-    res = client.get("/api/clawmate/agent/sessions?root=root")
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        res = await client.get("/api/clawmate/agent/sessions?root=root")
 
     assert res.status_code == 200
     data = res.json()
@@ -93,7 +95,8 @@ def test_session_list_filters_empty_chat_logs_and_returns_instruction_count(tmp_
     assert data["sessions"][0]["turn_count"] == 1
 
 
-def test_session_instruction_count_matches_detail_turns(tmp_path, monkeypatch):
+@pytest.mark.asyncio
+async def test_session_instruction_count_matches_detail_turns(tmp_path, monkeypatch):
     sess_dir = tmp_path / ".clawmate" / "sessions"
     sess_dir.mkdir(parents=True)
     index = {
@@ -128,11 +131,11 @@ def test_session_instruction_count_matches_detail_turns(tmp_path, monkeypatch):
 
     app = FastAPI()
     app.include_router(agent_routes.router)
-    client = TestClient(app)
-
-    list_res = client.get("/api/clawmate/agent/sessions?root=root")
-    detail_res = client.get("/api/clawmate/agent/sessions/merged-input?root=root")
-    log_res = client.get("/api/clawmate/agent/sessions/merged-input/log?root=root")
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        list_res = await client.get("/api/clawmate/agent/sessions?root=root")
+        detail_res = await client.get("/api/clawmate/agent/sessions/merged-input?root=root")
+        log_res = await client.get("/api/clawmate/agent/sessions/merged-input/log?root=root")
 
     assert list_res.status_code == 200
     assert detail_res.status_code == 200
@@ -204,7 +207,8 @@ def test_collect_transcript_derives_cwd_from_session_dir_when_runtime_cwd_missin
     assert captured["backend"] == "codex"
 
 
-def test_session_log_assigns_turn_index_per_user_instruction(tmp_path, monkeypatch):
+@pytest.mark.asyncio
+async def test_session_log_assigns_turn_index_per_user_instruction(tmp_path, monkeypatch):
     sess_dir = tmp_path / ".clawmate" / "sessions"
     sess_dir.mkdir(parents=True)
     index = {
@@ -239,16 +243,17 @@ def test_session_log_assigns_turn_index_per_user_instruction(tmp_path, monkeypat
 
     app = FastAPI()
     app.include_router(agent_routes.router)
-    client = TestClient(app)
-
-    res = client.get("/api/clawmate/agent/sessions/two-rounds/log?root=root")
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        res = await client.get("/api/clawmate/agent/sessions/two-rounds/log?root=root")
 
     assert res.status_code == 200
     turns = res.json()["turns"]
     assert [t["turn_index"] for t in turns] == [1, 1, 2, 2]
 
 
-def test_session_dates_returns_sorted_dates(tmp_path, monkeypatch):
+@pytest.mark.asyncio
+async def test_session_dates_returns_sorted_dates(tmp_path, monkeypatch):
     """``/sessions/dates`` returns sorted ``{dates: [\"2026-07-06\", ...]}``."""
     sess_dir = tmp_path / ".clawmate" / "sessions"
     sess_dir.mkdir(parents=True)
@@ -277,16 +282,17 @@ def test_session_dates_returns_sorted_dates(tmp_path, monkeypatch):
 
     app = FastAPI()
     app.include_router(agent_routes.router)
-    client = TestClient(app)
-
-    res = client.get("/api/clawmate/agent/sessions/dates?root=root")
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        res = await client.get("/api/clawmate/agent/sessions/dates?root=root")
     assert res.status_code == 200
     data = res.json()
     assert "dates" in data
     assert data["dates"] == ["2026-07-05", "2026-07-04", "2026-07-03"]
 
 
-def test_session_dates_excludes_active_sessions(tmp_path, monkeypatch):
+@pytest.mark.asyncio
+async def test_session_dates_excludes_active_sessions(tmp_path, monkeypatch):
     """Active session IDs are excluded from the dates list."""
     sess_dir = tmp_path / ".clawmate" / "sessions"
     sess_dir.mkdir(parents=True)
@@ -318,15 +324,16 @@ def test_session_dates_excludes_active_sessions(tmp_path, monkeypatch):
 
     app = FastAPI()
     app.include_router(agent_routes.router)
-    client = TestClient(app)
-
-    res = client.get("/api/clawmate/agent/sessions/dates?root=root")
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        res = await client.get("/api/clawmate/agent/sessions/dates?root=root")
     assert res.status_code == 200
     data = res.json()
     assert data["dates"] == ["2026-07-04"]
 
 
-def test_session_list_filters_by_date(tmp_path, monkeypatch):
+@pytest.mark.asyncio
+async def test_session_list_filters_by_date(tmp_path, monkeypatch):
     """``/sessions?date=YYYY-MM-DD`` returns only sessions with that date."""
     sess_dir = tmp_path / ".clawmate" / "sessions"
     sess_dir.mkdir(parents=True)
@@ -356,17 +363,18 @@ def test_session_list_filters_by_date(tmp_path, monkeypatch):
 
     app = FastAPI()
     app.include_router(agent_routes.router)
-    client = TestClient(app)
-
-    # Filter to 2026-07-04 — should only get s2
-    res = client.get("/api/clawmate/agent/sessions?root=root&date=2026-07-04")
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        # Filter to 2026-07-04 — should only get s2
+        res = await client.get("/api/clawmate/agent/sessions?root=root&date=2026-07-04")
     assert res.status_code == 200
     data = res.json()
     assert data["total"] == 1
     assert data["sessions"][0]["id"] == "s2"
 
 
-def test_session_list_returns_stored_session_key_when_present(tmp_path, monkeypatch):
+@pytest.mark.asyncio
+async def test_session_list_returns_stored_session_key_when_present(tmp_path, monkeypatch):
     sess_dir = tmp_path / ".clawmate" / "sessions"
     sess_dir.mkdir(parents=True)
     index = {
@@ -405,16 +413,17 @@ def test_session_list_returns_stored_session_key_when_present(tmp_path, monkeypa
 
     app = FastAPI()
     app.include_router(agent_routes.router)
-    client = TestClient(app)
-
-    res = client.get("/api/clawmate/agent/sessions?root=root")
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        res = await client.get("/api/clawmate/agent/sessions?root=root")
 
     assert res.status_code == 200
     session = res.json()["sessions"][0]
     assert session["sessionKey"] == "codex:root:project-a"
 
 
-def test_session_list_falls_back_to_derived_session_key(tmp_path, monkeypatch):
+@pytest.mark.asyncio
+async def test_session_list_falls_back_to_derived_session_key(tmp_path, monkeypatch):
     root_sess_dir = tmp_path / ".clawmate" / "sessions"
     project_sess_dir = tmp_path / "project-a" / ".clawmate" / "sessions"
     root_sess_dir.mkdir(parents=True)
@@ -464,9 +473,9 @@ def test_session_list_falls_back_to_derived_session_key(tmp_path, monkeypatch):
 
     app = FastAPI()
     app.include_router(agent_routes.router)
-    client = TestClient(app)
-
-    res = client.get("/api/clawmate/agent/sessions?root=root")
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        res = await client.get("/api/clawmate/agent/sessions?root=root")
 
     assert res.status_code == 200
     sessions = {s["id"]: s for s in res.json()["sessions"]}
@@ -490,11 +499,11 @@ def test_known_file_helpers_normalize_and_extract():
     assert agent_routes._extract_known_file_path("echo @/tmp/demo.md") == ""
 
 
-def test_session_logger_record_user_accepts_explicit_timestamp(tmp_path):
+@pytest.mark.asyncio
+async def test_session_logger_record_user_accepts_explicit_timestamp(tmp_path):
     logger = agent_routes.SessionLogger("demo", {"started_at": 1}, tmp_path)
     try:
-        import asyncio
-        asyncio.run(logger.record_user("hello", ts=123.456))
+        await logger.record_user("hello", ts=123.456)
     finally:
         logger.close()
 

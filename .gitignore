@@ -1,4 +1,5 @@
 node_modules/
+.pnpm-debug.log*
 .npm/
 .pnpm-store/
 __pycache__/
@@ -14,6 +15,9 @@ Thumbs.db
 .idea/
 dist/
 build/
+dev/static/dist/
+playwright-report/
+test-results/
 
 # Sensitive: contains local paths and secrets
 config.json

@@ -10,8 +10,8 @@
 (function () {
   'use strict';
 
-  // --- xterm.js CDN (update version here → index.html <link>/<script> + preview.js follow) ---
-  var XTERM_VERSION = '5.5.0';
+  // --- xterm.js CDN / local bundle version (keep in sync with HTML + preview.js) ---
+  var XTERM_VERSION = '6.0.0';
   var XTERM_CDN_BASE = 'https://cdn.jsdelivr.net/npm/@xterm/xterm@' + XTERM_VERSION;
 
   // --- DOM refs (re-initializable with prefix for reuse in preview page) ---

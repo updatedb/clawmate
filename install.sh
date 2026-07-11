@@ -28,6 +28,16 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
+# Terminal v2 assets are bundled locally; use a current Node release so the
+# production bundle exactly matches the pinned package-lock dependency graph.
+if ! command -v node >/dev/null 2>&1 || [ "$(node -p 'process.versions.node.split(".")[0]')" -lt 22 ]; then
+  echo "需要 Node.js 22+ 来构建本地终端资源"
+  exit 1
+fi
+
+echo "构建本地终端资源..."
+(cd "$CLAWMATE_DIR" && npm ci && npm run build:terminal)
+
 # 确保 config.json 存在
 _CFG_PATH="$CLAWMATE_DIR/config.json"
 if [ ! -f "$_CFG_PATH" ]; then

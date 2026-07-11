@@ -195,5 +195,3 @@ async def clawmate_search_content(
     result.pop("summary", None)
 
     return JSONResponse(content=result)
-
-

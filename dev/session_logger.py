@@ -6,6 +6,7 @@ import asyncio
 import json
 import time
 import typing
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -313,14 +314,18 @@ class SessionIndex:
 
     def __init__(self, log_dir: str | Path):
         self._log_dir = Path(log_dir)
-        self._lock = asyncio.Lock()
+        # ``asyncio.Lock`` is tied to the event loop that created it, which
+        # makes cached SessionIndex instances fragile across TestClient /
+        # reload cycles.  A plain threading lock is loop-agnostic and still
+        # sufficient here because the protected sections are short file I/O.
+        self._lock = threading.Lock()
 
     async def load_async(self) -> list[dict]:
-        async with self._lock:
+        with self._lock:
             return self._sync_load(self._log_dir)
 
     async def add_async(self, entry: dict):
-        async with self._lock:
+        with self._lock:
             sessions = self._sync_load(self._log_dir)
             for s in sessions:
                 if s.get("id") == entry.get("id"):
@@ -331,7 +336,7 @@ class SessionIndex:
             self._sync_save(self._log_dir, sessions)
 
     async def update_async(self, session_id: str, updates: dict):
-        async with self._lock:
+        with self._lock:
             sessions = self._sync_load(self._log_dir)
             for s in sessions:
                 if s.get("id") == session_id:
@@ -341,7 +346,7 @@ class SessionIndex:
 
     async def update_batch(self, updates: dict[str, dict]):
         """Update multiple sessions in a single atomic load+save."""
-        async with self._lock:
+        with self._lock:
             sessions = self._sync_load(self._log_dir)
             for sid, fields in updates.items():
                 for s in sessions:
@@ -351,7 +356,7 @@ class SessionIndex:
             self._sync_save(self._log_dir, sessions)
 
     async def remove_async(self, session_id: str):
-        async with self._lock:
+        with self._lock:
             sessions = self._sync_load(self._log_dir)
             sessions = [s for s in sessions if s.get("id") != session_id]
             self._sync_save(self._log_dir, sessions)
@@ -365,7 +370,7 @@ class SessionIndex:
         When *active_keys* is None, no sessions are protected (use with care).
         Returns count removed.
         """
-        async with self._lock:
+        with self._lock:
             sessions = self._sync_load(self._log_dir)
             now = time.time()
             cutoff = now - ttl_days * 86400

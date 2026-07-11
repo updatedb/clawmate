@@ -20,6 +20,10 @@ ClawMate 是 AI Agent 工作流的**一站式中台**，将传统分散的文件
 
 集成 **Claude Code**、**Codex** 和 **OpenClaw** 三后端 Agent 面板——右上角一键切换，无需修改配置。Claude/Codex 通过 xterm.js PTY 提供完整 CLI 体验（60fps），OpenClaw 通过 Markdown 聊天 + Gateway 协议支持多 Agent 协作。在浏览器中完成从文件浏览到 AI 执行的完整闭环，无需离开 ClawMate。
 
+### Terminal v2 灰度发布
+
+终端资源由本地锁定的 `@xterm/xterm@6.0.0` bundle 提供，不依赖运行时 CDN。默认保持兼容路径；在 `agent.terminal_v2` 设为 `true` 后，Claude/Codex 会使用协议 v2（二进制终端数据帧、受限回放及队列），出现问题时将该开关设回 `false` 即可回退。构建资源：`npm ci && npm run build:terminal`。
+
 ### 业务架构
 
 ```mermaid

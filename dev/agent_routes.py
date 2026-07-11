@@ -34,6 +34,16 @@ from starlette.websockets import WebSocketState
 from config import load as load_cfg
 from service import find_project_marker
 from session_logger import SessionLogger, SessionIndex, _SESSION_LOG_EXTS
+from session_history_service import SessionHistoryService
+from terminal_manager import PosixPtyAdapter, SessionRequest, TerminalManager
+from terminal_protocol import (
+    PROTOCOL_VERSION,
+    ProtocolError,
+    decode_binary_frame,
+    encode_binary_frame,
+    parse_control,
+    validate_dimensions,
+)
 
 router = APIRouter()
 logger = logging.getLogger("clawmate.agent")
@@ -98,6 +108,7 @@ class _AgentSession:
 
 # session registry: key → _AgentSession
 _sessions: dict[str, _AgentSession] = {}
+_terminal_v2_manager: TerminalManager | None = None
 
 
 def _session_key(root: str, dir_: str = "", backend: str = "claude") -> str:
@@ -1338,6 +1349,141 @@ async def _openclaw_backend(
 
 # --- Main WebSocket endpoint ---
 
+
+async def _v2_pty_factory(request: SessionRequest) -> PosixPtyAdapter:
+    cfg = load_cfg()
+    if request.backend == "codex":
+        legacy_session = await _spawn_codex(request.cwd, extra_env=cfg.agent.env)
+    elif request.backend == "claude":
+        legacy_session = await _spawn_claude(request.cwd, extra_env=cfg.agent.env)
+    else:
+        raise RuntimeError("terminal v2 supports only PTY backends")
+    if legacy_session is None:
+        raise RuntimeError(f"{request.backend} CLI not found")
+    return PosixPtyAdapter(legacy_session.master_fd, legacy_session.proc)
+
+
+def _get_terminal_v2_manager() -> TerminalManager:
+    global _terminal_v2_manager
+    if _terminal_v2_manager is None:
+        cfg = load_cfg().agent
+        _terminal_v2_manager = TerminalManager(
+            _v2_pty_factory,
+            replay_bytes=cfg.replay_bytes,
+            connection_queue_bytes=cfg.connection_queue_bytes,
+            input_queue_bytes=cfg.input_queue_bytes,
+            resize_lease_seconds=cfg.resize_lease_seconds,
+            max_sessions=cfg.max_sessions,
+        )
+    return _terminal_v2_manager
+
+
+async def _send_terminal_v2_frames(ws: WebSocket, session, connection) -> None:
+    while not connection.closed:
+        chunk = await session.next_output(connection.id)
+        await ws.send_bytes(encode_binary_frame(chunk.start, chunk.data))
+
+
+@router.get("/api/clawmate/agent/diagnostics")
+async def agent_terminal_diagnostics():
+    """Return authenticated operational terminal metadata without user content."""
+    manager = _terminal_v2_manager
+    if manager is None:
+        return JSONResponse({
+            "session_count": 0,
+            "connection_count": 0,
+            "reader_task_count": 0,
+            "writer_task_count": 0,
+            "idle_session_count": 0,
+        })
+    return JSONResponse(manager.diagnostics())
+
+
+@router.websocket("/api/clawmate/agent/terminal/v2")
+async def agent_terminal_v2(ws: WebSocket):
+    """Protocol-v2 PTY endpoint with separate control and binary data frames."""
+    await ws.accept()
+    if _terminal_v2_manager is None and not load_cfg().agent.terminal_v2:
+        error = ProtocolError("terminal_v2_disabled", "Terminal v2 is not enabled", True)
+        await ws.send_text(json.dumps(error.as_message()))
+        return
+    manager = _get_terminal_v2_manager()
+    connection = None
+    session = None
+    sender_task = None
+    try:
+        first = await ws.receive()
+        if not first.get("text"):
+            raise ProtocolError("expected_hello", "The first terminal v2 frame must be hello", True)
+        hello = parse_control(first["text"])
+        if hello.get("type") != "hello":
+            raise ProtocolError("expected_hello", "The first terminal v2 frame must be hello", True)
+        cols, rows = validate_dimensions(hello.get("cols"), hello.get("rows"))
+        client_id = str(hello.get("client_id") or "").strip()
+        backend = str(hello.get("backend") or "claude")
+        if not client_id or backend not in {"claude", "codex"}:
+            raise ProtocolError("invalid_hello", "Hello must include a client ID and PTY backend", True)
+        request = SessionRequest(
+            backend=backend,
+            root=str(hello.get("root") or ""),
+            project=str(hello.get("dir") or ""),
+            cwd=resolve_session_cwd(str(hello.get("root") or ""), str(hello.get("dir") or "")),
+        )
+        session = await manager.get_or_create(request)
+        connection = await manager.subscribe(session.id, client_id, int(hello.get("last_output_ack") or 0))
+        await session.resize(client_id, cols, rows)
+        await ws.send_text(json.dumps({
+            "v": PROTOCOL_VERSION,
+            "type": "ready",
+            "id": hello.get("id", ""),
+            "session_id": session.id,
+            "connection_count": len(session.connections),
+            "replay": {
+                "earliest_sequence": session.replay.earliest_sequence,
+                "latest_sequence": session.replay.latest_sequence,
+            },
+        }))
+        sender_task = asyncio.create_task(_send_terminal_v2_frames(ws, session, connection))
+        while True:
+            message = await ws.receive()
+            if message.get("bytes") is not None:
+                sequence, payload = decode_binary_frame(message["bytes"])
+                await session.enqueue_input(connection.id, sequence, payload)
+                await session.wait_input_ack(connection.id, sequence)
+                await ws.send_text(json.dumps({"v": PROTOCOL_VERSION, "type": "input_ack", "sequence": sequence}))
+                continue
+            if message.get("text") is None:
+                raise WebSocketDisconnect()
+            control = parse_control(message["text"])
+            kind = control["type"]
+            if kind == "focus":
+                await session.focus(connection.id)
+            elif kind == "resize":
+                accepted = await session.resize(connection.id, control.get("cols"), control.get("rows"))
+                await ws.send_text(json.dumps({"v": PROTOCOL_VERSION, "type": "resize_ack", "accepted": accepted}))
+            elif kind == "output_ack":
+                session.acknowledge_output(connection.id, int(control.get("sequence") or 0))
+            elif kind == "lock_input":
+                await session.set_input_lock(connection.id if control.get("locked") else None)
+            elif kind == "terminate":
+                await manager.terminate(session.id, "manual")
+                return
+            elif kind == "heartbeat":
+                await ws.send_text(json.dumps({"v": PROTOCOL_VERSION, "type": "heartbeat_ack"}))
+    except ProtocolError as exc:
+        await ws.send_text(json.dumps(exc.as_message()))
+    except WebSocketDisconnect:
+        pass
+    except RuntimeError as exc:
+        error = ProtocolError("terminal_unavailable", str(exc), True)
+        await ws.send_text(json.dumps(error.as_message()))
+    finally:
+        if sender_task:
+            sender_task.cancel()
+            await asyncio.gather(sender_task, return_exceptions=True)
+        if connection and session:
+            await manager.unsubscribe(session.id, connection.id)
+
 @router.websocket("/api/clawmate/agent/terminal")
 async def agent_terminal(
     ws: WebSocket,
@@ -1965,6 +2111,7 @@ async def agent_session_list(
     date: str = "",
     limit: int = 15,
     offset: int = 0,
+    cursor: str = "",
 ):
     """List archived agent sessions, grouped by project."""
     await _cleanup_dead_sessions()
@@ -2050,6 +2197,14 @@ async def agent_session_list(
                 })
 
     results.sort(key=lambda x: x.get("started_at", 0), reverse=True)
+    if cursor:
+        page = SessionHistoryService(results).list(
+            limit=limit,
+            cursor=cursor,
+            backend=backend,
+            keyword=q,
+        )
+        return JSONResponse(page)
     total = len(results)
     paged = results[offset:offset + limit]
     return JSONResponse({"total": total, "sessions": paged})

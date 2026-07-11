@@ -1,0 +1,45 @@
+.clawmate-terminal-host {
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+}
+
+.agent-panel-v2 {
+  width: clamp(420px, 46vw, 820px);
+  min-width: 0;
+}
+
+.agent-panel-v2 .xterm-container {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+
+.terminal-status-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--bg, #111827) 86%, transparent);
+  transition: opacity 160ms ease;
+}
+
+@media (max-width: 1024px) and (min-width: 769px) {
+  .agent-panel-v2 { width: min(60vw, 820px); }
+}
+
+@media (max-width: 768px) {
+  .agent-panel-v2 {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100dvh;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-panel-v2,
+  .terminal-status-overlay { transition: none; }
+}
