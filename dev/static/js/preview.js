@@ -4352,12 +4352,11 @@
       var html = '';
       for (var i = 0; i < data.commits.length; i++) {
         var c = data.commits[i];
-        var dateStr = c.date ? c.date.substring(0, 10) : '';
+        var dateStr = c.date ? c.date.replace('T', ' ').substring(0, 19) : '';
         html += '<div class="version-commit-item" data-idx="' + i + '">' +
           '<div class="version-commit-message">' + escHtml(c.message) + '</div>' +
           '<div class="version-commit-meta">' +
             '<span class="version-commit-hash">' + escHtml(c.short_hash) + '</span>' +
-            '<span class="version-commit-author">' + escHtml(c.author) + '</span>' +
             '<span>' + dateStr + '</span>' +
           '</div>' +
         '</div>';
@@ -6535,9 +6534,7 @@
   })();
 
   // ============ Agent Overlay (preview page) ============
-  var _agentLibsLoaded = false;
-  var _agentLibsLoading = false;
-  var _agentConfig = { backend: 'claude', wsUrl: '', agentId: '' };
+  var _agentConfig = { backend: 'claude', wsUrl: '', agentId: '', terminalV2: false, renderer: 'auto', scrollback: 10000 };
 
   /** Fetch agent config from getRootsConfig cached data */
   async function _fetchAgentConfig() {
@@ -6546,6 +6543,9 @@
       if (cfg && cfg.agent) {
         _agentConfig.backend = cfg.agent.backend || 'claude';
         _agentConfig.wsUrl = cfg.agent.ws_url || '';
+        _agentConfig.terminalV2 = !!cfg.agent.terminal_v2;
+        _agentConfig.renderer = cfg.agent.renderer || 'auto';
+        _agentConfig.scrollback = cfg.agent.scrollback || 10000;
       }
       if (cfg && cfg.roots) {
         for (var i = 0; i < cfg.roots.length; i++) {
@@ -6556,53 +6556,6 @@
         }
       }
     } catch (_) {}
-  }
-
-  // xterm.js version — keep in sync with agent.js XTERM_VERSION + index.html <link>/<script>
-  var XTERM_CDN = 'https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0';
-
-  /** Lazy-load xterm.js + addons + agent.js (only on first agent open) */
-  function _loadAgentLibs() {
-    return new Promise(function(resolve, reject) {
-      if (_agentLibsLoaded) { resolve(); return; }
-      if (_agentLibsLoading) {
-        var check = setInterval(function() {
-          if (_agentLibsLoaded) { clearInterval(check); resolve(); }
-        }, 100);
-        return;
-      }
-      _agentLibsLoading = true;
-
-      // xterm CSS
-      var cssLink = document.createElement('link');
-      cssLink.rel = 'stylesheet';
-      cssLink.href = XTERM_CDN + '/css/xterm.min.css';
-      document.head.appendChild(cssLink);
-
-      // agent.js is now loaded via <script defer> in preview.html
-      var scripts = [
-        XTERM_CDN + '/lib/xterm.min.js',
-        './vendor/addon-fit.min.js?v=20260622',
-      ];
-
-      function loadNext(idx) {
-        if (idx >= scripts.length) {
-          _agentLibsLoaded = true;
-          _agentLibsLoading = false;
-          resolve();
-          return;
-        }
-        var script = document.createElement('script');
-        script.src = scripts[idx];
-        script.onload = function() { loadNext(idx + 1); };
-        script.onerror = function() {
-          _agentLibsLoading = false;  // reset so retry works
-          reject(new Error('Failed to load: ' + scripts[idx]));
-        };
-        document.head.appendChild(script);
-      }
-      loadNext(0);
-    });
   }
 
   // Agent toggle button
@@ -6628,10 +6581,8 @@
           rightSidebar.style.transition = '';
           rightSidebar.style.display = ''; // let CSS display:none take effect now (inline flex from closeRightSidebar is no longer needed)
         }
-        // Opening — lazy-load libs then init Agent
+        // The same-origin terminal bundle and Agent facade are loaded with the page.
         _fetchAgentConfig().then(function() {
-          return _loadAgentLibs();
-        }).then(function() {
           agentPanel.style.display = 'flex';     // override any stale display:none from previous close
           agentPanel.classList.remove('hidden');
           agentPanel.style.display = '';         // let CSS take over
@@ -6646,19 +6597,26 @@
               domPrefix: 'preview',  // use #previewXtermContainer etc.
               backend: _agentConfig.backend,
               wsUrl: _agentConfig.wsUrl,
+              terminalV2: _agentConfig.terminalV2,
+              renderer: _agentConfig.renderer,
+              scrollback: _agentConfig.scrollback,
               rootId: rootId,
               dir: agentDir,
               agentId: _agentConfig.agentId,
             });
-            // Wrap Agent.close to sync preview grid columns
-            var _origClose = window.Agent.close;
-            window.Agent.close = function () {
-              _origClose.apply(this, arguments);
-              if (agentPanel) { agentPanel.classList.add('hidden'); agentPanel.style.display = 'none'; }
-              if (btnToggleAgent) btnToggleAgent.classList.remove('active');
-              updateGridColumns();
-              _syncPanelOpenClass();
-            };
+            // Install the preview-specific close callback once. Rewrapping on
+            // every open previously stacked callbacks and left stale layout work.
+            if (!window.Agent._previewCloseWrapped) {
+              var _origClose = window.Agent.close;
+              window.Agent.close = function () {
+                _origClose.apply(this, arguments);
+                if (agentPanel) { agentPanel.classList.add('hidden'); agentPanel.style.display = 'none'; }
+                if (btnToggleAgent) btnToggleAgent.classList.remove('active');
+                updateGridColumns();
+                _syncPanelOpenClass();
+              };
+              window.Agent._previewCloseWrapped = true;
+            }
             // Pass path only; quote/content insertion is handled explicitly by selection.
             var fileCtx = filePath ? { path: filePath } : null;
             window.Agent.open(rootId, agentDir, fileCtx);
