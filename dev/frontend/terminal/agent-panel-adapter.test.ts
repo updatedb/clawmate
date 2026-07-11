@@ -128,13 +128,29 @@ describe('main agent panel layout', () => {
   it('derives width bounds from font size and readable terminal columns', () => {
     document.body.innerHTML = '<div class="content"></div>';
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1920 });
-    expect(getAgentPanelWidthBounds(10).min).toBe(548);
-    expect(getAgentPanelWidthBounds(22).min).toBe(1153);
-    expect(getAgentPanelWidthBounds(22).max).toBe(1153);
+    // When canvas measureText is unavailable (jsdom), the code falls back to
+    // a 0.625 factor (= 5/8) which is a safer estimate than the old 0.6 for
+    // typical monospace fonts like JetBrains Mono.  Both the min and max use
+    // the fallback when measurement returns 0.
+    //
+    // The width calculation mirrors xterm's internal dimension math:
+    //   cssCanvasWidth = Math.round(cellWidth × 84)
+    //   minWidth       = cssCanvasWidth + scrollbar(14) + flatSafety(8)
+    // This matches FitAddon's floor‑division logic without a per‑cell margin.
+    const CHROME = 14 + 8; // XTERM_SCROLLBAR_WIDTH + FLAT_SAFETY_MARGIN
+    const expectedMin10 = Math.round(10 * 0.625 * 84) + CHROME; // 547
+    const expectedMin22 = Math.round(22 * 0.625 * 84) + CHROME; // 1177
+    expect(getAgentPanelWidthBounds(10).min).toBe(expectedMin10);
+    expect(getAgentPanelWidthBounds(22).min).toBe(expectedMin22);
+    // max is capped at availableMax when no sidebar on 1920px:
+    //   1920 − 0(sidebar) − 315 − 5 = 1600
+    // Since maxReadable (1177) < 1600, max = max(min, 1177).
+    expect(getAgentPanelWidthBounds(22).max).toBe(expectedMin22);
     expect(scaleAgentPanelWidth(524, 10, 22)).toBe(1153);
-    expect(getFontSizeForAgentPanelWidth(548)).toBe(10);
-    expect(getFontSizeForAgentPanelWidth(700)).toBe(13);
-    expect(getFontSizeForAgentPanelWidth(1153)).toBe(22);
+    expect(getFontSizeForAgentPanelWidth(expectedMin10)).toBe(10);
+    // width = 700 → largest fontSize whose bounds.min ≤ 700
+    expect(getFontSizeForAgentPanelWidth(700)).toBe(12);
+    expect(getFontSizeForAgentPanelWidth(expectedMin22)).toBe(22);
   });
 
   it('renders OpenClaw Markdown while keeping line breaks', () => {

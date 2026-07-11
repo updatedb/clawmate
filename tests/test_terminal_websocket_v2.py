@@ -399,10 +399,9 @@ async def test_v2_input_buffering_preserves_newlines_in_paste(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_v2_endpoint_remains_available_when_legacy_flag_is_false(monkeypatch):
+async def test_v2_endpoint_returns_ready_when_manager_uninitialized(monkeypatch):
     monkeypatch.setattr(agent_routes, "_terminal_v2_manager", None)
     monkeypatch.setattr(agent_routes, "load_cfg", lambda: SimpleNamespace(agent=SimpleNamespace(
-        terminal_v2=False,
         replay_bytes=4 * 1024 * 1024,
         connection_queue_bytes=4 * 1024 * 1024,
         input_queue_bytes=2 * 1024 * 1024,

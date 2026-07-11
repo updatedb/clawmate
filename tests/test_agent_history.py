@@ -76,11 +76,6 @@ async def test_session_list_filters_empty_chat_logs_and_returns_instruction_coun
         "load_cfg",
         lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
     )
-    async def noop_cleanup():
-        return None
-
-    monkeypatch.setattr(agent_routes, "_cleanup_dead_sessions", noop_cleanup)
-    agent_routes._sessions.clear()
 
     app = FastAPI()
     app.include_router(agent_routes.router)
@@ -116,11 +111,6 @@ async def test_session_list_excludes_active_v2_session(tmp_path, monkeypatch):
         lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
     )
 
-    async def noop_cleanup():
-        return None
-
-    monkeypatch.setattr(agent_routes, "_cleanup_dead_sessions", noop_cleanup)
-    agent_routes._sessions.clear()
     agent_routes._v2_loggers.clear()
     agent_routes._v2_loggers["terminal-1"] = SimpleNamespace(session_id="v2-active")
 
@@ -162,11 +152,6 @@ async def test_session_instruction_count_matches_detail_turns(tmp_path, monkeypa
         lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
     )
 
-    async def noop_cleanup():
-        return None
-
-    monkeypatch.setattr(agent_routes, "_cleanup_dead_sessions", noop_cleanup)
-    agent_routes._sessions.clear()
 
     app = FastAPI()
     app.include_router(agent_routes.router)
@@ -274,11 +259,6 @@ async def test_session_log_assigns_turn_index_per_user_instruction(tmp_path, mon
         lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
     )
 
-    async def noop_cleanup():
-        return None
-
-    monkeypatch.setattr(agent_routes, "_cleanup_dead_sessions", noop_cleanup)
-    agent_routes._sessions.clear()
 
     app = FastAPI()
     app.include_router(agent_routes.router)
@@ -314,10 +294,6 @@ async def test_session_dates_returns_sorted_dates(tmp_path, monkeypatch):
         "load_cfg",
         lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
     )
-    async def noop_cleanup():
-        return None
-    monkeypatch.setattr(agent_routes, "_cleanup_dead_sessions", noop_cleanup)
-    agent_routes._sessions.clear()
 
     app = FastAPI()
     app.include_router(agent_routes.router)
@@ -351,15 +327,10 @@ async def test_session_dates_excludes_active_sessions(tmp_path, monkeypatch):
         "load_cfg",
         lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
     )
-    async def noop_cleanup():
-        return None
-    monkeypatch.setattr(agent_routes, "_cleanup_dead_sessions", noop_cleanup)
-    agent_routes._sessions.clear()
-    # Simulate an active session
+    # Simulate an active v2 session (excluded from dates)
     fake_active = SimpleNamespace()
-    fake_active.logger = SimpleNamespace()
-    fake_active.logger.session_id = "active-sess"
-    agent_routes._sessions["active"] = fake_active
+    fake_active.session_id = "active-sess"
+    agent_routes._v2_loggers["fake"] = fake_active
 
     app = FastAPI()
     app.include_router(agent_routes.router)
@@ -395,10 +366,6 @@ async def test_session_list_filters_by_date(tmp_path, monkeypatch):
         "load_cfg",
         lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
     )
-    async def noop_cleanup():
-        return None
-    monkeypatch.setattr(agent_routes, "_cleanup_dead_sessions", noop_cleanup)
-    agent_routes._sessions.clear()
 
     app = FastAPI()
     app.include_router(agent_routes.router)
@@ -434,11 +401,6 @@ async def test_history_dates_and_filter_use_session_end_time(tmp_path, monkeypat
         lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
     )
 
-    async def noop_cleanup():
-        return None
-
-    monkeypatch.setattr(agent_routes, "_cleanup_dead_sessions", noop_cleanup)
-    agent_routes._sessions.clear()
     agent_routes._v2_loggers.clear()
     app = FastAPI()
     app.include_router(agent_routes.router)
@@ -483,11 +445,6 @@ async def test_session_list_returns_stored_session_key_when_present(tmp_path, mo
         lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
     )
 
-    async def noop_cleanup():
-        return None
-
-    monkeypatch.setattr(agent_routes, "_cleanup_dead_sessions", noop_cleanup)
-    agent_routes._sessions.clear()
 
     app = FastAPI()
     app.include_router(agent_routes.router)
@@ -543,11 +500,6 @@ async def test_session_list_falls_back_to_derived_session_key(tmp_path, monkeypa
         lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
     )
 
-    async def noop_cleanup():
-        return None
-
-    monkeypatch.setattr(agent_routes, "_cleanup_dead_sessions", noop_cleanup)
-    agent_routes._sessions.clear()
 
     app = FastAPI()
     app.include_router(agent_routes.router)

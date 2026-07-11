@@ -67,8 +67,6 @@ async def public_config(request: Request):
         "agent": {
             "backend": cfg.agent.backend,
             "ws_url": _agent_ws_url(request),
-            "terminal_v2": cfg.agent.terminal_v2,
-            "renderer": cfg.agent.renderer,
             "scrollback": cfg.agent.scrollback,
         },
         "feedback_tags": [{"label": t.label, "prompt": t.agent_prompt} for t in load_task_templates() if t.frontend.get("tooltip") or t.frontend.get("panel")],

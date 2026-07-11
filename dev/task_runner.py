@@ -316,41 +316,27 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
         message = f"ClawMate 反馈通知：{scope} 目前无待处理 feedback。"
     run_name = f"clawmate-fb-{root_id}"
 
-    # ── 优先后台子进程执行（agent panel 活跃时）──
+    # ── 优先后台子进程执行 ──
     if items:
         try:
-            from agent_routes import get_agent_session, spawn_background_agent, resolve_session_cwd
+            from agent_routes import spawn_background_agent, resolve_session_cwd
 
-            # Determine which PTY backend is active (claude or codex)
-            active_backend = ""
-            for bk in ("claude", "codex"):
-                sess = get_agent_session(root_id, file, backend=bk)
-                if sess is not None:
-                    active_backend = bk
-                    break
-
-            if active_backend:
-                cwd = resolve_session_cwd(root_id, file)
-                ok = spawn_background_agent(
-                    message=message,
-                    cwd=cwd,
-                    backend=active_backend,
-                    extra_env=cfg.agent.env,
+            cwd = resolve_session_cwd(root_id, file)
+            ok = spawn_background_agent(
+                message=message,
+                cwd=cwd,
+                backend="claude",
+                extra_env=cfg.agent.env,
+            )
+            if ok:
+                _ts_end = datetime.now(CST).isoformat(timespec="seconds")
+                logger.info(
+                    "[task.wake] %s background agent spawned root_id=%s agent_id=%s items=%d",
+                    _ts_end, root_id, agent_id, len(items),
                 )
-                if ok:
-                    _ts_end = datetime.now(CST).isoformat(timespec="seconds")
-                    logger.info(
-                        "[task.wake] %s background agent spawned root_id=%s agent_id=%s backend=%s items=%d",
-                        _ts_end, root_id, agent_id, active_backend, len(items),
-                    )
-                    return
-                else:
-                    logger.warning(
-                        "[task.wake] background spawn failed (binary not found), "
-                        "falling back to webhook for root_id=%s", root_id
-                    )
+                return
         except ImportError:
-            pass  # agent_routes not available
+            pass  # agent_routes not available (e.g. test context)
         except Exception as e:
             logger.warning("[task.wake] background agent spawn failed, falling back to webhook: %s", e)
 

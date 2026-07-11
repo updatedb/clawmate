@@ -21,6 +21,21 @@ export function terminalTheme(): ITheme {
   };
 }
 
+/** Default monospace font stack — must match the --font-mono CSS custom property
+ *  in tokens.css so that xterm's internal CharSizeService measurement and the
+ *  canvas‑based measureCellWidth use the same font. */
+const DEFAULT_MONO_FONT = '"JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace';
+
+/**
+ * Resolve the monospace font family from the --font-mono CSS custom property,
+ * falling back to the hard‑coded DEFAULT_MONO_FONT when unavailable.
+ */
+function resolveFontFamily(): string {
+  if (typeof document === 'undefined') return DEFAULT_MONO_FONT;
+  const style = getComputedStyle(document.documentElement);
+  return style.getPropertyValue('--font-mono').trim() || DEFAULT_MONO_FONT;
+}
+
 export function terminalOptions(scrollback: number): ITerminalOptions {
   return {
     cursorBlink: true,
@@ -28,6 +43,7 @@ export function terminalOptions(scrollback: number): ITerminalOptions {
     scrollback,
     minimumContrastRatio: 4.5,
     allowProposedApi: false,
+    fontFamily: resolveFontFamily(),
     theme: terminalTheme(),
   };
 }

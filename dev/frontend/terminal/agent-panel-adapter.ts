@@ -15,7 +15,6 @@ export interface AgentInitOptions {
   project?: string;
   agentId?: string;
   domPrefix?: string;
-  terminalV2?: boolean;
   scrollback?: number;
 }
 
@@ -29,29 +28,141 @@ export function formatAgentScope(backend: AgentInitOptions['backend'], rootId: s
 }
 
 const MIN_READABLE_TERMINAL_COLUMNS = 84;
-const TERMINAL_CELL_WIDTH_FACTOR = 0.6;
-const PANEL_HORIZONTAL_CHROME = 44;
-const MAX_TERMINAL_FONT_SIZE = 22;
+const MAX_TERMINAL_FONT_SIZE = 20;
 
+/**
+ * xterm reserves this many CSS pixels for the vertical scrollbar track
+ * (DEFAULT_SCROLL_BAR_WIDTH = 14) when scrollback > 0.  The scrollbar is
+ * positioned as an overlay so the space isn't visible, but FitAddon still
+ * subtracts it from the available width when computing columns.
+ */
+const XTERM_SCROLLBAR_WIDTH = 14;
+
+/**
+ * Flat CSS‑pixel margin added to the computed canvas width so that xterm's
+ * FitAddon (which uses floor‑division) always produces at least
+ * MIN_READABLE_TERMINAL_COLUMNS columns.  This small flat amount absorbs:
+ *
+ *  1. Sub‑pixel rounding differences between canvas measureText and xterm's
+ *     DOM‑based character‑width measurement (offsetWidth / 32).
+ *  2. Font‑hinting boundary effects across platforms and font sizes.
+ *
+ * Unlike a per‑cell margin (which scales linearly with columns), a flat
+ * safety margin is small enough that it doesn't materially over‑estimate
+ * the required panel width at practical column counts.
+ */
+const FLAT_SAFETY_MARGIN = 8;
+
+/** Cache for canvas‑measured cell widths, keyed by fontSize (10–20). */
+const _cellWidthCache = new Map<number, number>();
+
+/**
+ * Resolve the monospace font family string used by the terminal.
+ * Reads the --font-mono CSS custom property, falling back to the
+ * xterm font stack so the canvas measurement matches xterm's own.
+ */
+function _resolveMonoFontFamily(): string {
+  if (typeof document === 'undefined') return '"JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace';
+  const style = getComputedStyle(document.documentElement);
+  return style.getPropertyValue('--font-mono').trim() || '"JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace';
+}
+
+/**
+ * Measure the actual pixel width of a monospace character cell for the
+ * terminal's loaded font at the given size, using an OffscreenCanvas.
+ *
+ * Returns 0 when measurement is unavailable (test environments, SSR).
+ */
+export function measureCellWidth(fontSize: number): number {
+  const cached = _cellWidthCache.get(fontSize);
+  if (cached !== undefined) return cached;
+  if (typeof document === 'undefined') return 0;
+  const fontFamily = _resolveMonoFontFamily();
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 100;
+    canvas.height = 100;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return 0;
+    ctx.font = `${fontSize}px ${fontFamily}`;
+    const width = ctx.measureText('W').width;
+    if (Number.isFinite(width) && width > 0) {
+      _cellWidthCache.set(fontSize, width);
+      return width;
+    }
+  } catch {
+    /* canvas unavailable */
+  }
+  return 0;
+}
+
+/**
+ * Compute the minimum panel width that guarantees `MIN_READABLE_TERMINAL_COLUMNS`
+ * columns in xterm at the given font size.
+ *
+ * The calculation mirrors xterm's own dimension math to avoid over‑estimation:
+ *
+ *  1. Measure the character width (canvas measureText).
+ *  2. xterm's final `css.cell.width` is derived from the total canvas width
+ *     rounded to the nearest integer CSS pixel:
+ *       `css.cell.width = Math.round(charWidth × cols) / cols`
+ *  3. FitAddon computes available columns with floor‑division:
+ *       `cols = ⌊(parentWidth − padding − scrollbar) / css.cell.width⌋`
+ *
+ * So the exact CSS‑pixel canvas width that yields N columns is
+ * `Math.round(charWidth × N)`.  Adding the scrollbar reservation and a flat
+ * safety margin gives the panel‑width lower bound.
+ */
 export function getAgentPanelWidthBounds(fontSize = 14): { min: number; max: number } {
-  const readableMin = Math.ceil(fontSize * TERMINAL_CELL_WIDTH_FACTOR * MIN_READABLE_TERMINAL_COLUMNS + PANEL_HORIZONTAL_CHROME);
+  const nonTerminal = XTERM_SCROLLBAR_WIDTH + FLAT_SAFETY_MARGIN;
+
+  const measured = measureCellWidth(fontSize);
+  const readableCanvas = measured > 0
+    ? Math.round(measured * MIN_READABLE_TERMINAL_COLUMNS)
+    : Math.round(fontSize * 0.625 * MIN_READABLE_TERMINAL_COLUMNS);
+  const readableMin = readableCanvas + nonTerminal;
   const min = Math.max(420, readableMin);
-  const maxReadable = Math.ceil(MAX_TERMINAL_FONT_SIZE * TERMINAL_CELL_WIDTH_FACTOR * MIN_READABLE_TERMINAL_COLUMNS + PANEL_HORIZONTAL_CHROME);
+
+  // The max bound is computed at MAX_TERMINAL_FONT_SIZE so it represents the
+  // largest sensible panel width regardless of the current font size.
+  const maxMeasured = measureCellWidth(MAX_TERMINAL_FONT_SIZE);
+  const maxCanvas = maxMeasured > 0
+    ? Math.round(maxMeasured * MIN_READABLE_TERMINAL_COLUMNS)
+    : Math.round(MAX_TERMINAL_FONT_SIZE * 0.625 * MIN_READABLE_TERMINAL_COLUMNS);
+  const maxReadable = maxCanvas + nonTerminal;
   const sidebar = document.getElementById('sidebar');
   const sidebarWidth = sidebar && !sidebar.classList.contains('hidden') && getComputedStyle(sidebar).display !== 'none' ? 240 : 0;
   const availableMax = window.innerWidth - sidebarWidth - 315 - 5;
   return { min, max: Math.max(min, Math.min(maxReadable, availableMax)) };
 }
 
+/**
+ * Scale the panel width proportionally when the font size changes.
+ * The result is only a starting point — the caller (setPanelWidth) clamps it to
+ * the actual readable bounds so transient rounding errors are absorbed.
+ */
 export function scaleAgentPanelWidth(width: number, oldFontSize: number, newFontSize: number): number {
   if (!Number.isFinite(width) || oldFontSize <= 0 || newFontSize <= 0) return width;
   return Math.round(width * (newFontSize / oldFontSize));
 }
 
+/**
+ * Derive the largest font size (10–20) whose readable minimum panel width fits
+ * within the given `width`.  Uses binary search against `getAgentPanelWidthBounds`
+ * so the result is consistent with how panel width → font size mapping actually
+ * behaves, including measured cell widths and safety margins.
+ */
 export function getFontSizeForAgentPanelWidth(width: number): number {
-  return Math.max(10, Math.min(MAX_TERMINAL_FONT_SIZE, Math.round(
-    (width - PANEL_HORIZONTAL_CHROME) / (TERMINAL_CELL_WIDTH_FACTOR * MIN_READABLE_TERMINAL_COLUMNS),
-  )));
+  if (!Number.isFinite(width) || width <= XTERM_SCROLLBAR_WIDTH + FLAT_SAFETY_MARGIN) return 10;
+  let lo = 10;
+  let hi = MAX_TERMINAL_FONT_SIZE;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    const bounds = getAgentPanelWidthBounds(mid);
+    if (bounds.min <= width) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
 }
 
 export function syncMainAgentPanelLayout(open: boolean, panelWidth?: number): void {
@@ -138,6 +249,14 @@ export class AgentPanelAdapter {
   private readonly wsRetryBaseDelay = DEFAULT_RETRY.baseDelay;
   private readonly wsRetryMaxDelay = DEFAULT_RETRY.maxDelay;
 
+  /** Highest output sequence acknowledged by the backend.  Sent on reconnect so
+   *  the session can skip replaying already‑delivered data. */
+  private lastOutputAck = 0;
+
+  /** Application‑layer heartbeat timer (every 25 s) to keep intermediate
+   *  proxies from closing the WebSocket during idle phases. */
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
   init(config: AgentInitOptions): void {
     this.config = { ...config };
     this.updateTitle();
@@ -221,7 +340,10 @@ export class AgentPanelAdapter {
         this.scheduleTerminalFit(host);
         this.output = new TerminalOutputQueue({
           write: (data, done) => this.terminal?.write(data, done),
-          acknowledge: (sequence) => this.sendControl({ type: 'output_ack', sequence }),
+          acknowledge: (sequence) => {
+            this.lastOutputAck = Math.max(this.lastOutputAck, sequence);
+            this.sendControl({ type: 'output_ack', sequence });
+          },
           maxBytes: 4 * 1024 * 1024,
         });
         this.terminal.onData((data) => this.sendInput(new TextEncoder().encode(data)));
@@ -237,6 +359,7 @@ export class AgentPanelAdapter {
     // 仅关闭 WebSocket，不发送 terminate。session 在服务端保持存活以便重新打开时恢复连续性。
     this.openclaw.close();
     this.wsClosedByUser = true;
+    this.stopHeartbeat();
     this.clearWsRetryTimer();
     this.socket?.close();
     this.socket = null;
@@ -315,7 +438,8 @@ export class AgentPanelAdapter {
     ws.onopen = () => {
       this.wsRetryCount = 0;
       this.setStatus('已连接');
-      this.sendControl({ type: 'hello', client_id: crypto.randomUUID(), root: this.config!.rootId, dir: this.config!.dir, backend: this.config!.backend, cols: this.terminal?.cols || 80, rows: this.terminal?.rows || 24 });
+      this.startHeartbeat();
+      this.sendControl({ type: 'hello', client_id: crypto.randomUUID(), root: this.config!.rootId, dir: this.config!.dir, backend: this.config!.backend, cols: this.terminal?.cols || 80, rows: this.terminal?.rows || 24, last_output_ack: this.lastOutputAck });
       if (this.pendingFileContext) {
         const context = this.pendingFileContext;
         this.pendingFileContext = '';
@@ -326,6 +450,7 @@ export class AgentPanelAdapter {
     ws.onclose = (event) => {
       if (this.socket !== ws) return;
       this.socket = null;
+      this.stopHeartbeat();
       const freshSession = this.pendingFreshSession;
       this.pendingFreshSession = null;
       if (freshSession) {
@@ -395,7 +520,7 @@ export class AgentPanelAdapter {
     const adjustFont = (delta: number) => {
       if (!this.terminal) return;
       const oldFontSize = this.terminal.options.fontSize || 14;
-      const newFontSize = Math.max(10, Math.min(22, oldFontSize + delta));
+      const newFontSize = Math.max(10, Math.min(MAX_TERMINAL_FONT_SIZE, oldFontSize + delta));
       this.terminal.options.fontSize = newFontSize;
       this.setPanelWidth(scaleAgentPanelWidth(this.panelWidth, oldFontSize, newFontSize));
       this.refreshTerminalLayout();
@@ -976,6 +1101,25 @@ export class AgentPanelAdapter {
     if (this.wsRetryTimer !== null) {
       clearTimeout(this.wsRetryTimer);
       this.wsRetryTimer = null;
+    }
+  }
+
+  /** Start sending application‑level heartbeat pings every 25 seconds.
+   *  Intermediate proxies (nginx, Cloudflare, etc.) often have idle‑timeout
+   *  settings between 60–120 s for WebSocket connections.  A heartbeat every
+   *  25 s keeps the connection alive even during long stretches where no
+   *  terminal data flows, without waking the backend for every frame. */
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      this.sendControl({ type: 'heartbeat' });
+    }, 25000);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer !== null) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
     }
   }
 

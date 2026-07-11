@@ -51,10 +51,8 @@ class AgentConfig:
     max_sessions: int = 10           # max concurrent Claude sessions
     session_log_ttl_days: int = 30   # auto-cleanup agent session logs after N days
     env: dict[str, str] = field(default_factory=dict)  # extra env vars passed to agent subprocess
-    terminal_v2: bool = True
     terminal_idle_seconds: int = 24 * 3600
     terminal_max_lifetime_seconds: int = 24 * 3600
-    renderer: str = "auto"
     replay_bytes: int = 4 * 1024 * 1024
     scrollback: int = 10_000
     input_queue_bytes: int = 2 * 1024 * 1024
@@ -244,9 +242,6 @@ def _parse_config(raw: dict) -> AppConfig:
     env_onlyoffice_js_url = os.getenv("CLAWMATE_ONLYOFFICE_URL")
     env_onlyoffice_jwt = os.getenv("CLAWMATE_ONLYOFFICE_JWT_SECRET")
     env_agent_backend = os.getenv("CLAWMATE_AGENT_BACKEND")
-    renderer = str(ag.get("renderer", "auto")).lower()
-    if renderer not in {"auto", "dom", "webgl"}:
-        renderer = "auto"
 
     return AppConfig(
         roots=roots,
@@ -273,10 +268,8 @@ def _parse_config(raw: dict) -> AppConfig:
             max_sessions=int(ag.get("max_sessions", 10)),
             session_log_ttl_days=int(ag.get("session_log_ttl_days", 30)),
             env=dict(ag.get("env") or {}),
-            terminal_v2=_parse_bool(ag.get("terminal_v2", True)),
             terminal_idle_seconds=_bounded_int(ag.get("terminal_idle_seconds"), 24 * 3600, 600, 7 * 24 * 3600),
             terminal_max_lifetime_seconds=_bounded_int(ag.get("terminal_max_lifetime_seconds"), 24 * 3600, 3600, 7 * 24 * 3600),
-            renderer=renderer,
             replay_bytes=_bounded_int(ag.get("replay_bytes"), 4 * 1024 * 1024, 1 * 1024 * 1024, 16 * 1024 * 1024),
             scrollback=_bounded_int(ag.get("scrollback"), 10_000, 1_000, 50_000),
             input_queue_bytes=_bounded_int(ag.get("input_queue_bytes"), 2 * 1024 * 1024, 1 * 1024 * 1024, 16 * 1024 * 1024),

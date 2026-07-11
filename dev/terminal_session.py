@@ -245,13 +245,14 @@ class TerminalSession:
         if connection.closed:
             return
         if connection.queued_bytes + len(chunk.data) > self.connection_queue_bytes:
-            connection.closed = True
-            self.connections.pop(connection.id, None)
-            if self._resize_owner == connection.id:
-                self._resize_owner = None
-                self._resize_lease_expires_at = 0.0
-            if self._input_lock_owner == connection.id:
-                self._input_lock_owner = None
+            # Connection send queue is full (WS sender can't keep up with PTY
+            # output rate).  Instead of hard‑closing the WebSocket — which loses
+            # input capability and triggers a disruptive reconnect cycle — skip
+            # the chunk for this connection.  The sender will continue draining
+            # older chunks, and once it catches up new output will be delivered
+            # normally.  Skipped content is available from the replay buffer on
+            # reconnect, and the terminal's own scrollback captures the PTY
+            # output via the ReadLoop → terminal data path.
             return
         connection.output_queue.put_nowait(chunk)
         connection.queued_bytes += len(chunk.data)
