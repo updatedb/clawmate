@@ -437,7 +437,7 @@ export class AgentPanelAdapter {
     ws.binaryType = 'arraybuffer';
     ws.onopen = () => {
       this.wsRetryCount = 0;
-      this.setStatus('已连接');
+      this.setStatus('连接中');
       this.startHeartbeat();
       this.sendControl({ type: 'hello', client_id: crypto.randomUUID(), root: this.config!.rootId, dir: this.config!.dir, backend: this.config!.backend, cols: this.terminal?.cols || 80, rows: this.terminal?.rows || 24, last_output_ack: this.lastOutputAck });
       if (this.pendingFileContext) {
@@ -486,6 +486,15 @@ export class AgentPanelAdapter {
         const frame = new Uint8Array(event.data);
         const sequence = Number(new DataView(frame.buffer, frame.byteOffset, frame.byteLength).getBigUint64(0));
         this.output?.enqueue(sequence + frame.byteLength - 8, frame.slice(8));
+      } else if (typeof event.data === 'string') {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'ready') {
+            this.setStatus('已连接');
+          } else if (msg.type === 'error') {
+            this.setStatus(String(msg.error?.message || msg.message || '连接错误'));
+          }
+        } catch { /* malformed text frame — ignore */ }
       }
     };
     this.socket = ws;

@@ -1019,6 +1019,10 @@ async def agent_terminal_v2(ws: WebSocket):
     except RuntimeError as exc:
         error = ProtocolError("terminal_unavailable", str(exc), True)
         await ws.send_text(json.dumps(error.as_message()))
+        try:
+            await ws.close(code=1011, reason="terminal_unavailable")
+        except Exception:
+            pass
     finally:
         if sender_task:
             sender_task.cancel()
