@@ -100,6 +100,31 @@ async def test_terminate_removes_the_session_and_closes_its_tasks():
 
 
 @pytest.mark.asyncio
+async def test_process_eof_removes_session_and_runs_archive_callback():
+    factory = Factory([])
+    removed: list[tuple[str, str]] = []
+    removed_event = asyncio.Event()
+
+    async def on_session_removed(session_id: str, reason: str) -> None:
+        removed.append((session_id, reason))
+        removed_event.set()
+
+    manager = TerminalManager(
+        factory,
+        replay_bytes=4096,
+        on_session_removed=on_session_removed,
+    )
+    session = await manager.get_or_create(request())
+
+    await factory.created[0]._output.put(b"")
+    await asyncio.wait_for(removed_event.wait(), timeout=1)
+
+    assert session.closed is True
+    assert removed == [(session.id, "process_exited")]
+    assert manager.diagnostics()["session_count"] == 0
+
+
+@pytest.mark.asyncio
 async def test_posix_pty_adapter_transfers_bytes_and_terminates_process():
     class Process:
         returncode = None

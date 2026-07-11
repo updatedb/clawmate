@@ -1,6 +1,7 @@
 import json
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -93,6 +94,44 @@ async def test_session_list_filters_empty_chat_logs_and_returns_instruction_coun
     assert [s["id"] for s in data["sessions"]] == ["with-turns"]
     assert data["sessions"][0]["instruction_count"] == 2
     assert data["sessions"][0]["turn_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_session_list_excludes_active_v2_session(tmp_path, monkeypatch):
+    sess_dir = tmp_path / ".clawmate" / "sessions"
+    sess_dir.mkdir(parents=True)
+    index = {
+        "version": 1,
+        "sessions": [
+            {"id": "v2-active", "backend": "codex", "started_at": 20},
+            {"id": "archived", "backend": "codex", "started_at": 10},
+        ],
+    }
+    (sess_dir / "index.json").write_text(json.dumps(index), encoding="utf-8")
+    _write_session(sess_dir, "v2-active", [{"role": "user", "content": "still running", "ts": 20}])
+    _write_session(sess_dir, "archived", [{"role": "user", "content": "done", "ts": 10}])
+    monkeypatch.setattr(
+        agent_routes,
+        "load_cfg",
+        lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
+    )
+
+    async def noop_cleanup():
+        return None
+
+    monkeypatch.setattr(agent_routes, "_cleanup_dead_sessions", noop_cleanup)
+    agent_routes._sessions.clear()
+    agent_routes._v2_loggers.clear()
+    agent_routes._v2_loggers["terminal-1"] = SimpleNamespace(session_id="v2-active")
+
+    app = FastAPI()
+    app.include_router(agent_routes.router)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        res = await client.get("/api/clawmate/agent/sessions?root=root")
+
+    assert res.status_code == 200
+    assert [session["id"] for session in res.json()["sessions"]] == ["archived"]
 
 
 @pytest.mark.asyncio
@@ -371,6 +410,45 @@ async def test_session_list_filters_by_date(tmp_path, monkeypatch):
     data = res.json()
     assert data["total"] == 1
     assert data["sessions"][0]["id"] == "s2"
+
+
+@pytest.mark.asyncio
+async def test_history_dates_and_filter_use_session_end_time(tmp_path, monkeypatch):
+    sess_dir = tmp_path / ".clawmate" / "sessions"
+    sess_dir.mkdir(parents=True)
+    index = {
+        "version": 1,
+        "sessions": [
+            {
+                "id": "crosses-midnight", "backend": "claude",
+                "started_at": datetime(2026, 7, 10, 23, 30).timestamp(),
+                "ended_at": datetime(2026, 7, 11, 0, 30).timestamp(),
+            },
+        ],
+    }
+    (sess_dir / "index.json").write_text(json.dumps(index), encoding="utf-8")
+    _write_session(sess_dir, "crosses-midnight", [{"role": "user", "content": "done", "ts": datetime(2026, 7, 11, 0, 30).timestamp()}])
+    monkeypatch.setattr(
+        agent_routes,
+        "load_cfg",
+        lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
+    )
+
+    async def noop_cleanup():
+        return None
+
+    monkeypatch.setattr(agent_routes, "_cleanup_dead_sessions", noop_cleanup)
+    agent_routes._sessions.clear()
+    agent_routes._v2_loggers.clear()
+    app = FastAPI()
+    app.include_router(agent_routes.router)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        dates = await client.get("/api/clawmate/agent/sessions/dates?root=root")
+        listed = await client.get("/api/clawmate/agent/sessions?root=root&date=2026-07-11")
+
+    assert dates.json()["dates"] == ["2026-07-11"]
+    assert [session["id"] for session in listed.json()["sessions"]] == ["crosses-midnight"]
 
 
 @pytest.mark.asyncio

@@ -1439,10 +1439,15 @@
       background: var(--xterm-bg, #1e1e2e);
     }
     #previewXtermContainer .xterm {
-      height: 100%; padding: 4px 6px;
+      height: 100%; padding: 0;
       text-rendering: optimizeLegibility;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
+    }
+    #previewXtermContainer .xterm-viewport,
+    #previewXtermContainer .xterm-scrollable-element {
+      margin: 0;
+      padding: 0;
     }
 
     /* Mobile: agent panel as fixed overlay */

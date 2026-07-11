@@ -108,8 +108,10 @@ class TerminalManager:
         input_queue_bytes: int = 2 * 1024 * 1024,
         resize_lease_seconds: int = 15,
         idle_seconds: int = 600,
+        max_lifetime_seconds: int = 86400,
         max_sessions: int = 10,
         clock: Callable[[], float] = time.monotonic,
+        on_session_removed: Callable[[str, str], Awaitable[None]] | None = None,
     ):
         self._pty_factory = pty_factory
         self._replay_bytes = replay_bytes
@@ -117,11 +119,14 @@ class TerminalManager:
         self._input_queue_bytes = input_queue_bytes
         self._resize_lease_seconds = resize_lease_seconds
         self._idle_seconds = idle_seconds
+        self._max_lifetime_seconds = max_lifetime_seconds
         self._max_sessions = max_sessions
         self._clock = clock
+        self._on_session_removed = on_session_removed
         self._sessions: dict[str, TerminalSession] = {}
         self._keys: dict[str, str] = {}
         self._idle_since: dict[str, float] = {}
+        self._created_at: dict[str, float] = {}
         self._lock = asyncio.Lock()
         self._next_id = 0
 
@@ -159,13 +164,15 @@ class TerminalManager:
     async def expire_idle(self) -> int:
         async with self._lock:
             now = self._clock()
-            expired = [
-                session_id
-                for session_id, idle_since in self._idle_since.items()
-                if now - idle_since >= self._idle_seconds
-            ]
-            for session_id in expired:
-                await self._remove_locked(session_id, "idle_expired")
+            expired = []
+            for session_id in self._sessions:
+                idle_since = self._idle_since.get(session_id)
+                if idle_since is not None and now - idle_since >= self._idle_seconds:
+                    expired.append((session_id, "idle_expired"))
+                elif now - self._created_at.get(session_id, now) >= self._max_lifetime_seconds:
+                    expired.append((session_id, "lifetime_expired"))
+            for session_id, reason in expired:
+                await self._remove_locked(session_id, reason)
             return len(expired)
 
     async def close_all(self, reason: str) -> None:
@@ -195,21 +202,32 @@ class TerminalManager:
             connection_queue_bytes=self._connection_queue_bytes,
             input_queue_bytes=self._input_queue_bytes,
             resize_lease_seconds=self._resize_lease_seconds,
+            on_process_exited=self._on_process_exited,
         )
         await session.start()
         self._sessions[session.id] = session
         self._keys[request.key] = session.id
+        self._created_at[session.id] = self._clock()
         return session
+
+    async def _on_process_exited(self, session_id: str) -> None:
+        """Archive and remove a PTY session as soon as its child exits."""
+        async with self._lock:
+            if session_id in self._sessions:
+                await self._remove_locked(session_id, "process_exited")
 
     async def _remove_locked(self, session_id: str, reason: str) -> None:
         session = self._sessions.pop(session_id, None)
         if not session:
             return
         self._idle_since.pop(session_id, None)
+        self._created_at.pop(session_id, None)
         for key, mapped_id in list(self._keys.items()):
             if mapped_id == session_id:
                 del self._keys[key]
         await session.close(reason)
+        if self._on_session_removed:
+            await self._on_session_removed(session_id, reason)
 
     def _require(self, session_id: str) -> TerminalSession:
         session = self._sessions.get(session_id)

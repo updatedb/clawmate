@@ -135,8 +135,25 @@
             <option value="openclaw">OpenClaw</option>
           </select>
           <span class="agent-panel-title" id="agentPanelTitle">Agent</span>
-          <button id="btnNewAgentSession" class="agent-panel-btn" title="新建会话"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 新会话</button>
+          <button id="btnAgentHistory" class="agent-panel-btn" type="button" title="历史会话"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 7v5l3 2"></path></svg>历史会话</button>
+          <button id="btnNewAgentSession" class="agent-panel-btn" title="新建会话"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>新会话</button>
           <button id="btnCloseAgent" class="agent-panel-close" title="关闭 Agent"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+        </div>
+        <div id="AgentToolbar" class="agent-toolbar" role="toolbar" aria-label="终端工具栏">
+          <span id="AgentStatus" class="agent-status" aria-live="polite">未连接</span>
+          <div class="agent-toolbar-actions">
+            <button id="AgentSearch" class="agent-toolbar-btn" type="button" title="搜索终端" aria-label="搜索终端"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>搜索</button>
+            <button id="AgentCopy" class="agent-toolbar-btn" type="button" title="复制选中内容" aria-label="复制选中内容"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>复制</button>
+            <button id="AgentClear" class="agent-toolbar-btn" type="button" title="清空终端" aria-label="清空终端"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="m6 6 1 15h10l1-15"></path></svg>清空</button>
+            <button id="AgentFontDown" class="agent-toolbar-btn font-size-action" type="button" title="缩小文字" aria-label="缩小文字"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19 9 5l5 14"></path><path d="M6 14h6"></path><path d="M17 12h5"></path></svg><span>缩小文字</span></button>
+            <button id="AgentFontUp" class="agent-toolbar-btn font-size-action" type="button" title="放大文字" aria-label="放大文字"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19 9 5l5 14"></path><path d="M6 14h6"></path><path d="M19.5 9v6"></path><path d="M16.5 12h6"></path></svg><span>放大文字</span></button>
+            <button id="AgentReconnect" class="agent-toolbar-btn" type="button" title="重新连接" aria-label="重新连接"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8.1 8.1 0 0 0-14.9-3L3 11"></path><path d="M3 4v7h7"></path><path d="M4 13a8.1 8.1 0 0 0 14.9 3L21 13"></path><path d="M21 20v-7h-7"></path></svg>重连</button>
+          </div>
+        </div>
+        <div class="agent-search-row" id="AgentSearchRow" hidden>
+          <input id="AgentSearchInput" type="search" placeholder="在终端中搜索…" aria-label="在终端中搜索" />
+          <button id="AgentSearchPrev" class="agent-toolbar-btn" type="button" aria-label="上一个匹配">↑</button>
+          <button id="AgentSearchNext" class="agent-toolbar-btn" type="button" aria-label="下一个匹配">↓</button>
         </div>
         <div id="xtermContainer" class="xterm-container"></div>
         <div id="agentChatView" class="agent-chat-view hidden">
@@ -183,7 +200,6 @@
   <!-- KaTeX + Mermaid loaded conditionally by app.js (CSS+JS) -->
   <script src="./js/icons.js" defer></script>
   <script src="./js/topbar.js" defer></script>
-  <script src="./js/agent.js" defer></script>
   <script src="./dist/terminal.js" defer></script>
   <script src="./js/app.js?v=1782996122" defer></script>
   <!-- Service Worker registration for PWA -->

@@ -22,6 +22,7 @@
     applyTheme(resolved);
     updateThemeButton();
     localStorage.setItem('clawmate-theme', currentTheme);
+    if (window.Agent && window.Agent.syncTheme) window.Agent.syncTheme();
     // Notify page-specific handlers
     if (typeof window._onThemeChange === 'function') window._onThemeChange(resolved);
   }
@@ -51,6 +52,7 @@
     if (currentTheme === 'auto') {
       var r = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
       applyTheme(r);
+      if (window.Agent && window.Agent.syncTheme) window.Agent.syncTheme();
       if (typeof window._onThemeChange === 'function') window._onThemeChange(r);
     }
   });
@@ -76,7 +78,7 @@
   // ── Agent toggle placeholder ──
   // Each page wires its own agent panel open/close.
   // This module just ensures the toggle button exists and hands off to
-  // page-specific agent.js caller via a global hook.
+  // page-specific Agent facade caller via a global hook.
   window._topbarToggleAgent = function () {
     var btn = document.getElementById('btnToggleAgent');
     if (btn) btn.click();

@@ -51,7 +51,9 @@ class AgentConfig:
     max_sessions: int = 10           # max concurrent Claude sessions
     session_log_ttl_days: int = 30   # auto-cleanup agent session logs after N days
     env: dict[str, str] = field(default_factory=dict)  # extra env vars passed to agent subprocess
-    terminal_v2: bool = False
+    terminal_v2: bool = True
+    terminal_idle_seconds: int = 24 * 3600
+    terminal_max_lifetime_seconds: int = 24 * 3600
     renderer: str = "auto"
     replay_bytes: int = 4 * 1024 * 1024
     scrollback: int = 10_000
@@ -160,8 +162,9 @@ _CONFIG_TTL: int = 60
 
 def set_config_path(path: str | Path) -> None:
     """main.py 启动时调用，设定 config.json 路径。"""
-    global _CONFIG_PATH
+    global _CONFIG_PATH, _CONFIG_CACHE
     _CONFIG_PATH = Path(path)
+    _CONFIG_CACHE = None
 
 
 def clear_config_cache() -> None:
@@ -270,7 +273,9 @@ def _parse_config(raw: dict) -> AppConfig:
             max_sessions=int(ag.get("max_sessions", 10)),
             session_log_ttl_days=int(ag.get("session_log_ttl_days", 30)),
             env=dict(ag.get("env") or {}),
-            terminal_v2=_parse_bool(ag.get("terminal_v2", False)),
+            terminal_v2=_parse_bool(ag.get("terminal_v2", True)),
+            terminal_idle_seconds=_bounded_int(ag.get("terminal_idle_seconds"), 24 * 3600, 600, 7 * 24 * 3600),
+            terminal_max_lifetime_seconds=_bounded_int(ag.get("terminal_max_lifetime_seconds"), 24 * 3600, 3600, 7 * 24 * 3600),
             renderer=renderer,
             replay_bytes=_bounded_int(ag.get("replay_bytes"), 4 * 1024 * 1024, 1 * 1024 * 1024, 16 * 1024 * 1024),
             scrollback=_bounded_int(ag.get("scrollback"), 10_000, 1_000, 50_000),

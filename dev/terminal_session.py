@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass, field
+from collections.abc import Awaitable, Callable
 from typing import Protocol
 
 try:  # FastAPI imports modules from dev/, while tests import dev.* packages.
@@ -26,7 +27,7 @@ class PtyAdapter(Protocol):
 @dataclass(slots=True)
 class TerminalConnection:
     id: str
-    output_queue: asyncio.Queue[OutputChunk]
+    output_queue: asyncio.Queue[OutputChunk | None]
     queued_bytes: int = 0
     last_output_ack: int = 0
     input_locked_out: bool = False
@@ -52,6 +53,7 @@ class TerminalSession:
         connection_queue_bytes: int = 4 * 1024 * 1024,
         input_queue_bytes: int = 2 * 1024 * 1024,
         resize_lease_seconds: int = 15,
+        on_process_exited: Callable[[str], Awaitable[None]] | None = None,
     ):
         self.id = session_id
         self.pty = pty
@@ -74,6 +76,7 @@ class TerminalSession:
         self._resize_owner: str | None = None
         self._resize_lease_expires_at = 0.0
         self._terminated = False
+        self._on_process_exited = on_process_exited
 
     async def start(self) -> None:
         if self.closed:
@@ -116,6 +119,8 @@ class TerminalSession:
     async def next_output(self, connection_id: str) -> OutputChunk:
         connection = self.connections[connection_id]
         chunk = await connection.output_queue.get()
+        if chunk is None:
+            raise ConnectionError("terminal session closed")
         connection.queued_bytes -= len(chunk.data)
         return chunk
 
@@ -184,6 +189,7 @@ class TerminalSession:
         self.close_reason = reason
         for connection in self.connections.values():
             connection.closed = True
+            connection.output_queue.put_nowait(None)
         self.connections.clear()
         for future in self._input_acks.values():
             if not future.done():
@@ -203,6 +209,7 @@ class TerminalSession:
             while not self.closed:
                 data = await self.pty.read(64 * 1024)
                 if not data:
+                    await self._notify_process_exited()
                     return
                 self.replay.append(data)
                 chunk = OutputChunk(self.replay.latest_sequence - len(data), self.replay.latest_sequence, data)
@@ -210,6 +217,13 @@ class TerminalSession:
                     self._offer_output(connection, chunk)
         except asyncio.CancelledError:
             raise
+        except OSError:
+            if not self.closed:
+                await self._notify_process_exited()
+
+    async def _notify_process_exited(self) -> None:
+        if not self.closed and self._on_process_exited:
+            await self._on_process_exited(self.id)
 
     async def _write_loop(self) -> None:
         try:

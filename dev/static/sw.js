@@ -7,7 +7,7 @@
 // The ?v= query strings on HTML <script>/<link> tags are NO LONGER NEEDED —
 // proper HTTP Cache-Control headers on the server handle that now.
 //
-const CACHE_VERSION = 'v20260710-terminal-v2';
+const CACHE_VERSION = 'v20260711-history-ui-v17';
 const STATIC_CACHE = 'clawmate-static-' + CACHE_VERSION;
 const VENDOR_CACHE = 'clawmate-vendor-' + CACHE_VERSION;
 const API_CACHE = 'clawmate-api-' + CACHE_VERSION;
@@ -26,7 +26,6 @@ const PRECACHE_URLS = [
   '/clawmate/js/icons.js',
   '/clawmate/js/topbar.js',
   '/clawmate/js/app.js',
-  '/clawmate/js/agent.js',
   '/clawmate/js/preview.js',
   '/clawmate/js/preview-common.js',
   '/clawmate/dist/terminal.js',

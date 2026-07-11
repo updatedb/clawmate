@@ -6,7 +6,7 @@ Two mechanisms work together:
 1.  HTML rewriting — when serving an HTML file, the middleware scans the
     response body for <script src="..."> and <link href="..."> tags that
     reference local static files (under /clawmate/js/, /clawmate/css/,
-    /clawmate/asset/).  Each URL gets a ?v=<mtime> query string appended
+    /clawmate/asset/, or /clawmate/dist/).  Each URL gets a ?v=<mtime> query string appended
     automatically, where <mtime> is the file's modification time.  When a
     file changes on disk, its mtime changes → the URL changes → browsers
     fetch the new version immediately.  Zero maintenance.
@@ -56,7 +56,7 @@ def _get_mtime(abs_path: str) -> int:
 
 # HTML tag patterns — match src="..." or href="..." that point to local
 # static files (not CDN, not data: URIs, not absolute URLs).
-_STATIC_DIRS = ("js/", "css/", "asset/")
+_STATIC_DIRS = ("js/", "css/", "asset/", "dist/")
 _RE_SCRIPT_SRC = re.compile(
     r'(<script\b[^>]*?\ssrc=")(\.\.?/)(js/[^"]+)(")',
     re.IGNORECASE,
@@ -67,7 +67,7 @@ _RE_LINK_HREF = re.compile(
 )
 # Broader pattern for any local reference under ./ that we can mtime-stamp
 _RE_ANY_SRC = re.compile(
-    r'((?:src|href)=")(\.\.?/)((?:js|css|asset)/[^"]+)(")',
+    r'((?:src|href)=")(\.\.?/)((?:js|css|asset|dist)/[^"]+)(")',
     re.IGNORECASE,
 )
 

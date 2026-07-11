@@ -465,6 +465,7 @@ def list_dir(root_id: str, rel_dir: str = "", offset: int = 0, limit: int = 200,
     result = {
         "path": "" if target == root_path else str(target.relative_to(root_path)),
         "name": target.name if target != root_path else root_path.name,
+        "project": find_project_marker(root_path, rel_dir),
         "entries": entries,
         "total": total,
         "offset": offset,
