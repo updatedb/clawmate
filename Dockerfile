@@ -19,6 +19,8 @@ RUN npm ci
 COPY dev/frontend ./dev/frontend
 RUN npm run build:terminal
 
+FROM node:22-bookworm-slim AS node-runtime
+
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
@@ -32,6 +34,12 @@ RUN pip install --no-cache-dir -r requirements.txt \
 FROM python:3.11-slim AS runtime
 
 WORKDIR /app
+
+# Node/npm are required to install the agent CLIs on container startup.
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/local/bin/npm /usr/local/bin/npm
+COPY --from=node-runtime /usr/local/bin/npx /usr/local/bin/npx
+COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
 
 # runtime dependencies: ripgrep for content search, ffmpeg for subtitle extraction
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -55,4 +63,4 @@ EXPOSE 5533
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5533/api/health').read()" || exit 1
 
-CMD ["python", "-u", "main.py"]
+CMD ["sh", "-c", "if [ \"${CLAWMATE_INSTALL_AGENT_CLIS:-1}\" != \"0\" ]; then command -v claude >/dev/null 2>&1 || npm install --global @anthropic-ai/claude-code; command -v codex >/dev/null 2>&1 || npm install --global @openai/codex; fi; exec python -u main.py"]
