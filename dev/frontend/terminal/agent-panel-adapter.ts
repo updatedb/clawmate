@@ -370,6 +370,45 @@ export class AgentPanelAdapter {
       this.bindToolbar(prefix);
       if (!this.terminal) {
         this.terminal = new Terminal(terminalOptions(this.config.scrollback || 10000));
+        this.terminal.attachCustomKeyEventHandler((event) => {
+          // Only intercept keydown — keyup/keypress pass through
+          if (event.type !== 'keydown') return true;
+          if (!event.ctrlKey) return true;
+
+          const key = event.key.toLowerCase();
+
+          // Ctrl+C: Copy selected text if any, else pass through to PTY (SIGINT)
+          if (key === 'c') {
+            if (this.terminal?.hasSelection()) {
+              const text = this.terminal.getSelection();
+              navigator.clipboard.writeText(text).catch(() => {
+                try { document.execCommand('copy'); } catch { /* no clipboard */ }
+              });
+              this.terminal.clearSelection();
+              return false; // Don't send \x03 to PTY
+            }
+            return true; // No selection → send \x03 (SIGINT to PTY process)
+          }
+
+          // Ctrl+V: Paste from clipboard via async API
+          if (key === 'v') {
+            navigator.clipboard.readText()
+              .then((text) => {
+                if (text) this.sendInput(new TextEncoder().encode(text));
+              })
+              .catch(() => {
+                // Clipboard read unavailable — silently ignore
+              });
+            return false; // Don't send \x16 to PTY
+          }
+
+          // Ctrl+Z: Block entirely (prevents SIGTSTP from suspending the PTY process)
+          if (key === 'z') {
+            return false;
+          }
+
+          return true;
+        });
         this.fit = new FitAddon();
         this.search = new SearchAddon();
         this.terminal.loadAddon(this.fit);
