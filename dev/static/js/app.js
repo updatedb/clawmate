@@ -97,6 +97,7 @@ const els = {
   // Multi-select
   multiSelectToggle: document.getElementById("multiSelectToggle"),
   btnCreate: document.getElementById("btnCreate"),
+  createFileInput: document.getElementById("createFileInput"),
   batchBar: document.getElementById("batchBar"),
   batchCount: document.getElementById("batchCount"),
   batchSelectAllBtn: document.getElementById("batchSelectAllBtn"),
@@ -2326,6 +2327,10 @@ function toggleCreateMenu() {
     }
   });
 
+  addItem('file-output', '选择文件上传', function () {
+    els.createFileInput && els.createFileInput.click();
+  });
+
   addItem('file', '创建 Markdown', async function () {
     var name = prompt("请输入文件名（自动添加 .md 后缀）：");
     if (!name) return;
@@ -2367,6 +2372,40 @@ function toggleCreateMenu() {
 // Multi-select
 els.multiSelectToggle && els.multiSelectToggle.addEventListener("click", toggleMultiSelect);
 els.btnCreate && els.btnCreate.addEventListener("click", toggleCreateMenu);
+els.createFileInput && els.createFileInput.addEventListener("change", async function () {
+  const file = this.files && this.files[0];
+  if (!file) return;
+  if (!state.rootId) {
+    setStatus("请先选择根目录");
+    this.value = "";
+    return;
+  }
+
+  setStatus("正在上传 " + file.name + "...");
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await authFetch(
+      '/api/clawmate/upload?root=' + encodeURIComponent(state.rootId) + '&dir=' + encodeURIComponent(state.dir),
+      { method: 'POST', body: formData }
+    );
+    if (res.ok) {
+      let data = {};
+      try { data = await res.json(); } catch (_) {}
+      setStatus("文件已上传: " + (data.filename || file.name));
+      invalidateDirCache();
+      loadDir(state.dir);
+    } else {
+      let detail = "";
+      try { const err = await res.json(); detail = err.detail || ""; } catch (_) {}
+      setStatus("上传失败: " + (detail || res.status));
+    }
+  } catch (e) {
+    setStatus("上传出错: " + (e.message || e));
+  } finally {
+    this.value = "";
+  }
+});
 els.batchSelectAllBtn && els.batchSelectAllBtn.addEventListener("click", selectAll);
 
 // Batch operations

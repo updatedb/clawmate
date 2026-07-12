@@ -37,4 +37,17 @@ def test_preview_selection_handler_reuses_single_range_binding():
     js = PREVIEW_JS.read_text(encoding="utf-8")
 
     assert "let range = null;" in js
+
+
+def test_preview_mermaid_success_path_does_not_reference_undefined_error():
+    js = PREVIEW_JS.read_text(encoding="utf-8")
+
+    assert "} catch (err) {\n      var errMsg = err &&" in js
+
+
+def test_preview_markdown_renderer_normalizes_dev_static_asset_paths():
+    js = PREVIEW_JS.read_text(encoding="utf-8")
+
+    assert "dev\\/static" in js
+    assert "asset/clawmate-logo.png" not in js[js.index("function createMarkdownRenderer"):js.index("function createMarkdownRenderer") + 2200]
     assert "const range = sel.getRangeAt(0);" not in js

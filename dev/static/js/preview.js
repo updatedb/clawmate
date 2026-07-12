@@ -135,7 +135,7 @@
     // 统一字体栈：优先使用 Noto Sans SC 确保中英文混排时字体一致
     var _mdFontStack = '-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","Noto Sans",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji"';
     if (resolved === 'dark') {
-      varsEl.textContent = '[data-theme=dark] .markdown-body { color:#f0f6fc; background-color:#0d1117; font-family:' + _mdFontStack + '; } [data-theme=dark] .markdown-body * { color:#f0f6fc; } [data-theme=dark] .markdown-body table tr { background-color:#0d1117; border-top:1px solid #3d444db3; } [data-theme=dark] .markdown-body table td,[data-theme=dark] .markdown-body table th { border:1px solid #3d444d; } [data-theme=dark] .markdown-body code { background-color:#656c7633; color:#e1e4e8; } [data-theme=dark] .markdown-body pre { background-color:#151b23; color:#f0f6fc; } [data-theme=dark] .markdown-body pre code { background:transparent; color:#f0f6fc; } [data-theme=dark] .markdown-body blockquote { color:#9198a1; border-left-color:#3d444d; }';
+      varsEl.textContent = '[data-theme=dark] .markdown-body { color:#f0f6fc; background-color:#0d1117; font-family:' + _mdFontStack + '; } [data-theme=dark] .markdown-body table tr { background-color:#0d1117; border-top:1px solid #3d444db3; } [data-theme=dark] .markdown-body table td,[data-theme=dark] .markdown-body table th { border:1px solid #3d444d; } [data-theme=dark] .markdown-body code { background-color:#656c7633; color:#e1e4e8; } [data-theme=dark] .markdown-body pre { background-color:#151b23; color:#f0f6fc; } [data-theme=dark] .markdown-body pre code { background:transparent; color:#f0f6fc; } [data-theme=dark] .markdown-body blockquote { color:#9198a1; border-left-color:#3d444d; }';
     } else {
       varsEl.textContent = '[data-theme=light] .markdown-body { color:#1f2328; background-color:#ffffff; font-family:' + _mdFontStack + '; } [data-theme=light] .markdown-body table tr { background-color:#ffffff; border-top:1px solid #d1d9e0b3; } [data-theme=light] .markdown-body table td,[data-theme=light] .markdown-body table th { border:1px solid #d1d9e0; } [data-theme=light] .markdown-body code { background:rgba(175,184,193,0.2); color:#d73a49; } [data-theme=light] .markdown-body pre { background:#f6f8fa; color:#1f2328; } [data-theme=light] .markdown-body pre code { background:transparent; color:#1f2328; } [data-theme=light] .markdown-body blockquote { color:#656d76; border-left-color:#d0d7de; }';
     }
@@ -212,7 +212,9 @@
       let href = token.attrGet('src') || '';
       const title = token.attrGet('title') || '';
       const text = token.content || '';
-      if (!/^https?:\/\//i.test(href) && !href.startsWith('/')) {
+      if (/^dev\/static\//i.test(href)) {
+        href = `/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(href.replace(/^dev\/static\//i, ''))}`;
+      } else if (!/^https?:\/\//i.test(href) && !href.startsWith('/')) {
         const dir = entryRelPath.split('/').slice(0, -1).join('/');
         const fullPath = dir ? dir + '/' + href : href;
         href = `/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(fullPath)}`;
@@ -325,6 +327,7 @@
           if (stroke.indexOf('NaN%') !== -1) el.setAttribute('stroke', stroke.replace(/hsl\([^)]*NaN%[^)]*\)/g, resolvedTheme === 'dark' ? '#58a6ff' : '#4f46e5'));
         });
       }
+    } catch (err) {
       var errMsg = err && (err.message || err.str || String(err));
       console.error('[ClawMate] Mermaid \u6e32\u67d3\u5931\u8d25:', errMsg, err);
       for (var i = 0; i < blocks.length; i++) {
@@ -1210,17 +1213,50 @@
   let sourceDirty = false;
 
   // ── Line numbers for code / source views (per-row flex layout) ──
-  function renderCodeWithLineNumbers(rawContent, preEl) {
+  function normalizeHighlightLanguage(language) {
+    var lang = (language || '').toLowerCase();
+    var aliases = {
+      yml: 'yaml', node: 'javascript', 'node.js': 'javascript',
+      py: 'python', sh: 'bash', md: 'markdown', text: 'plaintext',
+      h: 'cpp', hpp: 'cpp', zsh: 'bash', fish: 'bash',
+      bat: 'dos', ps1: 'powershell', rb: 'ruby', rs: 'rust',
+      kt: 'kotlin', pl: 'perl', pm: 'perl'
+    };
+    return aliases[lang] || lang;
+  }
+
+  function highlightSourceLines(rawContent, language) {
+    var content = rawContent || '';
+    if (!window.hljs || !language) return content.split('\n').map(escHtml);
+
+    try {
+      var normalized = normalizeHighlightLanguage(language);
+      var highlighted = window.hljs.getLanguage(normalized)
+        ? window.hljs.highlight(content, {
+            language: normalized,
+            ignoreIllegals: true,
+          }).value
+        : window.hljs.highlightAuto(content).value;
+      var code = document.createElement('code');
+      code.innerHTML = highlighted;
+      return splitHighlightedHtmlByLines(code);
+    } catch (_) {
+      return content.split('\n').map(escHtml);
+    }
+  }
+
+  function renderCodeWithLineNumbers(rawContent, language) {
     const wrapper = document.createElement('div');
     wrapper.className = 'code-with-lines';
-    const lines = (rawContent || '').split('\n');
+    wrapper.dataset.language = language || '';
+    const lines = highlightSourceLines(rawContent, language);
     for (var i = 0; i < lines.length; i++) {
-      wrapper.appendChild(createCodeRow(i + 1, lines[i]));
+      wrapper.appendChild(createCodeRow(i + 1, '', lines[i] || '&nbsp;'));
     }
     return wrapper;
   }
 
-  function createCodeRow(num, text) {
+  function createCodeRow(num, text, highlightedHtml) {
     var row = document.createElement('div');
     row.className = 'code-row';
 
@@ -1230,25 +1266,27 @@
 
     var textSpan = document.createElement('code');
     textSpan.className = 'code-row-text';
-    textSpan.textContent = text;
+    if (highlightedHtml !== undefined) textSpan.innerHTML = highlightedHtml;
+    else textSpan.textContent = text;
 
     row.appendChild(numSpan);
     row.appendChild(textSpan);
     return row;
   }
 
-  function updateCodeLineNumbers(wrapper, rawContent) {
+  function updateCodeLineNumbers(wrapper, rawContent, language) {
     if (!wrapper) return;
-    var lines = (rawContent || '').split('\n');
+    var lang = language || wrapper.dataset.language || '';
+    var lines = highlightSourceLines(rawContent, lang);
     var rows = wrapper.querySelectorAll('.code-row');
 
     // Update existing rows
     for (var i = 0; i < lines.length; i++) {
       if (i < rows.length) {
         rows[i].querySelector('.code-row-num').textContent = i + 1;
-        rows[i].querySelector('.code-row-text').textContent = lines[i];
+        rows[i].querySelector('.code-row-text').innerHTML = lines[i] || '&nbsp;';
       } else {
-        wrapper.appendChild(createCodeRow(i + 1, lines[i]));
+        wrapper.appendChild(createCodeRow(i + 1, '', lines[i] || '&nbsp;'));
       }
     }
 
@@ -1300,6 +1338,19 @@
   function splitHighlightedHtmlByLines(codeEl) {
     var lines = [];
     var currentLine = [];
+    var activeTags = [];
+
+    function closeActiveTags() {
+      for (var i = activeTags.length - 1; i >= 0; i--) {
+        currentLine.push(activeTags[i].close);
+      }
+    }
+
+    function reopenActiveTags() {
+      for (var i = 0; i < activeTags.length; i++) {
+        currentLine.push(activeTags[i].open);
+      }
+    }
 
     function collect(nodes) {
       for (var i = 0; i < nodes.length; i++) {
@@ -1308,17 +1359,25 @@
           var parts = node.textContent.split('\n');
           for (var j = 0; j < parts.length; j++) {
             if (j > 0) {
+              closeActiveTags();
               lines.push(currentLine.join(''));
               currentLine = [];
+              reopenActiveTags();
             }
             currentLine.push(escHtml(parts[j]));
           }
         } else if (node.nodeType === Node.ELEMENT_NODE) {
           var tag = node.tagName.toLowerCase();
           var cls = node.className ? ' class="' + node.className + '"' : '';
-          currentLine.push('<' + tag + cls + '>');
+          var tagPair = {
+            open: '<' + tag + cls + '>',
+            close: '</' + tag + '>',
+          };
+          currentLine.push(tagPair.open);
+          activeTags.push(tagPair);
           collect(node.childNodes);
-          currentLine.push('</' + tag + '>');
+          activeTags.pop();
+          currentLine.push(tagPair.close);
         }
       }
     }
@@ -1327,6 +1386,7 @@
     if (currentLine.length > 0) {
       lines.push(currentLine.join(''));
     }
+    if (lines.length === 0) lines.push('');
 
     return lines;
   }
@@ -2189,7 +2249,7 @@
           srcPre.className = 'raw-text';
         }
         contentBody.appendChild(srcPre);
-        const mdSrcWrapper = renderCodeWithLineNumbers(content);
+        const mdSrcWrapper = renderCodeWithLineNumbers(content, 'markdown');
         mdSrcWrapper.style.display = isRawMode ? '' : 'none';
         contentBody.appendChild(mdSrcWrapper);
 
@@ -2320,7 +2380,7 @@
           srcPre.textContent = content;
         }
         htmlWrap.appendChild(srcPre);
-        var htmlSrcWrapper = renderCodeWithLineNumbers(content);
+        var htmlSrcWrapper = renderCodeWithLineNumbers(content, 'html');
         htmlSrcWrapper.style.display = isRawMode ? '' : 'none';
         htmlSrcWrapper.style.flex = '1';
         htmlSrcWrapper.style.borderRadius = '0';
@@ -2366,7 +2426,7 @@
           updatePlainTextDynamicButtons();
         } else {
           // Display mode: per-line rows with line numbers
-          contentBody.appendChild(renderCodeWithLineNumbers(rawContent));
+          contentBody.appendChild(renderCodeWithLineNumbers(rawContent, ext));
           removeLoading();
           // Render outline sidebar for code (display mode: auto-open on desktop only)
           if (codeOutlineItems.length >= 2) {
