@@ -566,11 +566,6 @@ export class AgentPanelAdapter {
     if (searchNext) searchNext.onclick = () => runSearch(true);
     const clear = document.getElementById(id('AgentClear'));
     if (clear) clear.onclick = () => this.terminal?.clear();
-    const copy = document.getElementById(id('AgentCopy'));
-    if (copy) copy.onclick = () => {
-      const text = this.terminal?.getSelection() || '';
-      if (text && navigator.clipboard) void navigator.clipboard.writeText(text);
-    };
     const adjustFont = (delta: number) => {
       if (!this.terminal) return;
       const oldFontSize = this.terminal.options.fontSize || 14;

@@ -1699,3 +1699,49 @@
   color: var(--text-muted);
   flex-shrink: 0;
 }
+
+/* Version history modal — mobile bottom sheet */
+@media (max-width: 768px) {
+  .version-modal-dialog {
+    min-width: 0;
+    width: 100vw;
+    max-width: none;
+    max-height: calc(100dvh - env(safe-area-inset-top) - 8px);
+    border-radius: 16px 16px 0 0;
+  }
+
+  .version-modal-header {
+    min-height: 52px;
+    padding: 8px 12px 8px 16px;
+  }
+
+  .version-modal-close {
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .version-modal-body {
+    flex-direction: column;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  .version-commit-pane {
+    width: auto;
+    max-height: 38dvh;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .version-diff-pane {
+    min-height: 50dvh;
+  }
+
+  .version-modal-footer {
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+}

@@ -8,6 +8,7 @@
  * that overlay on the same 6px track used by index and preview scrollbars. */
 .agent-panel-v2 .xterm-scrollable-element > .scrollbar.vertical {
   width: 6px !important;
+  min-width: 6px !important;
   background: transparent !important;
 }
 
@@ -42,6 +43,19 @@
 }
 .agent-panel-v2 .xterm {
   font-family: var(--font-mono, "JetBrains Mono", "Fira Code", monospace);
+}
+
+/* The xterm-viewport has background:#000 from xterm's CSS, creating a visible
+   black bar at the bottom when screen height < viewport height.  Bypass with
+   transparent so the themed scrollable-element background shows through. */
+.agent-panel-v2 .xterm-viewport {
+  background: var(--bg-code, #f8fafc) !important;
+}
+
+/* Hide the overview ruler canvas that xterm creates when overviewRuler.width
+   is set (we use that option only to shrink the scrollbar dimension). */
+.agent-panel-v2 .xterm-decoration-overview-ruler {
+  display: none !important;
 }
 
 .agent-panel-v2 .agent-toolbar {
@@ -117,6 +131,7 @@
 }
 .agent-toolbar-btn.icon { min-width: 28px; padding: 0 4px; font-family: Arial, sans-serif; }
 .agent-toolbar-btn.font-size-action { min-width: auto; padding: 0 7px; }
+.agent-btn-label { margin-left: 1px; }
 .agent-search-row {
   display: flex;
   gap: 4px;
@@ -161,6 +176,7 @@
   }
   .agent-panel-v2 .agent-toolbar { min-height: 38px; padding: 5px 8px; }
   .agent-panel-v2 .agent-toolbar-btn { height: 28px; padding: 0 6px; }
+  .agent-toolbar-actions .agent-btn-label { display: none; }
 }
 
 /* ── Agent History Search ── */

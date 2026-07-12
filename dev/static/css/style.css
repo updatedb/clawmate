@@ -2354,6 +2354,56 @@ pre:hover .code-copy-btn,
   font-weight: 600;
 }
 
+/* Content match detail modal — mobile bottom sheet */
+@media (max-width: 768px) {
+  .content-match-modal-box {
+    min-width: 0;
+    width: 100vw;
+    max-width: none;
+    max-height: calc(100dvh - env(safe-area-inset-top) - 8px);
+    border-radius: 16px 16px 0 0;
+  }
+
+  .content-match-modal-box .modal-header {
+    min-height: 52px;
+    padding: 8px 12px 8px 16px;
+  }
+
+  .content-match-modal-box .modal-close {
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    flex-shrink: 0;
+  }
+
+  .content-match-modal-box .modal-body {
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  .content-match-modal-box .cmd-modal-body {
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .content-match-modal-box .cmd-file-nav {
+    width: auto;
+    min-width: 0;
+    max-height: 34dvh;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .content-match-modal-box .cmd-file-content {
+    min-height: 48dvh;
+    padding: 12px 14px;
+  }
+
+  .content-match-modal-box .modal-footer {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+}
+
 /* ── Agent Session History ── */
 .agent-history-container {
   display: flex; flex-direction: column; height: 100%; overflow: hidden;
