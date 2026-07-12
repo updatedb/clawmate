@@ -387,6 +387,10 @@ export class AgentPanelAdapter {
             this.lastOutputAck = Math.max(this.lastOutputAck, sequence);
             this.sendControl({ type: 'output_ack', sequence });
           },
+          replayComplete: () => {
+            this.terminal?.scrollToBottom();
+            this.setStatus('已连接');
+          },
           maxBytes: 4 * 1024 * 1024,
         });
         this.terminal.onData((data) => this.sendInput(new TextEncoder().encode(data)));
@@ -535,7 +539,15 @@ export class AgentPanelAdapter {
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === 'ready') {
-            this.setStatus('已连接');
+            const replayLatest = Number(msg.replay?.latest_sequence);
+            if (Number.isFinite(replayLatest)) {
+              const replaying = replayLatest > this.lastOutputAck;
+              if (replaying) this.setStatus('加载中');
+              this.output?.beginReplay(replayLatest);
+              if (!replaying) this.setStatus('已连接');
+            } else {
+              this.setStatus('已连接');
+            }
           } else if (msg.type === 'error') {
             this.setStatus(String(msg.error?.message || msg.message || '连接错误'));
           }
@@ -565,7 +577,7 @@ export class AgentPanelAdapter {
     if (searchPrev) searchPrev.onclick = () => runSearch(false);
     if (searchNext) searchNext.onclick = () => runSearch(true);
     const clear = document.getElementById(id('AgentClear'));
-    if (clear) clear.onclick = () => this.terminal?.clear();
+    if (clear) clear.onclick = () => this.sendInput(new Uint8Array([0x0c]));
     const adjustFont = (delta: number) => {
       if (!this.terminal) return;
       const oldFontSize = this.terminal.options.fontSize || 14;

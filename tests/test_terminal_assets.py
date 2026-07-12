@@ -28,3 +28,11 @@ def test_terminal_assets_are_shipped_without_runtime_cdn_dependencies():
     assert "npm run build:terminal" in install
     assert "npm ci" in workflow
     assert "npm test" in workflow
+
+
+def test_replay_exposes_loading_status_until_terminal_output_is_restored():
+    source = (ROOT / "dev/frontend/terminal/agent-panel-adapter.ts").read_text(encoding="utf-8")
+
+    assert "this.setStatus('加载中')" in source
+    assert "replayComplete" in source
+    assert "this.setStatus('已连接')" in source

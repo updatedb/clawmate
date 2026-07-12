@@ -162,6 +162,29 @@ describe('main agent panel layout', () => {
     vi.unstubAllGlobals();
   });
 
+  it('sends Ctrl+L for the clear-screen toolbar action instead of clearing xterm locally', () => {
+    class FakeWebSocket {
+      static OPEN = 1;
+      readyState = FakeWebSocket.OPEN;
+      send = vi.fn();
+    }
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+    document.body.innerHTML = '<button id="AgentClear"></button>';
+    const adapter = new AgentPanelAdapter();
+    const terminalClear = vi.fn();
+    const socket = new FakeWebSocket();
+    (adapter as any).terminal = { clear: terminalClear };
+    (adapter as any).socket = socket;
+
+    (adapter as any).bindToolbar('');
+    document.getElementById('AgentClear')?.click();
+
+    expect(terminalClear).not.toHaveBeenCalled();
+    const frame = socket.send.mock.calls[0][0] as Uint8Array;
+    expect(new TextDecoder().decode(frame.slice(8))).toBe('\x0c');
+    vi.unstubAllGlobals();
+  });
+
   it('waits for v2 termination before opening a fresh session', () => {
     class FakeWebSocket {
       static OPEN = 1;

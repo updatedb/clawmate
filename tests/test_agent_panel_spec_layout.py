@@ -40,6 +40,14 @@ def test_agent_panel_exposes_context_resize_and_history_contract():
     assert 'id="previewResizeHandle"' in PREVIEW_HTML.read_text(encoding="utf-8")
 
 
+def test_clear_screen_toolbar_action_matches_ctrl_l_semantics():
+    for path in (INDEX_HTML, PREVIEW_HTML):
+        html = path.read_text(encoding="utf-8")
+        assert 'title="清屏"' in html
+        assert 'aria-label="清屏"' in html
+        assert '清空终端' not in html
+
+
 def test_history_runtime_contract_includes_search_backend_and_pagination():
     source = (ROOT / "dev" / "frontend" / "terminal" / "agent-panel-adapter.ts").read_text(
         encoding="utf-8"
@@ -83,8 +91,8 @@ def test_terminal_toolbar_actions_have_compact_icon_contract():
         start = html.index('class="agent-toolbar-actions"')
         end = html.index('</div>', start)
         assert '<svg' in html[start:end]
-        assert '缩小文字' in html[start:end]
-        assert '放大文字' in html[start:end]
+        assert '缩小' in html[start:end]
+        assert '放大' in html[start:end]
 
 
 def test_history_typography_matches_index_card_scale_and_refreshes_bundle_cache():
