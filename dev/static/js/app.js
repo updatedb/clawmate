@@ -3355,15 +3355,6 @@ function _openContentMatchModal(filePath) {
   // Render results
   _renderContentMatchModalBody(results, query);
 
-  // Shrink overlay right edge to exclude agent panel, so justify-content:center
-  // naturally centers in the remaining visible area
-  var _agentPanel = document.getElementById('agentPanel');
-  if (_agentPanel && !_agentPanel.classList.contains('hidden')) {
-    els.contentMatchModal.style.right = '750px';
-  } else {
-    els.contentMatchModal.style.right = '';
-  }
-
   els.contentMatchModal.style.display = 'flex';
 
   // Auto-select file after modal is visible

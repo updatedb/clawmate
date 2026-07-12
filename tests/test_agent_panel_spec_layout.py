@@ -55,7 +55,7 @@ def test_history_runtime_contract_includes_search_backend_and_pagination():
     for token in ("agent-history-search-input", "agent-history-backend-input", "agent-history-prev", "agent-history-next", "offset"):
         assert token in source
     assert "agent-history-date-input" not in source
-    assert ".agent-history-search-clear { display: none; }" in (ROOT / "dev" / "static" / "css" / "style.css").read_text(encoding="utf-8")
+    assert '.search-clear { display: none;' in (ROOT / "dev" / "static" / "css" / "style.css").read_text(encoding="utf-8")
 
 
 def test_agent_search_controls_use_compact_30px_layout_and_history_filters_only_supported_backends():
@@ -65,7 +65,7 @@ def test_agent_search_controls_use_compact_30px_layout_and_history_filters_only_
 
     assert "width: 84px; flex: 0 0 84px; height: 30px" in css
     assert "appearance: none; width: 84px; max-width: 84px; height: 30px" in css
-    assert ".agent-history-search-wrap .agent-header-search {\n  height: 30px;" in terminal_css
+    assert ".search-input {\n  width: 100%;\n  height: 30px;" in css
     assert 'value="openclaw">OpenClaw' not in source
 
 
@@ -77,7 +77,7 @@ def test_history_header_modes_respect_hidden_attribute():
     assert ".agent-history-list-header[hidden]" in css
     assert ".agent-history-date-axis[hidden]" in css
     assert ".agent-history-pagination[hidden]" in css
-    assert "font: 12px/1 Arial, sans-serif" in css
+    assert "font-family: Arial, sans-serif; font-size: 12px" in css
 
 
 def test_terminal_toolbar_actions_have_compact_icon_contract():
@@ -103,7 +103,7 @@ def test_history_typography_matches_index_card_scale_and_refreshes_bundle_cache(
     assert ".agent-history-item-title { color: var(--text-primary); font-size: 12px;" in css
     assert ".agent-history-item-meta { display: block; margin-top: 3px; color: var(--text-muted); font-size: 10px;" in css
     assert "font: 500 12px/1 var(--font-ui); white-space: nowrap" in css
-    assert "v20260711-history-ui-v17" in sw
+    assert "v20260712-search-ui-v18" in sw
 
 
 def test_agent_panel_separates_terminal_and_web_typography():

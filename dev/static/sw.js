@@ -7,7 +7,7 @@
 // The ?v= query strings on HTML <script>/<link> tags are NO LONGER NEEDED —
 // proper HTTP Cache-Control headers on the server handle that now.
 //
-const CACHE_VERSION = 'v20260711-history-ui-v17';
+const CACHE_VERSION = 'v20260712-search-ui-v18';
 const STATIC_CACHE = 'clawmate-static-' + CACHE_VERSION;
 const VENDOR_CACHE = 'clawmate-vendor-' + CACHE_VERSION;
 const API_CACHE = 'clawmate-api-' + CACHE_VERSION;

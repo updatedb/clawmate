@@ -135,21 +135,15 @@
 .agent-search-row {
   display: flex;
   gap: 4px;
+  align-items: center;
   padding: 5px 8px;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-secondary);
 }
 .agent-search-row[hidden] { display: none; }
-.agent-search-row input {
-  min-width: 0;
+.agent-search-row .search-wrap {
   flex: 1;
-  height: 25px;
-  padding: 0 8px;
-  border: 1px solid var(--border-color);
-  border-radius: 5px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font: 12px/1 var(--font-ui);
+  min-width: 0;
 }
 
 .terminal-status-overlay {
@@ -185,61 +179,6 @@
   display: flex;
   flex: 1;
   min-width: 0;
-  height: 30px;
-}
-.agent-history-search-wrap .agent-header-search {
-  height: 30px;
-  padding: 0 28px 0 8px;
-  border: 1px solid var(--border-color);
-  border-radius: 5px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: 12px;
-  outline: none;
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-  transition: background var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
-}
-.agent-history-search-wrap .agent-header-search::placeholder {
-  color: var(--text-muted);
-  opacity: 0.7;
-}
-.agent-history-search-wrap .agent-header-search::-webkit-search-decoration,
-.agent-history-search-wrap .agent-header-search::-webkit-search-cancel-button,
-.agent-history-search-wrap .agent-header-search::-webkit-search-results-button,
-.agent-history-search-wrap .agent-header-search::-webkit-search-results-decoration {
-  -webkit-appearance: none;
-  display: none;
-}
-.agent-history-search-wrap .agent-header-search:focus {
-  background: var(--bg-primary);
-  border-color: var(--accent);
-}
-.agent-history-search-clear {
-  position: absolute;
-  right: 3px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent !important;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: 50%;
-  flex-shrink: 0;
-  opacity: 0.7;
-  transition: opacity var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out);
-}
-.agent-history-search-clear:hover {
-  color: var(--text-primary);
-  background: var(--bg-tertiary) !important;
-  opacity: 1;
 }
 
 .agent-history-loading {
@@ -252,6 +191,6 @@
 @media (prefers-reduced-motion: reduce) {
   .agent-panel-v2,
   .terminal-status-overlay,
-  .agent-history-search-wrap .agent-header-search,
-  .agent-history-search-clear { transition: none; }
+  .search-input,
+  .search-clear { transition: none; }
 }
