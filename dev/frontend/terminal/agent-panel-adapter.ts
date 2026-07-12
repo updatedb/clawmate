@@ -548,6 +548,9 @@ export class AgentPanelAdapter {
             } else {
               this.setStatus('已连接');
             }
+          } else if (msg.type === 'replay_complete') {
+            this.terminal?.scrollToBottom();
+            this.setStatus('已连接');
           } else if (msg.type === 'error') {
             this.setStatus(String(msg.error?.message || msg.message || '连接错误'));
           }

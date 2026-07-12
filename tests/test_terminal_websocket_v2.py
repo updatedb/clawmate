@@ -15,6 +15,7 @@ if str(DEV) not in sys.path:
 import agent_routes
 from terminal_manager import SessionRequest, TerminalManager
 from terminal_protocol import encode_binary_frame
+from terminal_replay import OutputChunk
 
 
 def _tracking_manager_of(manager, logger_factory):
@@ -77,6 +78,48 @@ class FakeWebSocket:
 
     async def send_text(self, data: str) -> None:
         self.text_frames.append(json.loads(data))
+
+
+@pytest.mark.asyncio
+async def test_v2_sender_emits_explicit_replay_complete_after_boundary():
+    class SenderWebSocket:
+        def __init__(self):
+            self.binary_frames: list[bytes] = []
+            self.text_frames: list[dict] = []
+            self.client_state = agent_routes.WebSocketState.DISCONNECTED
+
+        async def send_bytes(self, data: bytes) -> None:
+            self.binary_frames.append(data)
+
+        async def send_text(self, data: str) -> None:
+            self.text_frames.append(json.loads(data))
+
+    class ReplaySession:
+        close_reason = ""
+
+        def __init__(self):
+            self.chunks = iter([OutputChunk(0, 6, b"replay")])
+
+        async def next_output(self, connection_id: str) -> OutputChunk:
+            try:
+                return next(self.chunks)
+            except StopIteration as exc:
+                raise ConnectionError from exc
+
+    websocket = SenderWebSocket()
+    connection = SimpleNamespace(id="browser", closed=False)
+
+    await agent_routes._send_terminal_v2_frames(
+        websocket,
+        ReplaySession(),
+        connection,
+        replay_latest=6,
+        last_output_ack=0,
+        replay_chunk_count=1,
+    )
+
+    assert len(websocket.binary_frames) == 1
+    assert websocket.text_frames == [{"v": 2, "type": "replay_complete", "sequence": 6}]
 
 
 @pytest.mark.asyncio

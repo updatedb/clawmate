@@ -36,3 +36,4 @@ def test_replay_exposes_loading_status_until_terminal_output_is_restored():
     assert "this.setStatus('加载中')" in source
     assert "replayComplete" in source
     assert "this.setStatus('已连接')" in source
+    assert "msg.type === 'replay_complete'" in source

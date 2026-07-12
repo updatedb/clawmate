@@ -32,6 +32,9 @@ class TerminalConnection:
     last_output_ack: int = 0
     input_locked_out: bool = False
     closed: bool = False
+    replay_earliest: int = 0
+    replay_latest: int = 0
+    replay_chunk_count: int = 0
 
 
 @dataclass(slots=True)
@@ -94,13 +97,17 @@ class TerminalSession:
             raise RuntimeError("terminal session is closed")
         await self.start()
         await self.unsubscribe(connection_id)
+        replay = self.replay.after(max(0, last_output_ack))
         connection = TerminalConnection(
             id=connection_id,
             output_queue=asyncio.Queue(),
             last_output_ack=max(0, last_output_ack),
+            replay_earliest=replay.earliest_sequence,
+            replay_latest=replay.latest_sequence,
+            replay_chunk_count=len(replay.chunks),
         )
         self.connections[connection_id] = connection
-        for chunk in self.replay.after(connection.last_output_ack).chunks:
+        for chunk in replay.chunks:
             self._offer_output(connection, chunk)
             if connection.closed:
                 break
