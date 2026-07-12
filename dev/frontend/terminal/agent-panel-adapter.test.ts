@@ -222,18 +222,18 @@ describe('main agent panel layout', () => {
     // This matches FitAddon's floor‑division logic without a per‑cell margin.
     const CHROME = 14 + 8; // XTERM_SCROLLBAR_WIDTH + FLAT_SAFETY_MARGIN
     const expectedMin10 = Math.round(10 * 0.625 * 84) + CHROME; // 547
-    const expectedMin22 = Math.round(22 * 0.625 * 84) + CHROME; // 1177
+    const expectedMin20 = Math.round(20 * 0.625 * 84) + CHROME; // 1072
     expect(getAgentPanelWidthBounds(10).min).toBe(expectedMin10);
-    expect(getAgentPanelWidthBounds(22).min).toBe(expectedMin22);
+    expect(getAgentPanelWidthBounds(20).min).toBe(expectedMin20);
     // max is capped at availableMax when no sidebar on 1920px:
     //   1920 − 0(sidebar) − 315 − 5 = 1600
-    // Since maxReadable (1177) < 1600, max = max(min, 1177).
-    expect(getAgentPanelWidthBounds(22).max).toBe(expectedMin22);
-    expect(scaleAgentPanelWidth(524, 10, 22)).toBe(1153);
+    // Since maxReadable (1072) < 1600, max = max(min, 1072).
+    expect(getAgentPanelWidthBounds(20).max).toBe(expectedMin20);
+    expect(scaleAgentPanelWidth(524, 10, 20)).toBe(1048);
     expect(getFontSizeForAgentPanelWidth(expectedMin10)).toBe(10);
     // width = 700 → largest fontSize whose bounds.min ≤ 700
     expect(getFontSizeForAgentPanelWidth(700)).toBe(12);
-    expect(getFontSizeForAgentPanelWidth(expectedMin22)).toBe(22);
+    expect(getFontSizeForAgentPanelWidth(expectedMin20)).toBe(20);
   });
 
   it('renders OpenClaw Markdown while keeping line breaks', () => {
@@ -298,7 +298,7 @@ describe('main agent panel layout', () => {
         total: 1,
         sessions: [{
           id: 'session-1', title: 'Fix history', backend: 'codex', state: 'ended',
-          started_at: new Date(2026, 6, 11, 9, 8, 7).getTime() / 1000,
+          started_at: new Date(2099, 0, 1, 9, 8, 7).getTime() / 1000,
           turn_count: 2, instruction_count: 3, first_ts: 100, last_ts: 220,
           root: 'root', project: 'project',
         }],
@@ -312,12 +312,14 @@ describe('main agent panel layout', () => {
     const overlay = document.getElementById('agentHistoryOverlay')!;
     expect(overlay.querySelector('.agent-history-overlay-header .agent-history-controls')).toBeTruthy();
     expect(overlay.querySelector('.agent-history-search-clear')).toBeTruthy();
-    expect(overlay.textContent).toContain('Today');
+    expect(Array.from(overlay.querySelectorAll<HTMLSelectElement>('.agent-history-backend-input option'))
+      .map((option) => option.value)).toEqual(['', 'claude', 'codex']);
+    expect(overlay.textContent).toContain('2099-01-01');
     expect(overlay.querySelector('.agent-history-list .agent-history-group-title')).toBeNull();
     expect(overlay.textContent).toContain('Fix history');
-    expect(overlay.textContent).toContain('session-1');
+    expect(overlay.querySelector('.agent-history-item-meta')?.textContent).not.toContain('session-1');
     expect(overlay.textContent).not.toContain('codex · ');
-    expect(overlay.textContent).toContain('2026-07-11 09:08:07');
+    expect(overlay.textContent).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
     expect(overlay.textContent).toContain('2轮对话');
     expect(overlay.textContent).toContain('3条指令');
     expect(overlay.textContent).not.toContain('查看');
@@ -335,7 +337,7 @@ describe('main agent panel layout', () => {
     `;
     const session = {
       id: 'search-session', title: 'Search result', backend: 'codex', state: 'ended',
-      started_at: new Date(2026, 6, 11, 9, 0, 0).getTime() / 1000,
+      started_at: new Date(2099, 0, 1, 9, 0, 0).getTime() / 1000,
       turn_count: 1, instruction_count: 1, root: 'root', project: 'project',
     };
     const fetchMock = vi.fn()
@@ -352,7 +354,7 @@ describe('main agent panel layout', () => {
     search.dispatchEvent(new Event('input', { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect((document.querySelector('.agent-history-date-axis') as HTMLElement)?.hidden).toBe(true);
-    expect(document.querySelector('.agent-history-list .agent-history-group-title')?.textContent).toBe('Today');
+    expect(document.querySelector('.agent-history-list .agent-history-group-title')?.textContent).toBe('2099-01-01');
     vi.unstubAllGlobals();
   });
 
@@ -385,6 +387,8 @@ describe('main agent panel layout', () => {
     expect(body.textContent).toContain('09:08:07');
     expect(body.textContent).toContain('question');
     expect(body.textContent).toContain('answer');
+    expect(document.querySelector('.agent-history-detail-title')?.textContent)
+      .toBe('session-1');
     expect((document.querySelector('.agent-history-list-header') as HTMLElement)?.hidden).toBe(true);
     expect((document.querySelector('.agent-history-detail-header') as HTMLElement)?.hidden).toBe(false);
     expect((document.querySelector('.agent-history-pagination') as HTMLElement)?.hidden).toBe(true);

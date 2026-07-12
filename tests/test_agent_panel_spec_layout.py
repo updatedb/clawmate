@@ -50,6 +50,17 @@ def test_history_runtime_contract_includes_search_backend_and_pagination():
     assert ".agent-history-search-clear { display: none; }" in (ROOT / "dev" / "static" / "css" / "style.css").read_text(encoding="utf-8")
 
 
+def test_agent_search_controls_use_compact_30px_layout_and_history_filters_only_supported_backends():
+    css = (ROOT / "dev" / "static" / "css" / "style.css").read_text(encoding="utf-8")
+    terminal_css = (ROOT / "dev" / "frontend" / "terminal" / "terminal.css").read_text(encoding="utf-8")
+    source = (ROOT / "dev" / "frontend" / "terminal" / "agent-panel-adapter.ts").read_text(encoding="utf-8")
+
+    assert "width: 84px; flex: 0 0 84px; height: 30px" in css
+    assert "appearance: none; width: 84px; max-width: 84px; height: 30px" in css
+    assert ".agent-history-search-wrap .agent-header-search {\n  height: 30px;" in terminal_css
+    assert 'value="openclaw">OpenClaw' not in source
+
+
 def test_history_header_modes_respect_hidden_attribute():
     css = (ROOT / "dev" / "static" / "css" / "style.css").read_text(
         encoding="utf-8"

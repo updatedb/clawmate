@@ -35,7 +35,7 @@ describe('session history panel data', () => {
     expect(groups.map((group) => group.label)).toEqual(['Yesterday']);
   });
 
-  it('formats full local date time and row metadata with session id', () => {
+  it('formats row metadata without exposing the session id', () => {
     const ts = new Date(2026, 6, 11, 9, 8, 7).getTime() / 1000;
     const endedAt = ts + 3600;
     const meta = formatHistoryRowMeta({
@@ -48,15 +48,15 @@ describe('session history panel data', () => {
       first_ts: ts,
       last_ts: ts + 125,
     });
-    expect(meta).toContain('claude_webprojects_clawmate_20260711_194014');
-    expect(meta).not.toContain('claude · 2026');
+    expect(meta).not.toContain('claude_webprojects_clawmate_20260711_194014');
+    expect(meta.startsWith('2026-07-11 10:08:07')).toBe(true);
     expect(meta).toContain('2026-07-11 10:08:07');
     expect(meta).not.toContain('2026-07-11 09:08:07');
     expect(meta).toContain('3轮对话');
     expect(meta).toContain('4条指令');
   });
 
-  it('formats full local date time and row metadata', () => {
+  it('formats full local date time and row metadata without session id', () => {
     const ts = new Date(2026, 6, 11, 9, 8, 7).getTime() / 1000;
     expect(formatSessionDateTime(ts)).toBe('2026-07-11 09:08:07');
     expect(formatHistoryRowMeta({
@@ -67,7 +67,7 @@ describe('session history panel data', () => {
       instruction_count: 4,
       first_ts: ts,
       last_ts: ts + 125,
-    })).toContain('some-session-id');
+    })).not.toContain('some-session-id');
     expect(formatHistoryRowMeta({
       id: 'some-session-id',
       backend: 'codex',

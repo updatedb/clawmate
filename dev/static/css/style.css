@@ -419,7 +419,7 @@ button svg, .btn svg, a svg {
 .agent-panel-header svg { width: 14px; height: 14px; }
 .agent-panel-title { font-size: 13px; font-weight: 600; color: var(--text-primary); white-space: nowrap; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .agent-backend-select {
-  appearance: none; width: 112px; max-width: 112px; height: 30px;
+  appearance: none; width: 84px; max-width: 84px; height: 30px;
   padding: 0 14px; padding-right: 28px; border-radius: var(--radius-sm);
   background: var(--bg-secondary); color: var(--text-primary);
   border: 1px solid var(--border-color); cursor: pointer; outline: none;
@@ -2694,7 +2694,7 @@ pre:hover .code-copy-btn,
   font: 12px/1 Arial, sans-serif; outline: none; box-sizing: border-box;
 }
 .agent-history-controls select {
-  width: 112px; flex: 0 0 112px; height: 30px; padding: 0 14px; padding-right: 28px;
+  width: 84px; flex: 0 0 84px; height: 30px; padding: 0 10px; padding-right: 24px;
   border: 1px solid var(--border-color); border-radius: 6px;
   background: var(--bg-tertiary); color: var(--text-primary); cursor: pointer;
   font: 400 12px/1 Arial, sans-serif; outline: none;
