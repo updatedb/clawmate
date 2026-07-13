@@ -1,0 +1,1471 @@
+- generic [ref=f4e2]:
+  - banner [ref=f4e3]:
+    - generic [ref=f4e4]: ClawMate
+    - generic [ref=f4e5]:
+      - generic [ref=f4e6]: preview.html
+      - button "复制文件名" [ref=f4e7] [cursor=pointer]
+      - button "刷新大纲和内容" [ref=f4e11] [cursor=pointer]
+      - generic "commit OpenClaw · 2026-07-12" [ref=f4e73] [cursor=pointer]:
+        - generic [ref=f4e74]: abd8e50
+        - generic [ref=f4e75]: ●
+    - generic [ref=f4e16]:
+      - button "切换大纲面板" [ref=f4e17] [cursor=pointer]
+      - button "切换反馈面板" [ref=f4e19] [cursor=pointer]
+      - button "Agent 终端" [ref=f4e22] [cursor=pointer]
+      - button "深色模式" [ref=f4e26] [cursor=pointer]
+      - button "退出登录" [ref=f4e29] [cursor=pointer]
+  - main [ref=f4e34]:
+    - generic [ref=f4e76]:
+      - generic [ref=f4e77]:
+        - generic: "1"
+        - code [ref=f4e78]:
+          - generic [ref=f4e79]: <!DOCTYPE html>
+      - generic [ref=f4e80]:
+        - generic: "2"
+        - code [ref=f4e81]:
+          - generic [ref=f4e82]: <html lang="zh-CN">
+      - generic [ref=f4e83]:
+        - generic: "3"
+        - code [ref=f4e84]:
+          - generic [ref=f4e85]: <head>
+      - generic [ref=f4e86]:
+        - generic: "4"
+        - code [ref=f4e87]:
+          - generic [ref=f4e88]: <meta charset="UTF-8" />
+      - generic [ref=f4e89]:
+        - generic: "5"
+        - code [ref=f4e90]:
+          - generic [ref=f4e91]: <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, interactive-widget=resizes-content" />
+      - generic [ref=f4e92]:
+        - generic: "6"
+        - code [ref=f4e93]:
+          - generic [ref=f4e94]: <link rel="icon" type="image/png" sizes="32x32" href="./asset/clawmate-logo.png" />
+      - generic [ref=f4e95]:
+        - generic: "7"
+        - code [ref=f4e96]:
+          - generic [ref=f4e97]: <link rel="apple-touch-icon" href="./asset/clawmate-logo.png" />
+      - generic [ref=f4e98]:
+        - generic: "8"
+        - code [ref=f4e99]:
+          - generic [ref=f4e100]: "<meta name=\"theme-color\" content=\"#0d9488\" media=\"(prefers-color-scheme: light)\" />"
+      - generic [ref=f4e101]:
+        - generic: "9"
+        - code [ref=f4e102]:
+          - generic [ref=f4e103]: "<meta name=\"theme-color\" content=\"#042f2e\" media=\"(prefers-color-scheme: dark)\" />"
+      - generic [ref=f4e104]:
+        - generic: "10"
+        - code [ref=f4e105]:
+          - generic [ref=f4e106]: <link rel="manifest" href="./manifest.json" />
+      - generic [ref=f4e107]:
+        - generic: "11"
+        - code [ref=f4e108]: "<!-- Anti-flash: apply theme BEFORE first paint -->"
+      - generic [ref=f4e109]:
+        - generic: "12"
+        - code [ref=f4e110]:
+          - generic [ref=f4e111]: <script>
+      - generic [ref=f4e112]:
+        - generic: "13"
+        - code [ref=f4e113]:
+          - generic [ref=f4e114]: "(function(){try{var t=localStorage.getItem('clawmate-theme')||'auto';if(t==='dark'){document.documentElement.setAttribute('data-theme','dark');}else if(t==='auto'){if(window.matchMedia('(prefers-color-scheme:dark)').matches){document.documentElement.setAttribute('data-theme','dark');}}}catch(e){}})();"
+      - generic [ref=f4e115]:
+        - generic: "14"
+        - code [ref=f4e116]:
+          - generic [ref=f4e117]: </script>
+      - generic [ref=f4e118]:
+        - generic: "15"
+        - code [ref=f4e119]:
+          - generic [ref=f4e120]: <title>
+          - text: 预览 — ClawMate
+          - generic [ref=f4e121]: </title>
+      - generic [ref=f4e122]:
+        - generic: "16"
+        - code [ref=f4e123]:
+          - generic [ref=f4e124]: <link rel="preconnect" href="https://fonts.googleapis.com" />
+      - generic [ref=f4e125]:
+        - generic: "17"
+        - code [ref=f4e126]:
+          - generic [ref=f4e127]: <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+      - generic [ref=f4e128]:
+        - generic: "18"
+        - code [ref=f4e129]:
+          - generic [ref=f4e130]: <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+      - generic [ref=f4e131]:
+        - generic: "19"
+        - code [ref=f4e132]:
+          - generic [ref=f4e133]: <link rel="stylesheet" href="./css/style.css" />
+      - generic [ref=f4e134]:
+        - generic: "20"
+        - code [ref=f4e135]:
+          - generic [ref=f4e136]: <link rel="stylesheet" href="./vendor/github-markdown-dark.min.css" id="github-markdown-css" />
+      - generic [ref=f4e137]:
+        - generic: "21"
+        - code [ref=f4e138]: <!-- KaTeX CSS loaded conditionally by preview.js -->
+      - generic [ref=f4e139]:
+        - generic: "22"
+        - code [ref=f4e140]:
+          - generic [ref=f4e141]: <link rel="stylesheet" href="./vendor/github.min.css" id="highlight-theme-css" />
+      - generic [ref=f4e142]:
+        - generic: "23"
+        - code [ref=f4e143]:
+          - generic [ref=f4e144]: <link rel="stylesheet" href="./css/preview.css">
+      - generic [ref=f4e145]:
+        - generic: "24"
+        - code [ref=f4e146]:
+          - generic [ref=f4e147]: <link rel="stylesheet" href="./dist/terminal.css">
+      - generic [ref=f4e148]:
+        - generic: "25"
+        - code [ref=f4e149]:
+          - generic [ref=f4e150]: </head>
+      - generic [ref=f4e151]:
+        - generic: "26"
+        - code [ref=f4e152]:
+          - generic [ref=f4e153]: <body>
+      - generic [ref=f4e154]:
+        - generic: "27"
+        - code [ref=f4e155]:
+          - generic [ref=f4e156]: <div class="preview-app">
+      - generic [ref=f4e157]:
+        - generic: "28"
+        - code [ref=f4e158]: <!-- Topbar -->
+      - generic [ref=f4e159]:
+        - generic: "29"
+        - code [ref=f4e160]:
+          - generic [ref=f4e161]: <header class="topbar">
+      - generic [ref=f4e162]:
+        - generic: "30"
+        - code [ref=f4e163]:
+          - generic [ref=f4e164]: <a class="topbar-btn mobile-back-btn" id="btnBackMobile" href="" title="返回">
+          - generic [ref=f4e165]: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e166]: <path d="m12 19-7-7 7-7"/>
+          - generic [ref=f4e167]: <path d="M19 12H5"/>
+          - generic [ref=f4e168]: </svg>
+          - generic [ref=f4e169]: </a>
+      - generic [ref=f4e170]:
+        - generic: "31"
+        - code [ref=f4e171]:
+          - generic [ref=f4e172]: <span class="brand">
+          - generic [ref=f4e173]: <img src="./asset/clawmate-logo.png" alt="" width="28" height="28" style="flex-shrink:0;" />
+          - text: ClawMate
+          - generic [ref=f4e174]: </span>
+      - generic [ref=f4e175]:
+        - generic: "32"
+        - code [ref=f4e176]:
+          - generic [ref=f4e177]: <span class="preview-topbar-title-wrap">
+      - generic [ref=f4e178]:
+        - generic: "33"
+        - code [ref=f4e179]:
+          - generic [ref=f4e180]: <span class="preview-topbar-title" id="docTitle">
+          - text: 加载中...
+          - generic [ref=f4e181]: </span>
+      - generic [ref=f4e182]:
+        - generic: "34"
+        - code [ref=f4e183]:
+          - generic [ref=f4e184]: <button class="preview-copy-filename" id="btnCopyFilename" title="复制文件名">
+      - generic [ref=f4e185]:
+        - generic: "35"
+        - code [ref=f4e186]:
+          - generic [ref=f4e187]: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e188]: <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+          - generic [ref=f4e189]: <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+          - generic [ref=f4e190]: </svg>
+      - generic [ref=f4e191]:
+        - generic: "36"
+        - code [ref=f4e192]:
+          - generic [ref=f4e193]: </button>
+      - generic [ref=f4e194]:
+        - generic: "37"
+        - code [ref=f4e195]:
+          - generic [ref=f4e196]: <button class="preview-copy-filename" id="btnRefreshContent" title="刷新大纲和内容">
+      - generic [ref=f4e197]:
+        - generic: "38"
+        - code [ref=f4e198]:
+          - generic [ref=f4e199]: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e200]: <polyline points="23 4 23 10 17 10"/>
+          - generic [ref=f4e201]: <polyline points="1 20 1 14 7 14"/>
+          - generic [ref=f4e202]: <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          - generic [ref=f4e203]: </svg>
+      - generic [ref=f4e204]:
+        - generic: "39"
+        - code [ref=f4e205]:
+          - generic [ref=f4e206]: </button>
+      - generic [ref=f4e207]:
+        - generic: "40"
+        - code [ref=f4e208]:
+          - generic [ref=f4e209]: <span class="version-pill hidden" id="versionPill" title="">
+      - generic [ref=f4e210]:
+        - generic: "41"
+        - code [ref=f4e211]:
+          - generic [ref=f4e212]: <span id="versionPillHash">
+          - generic [ref=f4e213]: </span>
+      - generic [ref=f4e214]:
+        - generic: "42"
+        - code [ref=f4e215]:
+          - generic [ref=f4e216]: <span id="versionPillDirty" class="version-pill-dirty hidden">
+          - text: ●
+          - generic [ref=f4e217]: </span>
+      - generic [ref=f4e218]:
+        - generic: "43"
+        - code [ref=f4e219]:
+          - generic [ref=f4e220]: </span>
+      - generic [ref=f4e221]:
+        - generic: "44"
+        - code [ref=f4e222]:
+          - generic [ref=f4e223]: </span>
+      - generic [ref=f4e224]:
+        - generic: "45"
+        - code [ref=f4e225]:
+          - generic [ref=f4e226]: <div class="topbar-actions">
+      - generic [ref=f4e227]:
+        - generic: "46"
+        - code [ref=f4e228]:
+          - generic [ref=f4e229]: <button class="topbar-btn" id="btnToggleLeft" title="切换大纲面板">
+      - generic [ref=f4e230]:
+        - generic: "47"
+        - code [ref=f4e231]:
+          - generic [ref=f4e232]: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e233]: <line x1="8" x2="21" y1="6" y2="6"/>
+          - generic [ref=f4e234]: <line x1="8" x2="21" y1="12" y2="12"/>
+          - generic [ref=f4e235]: <line x1="8" x2="21" y1="18" y2="18"/>
+          - generic [ref=f4e236]: <line x1="3" x2="3.01" y1="6" y2="6"/>
+          - generic [ref=f4e237]: <line x1="3" x2="3.01" y1="12" y2="12"/>
+          - generic [ref=f4e238]: <line x1="3" x2="3.01" y1="18" y2="18"/>
+          - generic [ref=f4e239]: </svg>
+      - generic [ref=f4e240]:
+        - generic: "48"
+        - code [ref=f4e241]:
+          - generic [ref=f4e242]: </button>
+      - generic [ref=f4e243]:
+        - generic: "49"
+        - code [ref=f4e244]:
+          - generic [ref=f4e245]: <button class="topbar-btn" id="btnToggleRight" title="切换反馈面板">
+      - generic [ref=f4e246]:
+        - generic: "50"
+        - code [ref=f4e247]:
+          - generic [ref=f4e248]: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e249]: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          - generic [ref=f4e250]: </svg>
+      - generic [ref=f4e251]:
+        - generic: "51"
+        - code [ref=f4e252]:
+          - generic [ref=f4e253]: </button>
+      - generic [ref=f4e254]:
+        - generic: "52"
+        - code [ref=f4e255]:
+          - generic [ref=f4e256]: <button class="topbar-btn" id="btnToggleAgent" title="Agent 终端">
+      - generic [ref=f4e257]:
+        - generic: "53"
+        - code [ref=f4e258]:
+          - generic [ref=f4e259]: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e260]: <path d="M12 8V4H8"/>
+          - generic [ref=f4e261]: <rect width="16" height="12" x="4" y="8" rx="2"/>
+          - generic [ref=f4e262]: <path d="M2 14h2"/>
+          - generic [ref=f4e263]: <path d="M20 14h2"/>
+          - generic [ref=f4e264]: <path d="M15 13v2"/>
+          - generic [ref=f4e265]: <path d="M9 13v2"/>
+          - generic [ref=f4e266]: </svg>
+      - generic [ref=f4e267]:
+        - generic: "54"
+        - code [ref=f4e268]:
+          - generic [ref=f4e269]: </button>
+      - generic [ref=f4e270]:
+        - generic: "55"
+        - code [ref=f4e271]:
+          - generic [ref=f4e272]: <button class="topbar-btn" id="themeToggle" title="切换主题">
+      - generic [ref=f4e273]:
+        - generic: "56"
+        - code [ref=f4e274]:
+          - generic [ref=f4e275]: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e276]: <circle cx="12" cy="12" r="4"/>
+          - generic [ref=f4e277]: <path d="M12 2v2"/>
+          - generic [ref=f4e278]: <path d="M12 20v2"/>
+          - generic [ref=f4e279]: <path d="m4.93 4.93 1.41 1.41"/>
+          - generic [ref=f4e280]: <path d="m17.66 17.66 1.41 1.41"/>
+          - generic [ref=f4e281]: <path d="M2 12h2"/>
+          - generic [ref=f4e282]: <path d="M20 12h2"/>
+          - generic [ref=f4e283]: <path d="m6.34 17.66-1.41 1.41"/>
+          - generic [ref=f4e284]: <path d="m19.07 4.93-1.41 1.41"/>
+          - generic [ref=f4e285]: </svg>
+      - generic [ref=f4e286]:
+        - generic: "57"
+        - code [ref=f4e287]:
+          - generic [ref=f4e288]: </button>
+      - generic [ref=f4e289]:
+        - generic: "58"
+        - code [ref=f4e290]:
+          - generic [ref=f4e291]: <button class="topbar-btn" id="btnLogout" title="退出登录">
+      - generic [ref=f4e292]:
+        - generic: "59"
+        - code [ref=f4e293]:
+          - generic [ref=f4e294]: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e295]: <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          - generic [ref=f4e296]: <polyline points="16 17 21 12 16 7"/>
+          - generic [ref=f4e297]: <line x1="21" x2="9" y1="12" y2="12"/>
+          - generic [ref=f4e298]: </svg>
+      - generic [ref=f4e299]:
+        - generic: "60"
+        - code [ref=f4e300]:
+          - generic [ref=f4e301]: </button>
+      - generic [ref=f4e302]:
+        - generic: "61"
+        - code [ref=f4e303]:
+          - generic [ref=f4e304]: </div>
+      - generic [ref=f4e305]:
+        - generic: "62"
+        - code [ref=f4e306]:
+          - generic [ref=f4e307]: </header>
+      - generic [ref=f4e308]:
+        - generic: "63"
+        - code [ref=f4e309]
+      - generic [ref=f4e310]:
+        - generic: "64"
+        - code [ref=f4e311]: <!-- Three-column body -->
+      - generic [ref=f4e312]:
+        - generic: "65"
+        - code [ref=f4e313]:
+          - generic [ref=f4e314]: <div class="preview-three-col">
+      - generic [ref=f4e315]:
+        - generic: "66"
+        - code [ref=f4e316]: "<!-- Left: TOC / Outline -->"
+      - generic [ref=f4e317]:
+        - generic: "67"
+        - code [ref=f4e318]:
+          - generic [ref=f4e319]: <aside class="preview-left" id="leftSidebar">
+      - generic [ref=f4e320]:
+        - generic: "68"
+        - code [ref=f4e321]:
+          - generic [ref=f4e322]: <div class="preview-left-header">
+          - generic [ref=f4e323]: <span>
+          - generic [ref=f4e324]: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px">
+          - generic [ref=f4e325]: <line x1="8" x2="21" y1="6" y2="6"/>
+          - generic [ref=f4e326]: <line x1="8" x2="21" y1="12" y2="12"/>
+          - generic [ref=f4e327]: <line x1="8" x2="21" y1="18" y2="18"/>
+          - generic [ref=f4e328]: <line x1="3" x2="3.01" y1="6" y2="6"/>
+          - generic [ref=f4e329]: <line x1="3" x2="3.01" y1="12" y2="12"/>
+          - generic [ref=f4e330]: <line x1="3" x2="3.01" y1="18" y2="18"/>
+          - generic [ref=f4e331]: </svg>
+          - text: 大纲
+          - generic [ref=f4e332]: </span>
+          - generic [ref=f4e333]: <button class="panel-close-btn" id="btnCloseLeft" title="关闭面板">
+          - generic [ref=f4e334]: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e335]: <path d="M18 6 6 18"/>
+          - generic [ref=f4e336]: <path d="m6 6 12 12"/>
+          - generic [ref=f4e337]: </svg>
+          - generic [ref=f4e338]: </button>
+          - generic [ref=f4e339]: </div>
+      - generic [ref=f4e340]:
+        - generic: "69"
+        - code [ref=f4e341]:
+          - generic [ref=f4e342]: <div class="preview-left-body" id="tocBody">
+      - generic [ref=f4e343]:
+        - generic: "70"
+        - code [ref=f4e344]:
+          - generic [ref=f4e345]: <div class="preview-toc-empty">
+          - text: 非 Markdown，无大纲
+          - generic [ref=f4e346]: </div>
+      - generic [ref=f4e347]:
+        - generic: "71"
+        - code [ref=f4e348]:
+          - generic [ref=f4e349]: </div>
+      - generic [ref=f4e350]:
+        - generic: "72"
+        - code [ref=f4e351]:
+          - generic [ref=f4e352]: </aside>
+      - generic [ref=f4e353]:
+        - generic: "73"
+        - code [ref=f4e354]
+      - generic [ref=f4e355]:
+        - generic: "74"
+        - code [ref=f4e356]: "<!-- Center: Content -->"
+      - generic [ref=f4e357]:
+        - generic: "75"
+        - code [ref=f4e358]:
+          - generic [ref=f4e359]: <main class="preview-center">
+      - generic [ref=f4e360]:
+        - generic: "76"
+        - code [ref=f4e361]:
+          - generic [ref=f4e362]: <div class="preview-center-body" id="contentBody">
+      - generic [ref=f4e363]:
+        - generic: "77"
+        - code [ref=f4e364]:
+          - generic [ref=f4e365]: <div class="preview-loading">
+          - text: 加载中...
+          - generic [ref=f4e366]: </div>
+      - generic [ref=f4e367]:
+        - generic: "78"
+        - code [ref=f4e368]:
+          - generic [ref=f4e369]: </div>
+      - generic [ref=f4e370]:
+        - generic: "79"
+        - code [ref=f4e371]: <!-- Subtitle / media panels (hidden by default) -->
+      - generic [ref=f4e372]:
+        - generic: "80"
+        - code [ref=f4e373]:
+          - generic [ref=f4e374]: <div class="subtitle-sync-panel hidden" id="subtitleSyncPanel">
+          - generic [ref=f4e375]: </div>
+      - generic [ref=f4e376]:
+        - generic: "81"
+        - code [ref=f4e377]:
+          - generic [ref=f4e378]: </main>
+      - generic [ref=f4e379]:
+        - generic: "82"
+        - code [ref=f4e380]
+      - generic [ref=f4e381]:
+        - generic: "83"
+        - code [ref=f4e382]: <!-- Resize handle -->
+      - generic [ref=f4e383]:
+        - generic: "84"
+        - code [ref=f4e384]:
+          - generic [ref=f4e385]: <div id="previewResizeHandle" class="preview-resize-handle hidden">
+          - generic [ref=f4e386]: </div>
+      - generic [ref=f4e387]:
+        - generic: "85"
+        - code [ref=f4e388]: "<!-- Right: Feedback Panel -->"
+      - generic [ref=f4e389]:
+        - generic: "86"
+        - code [ref=f4e390]:
+          - generic [ref=f4e391]: <aside class="preview-right" id="rightSidebar">
+      - generic [ref=f4e392]:
+        - generic: "87"
+        - code [ref=f4e393]:
+          - generic [ref=f4e394]: <div class="preview-right-header">
+          - generic [ref=f4e395]: <span>
+          - generic [ref=f4e396]: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px">
+          - generic [ref=f4e397]: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          - generic [ref=f4e398]: </svg>
+          - text: 反馈
+          - generic [ref=f4e399]: </span>
+          - generic [ref=f4e400]: <button class="panel-close-btn" id="btnCloseRight" title="关闭面板">
+          - generic [ref=f4e401]: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e402]: <path d="M18 6 6 18"/>
+          - generic [ref=f4e403]: <path d="m6 6 12 12"/>
+          - generic [ref=f4e404]: </svg>
+          - generic [ref=f4e405]: </button>
+          - generic [ref=f4e406]: </div>
+      - generic [ref=f4e407]:
+        - generic: "88"
+        - code [ref=f4e408]:
+          - generic [ref=f4e409]: <div class="preview-right-body" id="feedbackBody">
+      - generic [ref=f4e410]:
+        - generic: "89"
+        - code [ref=f4e411]:
+          - generic [ref=f4e412]: <div class="fb-empty">
+          - text: 选中文本后点击「
+          - generic [ref=f4e413]: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px">
+          - generic [ref=f4e414]: <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+          - generic [ref=f4e415]: <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+          - generic [ref=f4e416]: </svg>
+          - text: 加入面板」即可累积
+          - generic [ref=f4e417]: </div>
+      - generic [ref=f4e418]:
+        - generic: "90"
+        - code [ref=f4e419]:
+          - generic [ref=f4e420]: </div>
+      - generic [ref=f4e421]:
+        - generic: "91"
+        - code [ref=f4e422]:
+          - generic [ref=f4e423]: </aside>
+      - generic [ref=f4e424]:
+        - generic: "92"
+        - code [ref=f4e425]
+      - generic [ref=f4e426]:
+        - generic: "93"
+        - code [ref=f4e427]: "<!-- Right: Agent Panel (shares column 4 with feedback, mutually exclusive) -->"
+      - generic [ref=f4e428]:
+        - generic: "94"
+        - code [ref=f4e429]:
+          - generic [ref=f4e430]: <aside class="preview-agent-panel hidden" id="previewAgentPanel">
+      - generic [ref=f4e431]:
+        - generic: "95"
+        - code [ref=f4e432]:
+          - generic [ref=f4e433]: <div class="agent-panel-header">
+      - generic [ref=f4e434]:
+        - generic: "96"
+        - code [ref=f4e435]:
+          - generic [ref=f4e436]: <select class="agent-backend-select" id="previewAgentBackendSelect">
+      - generic [ref=f4e437]:
+        - generic: "97"
+        - code [ref=f4e438]:
+          - generic [ref=f4e439]: <option value="claude">
+          - text: Claude
+          - generic [ref=f4e440]: </option>
+      - generic [ref=f4e441]:
+        - generic: "98"
+        - code [ref=f4e442]:
+          - generic [ref=f4e443]: <option value="codex">
+          - text: Codex
+          - generic [ref=f4e444]: </option>
+      - generic [ref=f4e445]:
+        - generic: "99"
+        - code [ref=f4e446]:
+          - generic [ref=f4e447]: <option value="openclaw">
+          - text: OpenClaw
+          - generic [ref=f4e448]: </option>
+      - generic [ref=f4e449]:
+        - generic: "100"
+        - code [ref=f4e450]:
+          - generic [ref=f4e451]: </select>
+      - generic [ref=f4e452]:
+        - generic: "101"
+        - code [ref=f4e453]:
+          - generic [ref=f4e454]: <span class="agent-panel-title" id="previewAgentTitle">
+          - text: Agent
+          - generic [ref=f4e455]: </span>
+      - generic [ref=f4e456]:
+        - generic: "102"
+        - code [ref=f4e457]:
+          - generic [ref=f4e458]: <button id="previewBtnAgentHistory" class="agent-panel-btn" type="button" title="历史会话">
+          - generic [ref=f4e459]: <svg viewBox="0 0 24 24" aria-hidden="true">
+          - generic [ref=f4e460]: <circle cx="12" cy="12" r="8">
+          - generic [ref=f4e461]: </circle>
+          - generic [ref=f4e462]: <path d="M12 7v5l3 2">
+          - generic [ref=f4e463]: </path>
+          - generic [ref=f4e464]: </svg>
+          - text: 历史会话
+          - generic [ref=f4e465]: </button>
+      - generic [ref=f4e466]:
+        - generic: "103"
+        - code [ref=f4e467]:
+          - generic [ref=f4e468]: <button class="agent-panel-btn" id="previewBtnNewAgentSession" title="新建会话">
+          - generic [ref=f4e469]: <svg viewBox="0 0 24 24" aria-hidden="true">
+          - generic [ref=f4e470]: <path d="M12 5v14">
+          - generic [ref=f4e471]: </path>
+          - generic [ref=f4e472]: <path d="M5 12h14">
+          - generic [ref=f4e473]: </path>
+          - generic [ref=f4e474]: </svg>
+          - text: 新会话
+          - generic [ref=f4e475]: </button>
+      - generic [ref=f4e476]:
+        - generic: "104"
+        - code [ref=f4e477]:
+          - generic [ref=f4e478]: <button class="agent-panel-close" id="previewBtnCloseAgent" title="关闭 Agent">
+          - generic [ref=f4e479]: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e480]: <path d="M18 6 6 18"/>
+          - generic [ref=f4e481]: <path d="m6 6 12 12"/>
+          - generic [ref=f4e482]: </svg>
+          - generic [ref=f4e483]: </button>
+      - generic [ref=f4e484]:
+        - generic: "105"
+        - code [ref=f4e485]:
+          - generic [ref=f4e486]: </div>
+      - generic [ref=f4e487]:
+        - generic: "106"
+        - code [ref=f4e488]:
+          - generic [ref=f4e489]: <div id="previewAgentToolbar" class="agent-toolbar" role="toolbar" aria-label="终端工具栏">
+      - generic [ref=f4e490]:
+        - generic: "107"
+        - code [ref=f4e491]:
+          - generic [ref=f4e492]: <span id="previewAgentStatus" class="agent-status" aria-live="polite">
+          - text: 未连接
+          - generic [ref=f4e493]: </span>
+      - generic [ref=f4e494]:
+        - generic: "108"
+        - code [ref=f4e495]:
+          - generic [ref=f4e496]: <div class="agent-toolbar-actions">
+      - generic [ref=f4e497]:
+        - generic: "109"
+        - code [ref=f4e498]:
+          - generic [ref=f4e499]: <button id="previewAgentSearch" class="agent-toolbar-btn" type="button" title="搜索终端" aria-label="搜索终端">
+          - generic [ref=f4e500]: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          - generic [ref=f4e501]: <circle cx="11" cy="11" r="7">
+          - generic [ref=f4e502]: </circle>
+          - generic [ref=f4e503]: <path d="m20 20-4-4">
+          - generic [ref=f4e504]: </path>
+          - generic [ref=f4e505]: </svg>
+          - generic [ref=f4e506]: <span class="agent-btn-label">
+          - text: 搜索
+          - generic [ref=f4e507]: </span>
+          - generic [ref=f4e508]: </button>
+      - generic [ref=f4e509]:
+        - generic: "110"
+        - code [ref=f4e510]:
+          - generic [ref=f4e511]: <button id="previewAgentClear" class="agent-toolbar-btn" type="button" title="清屏" aria-label="清屏">
+          - generic [ref=f4e512]: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e513]: <path d="M5 5h14v14H5z">
+          - generic [ref=f4e514]: </path>
+          - generic [ref=f4e515]: <path d="M8 9h8M8 13h5">
+          - generic [ref=f4e516]: </path>
+          - generic [ref=f4e517]: </svg>
+          - generic [ref=f4e518]: <span class="agent-btn-label">
+          - text: 清屏
+          - generic [ref=f4e519]: </span>
+          - generic [ref=f4e520]: </button>
+      - generic [ref=f4e521]:
+        - generic: "111"
+        - code [ref=f4e522]:
+          - generic [ref=f4e523]: <button id="previewAgentFontDown" class="agent-toolbar-btn font-size-action" type="button" title="缩小" aria-label="缩小">
+          - generic [ref=f4e524]: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          - generic [ref=f4e525]: <path d="M4 19 9 5l5 14">
+          - generic [ref=f4e526]: </path>
+          - generic [ref=f4e527]: <path d="M6 14h6">
+          - generic [ref=f4e528]: </path>
+          - generic [ref=f4e529]: <path d="M17 12h5">
+          - generic [ref=f4e530]: </path>
+          - generic [ref=f4e531]: </svg>
+          - generic [ref=f4e532]: <span class="agent-btn-label">
+          - text: 缩小
+          - generic [ref=f4e533]: </span>
+          - generic [ref=f4e534]: </button>
+      - generic [ref=f4e535]:
+        - generic: "112"
+        - code [ref=f4e536]:
+          - generic [ref=f4e537]: <button id="previewAgentFontUp" class="agent-toolbar-btn font-size-action" type="button" title="放大" aria-label="放大">
+          - generic [ref=f4e538]: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          - generic [ref=f4e539]: <path d="M4 19 9 5l5 14">
+          - generic [ref=f4e540]: </path>
+          - generic [ref=f4e541]: <path d="M6 14h6">
+          - generic [ref=f4e542]: </path>
+          - generic [ref=f4e543]: <path d="M19.5 9v6">
+          - generic [ref=f4e544]: </path>
+          - generic [ref=f4e545]: <path d="M16.5 12h6">
+          - generic [ref=f4e546]: </path>
+          - generic [ref=f4e547]: </svg>
+          - generic [ref=f4e548]: <span class="agent-btn-label">
+          - text: 放大
+          - generic [ref=f4e549]: </span>
+          - generic [ref=f4e550]: </button>
+      - generic [ref=f4e551]:
+        - generic: "113"
+        - code [ref=f4e552]:
+          - generic [ref=f4e553]: <button id="previewAgentReconnect" class="agent-toolbar-btn" type="button" title="重新连接" aria-label="重新连接">
+          - generic [ref=f4e554]: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e555]: <path d="M20 11a8.1 8.1 0 0 0-14.9-3L3 11">
+          - generic [ref=f4e556]: </path>
+          - generic [ref=f4e557]: <path d="M3 4v7h7">
+          - generic [ref=f4e558]: </path>
+          - generic [ref=f4e559]: <path d="M4 13a8.1 8.1 0 0 0 14.9 3L21 13">
+          - generic [ref=f4e560]: </path>
+          - generic [ref=f4e561]: <path d="M21 20v-7h-7">
+          - generic [ref=f4e562]: </path>
+          - generic [ref=f4e563]: </svg>
+          - generic [ref=f4e564]: <span class="agent-btn-label">
+          - text: 重连
+          - generic [ref=f4e565]: </span>
+          - generic [ref=f4e566]: </button>
+      - generic [ref=f4e567]:
+        - generic: "114"
+        - code [ref=f4e568]:
+          - generic [ref=f4e569]: </div>
+      - generic [ref=f4e570]:
+        - generic: "115"
+        - code [ref=f4e571]:
+          - generic [ref=f4e572]: </div>
+      - generic [ref=f4e573]:
+        - generic: "116"
+        - code [ref=f4e574]:
+          - generic [ref=f4e575]: <div class="agent-search-row" id="previewAgentSearchRow" hidden>
+      - generic [ref=f4e576]:
+        - generic: "117"
+        - code [ref=f4e577]:
+          - generic [ref=f4e578]: <span class="search-wrap">
+      - generic [ref=f4e579]:
+        - generic: "118"
+        - code [ref=f4e580]:
+          - generic [ref=f4e581]: <input id="previewAgentSearchInput" class="search-input" type="search" placeholder="在终端中搜索…" aria-label="在终端中搜索" />
+      - generic [ref=f4e582]:
+        - generic: "119"
+        - code [ref=f4e583]:
+          - generic [ref=f4e584]: <button id="previewAgentSearchClear" class="search-clear" type="button" aria-label="清除搜索">
+          - generic [ref=f4e585]: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          - generic [ref=f4e586]: <path d="M18 4 10 11"/>
+          - generic [ref=f4e587]: <path d="M10 11l-6 2"/>
+          - generic [ref=f4e588]: <path d="M10 11l-4 5"/>
+          - generic [ref=f4e589]: <path d="M10 11l-1 7"/>
+          - generic [ref=f4e590]: <path d="M10 11l2 7"/>
+          - generic [ref=f4e591]: <path d="M10 11l5 5"/>
+          - generic [ref=f4e592]: <path d="M10 11l7 2"/>
+          - generic [ref=f4e593]: </svg>
+          - generic [ref=f4e594]: </button>
+      - generic [ref=f4e595]:
+        - generic: "120"
+        - code [ref=f4e596]:
+          - generic [ref=f4e597]: </span>
+      - generic [ref=f4e598]:
+        - generic: "121"
+        - code [ref=f4e599]:
+          - generic [ref=f4e600]: <button id="previewAgentSearchPrev" class="agent-toolbar-btn" type="button" aria-label="上一个匹配">
+          - text: ↑
+          - generic [ref=f4e601]: </button>
+      - generic [ref=f4e602]:
+        - generic: "122"
+        - code [ref=f4e603]:
+          - generic [ref=f4e604]: <button id="previewAgentSearchNext" class="agent-toolbar-btn" type="button" aria-label="下一个匹配">
+          - text: ↓
+          - generic [ref=f4e605]: </button>
+      - generic [ref=f4e606]:
+        - generic: "123"
+        - code [ref=f4e607]:
+          - generic [ref=f4e608]: </div>
+      - generic [ref=f4e609]:
+        - generic: "124"
+        - code [ref=f4e610]:
+          - generic [ref=f4e611]: <div id="previewXtermContainer" class="xterm-container">
+          - generic [ref=f4e612]: </div>
+      - generic [ref=f4e613]:
+        - generic: "125"
+        - code [ref=f4e614]:
+          - generic [ref=f4e615]: <div id="previewAgentChatView" class="agent-chat-view hidden">
+      - generic [ref=f4e616]:
+        - generic: "126"
+        - code [ref=f4e617]:
+          - generic [ref=f4e618]: <div class="agent-chat-messages" id="previewAgentChatMessages">
+          - generic [ref=f4e619]: </div>
+      - generic [ref=f4e620]:
+        - generic: "127"
+        - code [ref=f4e621]:
+          - generic [ref=f4e622]: <div class="agent-chat-input-wrap">
+      - generic [ref=f4e623]:
+        - generic: "128"
+        - code [ref=f4e624]:
+          - generic [ref=f4e625]: <textarea id="previewAgentChatInput" class="agent-chat-input" rows="2" placeholder="输入消息，Enter 发送，Shift+Enter 换行。使用 /clawmate project 切换项目">
+          - generic [ref=f4e626]: </textarea>
+      - generic [ref=f4e627]:
+        - generic: "129"
+        - code [ref=f4e628]:
+          - generic [ref=f4e629]: <button id="previewAgentChatSend" class="agent-chat-send-btn">
+          - text: 发送
+          - generic [ref=f4e630]: </button>
+      - generic [ref=f4e631]:
+        - generic: "130"
+        - code [ref=f4e632]:
+          - generic [ref=f4e633]: </div>
+      - generic [ref=f4e634]:
+        - generic: "131"
+        - code [ref=f4e635]:
+          - generic [ref=f4e636]: </div>
+      - generic [ref=f4e637]:
+        - generic: "132"
+        - code [ref=f4e638]:
+          - generic [ref=f4e639]: </aside>
+      - generic [ref=f4e640]:
+        - generic: "133"
+        - code [ref=f4e641]:
+          - generic [ref=f4e642]: </div>
+      - generic [ref=f4e643]:
+        - generic: "134"
+        - code [ref=f4e644]
+      - generic [ref=f4e645]:
+        - generic: "135"
+        - code [ref=f4e646]: <!-- Bottom toolbar -->
+      - generic [ref=f4e647]:
+        - generic: "136"
+        - code [ref=f4e648]:
+          - generic [ref=f4e649]: <div class="preview-bottombar">
+      - generic [ref=f4e650]:
+        - generic: "137"
+        - code [ref=f4e651]:
+          - generic [ref=f4e652]: <div class="preview-btn-group">
+          - generic [ref=f4e653]: <button class="preview-bottom-btn" id="btnPath" title="跳转到文件所在目录">
+          - generic [ref=f4e654]: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e655]: <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+          - generic [ref=f4e656]: </svg>
+          - text: 位置
+          - generic [ref=f4e657]: </button>
+          - generic [ref=f4e658]: <button class="preview-bottom-btn" id="btnPdf" title="导出">
+          - generic [ref=f4e659]: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e660]: <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
+          - generic [ref=f4e661]: <path d="M4 7V4a2 2 0 0 1 2-2h8.5L20 7.5V20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/>
+          - generic [ref=f4e662]: <path d="M4 14h6"/>
+          - generic [ref=f4e663]: <path d="m7 11-3 3 3 3"/>
+          - generic [ref=f4e664]: </svg>
+          - text: 导出
+          - generic [ref=f4e665]: </button>
+          - generic [ref=f4e666]: <button class="preview-bottom-btn" id="btnDownload" title="下载文件">
+          - generic [ref=f4e667]: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e668]: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          - generic [ref=f4e669]: <polyline points="7 10 12 15 17 10"/>
+          - generic [ref=f4e670]: <line x1="12" x2="12" y1="15" y2="3"/>
+          - generic [ref=f4e671]: </svg>
+          - text: 下载
+          - generic [ref=f4e672]: </button>
+          - generic [ref=f4e673]: <button class="preview-bottom-btn" id="btnRename" title="重命名">
+          - generic [ref=f4e674]: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e675]: <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+          - generic [ref=f4e676]: <path d="m15 5 4 4"/>
+          - generic [ref=f4e677]: </svg>
+          - text: 重命名
+          - generic [ref=f4e678]: </button>
+          - generic [ref=f4e679]: <button class="preview-bottom-btn" id="btnMove" title="移动到">
+          - generic [ref=f4e680]: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e681]: <polyline points="5 9 2 12 5 15"/>
+          - generic [ref=f4e682]: <polyline points="9 5 12 2 15 5"/>
+          - generic [ref=f4e683]: <polyline points="15 19 12 22 9 19"/>
+          - generic [ref=f4e684]: <polyline points="19 9 22 12 19 15"/>
+          - generic [ref=f4e685]: <line x1="2" x2="22" y1="12" y2="12"/>
+          - generic [ref=f4e686]: <line x1="12" x2="12" y1="2" y2="22"/>
+          - generic [ref=f4e687]: </svg>
+          - text: 移动
+          - generic [ref=f4e688]: </button>
+          - generic [ref=f4e689]: <button class="preview-bottom-btn" id="btnExtract" title="解压到">
+          - generic [ref=f4e690]: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e691]: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          - generic [ref=f4e692]: <polyline points="7 10 12 15 17 10"/>
+          - generic [ref=f4e693]: <line x1="12" x2="12" y1="15" y2="3"/>
+          - generic [ref=f4e694]: </svg>
+          - text: 解压
+          - generic [ref=f4e695]: </button>
+          - generic [ref=f4e696]: <button class="preview-bottom-btn" id="btnShare" title="生成分享链接">
+          - generic [ref=f4e697]: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e698]: <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+          - generic [ref=f4e699]: <polyline points="16 6 12 2 8 6"/>
+          - generic [ref=f4e700]: <line x1="12" x2="12" y1="2" y2="15"/>
+          - generic [ref=f4e701]: </svg>
+          - text: 分享
+          - generic [ref=f4e702]: </button>
+          - generic [ref=f4e703]: </div>
+      - generic [ref=f4e704]:
+        - generic: "138"
+        - code [ref=f4e705]: "<!-- Dynamic zone: image/audio/video modules populate this -->"
+      - generic [ref=f4e706]:
+        - generic: "139"
+        - code [ref=f4e707]:
+          - generic [ref=f4e708]: <div id="bottombarDynamic" style="display:flex;align-items:center;gap:4px;">
+          - generic [ref=f4e709]: </div>
+      - generic [ref=f4e710]:
+        - generic: "140"
+        - code [ref=f4e711]:
+          - generic [ref=f4e712]: <div class="preview-btn-group" id="bottombarEditGroup">
+          - generic [ref=f4e713]: </div>
+      - generic [ref=f4e714]:
+        - generic: "141"
+        - code [ref=f4e715]:
+          - generic [ref=f4e716]: <div class="preview-bottom-divider" style="flex:1">
+          - generic [ref=f4e717]: </div>
+      - generic [ref=f4e718]:
+        - generic: "142"
+        - code [ref=f4e719]:
+          - generic [ref=f4e720]: <button class="preview-bottom-btn danger" id="btnDelete" title="删除文件">
+          - generic [ref=f4e721]: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e722]: <path d="M3 6h18"/>
+          - generic [ref=f4e723]: <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+          - generic [ref=f4e724]: <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+          - generic [ref=f4e725]: </svg>
+          - text: 删除
+          - generic [ref=f4e726]: </button>
+      - generic [ref=f4e727]:
+        - generic: "143"
+        - code [ref=f4e728]:
+          - generic [ref=f4e729]: </div>
+      - generic [ref=f4e730]:
+        - generic: "144"
+        - code [ref=f4e731]:
+          - generic [ref=f4e732]: </div>
+      - generic [ref=f4e733]:
+        - generic: "145"
+        - code [ref=f4e734]
+      - generic [ref=f4e735]:
+        - generic: "146"
+        - code [ref=f4e736]: <!-- Mobile selection floating button -->
+      - generic [ref=f4e737]:
+        - generic: "147"
+        - code [ref=f4e738]:
+          - generic [ref=f4e739]: <div class="mobile-sel-btn" id="mobileSelBtn" style="display:none;">
+          - generic [ref=f4e740]: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e741]: <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+          - generic [ref=f4e742]: <path d="m15 5 4 4"/>
+          - generic [ref=f4e743]: </svg>
+          - text: 反馈
+          - generic [ref=f4e744]: </div>
+      - generic [ref=f4e745]:
+        - generic: "148"
+        - code [ref=f4e746]
+      - generic [ref=f4e747]:
+        - generic: "149"
+        - code [ref=f4e748]: <!-- Desktop "添加到会话" button (shown when agent panel is open) -->
+      - generic [ref=f4e749]:
+        - generic: "150"
+        - code [ref=f4e750]:
+          - generic [ref=f4e751]: <button class="mobile-sel-btn" id="selAddToAgent" style="display:none;">
+          - generic [ref=f4e752]: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e753]: <polyline points="4 17 10 11 4 5"/>
+          - generic [ref=f4e754]: <line x1="12" y1="19" x2="20" y2="19"/>
+          - generic [ref=f4e755]: </svg>
+          - text: 添加到会话
+          - generic [ref=f4e756]: </button>
+      - generic [ref=f4e757]:
+        - generic: "151"
+        - code [ref=f4e758]
+      - generic [ref=f4e759]:
+        - generic: "152"
+        - code [ref=f4e760]: <!-- Selection tooltip -->
+      - generic [ref=f4e761]:
+        - generic: "153"
+        - code [ref=f4e762]:
+          - generic [ref=f4e763]: <div class="preview-selection-tooltip" id="selectionTooltip">
+      - generic [ref=f4e764]:
+        - generic: "154"
+        - code [ref=f4e765]:
+          - generic [ref=f4e766]: <div class="pst-header">
+          - generic [ref=f4e767]: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px">
+          - generic [ref=f4e768]: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          - generic [ref=f4e769]: </svg>
+          - text: 反馈选中内容
+          - generic [ref=f4e770]: </div>
+      - generic [ref=f4e771]:
+        - generic: "155"
+        - code [ref=f4e772]:
+          - generic [ref=f4e773]: <div class="pst-location-row">
+      - generic [ref=f4e774]:
+        - generic: "156"
+        - code [ref=f4e775]:
+          - generic [ref=f4e776]: <input type="text" id="pstLocationInput" class="pst-location" placeholder="位置：选择后自动识别" style="flex:1;" />
+      - generic [ref=f4e777]:
+        - generic: "157"
+        - code [ref=f4e778]:
+          - generic [ref=f4e779]: </div>
+      - generic [ref=f4e780]:
+        - generic: "158"
+        - code [ref=f4e781]:
+          - generic [ref=f4e782]: <textarea class="pst-note" id="pstNote" placeholder="必填 · 简要说明需要的改动" rows="3">
+          - generic [ref=f4e783]: </textarea>
+      - generic [ref=f4e784]:
+        - generic: "159"
+        - code [ref=f4e785]:
+          - generic [ref=f4e786]: <div class="pst-tags" id="pstTags">
+          - generic [ref=f4e787]: </div>
+      - generic [ref=f4e788]:
+        - generic: "160"
+        - code [ref=f4e789]:
+          - generic [ref=f4e790]: <div class="pst-actions">
+      - generic [ref=f4e791]:
+        - generic: "161"
+        - code [ref=f4e792]:
+          - generic [ref=f4e793]: <button class="pst-btn-add" id="pstBtnAdd">
+          - generic [ref=f4e794]: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e795]: <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+          - generic [ref=f4e796]: <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+          - generic [ref=f4e797]: </svg>
+          - text: 加入待办
+          - generic [ref=f4e798]: </button>
+      - generic [ref=f4e799]:
+        - generic: "162"
+        - code [ref=f4e800]:
+          - generic [ref=f4e801]: <button class="pst-btn-send" id="pstBtnSend">
+          - generic [ref=f4e802]: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e803]: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          - generic [ref=f4e804]: <polyline points="7 10 12 15 17 10"/>
+          - generic [ref=f4e805]: <line x1="12" x2="12" y1="15" y2="3"/>
+          - generic [ref=f4e806]: </svg>
+          - text: 立刻执行
+          - generic [ref=f4e807]: </button>
+      - generic [ref=f4e808]:
+        - generic: "163"
+        - code [ref=f4e809]:
+          - generic [ref=f4e810]: </div>
+      - generic [ref=f4e811]:
+        - generic: "164"
+        - code [ref=f4e812]:
+          - generic [ref=f4e813]: <div class="pst-status" id="pstStatus">
+          - generic [ref=f4e814]: </div>
+      - generic [ref=f4e815]:
+        - generic: "165"
+        - code [ref=f4e816]:
+          - generic [ref=f4e817]: </div>
+      - generic [ref=f4e818]:
+        - generic: "166"
+        - code [ref=f4e819]
+      - generic [ref=f4e820]:
+        - generic: "167"
+        - code [ref=f4e821]: <!-- Toast -->
+      - generic [ref=f4e822]:
+        - generic: "168"
+        - code [ref=f4e823]:
+          - generic [ref=f4e824]: <div class="preview-toast" id="toast" style="display:none;">
+          - generic [ref=f4e825]: </div>
+      - generic [ref=f4e826]:
+        - generic: "169"
+        - code [ref=f4e827]
+      - generic [ref=f4e828]:
+        - generic: "170"
+        - code [ref=f4e829]: <!-- Subtitle extraction progress modal -->
+      - generic [ref=f4e830]:
+        - generic: "171"
+        - code [ref=f4e831]:
+          - generic [ref=f4e832]: <div id="subtitleExtractModal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.45);align-items:center;justify-content:center;">
+      - generic [ref=f4e833]:
+        - generic: "172"
+        - code [ref=f4e834]:
+          - generic [ref=f4e835]: <div style="background:var(--bg-secondary,#fff);border:1px solid var(--border-color,#ddd);border-radius:12px;padding:24px 28px;min-width:340px;max-width:480px;box-shadow:0 8px 32px rgba(0,0,0,0.2);font-family:inherit;">
+      - generic [ref=f4e836]:
+        - generic: "173"
+        - code [ref=f4e837]:
+          - generic [ref=f4e838]: <div id="subtitleExtractModalTitle" style="font-size:15px;font-weight:600;margin-bottom:16px;color:var(--text-primary,#1f1f1f);">
+          - generic [ref=f4e839]: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px">
+          - generic [ref=f4e840]: <path d="M9 18V5l12-2v13"/>
+          - generic [ref=f4e841]: <circle cx="6" cy="18" r="3"/>
+          - generic [ref=f4e842]: <circle cx="18" cy="16" r="3"/>
+          - generic [ref=f4e843]: </svg>
+          - text: 正在提取字幕...
+          - generic [ref=f4e844]: </div>
+      - generic [ref=f4e845]:
+        - generic: "174"
+        - code [ref=f4e846]:
+          - generic [ref=f4e847]: <div id="subtitleExtractProgressBar" style="height:8px;background:var(--bg-tertiary,#e5e7eb);border-radius:4px;overflow:hidden;margin-bottom:10px;">
+      - generic [ref=f4e848]:
+        - generic: "175"
+        - code [ref=f4e849]:
+          - generic [ref=f4e850]: <div id="subtitleExtractProgressFill" style="height:100%;width:0%;background:var(--accent,#6366f1);border-radius:4px;transition:width 0.3s;">
+          - generic [ref=f4e851]: </div>
+      - generic [ref=f4e852]:
+        - generic: "176"
+        - code [ref=f4e853]:
+          - generic [ref=f4e854]: </div>
+      - generic [ref=f4e855]:
+        - generic: "177"
+        - code [ref=f4e856]:
+          - generic [ref=f4e857]: <div id="subtitleExtractProgressText" style="font-size:12px;color:var(--text-secondary,#6b7280);margin-bottom:4px;">
+          - text: 准备中...
+          - generic [ref=f4e858]: </div>
+      - generic [ref=f4e859]:
+        - generic: "178"
+        - code [ref=f4e860]:
+          - generic [ref=f4e861]: <div id="subtitleExtractProgressPct" style="font-size:11px;color:var(--text-muted,#9ca3af);">
+          - text: 0%
+          - generic [ref=f4e862]: </div>
+      - generic [ref=f4e863]:
+        - generic: "179"
+        - code [ref=f4e864]:
+          - generic [ref=f4e865]: <div id="subtitleExtractError" style="display:none;margin-top:12px;padding:10px;background:var(--danger-bg,#fee2e2);border:1px solid var(--danger-border,#fca5a5);border-radius:6px;font-size:12px;color:var(--danger,#dc2626);">
+          - generic [ref=f4e866]: </div>
+      - generic [ref=f4e867]:
+        - generic: "180"
+        - code [ref=f4e868]:
+          - generic [ref=f4e869]: <button id="subtitleExtractCancelBtn" style="margin-top:16px;width:100%;padding:8px 16px;border-radius:6px;border:1px solid var(--border-color,#d1d5db);background:var(--btn-bg,#f3f4f6);color:var(--btn-text,#374151);cursor:pointer;font-size:13px;">
+          - text: 取消
+          - generic [ref=f4e870]: </button>
+      - generic [ref=f4e871]:
+        - generic: "181"
+        - code [ref=f4e872]:
+          - generic [ref=f4e873]: </div>
+      - generic [ref=f4e874]:
+        - generic: "182"
+        - code [ref=f4e875]:
+          - generic [ref=f4e876]: </div>
+      - generic [ref=f4e877]:
+        - generic: "183"
+        - code [ref=f4e878]
+      - generic [ref=f4e879]:
+        - generic: "184"
+        - code [ref=f4e880]: <!-- Directory picker modal (move / extract) -->
+      - generic [ref=f4e881]:
+        - generic: "185"
+        - code [ref=f4e882]:
+          - generic [ref=f4e883]: <div id="dirPickerModal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.45);align-items:center;justify-content:center;">
+      - generic [ref=f4e884]:
+        - generic: "186"
+        - code [ref=f4e885]:
+          - generic [ref=f4e886]: <div style="background:var(--bg-secondary,#fff);border:1px solid var(--border-color,#ddd);border-radius:12px;padding:0;min-width:380px;max-width:520px;max-height:70vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.2);font-family:inherit;">
+      - generic [ref=f4e887]:
+        - generic: "187"
+        - code [ref=f4e888]:
+          - generic [ref=f4e889]: <div style="padding:16px 20px;border-bottom:1px solid var(--border-color,#e5e7eb);display:flex;align-items:center;justify-content:space-between;">
+      - generic [ref=f4e890]:
+        - generic: "188"
+        - code [ref=f4e891]:
+          - generic [ref=f4e892]: <span id="dirPickerTitle" style="font-size:15px;font-weight:600;color:var(--text-primary);">
+          - text: 选择目标目录
+          - generic [ref=f4e893]: </span>
+      - generic [ref=f4e894]:
+        - generic: "189"
+        - code [ref=f4e895]:
+          - generic [ref=f4e896]: <button id="dirPickerClose" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;" title="关闭">
+      - generic [ref=f4e897]:
+        - generic: "190"
+        - code [ref=f4e898]:
+          - generic [ref=f4e899]: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e900]: <path d="M18 6 6 18"/>
+          - generic [ref=f4e901]: <path d="m6 6 12 12"/>
+          - generic [ref=f4e902]: </svg>
+      - generic [ref=f4e903]:
+        - generic: "191"
+        - code [ref=f4e904]:
+          - generic [ref=f4e905]: </button>
+      - generic [ref=f4e906]:
+        - generic: "192"
+        - code [ref=f4e907]:
+          - generic [ref=f4e908]: </div>
+      - generic [ref=f4e909]:
+        - generic: "193"
+        - code [ref=f4e910]:
+          - generic [ref=f4e911]: <div id="dirPickerTree" style="padding:12px 16px;overflow-y:auto;flex:1;min-height:200px;max-height:40vh;">
+      - generic [ref=f4e912]:
+        - generic: "194"
+        - code [ref=f4e913]:
+          - generic [ref=f4e914]: <div style="text-align:center;color:var(--text-muted);padding:20px;">
+          - text: 加载中...
+          - generic [ref=f4e915]: </div>
+      - generic [ref=f4e916]:
+        - generic: "195"
+        - code [ref=f4e917]:
+          - generic [ref=f4e918]: </div>
+      - generic [ref=f4e919]:
+        - generic: "196"
+        - code [ref=f4e920]:
+          - generic [ref=f4e921]: <div style="padding:12px 16px;border-top:1px solid var(--border-color,#e5e7eb);display:flex;align-items:center;gap:8px;">
+      - generic [ref=f4e922]:
+        - generic: "197"
+        - code [ref=f4e923]:
+          - generic [ref=f4e924]: <span id="dirPickerSelected" style="flex:1;font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+          - text: 当前目录
+          - generic [ref=f4e925]: </span>
+      - generic [ref=f4e926]:
+        - generic: "198"
+        - code [ref=f4e927]:
+          - generic [ref=f4e928]: <button id="dirPickerCancel" style="padding:6px 14px;border-radius:6px;border:1px solid var(--border-color,#d1d5db);background:var(--btn-bg,#f3f4f6);color:var(--btn-text,#374151);cursor:pointer;font-size:13px;">
+          - text: 取消
+          - generic [ref=f4e929]: </button>
+      - generic [ref=f4e930]:
+        - generic: "199"
+        - code [ref=f4e931]:
+          - generic [ref=f4e932]: <button id="dirPickerConfirm" style="padding:6px 18px;border-radius:6px;border:none;background:var(--accent,#6366f1);color:#fff;cursor:pointer;font-size:13px;">
+          - text: 确定
+          - generic [ref=f4e933]: </button>
+      - generic [ref=f4e934]:
+        - generic: "200"
+        - code [ref=f4e935]:
+          - generic [ref=f4e936]: </div>
+      - generic [ref=f4e937]:
+        - generic: "201"
+        - code [ref=f4e938]:
+          - generic [ref=f4e939]: </div>
+      - generic [ref=f4e940]:
+        - generic: "202"
+        - code [ref=f4e941]:
+          - generic [ref=f4e942]: </div>
+      - generic [ref=f4e943]:
+        - generic: "203"
+        - code [ref=f4e944]
+      - generic [ref=f4e945]:
+        - generic: "204"
+        - code [ref=f4e946]: <!-- Mobile bottom feedback add panel -->
+      - generic [ref=f4e947]:
+        - generic: "205"
+        - code [ref=f4e948]:
+          - generic [ref=f4e949]: <div class="mobile-fb-overlay" id="mobileFbOverlay">
+          - generic [ref=f4e950]: </div>
+      - generic [ref=f4e951]:
+        - generic: "206"
+        - code [ref=f4e952]:
+          - generic [ref=f4e953]: <div class="mobile-fb-panel" id="mobileFbPanel">
+      - generic [ref=f4e954]:
+        - generic: "207"
+        - code [ref=f4e955]:
+          - generic [ref=f4e956]: <div class="mobile-fb-header">
+      - generic [ref=f4e957]:
+        - generic: "208"
+        - code [ref=f4e958]:
+          - generic [ref=f4e959]: <span>
+          - text: 添加反馈
+          - generic [ref=f4e960]: </span>
+      - generic [ref=f4e961]:
+        - generic: "209"
+        - code [ref=f4e962]:
+          - generic [ref=f4e963]: <button class="mobile-fb-close" id="mobileFbClose">
+          - generic [ref=f4e964]: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e965]: <path d="M18 6 6 18"/>
+          - generic [ref=f4e966]: <path d="m6 6 12 12"/>
+          - generic [ref=f4e967]: </svg>
+          - generic [ref=f4e968]: </button>
+      - generic [ref=f4e969]:
+        - generic: "210"
+        - code [ref=f4e970]:
+          - generic [ref=f4e971]: </div>
+      - generic [ref=f4e972]:
+        - generic: "211"
+        - code [ref=f4e973]:
+          - generic [ref=f4e974]: <div class="mobile-fb-body">
+      - generic [ref=f4e975]:
+        - generic: "212"
+        - code [ref=f4e976]:
+          - generic [ref=f4e977]: <div class="mobile-fb-selection" id="mobileFbSelection">
+          - generic [ref=f4e978]: </div>
+      - generic [ref=f4e979]:
+        - generic: "213"
+        - code [ref=f4e980]:
+          - generic [ref=f4e981]: <textarea class="mobile-fb-note" id="mobileFbNote" placeholder="简要说明需要的改动">
+          - generic [ref=f4e982]: </textarea>
+      - generic [ref=f4e983]:
+        - generic: "214"
+        - code [ref=f4e984]:
+          - generic [ref=f4e985]: <div class="mobile-fb-tags" id="mobileFbTags">
+          - generic [ref=f4e986]: </div>
+      - generic [ref=f4e987]:
+        - generic: "215"
+        - code [ref=f4e988]:
+          - generic [ref=f4e989]: <button class="mobile-fb-submit" id="mobileFbSubmit">
+          - text: 提交反馈
+          - generic [ref=f4e990]: </button>
+      - generic [ref=f4e991]:
+        - generic: "216"
+        - code [ref=f4e992]:
+          - generic [ref=f4e993]: <div class="mobile-fb-status" id="mobileFbStatus">
+          - generic [ref=f4e994]: </div>
+      - generic [ref=f4e995]:
+        - generic: "217"
+        - code [ref=f4e996]:
+          - generic [ref=f4e997]: </div>
+      - generic [ref=f4e998]:
+        - generic: "218"
+        - code [ref=f4e999]:
+          - generic [ref=f4e1000]: </div>
+      - generic [ref=f4e1001]:
+        - generic: "219"
+        - code [ref=f4e1002]
+      - generic [ref=f4e1003]:
+        - generic: "220"
+        - code [ref=f4e1004]: <!-- Version history modal -->
+      - generic [ref=f4e1005]:
+        - generic: "221"
+        - code [ref=f4e1006]:
+          - generic [ref=f4e1007]: <div id="versionModal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.45);align-items:center;justify-content:center;">
+      - generic [ref=f4e1008]:
+        - generic: "222"
+        - code [ref=f4e1009]:
+          - generic [ref=f4e1010]: <div class="version-modal-dialog">
+      - generic [ref=f4e1011]:
+        - generic: "223"
+        - code [ref=f4e1012]: <!-- Header -->
+      - generic [ref=f4e1013]:
+        - generic: "224"
+        - code [ref=f4e1014]:
+          - generic [ref=f4e1015]: <div class="version-modal-header">
+      - generic [ref=f4e1016]:
+        - generic: "225"
+        - code [ref=f4e1017]:
+          - generic [ref=f4e1018]: <span>
+          - text: 📋 版本历史 —
+          - generic [ref=f4e1019]: <span id="versionModalFileName">
+          - generic [ref=f4e1020]: </span>
+          - generic [ref=f4e1021]: </span>
+      - generic [ref=f4e1022]:
+        - generic: "226"
+        - code [ref=f4e1023]:
+          - generic [ref=f4e1024]: <button id="versionModalClose" class="version-modal-close">
+          - generic [ref=f4e1025]: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          - generic [ref=f4e1026]: <path d="M18 6 6 18"/>
+          - generic [ref=f4e1027]: <path d="m6 6 12 12"/>
+          - generic [ref=f4e1028]: </svg>
+          - generic [ref=f4e1029]: </button>
+      - generic [ref=f4e1030]:
+        - generic: "227"
+        - code [ref=f4e1031]:
+          - generic [ref=f4e1032]: </div>
+      - generic [ref=f4e1033]:
+        - generic: "228"
+        - code [ref=f4e1034]:
+          - generic [ref=f4e1035]: <div class="version-modal-body">
+      - generic [ref=f4e1036]:
+        - generic: "229"
+        - code [ref=f4e1037]: "<!-- Left: commit list -->"
+      - generic [ref=f4e1038]:
+        - generic: "230"
+        - code [ref=f4e1039]:
+          - generic [ref=f4e1040]: <div class="version-commit-pane">
+      - generic [ref=f4e1041]:
+        - generic: "231"
+        - code [ref=f4e1042]:
+          - generic [ref=f4e1043]: <div class="version-latest-card" id="versionLatestCard">
+      - generic [ref=f4e1044]:
+        - generic: "232"
+        - code [ref=f4e1045]:
+          - generic [ref=f4e1046]: <div class="version-latest-loading">
+          - text: 加载版本信息...
+          - generic [ref=f4e1047]: </div>
+      - generic [ref=f4e1048]:
+        - generic: "233"
+        - code [ref=f4e1049]:
+          - generic [ref=f4e1050]: </div>
+      - generic [ref=f4e1051]:
+        - generic: "234"
+        - code [ref=f4e1052]:
+          - generic [ref=f4e1053]: <div class="version-dirty-warning hidden" id="versionDirtyWarning">
+          - text: ⚠️ 文件有未提交的修改
+          - generic [ref=f4e1054]: </div>
+      - generic [ref=f4e1055]:
+        - generic: "235"
+        - code [ref=f4e1056]:
+          - generic [ref=f4e1057]: <div class="version-commit-list" id="versionCommitList">
+      - generic [ref=f4e1058]:
+        - generic: "236"
+        - code [ref=f4e1059]:
+          - generic [ref=f4e1060]: <div class="version-commit-empty">
+          - text: 加载中...
+          - generic [ref=f4e1061]: </div>
+      - generic [ref=f4e1062]:
+        - generic: "237"
+        - code [ref=f4e1063]:
+          - generic [ref=f4e1064]: </div>
+      - generic [ref=f4e1065]:
+        - generic: "238"
+        - code [ref=f4e1066]:
+          - generic [ref=f4e1067]: </div>
+      - generic [ref=f4e1068]:
+        - generic: "239"
+        - code [ref=f4e1069]: "<!-- Right: diff viewer -->"
+      - generic [ref=f4e1070]:
+        - generic: "240"
+        - code [ref=f4e1071]:
+          - generic [ref=f4e1072]: <div class="version-diff-pane" id="versionDiffPane">
+      - generic [ref=f4e1073]:
+        - generic: "241"
+        - code [ref=f4e1074]:
+          - generic [ref=f4e1075]: <div class="version-diff-header" id="versionDiffHeader">
+      - generic [ref=f4e1076]:
+        - generic: "242"
+        - code [ref=f4e1077]: 选择一个版本查看变更
+      - generic [ref=f4e1078]:
+        - generic: "243"
+        - code [ref=f4e1079]:
+          - generic [ref=f4e1080]: </div>
+      - generic [ref=f4e1081]:
+        - generic: "244"
+        - code [ref=f4e1082]:
+          - generic [ref=f4e1083]: <div class="version-diff-content" id="versionDiffContent">
+      - generic [ref=f4e1084]:
+        - generic: "245"
+        - code [ref=f4e1085]:
+          - generic [ref=f4e1086]: <div class="version-diff-placeholder">
+          - text: 点击左侧任意提交以查看变更
+          - generic [ref=f4e1087]: </div>
+      - generic [ref=f4e1088]:
+        - generic: "246"
+        - code [ref=f4e1089]:
+          - generic [ref=f4e1090]: </div>
+      - generic [ref=f4e1091]:
+        - generic: "247"
+        - code [ref=f4e1092]:
+          - generic [ref=f4e1093]: </div>
+      - generic [ref=f4e1094]:
+        - generic: "248"
+        - code [ref=f4e1095]:
+          - generic [ref=f4e1096]: </div>
+      - generic [ref=f4e1097]:
+        - generic: "249"
+        - code [ref=f4e1098]:
+          - generic [ref=f4e1099]: <div class="version-modal-footer" id="versionModalFooter">
+          - generic [ref=f4e1100]: </div>
+      - generic [ref=f4e1101]:
+        - generic: "250"
+        - code [ref=f4e1102]:
+          - generic [ref=f4e1103]: </div>
+      - generic [ref=f4e1104]:
+        - generic: "251"
+        - code [ref=f4e1105]:
+          - generic [ref=f4e1106]: </div>
+      - generic [ref=f4e1107]:
+        - generic: "252"
+        - code [ref=f4e1108]
+      - generic [ref=f4e1109]:
+        - generic: "253"
+        - code [ref=f4e1110]: <!-- PDF.js for outline extraction -->
+      - generic [ref=f4e1111]:
+        - generic: "254"
+        - code [ref=f4e1112]:
+          - generic [ref=f4e1113]: <script src="/clawmate/pdfjs/pdf.min.js" defer>
+          - generic [ref=f4e1114]: </script>
+      - generic [ref=f4e1115]:
+        - generic: "255"
+        - code [ref=f4e1116]: <!-- Vendor scripts (KaTeX/Mermaid loaded conditionally) -->
+      - generic [ref=f4e1117]:
+        - generic: "256"
+        - code [ref=f4e1118]:
+          - generic [ref=f4e1119]: <script src="./vendor/purify.min.js" defer>
+          - generic [ref=f4e1120]: </script>
+      - generic [ref=f4e1121]:
+        - generic: "257"
+        - code [ref=f4e1122]:
+          - generic [ref=f4e1123]: <script src="./vendor/markdown-it.min.js" defer>
+          - generic [ref=f4e1124]: </script>
+      - generic [ref=f4e1125]:
+        - generic: "258"
+        - code [ref=f4e1126]:
+          - generic [ref=f4e1127]: <script src="./vendor/markdown-it-container.min.js" defer>
+          - generic [ref=f4e1128]: </script>
+      - generic [ref=f4e1129]:
+        - generic: "259"
+        - code [ref=f4e1130]:
+          - generic [ref=f4e1131]: <script src="./vendor/markdown-it-emoji.min.js" defer>
+          - generic [ref=f4e1132]: </script>
+      - generic [ref=f4e1133]:
+        - generic: "260"
+        - code [ref=f4e1134]:
+          - generic [ref=f4e1135]: <script src="./vendor/markdown-it-footnote.min.js" defer>
+          - generic [ref=f4e1136]: </script>
+      - generic [ref=f4e1137]:
+        - generic: "261"
+        - code [ref=f4e1138]:
+          - generic [ref=f4e1139]: <script src="./vendor/markdown-it-task-lists.min.js" defer>
+          - generic [ref=f4e1140]: </script>
+      - generic [ref=f4e1141]:
+        - generic: "262"
+        - code [ref=f4e1142]:
+          - generic [ref=f4e1143]: <script src="./vendor/highlight.min.js" defer>
+          - generic [ref=f4e1144]: </script>
+      - generic [ref=f4e1145]:
+        - generic: "263"
+        - code [ref=f4e1146]:
+          - generic [ref=f4e1147]: <script src="./dist/terminal.js" defer>
+          - generic [ref=f4e1148]: </script>
+      - generic [ref=f4e1149]:
+        - generic: "264"
+        - code [ref=f4e1150]:
+          - generic [ref=f4e1151]: <script src="./js/icons.js" defer>
+          - generic [ref=f4e1152]: </script>
+      - generic [ref=f4e1153]:
+        - generic: "265"
+        - code [ref=f4e1154]:
+          - generic [ref=f4e1155]: <script src="./js/topbar.js" defer>
+          - generic [ref=f4e1156]: </script>
+      - generic [ref=f4e1157]:
+        - generic: "266"
+        - code [ref=f4e1158]:
+          - generic [ref=f4e1159]: <script src="./js/preview-common.js" defer>
+          - generic [ref=f4e1160]: </script>
+      - generic [ref=f4e1161]:
+        - generic: "267"
+        - code [ref=f4e1162]:
+          - generic [ref=f4e1163]: <script src="./js/preview.js" defer>
+          - generic [ref=f4e1164]: </script>
+      - generic [ref=f4e1165]:
+        - generic: "268"
+        - code [ref=f4e1166]: <!-- Service Worker registration for PWA -->
+      - generic [ref=f4e1167]:
+        - generic: "269"
+        - code [ref=f4e1168]:
+          - generic [ref=f4e1169]: <script>
+      - generic [ref=f4e1170]:
+        - generic: "270"
+        - code [ref=f4e1171]:
+          - generic [ref=f4e1172]: "if ('serviceWorker' in navigator) {"
+      - generic [ref=f4e1173]:
+        - generic: "271"
+        - code [ref=f4e1174]:
+          - generic [ref=f4e1175]: "navigator.serviceWorker.register('/clawmate/sw.js').catch(function() {});"
+      - generic [ref=f4e1176]:
+        - generic: "272"
+        - code [ref=f4e1177]: "}"
+      - generic [ref=f4e1178]:
+        - generic: "273"
+        - code [ref=f4e1179]:
+          - generic [ref=f4e1180]: </script>
+      - generic [ref=f4e1181]:
+        - generic: "274"
+        - code [ref=f4e1182]:
+          - generic [ref=f4e1183]: </body>
+      - generic [ref=f4e1184]:
+        - generic: "275"
+        - code [ref=f4e1185]:
+          - generic [ref=f4e1186]: </html>
+      - generic [ref=f4e1187]:
+        - generic: "276"
+        - code [ref=f4e1188]
+  - generic [ref=f4e38]:
+    - generic [ref=f4e39]:
+      - button "位置" [ref=f4e40] [cursor=pointer]
+      - button "导出" [ref=f4e43] [cursor=pointer]
+      - button "下载" [ref=f4e48] [cursor=pointer]
+      - button "重命名" [ref=f4e52] [cursor=pointer]
+      - button "移动" [ref=f4e56] [cursor=pointer]
+      - button "分享" [ref=f4e62] [cursor=pointer]
+    - button "📝 渲染" [ref=f4e1189] [cursor=pointer]
+    - button "✏️ 编辑" [ref=f4e1191] [cursor=pointer]
+    - button "删除" [ref=f4e69] [cursor=pointer]

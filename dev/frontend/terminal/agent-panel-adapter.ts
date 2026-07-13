@@ -392,13 +392,7 @@ export class AgentPanelAdapter {
 
           // Ctrl+V: Paste from clipboard via async API
           if (key === 'v') {
-            navigator.clipboard.readText()
-              .then((text) => {
-                if (text) this.sendInput(new TextEncoder().encode(text));
-              })
-              .catch(() => {
-                // Clipboard read unavailable — silently ignore
-              });
+            void this.pasteFromClipboard();
             return false; // Don't send \x16 to PTY
           }
 
@@ -628,6 +622,8 @@ export class AgentPanelAdapter {
     if (searchNext) searchNext.onclick = () => runSearch(true);
     const clear = document.getElementById(id('AgentClear'));
     if (clear) clear.onclick = () => this.sendInput(new Uint8Array([0x0c]));
+    const paste = document.getElementById(id('AgentPaste'));
+    if (paste) paste.onclick = () => { void this.pasteFromClipboard(); };
     const adjustFont = (delta: number) => {
       if (!this.terminal) return;
       const oldFontSize = this.terminal.options.fontSize || 14;
@@ -1400,5 +1396,16 @@ export class AgentPanelAdapter {
 
   private sendInput(data: Uint8Array): void {
     if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(encodeInputFrame(this.nextSequence++, data));
+  }
+
+  private async pasteFromClipboard(): Promise<void> {
+    try {
+      const readText = navigator.clipboard?.readText?.bind(navigator.clipboard);
+      if (!readText) return;
+      const text = await readText();
+      if (text) this.sendInput(new TextEncoder().encode(text));
+    } catch {
+      // Clipboard access is best-effort on mobile browsers and insecure contexts.
+    }
   }
 }

@@ -637,6 +637,14 @@ button svg, .btn svg, a svg {
     box-shadow: 0 4px 24px rgba(0,0,0,0.25);
     box-sizing: border-box;
   }
+  .agent-panel-header .agent-panel-btn-label { display: none; }
+  #btnAgentHistory, #previewBtnAgentHistory,
+  #btnNewAgentSession, #previewBtnNewAgentSession {
+    width: 30px;
+    min-width: 30px;
+    padding: 0;
+    gap: 0;
+  }
   .agent-panel-header {
     height: auto; min-height: 40px;
     gap: 4px; padding-left: 10px; padding-right: 10px;

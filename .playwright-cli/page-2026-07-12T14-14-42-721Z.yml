@@ -1,0 +1,692 @@
+- generic [ref=f4e1]:
+  - generic [ref=f4e2]:
+    - banner [ref=f4e3]:
+      - generic [ref=f4e4]: ClawMate
+      - generic [ref=f4e5]:
+        - generic [ref=f4e6]: README.md
+        - button "复制文件名" [ref=f4e7] [cursor=pointer]
+        - button "刷新大纲和内容" [ref=f4e11] [cursor=pointer]
+        - 'generic "feat: add terminal sessions and agent history OpenClaw · 2026-07-11" [ref=f4e83] [cursor=pointer]': 992c619
+      - generic [ref=f4e16]:
+        - button "切换大纲面板" [ref=f4e17] [cursor=pointer]
+        - button "切换反馈面板" [ref=f4e19] [cursor=pointer]
+        - button "Agent 终端" [ref=f4e22] [cursor=pointer]
+        - button "自动主题" [ref=f4e26] [cursor=pointer]
+        - button "退出登录" [ref=f4e33] [cursor=pointer]
+    - generic [ref=f4e37]:
+      - complementary [ref=f4e38]:
+        - generic [ref=f4e39]:
+          - generic [ref=f4e40]: 大纲
+          - button "关闭面板" [ref=f4e42] [cursor=pointer]
+        - list [ref=f4e85]:
+          - listitem [ref=f4e86] [cursor=pointer]:
+            - link "ClawMate" [ref=f4e87]:
+              - /url: "#heading-0"
+          - listitem [ref=f4e88] [cursor=pointer]:
+            - link "Terminal v2 灰度发布" [ref=f4e89]:
+              - /url: "#heading-1"
+          - listitem [ref=f4e90] [cursor=pointer]:
+            - link "业务架构" [ref=f4e91]:
+              - /url: "#heading-2"
+          - listitem [ref=f4e92] [cursor=pointer]:
+            - link "六大核心能力" [ref=f4e93]:
+              - /url: "#heading-3"
+          - listitem [ref=f4e94] [cursor=pointer]:
+            - link "1. 远程文件管理" [ref=f4e95]:
+              - /url: "#heading-4"
+          - listitem [ref=f4e96] [cursor=pointer]:
+            - link "2. Agent 项目管理" [ref=f4e97]:
+              - /url: "#heading-5"
+          - listitem [ref=f4e98] [cursor=pointer]:
+            - link "3. 多 Agent 后端" [ref=f4e99]:
+              - /url: "#heading-6"
+          - listitem [ref=f4e100] [cursor=pointer]:
+            - link "4. 文件预览与反馈 & AI 修复" [ref=f4e101]:
+              - /url: "#heading-7"
+          - listitem [ref=f4e102] [cursor=pointer]:
+            - link "5. 按文件类型 AI 扩展" [ref=f4e103]:
+              - /url: "#heading-8"
+          - listitem [ref=f4e104] [cursor=pointer]:
+            - link "6. Skill 驱动关联" [ref=f4e105]:
+              - /url: "#heading-9"
+          - listitem [ref=f4e106] [cursor=pointer]:
+            - link "截图" [ref=f4e107]:
+              - /url: "#heading-10"
+          - listitem [ref=f4e108] [cursor=pointer]:
+            - link "文件管理 + Agent 面板" [ref=f4e109]:
+              - /url: "#heading-11"
+          - listitem [ref=f4e110] [cursor=pointer]:
+            - link "预览 + 大纲 + 反馈" [ref=f4e111]:
+              - /url: "#heading-12"
+          - listitem [ref=f4e112] [cursor=pointer]:
+            - link "视频 + 字幕提取" [ref=f4e113]:
+              - /url: "#heading-13"
+          - listitem [ref=f4e114] [cursor=pointer]:
+            - link "快速开始" [ref=f4e115]:
+              - /url: "#heading-14"
+          - listitem [ref=f4e116] [cursor=pointer]:
+            - link "Docker 部署（推荐）" [ref=f4e117]:
+              - /url: "#heading-15"
+          - listitem [ref=f4e118] [cursor=pointer]:
+            - link "本地启动" [ref=f4e119]:
+              - /url: "#heading-16"
+          - listitem [ref=f4e120] [cursor=pointer]:
+            - link "一键部署（systemd）" [ref=f4e121]:
+              - /url: "#heading-17"
+          - listitem [ref=f4e122] [cursor=pointer]:
+            - link "与 OpenClaw 集成" [ref=f4e123]:
+              - /url: "#heading-18"
+          - listitem [ref=f4e124] [cursor=pointer]:
+            - link "架构" [ref=f4e125]:
+              - /url: "#heading-19"
+          - listitem [ref=f4e126] [cursor=pointer]:
+            - link "配置参考" [ref=f4e127]:
+              - /url: "#heading-20"
+          - listitem [ref=f4e128] [cursor=pointer]:
+            - link "认证" [ref=f4e129]:
+              - /url: "#heading-21"
+      - main [ref=f4e48]:
+        - generic [ref=f4e130]:
+          - paragraph [ref=f4e131]:
+            - img "ClawMate" [ref=f4e132]
+          - heading "ClawMate" [level=1] [ref=f4e133]
+          - blockquote [ref=f4e134]:
+            - paragraph [ref=f4e135]: 远程文件管理 · Agent 终端 · 预览反馈闭环 · 多后端协作
+          - paragraph [ref=f4e136]:
+            - link [ref=f4e137] [cursor=pointer]:
+              - /url: preview.html?root=webprojects&file=clawmate%2FLICENSE
+              - img "MIT License" [ref=f4e138]
+          - paragraph [ref=f4e139]:
+            - text: ClawMate 是 AI Agent 工作流的
+            - strong [ref=f4e140]: 一站式中台
+            - text: ，将传统分散的文件管理、内容预览、反馈收集和 AI 编码四个环节整合为一个无缝闭环：
+          - list [ref=f4e141]:
+            - listitem [ref=f4e142]:
+              - strong [ref=f4e143]: 远程文件管理
+              - text: — 多 root 目录树，覆盖上传、搜索、移动、分享等全生命周期操作
+            - listitem [ref=f4e144]:
+              - strong [ref=f4e145]: 全格式预览
+              - text: — Markdown（Mermaid/KaTeX）、Office（ONLYOFFICE）、PDF、代码高亮、音视频、压缩包等开箱即用
+            - listitem [ref=f4e146]:
+              - strong [ref=f4e147]: 即时反馈
+              - text: — 预览页选中文本即出浮层，填写备注提交，反馈进入 pending→in_progress→done 状态机全程可追溯
+            - listitem [ref=f4e148]:
+              - strong [ref=f4e149]: Agent 自动修复
+              - text: — 反馈直接路由到活跃的 Agent 终端（PTY 注入或 webhook 唤醒），AI 读取 → 修改 → 保存，闭环完成
+            - listitem [ref=f4e150]:
+              - strong [ref=f4e151]: 项目持续迭代
+              - text: — 五阶段分层计划（Phase I-V）+ CLAWLIST 进度跟踪 +
+              - code [ref=f4e152]: .clawmate/
+              - text: marker session 隔离，多项目并行推进
+          - paragraph [ref=f4e153]:
+            - text: 集成
+            - strong [ref=f4e154]: Claude Code
+            - text: 、
+            - strong [ref=f4e155]: Codex
+            - text: 和
+            - strong [ref=f4e156]: OpenClaw
+            - text: 三后端 Agent 面板——右上角一键切换，无需修改配置。Claude/Codex 通过 xterm.js PTY 提供完整 CLI 体验（60fps），OpenClaw 通过 Markdown 聊天 + Gateway 协议支持多 Agent 协作。在浏览器中完成从文件浏览到 AI 执行的完整闭环，无需离开 ClawMate。
+          - heading "Terminal v2 灰度发布" [level=3] [ref=f4e157]
+          - paragraph [ref=f4e158]:
+            - text: 终端资源由本地锁定的
+            - code [ref=f4e159]: "@xterm/xterm@6.0.0"
+            - text: bundle 提供，不依赖运行时 CDN。默认保持兼容路径；在
+            - code [ref=f4e160]: agent.terminal_v2
+            - text: 设为
+            - code [ref=f4e161]: "true"
+            - text: 后，Claude/Codex 会使用协议 v2（二进制终端数据帧、受限回放及队列），出现问题时将该开关设回
+            - code [ref=f4e162]: "false"
+            - text: 即可回退。构建资源：
+            - code [ref=f4e163]: npm ci && npm run build:terminal
+            - text: 。
+          - heading "业务架构" [level=3] [ref=f4e164]
+          - document [ref=f4e167]:
+            - generic [ref=f4e187]:
+              - paragraph [ref=f4e194]: ClawMate一站式中台
+              - paragraph [ref=f4e201]: skill命令入口
+              - paragraph [ref=f4e208]: API程序入口
+              - paragraph [ref=f4e215]: 📁 filesystem文件管理
+              - paragraph [ref=f4e222]: ⚡ codexPTY CLI
+              - paragraph [ref=f4e229]: 🤖 claudePTY CLI
+              - paragraph [ref=f4e236]: 🔗 openclawGateway 协议
+              - paragraph [ref=f4e243]: 📋 project项目管理
+              - paragraph [ref=f4e250]: 💬 feedback反馈闭环
+          - table [ref=f4e252]:
+            - rowgroup [ref=f4e253]:
+              - row [ref=f4e254]:
+                - columnheader "层级" [ref=f4e255]
+                - columnheader "说明" [ref=f4e256]
+            - rowgroup [ref=f4e257]:
+              - row [ref=f4e258]:
+                - cell [ref=f4e259]:
+                  - strong [ref=f4e260]: 入口
+                - cell [ref=f4e261]:
+                  - text: skill（
+                  - code [ref=f4e262]: /clawmate ...
+                  - text: 命令）和 API（HTTP/WebSocket）两种方式访问
+              - row [ref=f4e263]:
+                - cell [ref=f4e264]:
+                  - strong [ref=f4e265]: 功能域
+                - cell "filesystem（文件管理）、project（项目管理）、feedback（反馈闭环）三大业务模块" [ref=f4e266]
+              - row [ref=f4e267]:
+                - cell [ref=f4e268]:
+                  - strong [ref=f4e269]: 后端
+                - cell "openclaw / codex / claude 三引擎，右上角 badge 一键切换，任一引擎可驱动任一功能" [ref=f4e270]
+          - blockquote [ref=f4e271]:
+            - paragraph [ref=f4e272]:
+              - text: 图中连线表示
+              - strong [ref=f4e273]: 主要侧重
+              - text: ，不是绑定。三个 badge 随时切换，同一 session 内可混合使用不同后端处理不同任务。
+          - separator [ref=f4e274]
+          - heading "六大核心能力" [level=2] [ref=f4e275]
+          - heading "1. 远程文件管理" [level=3] [ref=f4e276]
+          - paragraph [ref=f4e277]: 多 root 目录树浏览，覆盖完整文件生命周期：
+          - table [ref=f4e278]:
+            - rowgroup [ref=f4e279]:
+              - row [ref=f4e280]:
+                - columnheader "操作" [ref=f4e281]
+                - columnheader "能力" [ref=f4e282]
+            - rowgroup [ref=f4e283]:
+              - row [ref=f4e284]:
+                - cell "浏览" [ref=f4e285]
+                - cell "画廊/列表双视图、类型过滤、多字段排序" [ref=f4e286]
+              - row [ref=f4e287]:
+                - cell "搜索" [ref=f4e288]
+                - cell "递归全文搜索，彩色文件类型标签" [ref=f4e289]
+              - row [ref=f4e290]:
+                - cell "上传" [ref=f4e291]
+                - cell "拖拽上传 + Ctrl+V 剪切板粘贴图片" [ref=f4e292]
+              - row [ref=f4e293]:
+                - cell "组织" [ref=f4e294]
+                - cell "新建目录、重命名、移动、删除" [ref=f4e295]
+              - row [ref=f4e296]:
+                - cell "分享" [ref=f4e297]
+                - cell "24h 免登录分享链接，全格式支持" [ref=f4e298]
+              - row [ref=f4e299]:
+                - cell "下载" [ref=f4e300]
+                - cell "单文件下载 + 压缩包在线解压预览" [ref=f4e301]
+          - heading "2. Agent 项目管理" [level=3] [ref=f4e302]
+          - paragraph [ref=f4e303]: 围绕 AI Agent 工作流的项目全生命周期：
+          - list [ref=f4e304]:
+            - listitem [ref=f4e305]:
+              - strong [ref=f4e306]:
+                - code [ref=f4e307]: /clawmate init
+              - text: — 一键初始化标准项目结构（CLAWLIST + PROJECT_NOTE + research/prd/dev/test）
+            - listitem [ref=f4e308]:
+              - strong [ref=f4e309]:
+                - code [ref=f4e310]: /clawmate plan
+              - text: — 五阶段分层计划（Phase I 初始化 → II 需求澄清 → III 信息收集 → IV MRD → V PRD）
+            - listitem [ref=f4e311]:
+              - strong [ref=f4e312]:
+                - code [ref=f4e313]: /clawmate project
+              - text: — 秒级切换会话上下文，Agent 自动加载项目状态
+            - listitem [ref=f4e314]:
+              - code [ref=f4e315]: .clawmate/
+              - text: marker 自动识别项目边界，多项目并行 + session 隔离
+          - heading "3. 多 Agent 后端" [level=3] [ref=f4e316]
+          - paragraph [ref=f4e317]: 右上角一键切换后端，无需修改配置：
+          - table [ref=f4e318]:
+            - rowgroup [ref=f4e319]:
+              - row [ref=f4e320]:
+                - columnheader "后端" [ref=f4e321]
+                - columnheader "模式" [ref=f4e322]
+                - columnheader "交互" [ref=f4e323]
+            - rowgroup [ref=f4e324]:
+              - row [ref=f4e325]:
+                - cell [ref=f4e326]:
+                  - strong [ref=f4e327]: Claude Code
+                - cell "xterm.js PTY 终端" [ref=f4e328]
+                - cell "完整 CLI（Read/Write/Edit/Bash），60fps" [ref=f4e329]
+              - row [ref=f4e330]:
+                - cell [ref=f4e331]:
+                  - strong [ref=f4e332]: Codex
+                - cell "xterm.js PTY 终端" [ref=f4e333]
+                - cell "完整 CLI（Read/Write/Edit/Bash），60fps" [ref=f4e334]
+              - row [ref=f4e335]:
+                - cell [ref=f4e336]:
+                  - strong [ref=f4e337]: OpenClaw
+                - cell "Markdown 聊天" [ref=f4e338]
+                - cell "chat.send 协议，Gateway 多 Agent 协作" [ref=f4e339]
+          - paragraph [ref=f4e340]: Feedback 任务智能路由：PTY 活跃时直接注入终端执行，否则通过 webhook 唤醒。
+          - heading "4. 文件预览与反馈 & AI 修复" [level=3] [ref=f4e341]
+          - paragraph [ref=f4e342]: 点击即渲染，选中即反馈，AI 自动修改：
+          - paragraph [ref=f4e343]: 预览页选中代码段即可通过浮动按钮直接将文件路径发送到 Agent 终端，文件管理页也支持一键"添加到会话"。
+          - paragraph [ref=f4e344]:
+            - strong [ref=f4e345]: 全格式预览
+            - text: ：
+          - table [ref=f4e346]:
+            - rowgroup [ref=f4e347]:
+              - row [ref=f4e348]:
+                - columnheader "类型" [ref=f4e349]
+                - columnheader "能力" [ref=f4e350]
+            - rowgroup [ref=f4e351]:
+              - row [ref=f4e352]:
+                - cell "Markdown" [ref=f4e353]
+                - cell "Mermaid / KaTeX / 语法高亮 / 大纲导航" [ref=f4e354]
+              - row [ref=f4e355]:
+                - cell "Mermaid 图表" [ref=f4e356]
+                - cell "缩放 + 拖拽平移 + 全屏展开" [ref=f4e357]
+              - row [ref=f4e358]:
+                - cell "Office 文档" [ref=f4e359]
+                - cell "ONLYOFFICE 嵌入（编辑/只读）" [ref=f4e360]
+              - row [ref=f4e361]:
+                - cell "PDF" [ref=f4e362]
+                - cell "pdf.js 预览 + 大纲跳转" [ref=f4e363]
+              - row [ref=f4e364]:
+                - cell "压缩包" [ref=f4e365]
+                - cell "zip / tar / 7z / rar 树形展开" [ref=f4e366]
+              - row [ref=f4e367]:
+                - cell "代码" [ref=f4e368]
+                - cell "12 种语言语法高亮 + 函数/类大纲索引" [ref=f4e369]
+              - row [ref=f4e370]:
+                - cell "图片" [ref=f4e371]
+                - cell "‹ › 导航切换 + 缩略图大纲" [ref=f4e372]
+              - row [ref=f4e373]:
+                - cell "音视频" [ref=f4e374]
+                - cell "内嵌播放器 + 字幕同步" [ref=f4e375]
+          - paragraph [ref=f4e376]:
+            - strong [ref=f4e377]: 反馈闭环
+            - text: ：
+          - generic [ref=f4e378]:
+            - generic [ref=f4e379]:
+              - generic: "1"
+              - code [ref=f4e380]: 选中文本 → 浮层弹出 → 填写备注 → 提交 → pending → in_progress → done/failed
+            - generic [ref=f4e381]:
+              - generic: "2"
+              - code [ref=f4e382]
+          - paragraph [ref=f4e383]: 连续选中多个位置统一提交，反馈 timeline 全程可追溯，修改完成后可重新评审进入下一轮迭代。
+          - heading "5. 按文件类型 AI 扩展" [level=3] [ref=f4e384]
+          - paragraph [ref=f4e385]: 不同文件类型触发不同的 AI 能力：
+          - table [ref=f4e386]:
+            - rowgroup [ref=f4e387]:
+              - row [ref=f4e388]:
+                - columnheader "类型" [ref=f4e389]
+                - columnheader "AI 扩展" [ref=f4e390]
+            - rowgroup [ref=f4e391]:
+              - row [ref=f4e392]:
+                - cell "音视频" [ref=f4e393]
+                - cell "字幕提取（whisper） + 字幕编辑器 + 时间轴同步预览" [ref=f4e394]
+              - row [ref=f4e395]:
+                - cell "代码" [ref=f4e396]
+                - cell "12 语言函数/类大纲自动索引，click-to-scroll" [ref=f4e397]
+              - row [ref=f4e398]:
+                - cell "Office" [ref=f4e399]
+                - cell "ONLYOFFICE 在线编辑，保存后自动回写" [ref=f4e400]
+              - row [ref=f4e401]:
+                - cell "压缩包" [ref=f4e402]
+                - cell "在线解压浏览，支持嵌套目录" [ref=f4e403]
+          - paragraph [ref=f4e404]:
+            - text: 扩展通过
+            - code [ref=f4e405]: task_templates
+            - text: 体系注册，新文件类型可插拔接入。
+          - heading "6. Skill 驱动关联" [level=3] [ref=f4e406]
+          - paragraph [ref=f4e407]: 通过 Skill 体系联动项目、链接与 feedback：
+          - table [ref=f4e408]:
+            - rowgroup [ref=f4e409]:
+              - row [ref=f4e410]:
+                - columnheader "命令" [ref=f4e411]
+                - columnheader "用途" [ref=f4e412]
+            - rowgroup [ref=f4e413]:
+              - row [ref=f4e414]:
+                - cell [ref=f4e415]:
+                  - code [ref=f4e416]: /clawmate link <filename>
+                - cell "搜索文件生成可点击预览链接" [ref=f4e417]
+              - row [ref=f4e418]:
+                - cell [ref=f4e419]:
+                  - code [ref=f4e420]: /clawmate init [root] <project>
+                - cell "项目初始化" [ref=f4e421]
+              - row [ref=f4e422]:
+                - cell [ref=f4e423]:
+                  - code [ref=f4e424]: /clawmate plan [root] <project>
+                - cell "规划/更新项目计划" [ref=f4e425]
+              - row [ref=f4e426]:
+                - cell [ref=f4e427]:
+                  - code [ref=f4e428]: /clawmate list [root_id]
+                - cell "列出 root 下所有项目" [ref=f4e429]
+              - row [ref=f4e430]:
+                - cell [ref=f4e431]:
+                  - code [ref=f4e432]: /clawmate feed [status] [project]
+                - cell "查询 feedback 列表" [ref=f4e433]
+              - row [ref=f4e434]:
+                - cell [ref=f4e435]:
+                  - code [ref=f4e436]: /clawmate do [#ID]
+                - cell "批量处理待办反馈" [ref=f4e437]
+              - row [ref=f4e438]:
+                - cell [ref=f4e439]:
+                  - code [ref=f4e440]: /clawmate project <projectname>
+                - cell "切换会话到指定项目" [ref=f4e441]
+          - blockquote [ref=f4e442]:
+            - paragraph [ref=f4e443]:
+              - text: 📖 完整命令参数见
+              - link "skills/clawmate/SKILL.md" [ref=f4e444] [cursor=pointer]:
+                - /url: preview.html?root=webprojects&file=clawmate%2Fskills%2Fclawmate%2FSKILL.md
+          - separator [ref=f4e445]
+          - heading "截图" [level=2] [ref=f4e446]
+          - heading "文件管理 + Agent 面板" [level=3] [ref=f4e447]
+          - paragraph [ref=f4e448]:
+            - img "文件管理 + Agent" [ref=f4e449]
+          - paragraph [ref=f4e450]:
+            - emphasis [ref=f4e451]: 多 root 切换 · 项目与目录分离 · 画廊/列表双视图 · 类型过滤排序 · 右侧 Agent 终端随时唤醒
+          - heading "预览 + 大纲 + 反馈" [level=3] [ref=f4e452]
+          - paragraph [ref=f4e453]:
+            - img "预览反馈" [ref=f4e454]
+          - paragraph [ref=f4e455]:
+            - emphasis [ref=f4e456]: 左侧大纲导航 · 中间 Markdown 渲染（Mermaid/KaTeX）· 选中文本弹出反馈浮层 · 右侧 feedback panel 状态追踪 · 底部操作栏
+          - heading "视频 + 字幕提取" [level=3] [ref=f4e457]
+          - paragraph [ref=f4e458]:
+            - img "视频预览 + 字幕提取" [ref=f4e459]
+          - paragraph [ref=f4e460]:
+            - emphasis [ref=f4e461]: 视频播放与控制 · 字幕一键提取（faster-whisper）· SRT 生成与下载
+          - separator [ref=f4e462]
+          - heading "快速开始" [level=2] [ref=f4e463]
+          - heading "Docker 部署（推荐）" [level=3] [ref=f4e464]
+          - generic [ref=f4e465]:
+            - generic [ref=f4e466]:
+              - generic: "1"
+              - code [ref=f4e467]: docker build -t clawmate:latest .
+            - generic [ref=f4e468]:
+              - generic: "2"
+              - code [ref=f4e469]: cp config.example.json config.json
+            - generic [ref=f4e470]:
+              - generic: "3"
+              - code [ref=f4e471]: "# 编辑 config.json，填入目录路径"
+            - generic [ref=f4e472]:
+              - generic: "4"
+              - code [ref=f4e473]
+            - generic [ref=f4e474]:
+              - generic: "5"
+              - code [ref=f4e475]: docker run -d \
+            - generic [ref=f4e476]:
+              - generic: "6"
+              - code [ref=f4e477]: "--name clawmate \\"
+            - generic [ref=f4e478]:
+              - generic: "7"
+              - code [ref=f4e479]: "--restart unless-stopped \\"
+            - generic [ref=f4e480]:
+              - generic: "8"
+              - code [ref=f4e481]: "-p 5533:5533 \\"
+            - generic [ref=f4e482]:
+              - generic: "9"
+              - code [ref=f4e483]: "-v $(pwd)/config.json:/app/config.json:ro \\"
+            - generic [ref=f4e484]:
+              - generic: "10"
+              - code [ref=f4e485]: "-v /your/data:/data \\"
+            - generic [ref=f4e486]:
+              - generic: "11"
+              - code [ref=f4e487]: clawmate:latest
+            - generic [ref=f4e488]:
+              - generic: "12"
+              - code [ref=f4e489]
+          - heading "本地启动" [level=3] [ref=f4e490]
+          - generic [ref=f4e491]:
+            - generic [ref=f4e492]:
+              - generic: "1"
+              - code [ref=f4e493]: cp config.example.json config.json
+            - generic [ref=f4e494]:
+              - generic: "2"
+              - code [ref=f4e495]: python3 -m venv dev/.venv
+            - generic [ref=f4e496]:
+              - generic: "3"
+              - code [ref=f4e497]: dev/.venv/bin/pip install -r requirements.txt
+            - generic [ref=f4e498]:
+              - generic: "4"
+              - code [ref=f4e499]: cd dev && ../.venv/bin/python main.py
+            - generic [ref=f4e500]:
+              - generic: "5"
+              - code [ref=f4e501]
+          - heading "一键部署（systemd）" [level=3] [ref=f4e502]
+          - generic [ref=f4e503]:
+            - generic [ref=f4e504]:
+              - generic: "1"
+              - code [ref=f4e505]: "sudo bash install.sh # 安装到当前目录"
+            - generic [ref=f4e506]:
+              - generic: "2"
+              - code [ref=f4e507]: "sudo bash install.sh /opt/clawmate # 安装到指定路径"
+            - generic [ref=f4e508]:
+              - generic: "3"
+              - code [ref=f4e509]
+          - heading "与 OpenClaw 集成" [level=3] [ref=f4e510]
+          - generic [ref=f4e511]:
+            - generic [ref=f4e512]:
+              - generic: "1"
+              - code [ref=f4e513]: openclaw skills install clawmate
+            - generic [ref=f4e514]:
+              - generic: "2"
+              - code [ref=f4e515]: openclaw gateway restart
+            - generic [ref=f4e516]:
+              - generic: "3"
+              - code [ref=f4e517]
+          - paragraph [ref=f4e518]:
+            - text: 在
+            - code [ref=f4e519]: config.json
+            - text: 中配置 gateway 连接：
+          - generic [ref=f4e520]:
+            - generic [ref=f4e521]:
+              - generic: "1"
+              - code [ref=f4e522]: "{"
+            - generic [ref=f4e523]:
+              - generic: "2"
+              - code [ref=f4e524]: "\"openclaw\": {"
+            - generic [ref=f4e525]:
+              - generic: "3"
+              - code [ref=f4e526]: "\"gateway_url\": \"http://127.0.0.1:18789\","
+            - generic [ref=f4e527]:
+              - generic: "4"
+              - code [ref=f4e528]: "\"hook_token\": \"your-hook-token\""
+            - generic [ref=f4e529]:
+              - generic: "5"
+              - code [ref=f4e530]: "}"
+            - generic [ref=f4e531]:
+              - generic: "6"
+              - code [ref=f4e532]: "}"
+            - generic [ref=f4e533]:
+              - generic: "7"
+              - code [ref=f4e534]
+          - separator [ref=f4e535]
+          - heading "架构" [level=2] [ref=f4e536]
+          - document [ref=f4e539]:
+            - generic [ref=f4e541]:
+              - generic [ref=f4e542]:
+                - paragraph [ref=f4e549]: Agent 后端
+                - paragraph [ref=f4e556]: FastAPI :5533
+                - paragraph [ref=f4e563]: 浏览器
+              - generic [ref=f4e572]:
+                - paragraph [ref=f4e579]: index.html (文件管理 + Agent 面板)preview.html (预览 + 反馈)
+                - paragraph [ref=f4e586]: /api/clawmate/*文件 CRUD / 搜索 / 预览
+                - paragraph [ref=f4e593]: agent_routesWebSocket PTY 终端 / 聊天
+                - paragraph [ref=f4e600]: feedback_api反馈 CRUD + 状态流转
+                - paragraph [ref=f4e607]: task_runner任务执行 + cron 唤醒
+                - paragraph [ref=f4e614]: auth 登录认证
+                - paragraph [ref=f4e621]: Claude Code / Codexpty.spawn() PTY 终端
+                - paragraph [ref=f4e628]: OpenClaw Gatewaychat.send 协议
+          - table [ref=f4e630]:
+            - rowgroup [ref=f4e631]:
+              - row [ref=f4e632]:
+                - columnheader "模块" [ref=f4e633]
+                - columnheader "功能" [ref=f4e634]
+            - rowgroup [ref=f4e635]:
+              - row [ref=f4e636]:
+                - cell [ref=f4e637]:
+                  - code [ref=f4e638]: routes.py
+                - cell "文件 CRUD、搜索、预览、压缩包、移动" [ref=f4e639]
+              - row [ref=f4e640]:
+                - cell [ref=f4e641]:
+                  - code [ref=f4e642]: feedback_api.py
+                - cell "反馈闭环 CRUD + 四态流转" [ref=f4e643]
+              - row [ref=f4e644]:
+                - cell [ref=f4e645]:
+                  - code [ref=f4e646]: agent_routes.py
+                - cell "Agent WebSocket（PTY + 聊天双模）" [ref=f4e647]
+              - row [ref=f4e648]:
+                - cell [ref=f4e649]:
+                  - code [ref=f4e650]: task_runner.py
+                - cell "任务执行引擎 + cron 扫描唤醒" [ref=f4e651]
+              - row [ref=f4e652]:
+                - cell [ref=f4e653]:
+                  - code [ref=f4e654]: auth.py
+                - cell "Session 认证 + local_hosts 白名单" [ref=f4e655]
+              - row [ref=f4e656]:
+                - cell [ref=f4e657]:
+                  - code [ref=f4e658]: config.py
+                - cell "类型化配置加载 + TTL 缓存" [ref=f4e659]
+              - row [ref=f4e660]:
+                - cell [ref=f4e661]:
+                  - code [ref=f4e662]: store.py
+                - cell "反馈存储引擎（纯函数接口）" [ref=f4e663]
+              - row [ref=f4e664]:
+                - cell [ref=f4e665]:
+                  - code [ref=f4e666]: service.py
+                - cell "核心服务（文件操作、搜索、压缩包）" [ref=f4e667]
+          - separator [ref=f4e668]
+          - heading "配置参考" [level=2] [ref=f4e669]
+          - generic [ref=f4e670]:
+            - generic [ref=f4e671]:
+              - generic: "1"
+              - code [ref=f4e672]: "{"
+            - generic [ref=f4e673]:
+              - generic: "2"
+              - code [ref=f4e674]: "\"roots\": ["
+            - generic [ref=f4e675]:
+              - generic: "3"
+              - code [ref=f4e676]: "{"
+            - generic [ref=f4e677]:
+              - generic: "4"
+              - code [ref=f4e678]: "\"id\": \"example\","
+            - generic [ref=f4e679]:
+              - generic: "5"
+              - code [ref=f4e680]: "\"label\": \"示例目录\","
+            - generic [ref=f4e681]:
+              - generic: "6"
+              - code [ref=f4e682]: "\"dir\": \"/data/example\","
+            - generic [ref=f4e683]:
+              - generic: "7"
+              - code [ref=f4e684]: "\"agent_id\": \"main\""
+            - generic [ref=f4e685]:
+              - generic: "8"
+              - code [ref=f4e686]: "}"
+            - generic [ref=f4e687]:
+              - generic: "9"
+              - code [ref=f4e688]: "],"
+            - generic [ref=f4e689]:
+              - generic: "10"
+              - code [ref=f4e690]: "\"defaultRootId\": \"example\","
+            - generic [ref=f4e691]:
+              - generic: "11"
+              - code [ref=f4e692]: "\"port\": 5533,"
+            - generic [ref=f4e693]:
+              - generic: "12"
+              - code [ref=f4e694]: "\"public_base_url\": \"http://clawmate.lan:5533\","
+            - generic [ref=f4e695]:
+              - generic: "13"
+              - code [ref=f4e696]: "\"agent\": {"
+            - generic [ref=f4e697]:
+              - generic: "14"
+              - code [ref=f4e698]: "\"backend\": \"claude\","
+            - generic [ref=f4e699]:
+              - generic: "15"
+              - code [ref=f4e700]: "\"max_sessions\": 10,"
+            - generic [ref=f4e701]:
+              - generic: "16"
+              - code [ref=f4e702]: "\"env\": {}"
+            - generic [ref=f4e703]:
+              - generic: "17"
+              - code [ref=f4e704]: "},"
+            - generic [ref=f4e705]:
+              - generic: "18"
+              - code [ref=f4e706]: "\"openclaw\": {"
+            - generic [ref=f4e707]:
+              - generic: "19"
+              - code [ref=f4e708]: "\"gateway_url\": \"http://127.0.0.1:18789\","
+            - generic [ref=f4e709]:
+              - generic: "20"
+              - code [ref=f4e710]: "\"hook_token\": \"\""
+            - generic [ref=f4e711]:
+              - generic: "21"
+              - code [ref=f4e712]: "},"
+            - generic [ref=f4e713]:
+              - generic: "22"
+              - code [ref=f4e714]: "\"onlyoffice\": {"
+            - generic [ref=f4e715]:
+              - generic: "23"
+              - code [ref=f4e716]: "\"api_js_url\": \"http://onlyoffice.lan/web-apps/apps/api/documents/api.js\","
+            - generic [ref=f4e717]:
+              - generic: "24"
+              - code [ref=f4e718]: "\"mode\": \"edit\""
+            - generic [ref=f4e719]:
+              - generic: "25"
+              - code [ref=f4e720]: "},"
+            - generic [ref=f4e721]:
+              - generic: "26"
+              - code [ref=f4e722]: "\"auth\": {"
+            - generic [ref=f4e723]:
+              - generic: "27"
+              - code [ref=f4e724]: "\"username\": \"admin\","
+            - generic [ref=f4e725]:
+              - generic: "28"
+              - code [ref=f4e726]: "\"password_hash\": \"\","
+            - generic [ref=f4e727]:
+              - generic: "29"
+              - code [ref=f4e728]: "\"session_ttl_minutes\": 480"
+            - generic [ref=f4e729]:
+              - generic: "30"
+              - code [ref=f4e730]: "}"
+            - generic [ref=f4e731]:
+              - generic: "31"
+              - code [ref=f4e732]: "}"
+            - generic [ref=f4e733]:
+              - generic: "32"
+              - code [ref=f4e734]
+          - heading "认证" [level=3] [ref=f4e735]
+          - generic [ref=f4e736]:
+            - generic [ref=f4e737]:
+              - generic: "1"
+              - code [ref=f4e738]: "# 交互式设置密码（推荐）"
+            - generic [ref=f4e739]:
+              - generic: "2"
+              - code [ref=f4e740]: python3 main.py --set-password
+            - generic [ref=f4e741]:
+              - generic: "3"
+              - code [ref=f4e742]
+            - generic [ref=f4e743]:
+              - generic: "4"
+              - code [ref=f4e744]: "# 或手动生成 bcrypt hash"
+            - generic [ref=f4e745]:
+              - generic: "5"
+              - code [ref=f4e746]: python3 -c "import bcrypt; print(bcrypt.hashpw(b'你的密码', bcrypt.gensalt()).decode())"
+            - generic [ref=f4e747]:
+              - generic: "6"
+              - code [ref=f4e748]
+          - paragraph [ref=f4e749]:
+            - text: 启用后，
+            - code [ref=f4e750]: 127.0.0.1
+            - text: 及
+            - code [ref=f4e751]: auth.local_hosts
+            - text: 中的主机自动绕过认证。
+          - separator [ref=f4e752]
+          - paragraph [ref=f4e753]:
+            - emphasis [ref=f4e754]: ClawMate — 让 Agent 的输出不再是一次性的，而是可以不断打磨的作品。
+    - generic [ref=f4e50]:
+      - generic [ref=f4e51]:
+        - button "位置" [ref=f4e52] [cursor=pointer]
+        - button "导出" [ref=f4e55] [cursor=pointer]
+        - button "下载" [ref=f4e60] [cursor=pointer]
+        - button "重命名" [ref=f4e64] [cursor=pointer]
+        - button "移动" [ref=f4e68] [cursor=pointer]
+        - button "分享" [ref=f4e74] [cursor=pointer]
+      - button "📝 源码" [ref=f4e756] [cursor=pointer]
+      - button "删除" [ref=f4e79] [cursor=pointer]
+  - generic [ref=f4e757]:
+    - generic [ref=f4e758]: 反馈选中内容
+    - 'textbox "Section {heading} — 自动检测章节" [ref=f4e762]': Section ClawMate
+    - textbox "例如：修改选中内容，思路如下：" [active] [ref=f4e778]
+    - generic [ref=f4e764]:
+      - button "🗑 删除" [ref=f4e765] [cursor=pointer]
+      - button "🔧 修改" [ref=f4e766] [cursor=pointer]
+      - button "📈 扩展" [ref=f4e767] [cursor=pointer]
+      - button "📉 简化" [ref=f4e768] [cursor=pointer]
+      - button "🌐 翻译" [ref=f4e769] [cursor=pointer]
+      - button "➕ 追加" [ref=f4e770] [cursor=pointer]
+      - button "⚡ 执行方案" [ref=f4e771] [cursor=pointer]
+    - generic [ref=f4e772]:
+      - button "加入待办" [ref=f4e773] [cursor=pointer]
+      - button "⚡ 立刻执行" [ref=f4e777] [cursor=pointer]

@@ -1,0 +1,25 @@
+- generic [active] [ref=f5e1]:
+  - generic [ref=f5e2]:
+    - banner [ref=f5e3]:
+      - link "返回" [ref=f5e4] [cursor=pointer]:
+        - /url: /clawmate/?root=webprojects&dir=clawmate
+      - generic [ref=f5e7]: ClawMate
+      - generic [ref=f5e8]:
+        - generic [ref=f5e9]: README.md
+        - button "复制文件名" [ref=f5e10] [cursor=pointer]
+        - button "刷新大纲和内容" [ref=f5e14] [cursor=pointer]
+      - generic [ref=f5e19]:
+        - button "切换大纲面板" [ref=f5e20] [cursor=pointer]
+        - button "切换反馈面板" [ref=f5e22] [cursor=pointer]
+        - button "Agent 终端" [ref=f5e25] [cursor=pointer]
+        - button "自动主题" [ref=f5e29] [cursor=pointer]
+        - button "退出登录" [ref=f5e36] [cursor=pointer]
+    - main [ref=f5e41]
+    - button "分享" [ref=f5e45] [cursor=pointer]
+  - generic [ref=f5e50]:
+    - generic [ref=f5e51]:
+      - generic [ref=f5e52]: 添加反馈
+      - button [ref=f5e53] [cursor=pointer]
+    - generic [ref=f5e57]:
+      - textbox "简要说明需要的改动" [ref=f5e59]
+      - button "提交反馈" [ref=f5e60] [cursor=pointer]

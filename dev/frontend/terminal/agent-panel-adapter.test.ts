@@ -185,6 +185,31 @@ describe('main agent panel layout', () => {
     vi.unstubAllGlobals();
   });
 
+  it('pastes clipboard text into the terminal from the toolbar button', async () => {
+    class FakeWebSocket {
+      static OPEN = 1;
+      readyState = FakeWebSocket.OPEN;
+      send = vi.fn();
+    }
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+    const readText = vi.fn().mockResolvedValue('mobile paste');
+    vi.stubGlobal('navigator', { clipboard: { readText } });
+    document.body.innerHTML = '<button id="AgentPaste"></button><span id="agentStatus"></span>';
+    const adapter = new AgentPanelAdapter();
+    const socket = new FakeWebSocket();
+    (adapter as any).terminal = { options: { fontSize: 14 } };
+    (adapter as any).socket = socket;
+
+    (adapter as any).bindToolbar('');
+    document.getElementById('AgentPaste')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(readText).toHaveBeenCalledOnce();
+    const frame = socket.send.mock.calls[0][0] as Uint8Array;
+    expect(new TextDecoder().decode(frame.slice(8))).toBe('mobile paste');
+    vi.unstubAllGlobals();
+  });
+
   it('waits for v2 termination before opening a fresh session', () => {
     class FakeWebSocket {
       static OPEN = 1;

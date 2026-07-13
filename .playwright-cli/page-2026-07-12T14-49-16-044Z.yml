@@ -1,0 +1,917 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]: ClawMate
+    - generic [ref=e5]:
+      - generic [ref=e6]: main.py
+      - button "复制文件名" [ref=e7] [cursor=pointer]
+      - button "刷新大纲和内容" [ref=e11] [cursor=pointer]
+      - 'generic "feat: add terminal sessions and agent history OpenClaw · 2026-07-11" [ref=e16] [cursor=pointer]': 992c619
+    - generic [ref=e18]:
+      - button "切换大纲面板" [ref=e19] [cursor=pointer]
+      - button "切换反馈面板" [ref=e21] [cursor=pointer]
+      - button "Agent 终端" [ref=e24] [cursor=pointer]
+      - button "自动主题" [ref=e28] [cursor=pointer]
+      - button "退出登录" [ref=e35] [cursor=pointer]
+  - generic [ref=e39]:
+    - complementary [ref=e40]:
+      - generic [ref=e41]:
+        - generic [ref=e42]: 大纲
+        - button "关闭面板" [ref=e44] [cursor=pointer]
+      - list [ref=e49]:
+        - listitem [ref=e50] [cursor=pointer]:
+          - link "def _cli_set_password(...)" [ref=e51]:
+            - /url: "#"
+        - listitem [ref=e52] [cursor=pointer]:
+          - link "def _run_set_password(...)" [ref=e53]:
+            - /url: "#"
+        - listitem [ref=e54] [cursor=pointer]:
+          - link "async def root_redirect(...)" [ref=e55]:
+            - /url: "#"
+        - listitem [ref=e56] [cursor=pointer]:
+          - link "async def health(...)" [ref=e57]:
+            - /url: "#"
+        - listitem [ref=e58] [cursor=pointer]:
+          - link "def _start_periodic_cron_tick(...)" [ref=e59]:
+            - /url: "#"
+    - main [ref=e60]:
+      - generic [ref=e62]:
+        - generic [ref=e63]:
+          - generic: "1"
+          - code [ref=e64]: "\"\"\""
+        - generic [ref=e65]:
+          - generic: "2"
+          - code [ref=e66]: ClawMate v0.1 - Standalone ClawMate service.
+        - generic [ref=e67]:
+          - generic: "3"
+          - code [ref=e68]: Independent FastAPI server, Docker-deployable.
+        - generic [ref=e69]:
+          - generic: "4"
+          - code [ref=e70]
+        - generic [ref=e71]:
+          - generic: "5"
+          - code [ref=e72]: "Usage:"
+        - generic [ref=e73]:
+          - generic: "6"
+          - code [ref=e74]: "python main.py # uses defaults from config.json"
+        - generic [ref=e75]:
+          - generic: "7"
+          - code [ref=e76]: "CLAWMATE_PORT=8080 python main.py # override port"
+        - generic [ref=e77]:
+          - generic: "8"
+          - code [ref=e78]: CLAWMATE_CONFIG=/path/to/config.json python main.py
+        - generic [ref=e79]:
+          - generic: "9"
+          - code [ref=e80]: "python main.py --set-password # set/change password interactively"
+        - generic [ref=e81]:
+          - generic: "10"
+          - code [ref=e82]: "python main.py --set-password --force # skip old-password verification"
+        - generic [ref=e83]:
+          - generic: "11"
+          - code [ref=e84]: "\"\"\""
+        - generic [ref=e85]:
+          - generic: "12"
+          - code [ref=e86]
+        - generic [ref=e87]:
+          - generic: "13"
+          - code [ref=e88]: from __future__ import annotations
+        - generic [ref=e89]:
+          - generic: "14"
+          - code [ref=e90]
+        - generic [ref=e91]:
+          - generic: "15"
+          - code [ref=e92]: import json
+        - generic [ref=e93]:
+          - generic: "16"
+          - code [ref=e94]: import os
+        - generic [ref=e95]:
+          - generic: "17"
+          - code [ref=e96]: import sys
+        - generic [ref=e97]:
+          - generic: "18"
+          - code [ref=e98]: from pathlib import Path
+        - generic [ref=e99]:
+          - generic: "19"
+          - code [ref=e100]
+        - generic [ref=e101]:
+          - generic: "20"
+          - code [ref=e102]: from fastapi import FastAPI, Request
+        - generic [ref=e103]:
+          - generic: "21"
+          - code [ref=e104]: from fastapi.middleware.cors import CORSMiddleware
+        - generic [ref=e105]:
+          - generic: "22"
+          - code [ref=e106]: from fastapi.staticfiles import StaticFiles
+        - generic [ref=e107]:
+          - generic: "23"
+          - code [ref=e108]
+        - generic [ref=e109]:
+          - generic: "24"
+          - code [ref=e110]: from constants import (
+        - generic [ref=e111]:
+          - generic: "25"
+          - code [ref=e112]: CONFIG_PATH_ENV,
+        - generic [ref=e113]:
+          - generic: "26"
+          - code [ref=e114]: PUBLIC_BASE_URL_ENV,
+        - generic [ref=e115]:
+          - generic: "27"
+          - code [ref=e116]: ONLYOFFICE_JWT_SECRET_ENV,
+        - generic [ref=e117]:
+          - generic: "28"
+          - code [ref=e118]: ONLYOFFICE_URL_ENV,
+        - generic [ref=e119]:
+          - generic: "29"
+          - code [ref=e120]: )
+        - generic [ref=e121]:
+          - generic: "30"
+          - code [ref=e122]
+        - generic [ref=e123]:
+          - generic: "31"
+          - code [ref=e124]: from config import set_config_path, load as load_cfg
+        - generic [ref=e125]:
+          - generic: "32"
+          - code [ref=e126]
+        - generic [ref=e127]:
+          - generic: "33"
+          - code [ref=e128]: "# ── config resolution ──────────────────────────────────────────────"
+        - generic [ref=e129]:
+          - generic: "34"
+          - code [ref=e130]: CONFIG_PATH_STR = os.environ.get(CONFIG_PATH_ENV) or str(Path(__file__).resolve().parent.parent / "config.json")
+        - generic [ref=e131]:
+          - generic: "35"
+          - code [ref=e132]: CONFIG_PATH = Path(CONFIG_PATH_STR)
+        - generic [ref=e133]:
+          - generic: "36"
+          - code [ref=e134]: set_config_path(CONFIG_PATH_STR)
+        - generic [ref=e135]:
+          - generic: "37"
+          - code [ref=e136]: STATIC_DIR = Path(__file__).parent / "static"
+        - generic [ref=e137]:
+          - generic: "38"
+          - code [ref=e138]
+        - generic [ref=e139]:
+          - generic: "39"
+          - code [ref=e140]: "# Load config via config.py"
+        - generic [ref=e141]:
+          - generic: "40"
+          - code [ref=e142]: cfg = load_cfg()
+        - generic [ref=e143]:
+          - generic: "41"
+          - code [ref=e144]
+        - generic [ref=e145]:
+          - generic: "42"
+          - code [ref=e146]: "# env overrides (highest priority)"
+        - generic [ref=e147]:
+          - generic: "43"
+          - code [ref=e148]: ONLYOFFICE_API_JS_URL = os.environ.get(
+        - generic [ref=e149]:
+          - generic: "44"
+          - code [ref=e150]: ONLYOFFICE_URL_ENV,
+        - generic [ref=e151]:
+          - generic: "45"
+          - code [ref=e152]: cfg.onlyoffice.api_js_url,
+        - generic [ref=e153]:
+          - generic: "46"
+          - code [ref=e154]: )
+        - generic [ref=e155]:
+          - generic: "47"
+          - code [ref=e156]: ONLYOFFICE_JWT_SECRET = os.environ.get(
+        - generic [ref=e157]:
+          - generic: "48"
+          - code [ref=e158]: ONLYOFFICE_JWT_SECRET_ENV,
+        - generic [ref=e159]:
+          - generic: "49"
+          - code [ref=e160]: cfg.onlyoffice.jwt_secret,
+        - generic [ref=e161]:
+          - generic: "50"
+          - code [ref=e162]: )
+        - generic [ref=e163]:
+          - generic: "51"
+          - code [ref=e164]: PUBLIC_BASE_URL = os.environ.get(
+        - generic [ref=e165]:
+          - generic: "52"
+          - code [ref=e166]: PUBLIC_BASE_URL_ENV,
+        - generic [ref=e167]:
+          - generic: "53"
+          - code [ref=e168]: cfg.public_base_url,
+        - generic [ref=e169]:
+          - generic: "54"
+          - code [ref=e170]: )
+        - generic [ref=e171]:
+          - generic: "55"
+          - code [ref=e172]
+        - generic [ref=e173]:
+          - generic: "56"
+          - code [ref=e174]: "# inject env vars for routes.py / service.py"
+        - generic [ref=e175]:
+          - generic: "57"
+          - code [ref=e176]: os.environ.setdefault("CLAWMATE_ONLYOFFICE_JWT_SECRET", ONLYOFFICE_JWT_SECRET)
+        - generic [ref=e177]:
+          - generic: "58"
+          - code [ref=e178]: os.environ.setdefault("CLAWMATE_PUBLIC_BASE_URL", PUBLIC_BASE_URL)
+        - generic [ref=e179]:
+          - generic: "59"
+          - code [ref=e180]: os.environ.setdefault("CLAWMATE_CONFIG", str(CONFIG_PATH))
+        - generic [ref=e181]:
+          - generic: "60"
+          - code [ref=e182]
+        - generic [ref=e183]:
+          - generic: "61"
+          - code [ref=e184]
+        - generic [ref=e185]:
+          - generic: "62"
+          - code [ref=e186]: "# ── CLI: --set-password ─────────────────────────────────────────────"
+        - generic [ref=e187]:
+          - generic: "63"
+          - code [ref=e188]: "def _cli_set_password():"
+        - generic [ref=e189]:
+          - generic: "64"
+          - code [ref=e190]: import argparse
+        - generic [ref=e191]:
+          - generic: "65"
+          - code [ref=e192]: parser = argparse.ArgumentParser(description="ClawMate password management")
+        - generic [ref=e193]:
+          - generic: "66"
+          - code [ref=e194]: parser.add_argument("--set-password", action="store_true", help="Set or update the admin password")
+        - generic [ref=e195]:
+          - generic: "67"
+          - code [ref=e196]: parser.add_argument("--force", action="store_true", help="Skip old-password verification (first-time setup)")
+        - generic [ref=e197]:
+          - generic: "68"
+          - code [ref=e198]: args, _ = parser.parse_known_args()
+        - generic [ref=e199]:
+          - generic: "69"
+          - code [ref=e200]: return args.set_password, args.force
+        - generic [ref=e201]:
+          - generic: "70"
+          - code [ref=e202]
+        - generic [ref=e203]:
+          - generic: "71"
+          - code [ref=e204]
+        - generic [ref=e205]:
+          - generic: "72"
+          - code [ref=e206]: "def _run_set_password(force: bool = False):"
+        - generic [ref=e207]:
+          - generic: "73"
+          - code [ref=e208]: "\"\"\"Interactively set the admin password.\"\"\""
+        - generic [ref=e209]:
+          - generic: "74"
+          - code [ref=e210]: import getpass
+        - generic [ref=e211]:
+          - generic: "75"
+          - code [ref=e212]: from auth import hash_password, verify_password
+        - generic [ref=e213]:
+          - generic: "76"
+          - code [ref=e214]
+        - generic [ref=e215]:
+          - generic: "77"
+          - code [ref=e216]: "# Load current config (direct file read for write operations)"
+        - generic [ref=e217]:
+          - generic: "78"
+          - code [ref=e218]: "try:"
+        - generic [ref=e219]:
+          - generic: "79"
+          - code [ref=e220]: "with open(CONFIG_PATH, \"r\", encoding=\"utf-8\") as f:"
+        - generic [ref=e221]:
+          - generic: "80"
+          - code [ref=e222]: cfg = json.load(f)
+        - generic [ref=e223]:
+          - generic: "81"
+          - code [ref=e224]: "except (FileNotFoundError, json.JSONDecodeError):"
+        - generic [ref=e225]:
+          - generic: "82"
+          - code [ref=e226]: "cfg = {}"
+        - generic [ref=e227]:
+          - generic: "83"
+          - code [ref=e228]
+        - generic [ref=e229]:
+          - generic: "84"
+          - code [ref=e230]: "ac = cfg.get(\"auth\") or {}"
+        - generic [ref=e231]:
+          - generic: "85"
+          - code [ref=e232]: current_hash = ac.get("password_hash", "")
+        - generic [ref=e233]:
+          - generic: "86"
+          - code [ref=e234]: current_user = ac.get("username", "admin")
+        - generic [ref=e235]:
+          - generic: "87"
+          - code [ref=e236]
+        - generic [ref=e237]:
+          - generic: "88"
+          - code [ref=e238]: print("=== ClawMate 密码设置 ===")
+        - generic [ref=e239]:
+          - generic: "89"
+          - code [ref=e240]: "print(f\"当前用户名: {current_user}\")"
+        - generic [ref=e241]:
+          - generic: "90"
+          - code [ref=e242]
+        - generic [ref=e243]:
+          - generic: "91"
+          - code [ref=e244]: "if current_hash and not force:"
+        - generic [ref=e245]:
+          - generic: "92"
+          - code [ref=e246]: print("请输入当前密码(输入后按回车):")
+        - generic [ref=e247]:
+          - generic: "93"
+          - code [ref=e248]: "old = getpass.getpass(\"当前密码: \")"
+        - generic [ref=e249]:
+          - generic: "94"
+          - code [ref=e250]: "if not verify_password(old, current_hash):"
+        - generic [ref=e251]:
+          - generic: "95"
+          - code [ref=e252]: print("原密码错误,操作取消。")
+        - generic [ref=e253]:
+          - generic: "96"
+          - code [ref=e254]: sys.exit(1)
+        - generic [ref=e255]:
+          - generic: "97"
+          - code [ref=e256]: print("原密码验证成功。")
+        - generic [ref=e257]:
+          - generic: "98"
+          - code [ref=e258]: "elif current_hash:"
+        - generic [ref=e259]:
+          - generic: "99"
+          - code [ref=e260]: print("(force 模式,跳过原密码验证)")
+        - generic [ref=e261]:
+          - generic: "100"
+          - code [ref=e262]
+        - generic [ref=e263]:
+          - generic: "101"
+          - code [ref=e264]: "while True:"
+        - generic [ref=e265]:
+          - generic: "102"
+          - code [ref=e266]: "p1 = getpass.getpass(\"新密码(至少4字符): \")"
+        - generic [ref=e267]:
+          - generic: "103"
+          - code [ref=e268]: "if len(p1) < 4:"
+        - generic [ref=e269]:
+          - generic: "104"
+          - code [ref=e270]: print("新密码太短,至少需要4个字符。")
+        - generic [ref=e271]:
+          - generic: "105"
+          - code [ref=e272]: continue
+        - generic [ref=e273]:
+          - generic: "106"
+          - code [ref=e274]: "p2 = getpass.getpass(\"确认新密码: \")"
+        - generic [ref=e275]:
+          - generic: "107"
+          - code [ref=e276]: "if p1 != p2:"
+        - generic [ref=e277]:
+          - generic: "108"
+          - code [ref=e278]: print("两次输入的密码不一致,请重试。")
+        - generic [ref=e279]:
+          - generic: "109"
+          - code [ref=e280]: continue
+        - generic [ref=e281]:
+          - generic: "110"
+          - code [ref=e282]: break
+        - generic [ref=e283]:
+          - generic: "111"
+          - code [ref=e284]
+        - generic [ref=e285]:
+          - generic: "112"
+          - code [ref=e286]: new_hash = hash_password(p1)
+        - generic [ref=e287]:
+          - generic: "113"
+          - code [ref=e288]: "if \"auth\" not in cfg:"
+        - generic [ref=e289]:
+          - generic: "114"
+          - code [ref=e290]: "cfg[\"auth\"] = {}"
+        - generic [ref=e291]:
+          - generic: "115"
+          - code [ref=e292]: cfg["auth"]["username"] = current_user
+        - generic [ref=e293]:
+          - generic: "116"
+          - code [ref=e294]: cfg["auth"]["password_hash"] = new_hash
+        - generic [ref=e295]:
+          - generic: "117"
+          - code [ref=e296]: cfg["auth"]["session_ttl_minutes"] = ac.get("session_ttl_minutes", 480)
+        - generic [ref=e297]:
+          - generic: "118"
+          - code [ref=e298]
+        - generic [ref=e299]:
+          - generic: "119"
+          - code [ref=e300]: "onlyoffice = cfg.get(\"onlyoffice\") or {}"
+        - generic [ref=e301]:
+          - generic: "120"
+          - code [ref=e302]: cfg["onlyoffice"] = onlyoffice
+        - generic [ref=e303]:
+          - generic: "121"
+          - code [ref=e304]
+        - generic [ref=e305]:
+          - generic: "122"
+          - code [ref=e306]: "with open(CONFIG_PATH, \"w\", encoding=\"utf-8\") as f:"
+        - generic [ref=e307]:
+          - generic: "123"
+          - code [ref=e308]: json.dump(cfg, f, indent=2, ensure_ascii=False)
+        - generic [ref=e309]:
+          - generic: "124"
+          - code [ref=e310]
+        - generic [ref=e311]:
+          - generic: "125"
+          - code [ref=e312]: "print(f\"密码已更新(用户: {current_user})。\")"
+        - generic [ref=e313]:
+          - generic: "126"
+          - code [ref=e314]: print("重启 ClawMate 服务使新密码生效。")
+        - generic [ref=e315]:
+          - generic: "127"
+          - code [ref=e316]
+        - generic [ref=e317]:
+          - generic: "128"
+          - code [ref=e318]
+        - generic [ref=e319]:
+          - generic: "129"
+          - code [ref=e320]: "# ── FastAPI app ────────────────────────────────────────────────────"
+        - generic [ref=e321]:
+          - generic: "130"
+          - code [ref=e322]: app = FastAPI(
+        - generic [ref=e323]:
+          - generic: "131"
+          - code [ref=e324]: title="ClawMate",
+        - generic [ref=e325]:
+          - generic: "132"
+          - code [ref=e326]: docs_url=None,
+        - generic [ref=e327]:
+          - generic: "133"
+          - code [ref=e328]: redoc_url=None,
+        - generic [ref=e329]:
+          - generic: "134"
+          - code [ref=e330]: )
+        - generic [ref=e331]:
+          - generic: "135"
+          - code [ref=e332]
+        - generic [ref=e333]:
+          - generic: "136"
+          - code [ref=e334]
+        - generic [ref=e335]:
+          - generic: "137"
+          - code [ref=e336]: "# CORS 白名单:从 public_base_url 动态计算,保留本机调试"
+        - generic [ref=e337]:
+          - generic: "138"
+          - code [ref=e338]: _cors_allowed = []
+        - generic [ref=e339]:
+          - generic: "139"
+          - code [ref=e340]: "if PUBLIC_BASE_URL:"
+        - generic [ref=e341]:
+          - generic: "140"
+          - code [ref=e342]: _cors_allowed.append(PUBLIC_BASE_URL.rstrip("/"))
+        - generic [ref=e343]:
+          - generic: "141"
+          - code [ref=e344]: _cors_allowed.extend([
+        - generic [ref=e345]:
+          - generic: "142"
+          - code [ref=e346]: "\"http://localhost\","
+        - generic [ref=e347]:
+          - generic: "143"
+          - code [ref=e348]: "\"http://localhost:5533\","
+        - generic [ref=e349]:
+          - generic: "144"
+          - code [ref=e350]: "\"http://127.0.0.1\","
+        - generic [ref=e351]:
+          - generic: "145"
+          - code [ref=e352]: "\"http://127.0.0.1:5533\","
+        - generic [ref=e353]:
+          - generic: "146"
+          - code [ref=e354]: "\"https://cdnjs.cloudflare.com\","
+        - generic [ref=e355]:
+          - generic: "147"
+          - code [ref=e356]: "])"
+        - generic [ref=e357]:
+          - generic: "148"
+          - code [ref=e358]: app.add_middleware(
+        - generic [ref=e359]:
+          - generic: "149"
+          - code [ref=e360]: CORSMiddleware,
+        - generic [ref=e361]:
+          - generic: "150"
+          - code [ref=e362]: allow_origins=_cors_allowed,
+        - generic [ref=e363]:
+          - generic: "151"
+          - code [ref=e364]: allow_methods=["*"],
+        - generic [ref=e365]:
+          - generic: "152"
+          - code [ref=e366]: allow_headers=["*"],
+        - generic [ref=e367]:
+          - generic: "153"
+          - code [ref=e368]: allow_credentials=True,
+        - generic [ref=e369]:
+          - generic: "154"
+          - code [ref=e370]: )
+        - generic [ref=e371]:
+          - generic: "155"
+          - code [ref=e372]
+        - generic [ref=e373]:
+          - generic: "156"
+          - code [ref=e374]: "# Request logging middleware — before auth, to log all requests"
+        - generic [ref=e375]:
+          - generic: "157"
+          - code [ref=e376]: "from logging_middleware import RequestLoggingMiddleware # noqa: E402"
+        - generic [ref=e377]:
+          - generic: "158"
+          - code [ref=e378]: app.add_middleware(RequestLoggingMiddleware)
+        - generic [ref=e379]:
+          - generic: "159"
+          - code [ref=e380]
+        - generic [ref=e381]:
+          - generic: "160"
+          - code [ref=e382]: "# Import auth middleware - must be after CORS, before static files"
+        - generic [ref=e383]:
+          - generic: "161"
+          - code [ref=e384]: "from auth import AuthMiddleware, is_auth_enabled # noqa: E402"
+        - generic [ref=e385]:
+          - generic: "162"
+          - code [ref=e386]
+        - generic [ref=e387]:
+          - generic: "163"
+          - code [ref=e388]: "# v1.26: AuthMiddleware 内部使用 config.load()，不再需要传入 config dict"
+        - generic [ref=e389]:
+          - generic: "164"
+          - code [ref=e390]: app.add_middleware(AuthMiddleware, config=load_cfg())
+        - generic [ref=e391]:
+          - generic: "165"
+          - code [ref=e392]
+        - generic [ref=e393]:
+          - generic: "166"
+          - code [ref=e394]: "# import routes AFTER env vars are set (they read env at import time)"
+        - generic [ref=e395]:
+          - generic: "167"
+          - code [ref=e396]: "from routes import router as clawmate_router # noqa: E402"
+        - generic [ref=e397]:
+          - generic: "168"
+          - code [ref=e398]: "from task_runner import router as task_router # noqa: E402"
+        - generic [ref=e399]:
+          - generic: "169"
+          - code [ref=e400]: "from subtitle_routes import router as subtitle_router # noqa: E402"
+        - generic [ref=e401]:
+          - generic: "170"
+          - code [ref=e402]: "from share_routes import router as share_router # noqa: E402"
+        - generic [ref=e403]:
+          - generic: "171"
+          - code [ref=e404]: "from agent_routes import router as agent_router # noqa: E402"
+        - generic [ref=e405]:
+          - generic: "172"
+          - code [ref=e406]: "from search_routes import router as search_router # noqa: E402"
+        - generic [ref=e407]:
+          - generic: "173"
+          - code [ref=e408]: "from version_routes import router as version_router # noqa: E402"
+        - generic [ref=e409]:
+          - generic: "174"
+          - code [ref=e410]
+        - generic [ref=e411]:
+          - generic: "175"
+          - code [ref=e412]: app.include_router(clawmate_router)
+        - generic [ref=e413]:
+          - generic: "176"
+          - code [ref=e414]: app.include_router(task_router)
+        - generic [ref=e415]:
+          - generic: "177"
+          - code [ref=e416]: app.include_router(subtitle_router)
+        - generic [ref=e417]:
+          - generic: "178"
+          - code [ref=e418]: app.include_router(share_router)
+        - generic [ref=e419]:
+          - generic: "179"
+          - code [ref=e420]: app.include_router(agent_router)
+        - generic [ref=e421]:
+          - generic: "180"
+          - code [ref=e422]: app.include_router(search_router)
+        - generic [ref=e423]:
+          - generic: "181"
+          - code [ref=e424]: app.include_router(version_router)
+        - generic [ref=e425]:
+          - generic: "182"
+          - code [ref=e426]
+        - generic [ref=e427]:
+          - generic: "183"
+          - code [ref=e428]: "# mount static files under /clawmate/"
+        - generic [ref=e429]:
+          - generic: "184"
+          - code [ref=e430]: "if STATIC_DIR.exists() and STATIC_DIR.is_dir():"
+        - generic [ref=e431]:
+          - generic: "185"
+          - code [ref=e432]: app.mount("/clawmate", StaticFiles(directory=str(STATIC_DIR), html=True), name="clawmate_static")
+        - generic [ref=e433]:
+          - generic: "186"
+          - code [ref=e434]
+        - generic [ref=e435]:
+          - generic: "187"
+          - code [ref=e436]: "# Cache-bust middleware — must be added AFTER StaticFiles mount so it can"
+        - generic [ref=e437]:
+          - generic: "188"
+          - code [ref=e438]: "# intercept responses. Two mechanisms:"
+        - generic [ref=e439]:
+          - generic: "189"
+          - code [ref=e440]: "# 1. HTML rewriting: injects ?v=<mtime> into <script>/<link> URLs so"
+        - generic [ref=e441]:
+          - generic: "190"
+          - code [ref=e442]: "# browsers immediately pick up file changes (real-time cache busting)."
+        - generic [ref=e443]:
+          - generic: "191"
+          - code [ref=e444]: "# 2. Cache-Control headers: versioned URLs get 1-year immutable cache;"
+        - generic [ref=e445]:
+          - generic: "192"
+          - code [ref=e446]: "# unversioned fallbacks get short max-age + revalidation."
+        - generic [ref=e447]:
+          - generic: "193"
+          - code [ref=e448]: "# ZERO maintenance — add or change files, mtime handles the rest."
+        - generic [ref=e449]:
+          - generic: "194"
+          - code [ref=e450]: "from cache_bust import StaticCacheMiddleware # noqa: E402"
+        - generic [ref=e451]:
+          - generic: "195"
+          - code [ref=e452]: app.add_middleware(StaticCacheMiddleware, static_dir=str(STATIC_DIR))
+        - generic [ref=e453]:
+          - generic: "196"
+          - code [ref=e454]
+        - generic [ref=e455]:
+          - generic: "197"
+          - code [ref=e456]
+        - generic [ref=e457]:
+          - generic: "198"
+          - code [ref=e458]: "# redirect root to /clawmate/"
+        - generic [ref=e459]:
+          - generic: "199"
+          - code [ref=e460]: "@app.get(\"/\")"
+        - generic [ref=e461]:
+          - generic: "200"
+          - code [ref=e462]: "async def root_redirect():"
+        - generic [ref=e463]:
+          - generic: "201"
+          - code [ref=e464]: from fastapi.responses import RedirectResponse
+        - generic [ref=e465]:
+          - generic: "202"
+          - code [ref=e466]: return RedirectResponse(url="/clawmate/")
+        - generic [ref=e467]:
+          - generic: "203"
+          - code [ref=e468]
+        - generic [ref=e469]:
+          - generic: "204"
+          - code [ref=e470]
+        - generic [ref=e471]:
+          - generic: "205"
+          - code [ref=e472]: "# ── health check ───────────────────────────────────────────────────"
+        - generic [ref=e473]:
+          - generic: "206"
+          - code [ref=e474]: "@app.get(\"/api/health\")"
+        - generic [ref=e475]:
+          - generic: "207"
+          - code [ref=e476]: "async def health():"
+        - generic [ref=e477]:
+          - generic: "208"
+          - code [ref=e478]: "return {\"status\": \"ok\", \"service\": \"clawmate\"}"
+        - generic [ref=e479]:
+          - generic: "209"
+          - code [ref=e480]
+        - generic [ref=e481]:
+          - generic: "210"
+          - code [ref=e482]
+        - generic [ref=e483]:
+          - generic: "211"
+          - code [ref=e484]: "# ── 兜底定时扫描（替代 openclaw CLI cron 管理）────────────"
+        - generic [ref=e485]:
+          - generic: "212"
+          - code [ref=e486]
+        - generic [ref=e487]:
+          - generic: "213"
+          - code [ref=e488]: "import httpx # noqa: E402"
+        - generic [ref=e489]:
+          - generic: "214"
+          - code [ref=e490]
+        - generic [ref=e491]:
+          - generic: "215"
+          - code [ref=e492]
+        - generic [ref=e493]:
+          - generic: "216"
+          - code [ref=e494]: "def _start_periodic_cron_tick():"
+        - generic [ref=e495]:
+          - generic: "217"
+          - code [ref=e496]: "\"\"\"容器内定时调用 cron-tick，替代 openclaw CLI 的兜底 cron job。"
+        - generic [ref=e497]:
+          - generic: "218"
+          - code [ref=e498]
+        - generic [ref=e499]:
+          - generic: "219"
+          - code [ref=e500]: 即时唤醒已有 webhook (POST /hooks/agent) 负责，
+        - generic [ref=e501]:
+          - generic: "220"
+          - code [ref=e502]: 此函数仅为网络波动等场景提供兜底扫描。
+        - generic [ref=e503]:
+          - generic: "221"
+          - code [ref=e504]: "\"\"\""
+        - generic [ref=e505]:
+          - generic: "222"
+          - code [ref=e506]: import time
+        - generic [ref=e507]:
+          - generic: "223"
+          - code [ref=e508]
+        - generic [ref=e509]:
+          - generic: "224"
+          - code [ref=e510]: interval_hours = 6
+        - generic [ref=e511]:
+          - generic: "225"
+          - code [ref=e512]: "if load_cfg().openclaw.hook_token:"
+        - generic [ref=e513]:
+          - generic: "226"
+          - code [ref=e514]: "interval_hours = 24 # 有 webhook 时减少兜底频率"
+        - generic [ref=e515]:
+          - generic: "227"
+          - code [ref=e516]
+        - generic [ref=e517]:
+          - generic: "228"
+          - code [ref=e518]: url = "http://localhost:5533/api/clawmate/feedback/cron-tick"
+        - generic [ref=e519]:
+          - generic: "229"
+          - code [ref=e520]: "print(f\"[clawmate] 兜底定时器已启动: 每{interval_hours}h 扫描一次\")"
+        - generic [ref=e521]:
+          - generic: "230"
+          - code [ref=e522]
+        - generic [ref=e523]:
+          - generic: "231"
+          - code [ref=e524]: "while True:"
+        - generic [ref=e525]:
+          - generic: "232"
+          - code [ref=e526]: time.sleep(interval_hours * 3600)
+        - generic [ref=e527]:
+          - generic: "233"
+          - code [ref=e528]: "try:"
+        - generic [ref=e529]:
+          - generic: "234"
+          - code [ref=e530]: resp = httpx.post(url, timeout=10)
+        - generic [ref=e531]:
+          - generic: "235"
+          - code [ref=e532]: "if resp.status_code == 200:"
+        - generic [ref=e533]:
+          - generic: "236"
+          - code [ref=e534]: rj = resp.json()
+        - generic [ref=e535]:
+          - generic: "237"
+          - code [ref=e536]: "print(f\"[cron-tick] periodic check: checked={rj.get('checked',0)} pending={rj.get('pending',0)}\")"
+        - generic [ref=e537]:
+          - generic: "238"
+          - code [ref=e538]: "except Exception:"
+        - generic [ref=e539]:
+          - generic: "239"
+          - code [ref=e540]: "pass # 下次重试"
+        - generic [ref=e541]:
+          - generic: "240"
+          - code [ref=e542]
+        - generic [ref=e543]:
+          - generic: "241"
+          - code [ref=e544]
+        - generic [ref=e545]:
+          - generic: "242"
+          - code [ref=e546]: "# ── entrypoint ─────────────────────────────────────────────────────"
+        - generic [ref=e547]:
+          - generic: "243"
+          - code [ref=e548]: "if __name__ == \"__main__\":"
+        - generic [ref=e549]:
+          - generic: "244"
+          - code [ref=e550]: import uvicorn
+        - generic [ref=e551]:
+          - generic: "245"
+          - code [ref=e552]
+        - generic [ref=e553]:
+          - generic: "246"
+          - code [ref=e554]: do_set_password, force_password = _cli_set_password()
+        - generic [ref=e555]:
+          - generic: "247"
+          - code [ref=e556]: "if do_set_password:"
+        - generic [ref=e557]:
+          - generic: "248"
+          - code [ref=e558]: _run_set_password(force=force_password)
+        - generic [ref=e559]:
+          - generic: "249"
+          - code [ref=e560]: sys.exit(0)
+        - generic [ref=e561]:
+          - generic: "250"
+          - code [ref=e562]
+        - generic [ref=e563]:
+          - generic: "251"
+          - code [ref=e564]: port = int(os.environ.get("CLAWMATE_PORT", cfg.port))
+        - generic [ref=e565]:
+          - generic: "252"
+          - code [ref=e566]: max_upload = int(os.environ.get("CLAWMATE_MAX_UPLOAD_MB", cfg.max_upload_mb))
+        - generic [ref=e567]:
+          - generic: "253"
+          - code [ref=e568]: "print(f\"[clawmate] Starting on http://0.0.0.0:{port}\")"
+        - generic [ref=e569]:
+          - generic: "254"
+          - code [ref=e570]: print(f"[clawmate] Web UI at /clawmate/")
+        - generic [ref=e571]:
+          - generic: "255"
+          - code [ref=e572]: "print(f\"[clawmate] Config: {CONFIG_PATH}\")"
+        - generic [ref=e573]:
+          - generic: "256"
+          - code [ref=e574]: "print(f\"[clawmate] ONLYOFFICE API JS: {ONLYOFFICE_API_JS_URL}\")"
+        - generic [ref=e575]:
+          - generic: "257"
+          - code [ref=e576]: "print(f\"[clawmate] Max upload: {max_upload}MB\")"
+        - generic [ref=e577]:
+          - generic: "258"
+          - code [ref=e578]
+        - generic [ref=e579]:
+          - generic: "259"
+          - code [ref=e580]: "# 认证状态"
+        - generic [ref=e581]:
+          - generic: "260"
+          - code [ref=e582]: _auth_enabled = is_auth_enabled(load_cfg())
+        - generic [ref=e583]:
+          - generic: "261"
+          - code [ref=e584]: "if not _auth_enabled:"
+        - generic [ref=e585]:
+          - generic: "262"
+          - code [ref=e586]: print(f"[clawmate] ⚠️ 认证未配置（auth.password_hash 为空），任何人都可访问")
+        - generic [ref=e587]:
+          - generic: "263"
+          - code [ref=e588]: "print(f\"[clawmate] ⚠️ 请运行: python3 main.py --set-password\")"
+        - generic [ref=e589]:
+          - generic: "264"
+          - code [ref=e590]: "else:"
+        - generic [ref=e591]:
+          - generic: "265"
+          - code [ref=e592]: "print(f\"[clawmate] Auth: ENABLED\")"
+        - generic [ref=e593]:
+          - generic: "266"
+          - code [ref=e594]
+        - generic [ref=e595]:
+          - generic: "267"
+          - code [ref=e596]: "# webhook wake 状态"
+        - generic [ref=e597]:
+          - generic: "268"
+          - code [ref=e598]: "if cfg.openclaw.hook_token:"
+        - generic [ref=e599]:
+          - generic: "269"
+          - code [ref=e600]: "print(f\"[clawmate] Webhook wake: ENABLED (wake -> {cfg.openclaw.gateway_url}/hooks/agent)\")"
+        - generic [ref=e601]:
+          - generic: "270"
+          - code [ref=e602]: "print(f\"[clawmate] config source: config.json -> openclaw.hook_token\")"
+        - generic [ref=e603]:
+          - generic: "271"
+          - code [ref=e604]: "else:"
+        - generic [ref=e605]:
+          - generic: "272"
+          - code [ref=e606]: "print(f\"[clawmate] Webhook wake: DISABLED (openclaw.hook_token empty, fallback to cron only)\", file=sys.stderr)"
+        - generic [ref=e607]:
+          - generic: "273"
+          - code [ref=e608]
+        - generic [ref=e609]:
+          - generic: "274"
+          - code [ref=e610]: "# Increase multipart upload size limit (default 1MB)"
+        - generic [ref=e611]:
+          - generic: "275"
+          - code [ref=e612]: from starlette.formparsers import MultiPartParser
+        - generic [ref=e613]:
+          - generic: "276"
+          - code [ref=e614]: MultiPartParser.spool_max_size = max_upload * 1024 * 1024
+        - generic [ref=e615]:
+          - generic: "277"
+          - code [ref=e616]
+        - generic [ref=e617]:
+          - generic: "278"
+          - code [ref=e618]: "# 启动时同步 cron job（后台运行，不阻塞服务器）"
+        - generic [ref=e619]:
+          - generic: "279"
+          - code [ref=e620]: import threading
+        - generic [ref=e621]:
+          - generic: "280"
+          - code [ref=e622]: t = threading.Thread(target=_start_periodic_cron_tick, name="cron-tick", daemon=True)
+        - generic [ref=e623]:
+          - generic: "281"
+          - code [ref=e624]: t.start()
+        - generic [ref=e625]:
+          - generic: "282"
+          - code [ref=e626]
+        - generic [ref=e627]:
+          - generic: "283"
+          - code [ref=e628]: uvicorn.run(
+        - generic [ref=e629]:
+          - generic: "284"
+          - code [ref=e630]: app, host="0.0.0.0", port=port, log_level="info",
+        - generic [ref=e631]:
+          - generic: "285"
+          - code [ref=e632]: ws_ping_interval=30,
+        - generic [ref=e633]:
+          - generic: "286"
+          - code [ref=e634]: ws_ping_timeout=60,
+        - generic [ref=e635]:
+          - generic: "287"
+          - code [ref=e636]: timeout_keep_alive=120,
+        - generic [ref=e637]:
+          - generic: "288"
+          - code [ref=e638]: reload=os.environ.get("CLAWMATE_AUTO_RELOAD", "").lower() in ("1", "true", "yes"),
+        - generic [ref=e639]:
+          - generic: "289"
+          - code [ref=e640]: )
+        - generic [ref=e641]:
+          - generic: "290"
+          - code [ref=e642]
+  - generic [ref=e643]:
+    - generic [ref=e644]:
+      - button "位置" [ref=e645] [cursor=pointer]
+      - button "导出" [ref=e648] [cursor=pointer]
+      - button "下载" [ref=e653] [cursor=pointer]
+      - button "重命名" [ref=e657] [cursor=pointer]
+      - button "移动" [ref=e661] [cursor=pointer]
+      - button "分享" [ref=e667] [cursor=pointer]
+    - button "✏️ 编辑" [ref=e672] [cursor=pointer]
+    - button "删除" [ref=e674] [cursor=pointer]
