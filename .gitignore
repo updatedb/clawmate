@@ -18,6 +18,7 @@ build/
 dev/static/dist/
 playwright-report/
 test-results/
+.playwright-cli/
 
 # Sensitive: contains local paths and secrets
 config.json
