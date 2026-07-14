@@ -1428,10 +1428,17 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
             } else {
               // Create share link
               try {
+                var expiryInput = prompt("请输入分享有效期（天）：1 / 3 / 7 / 30", "1");
+                if (expiryInput === null) return;
+                var expiresDays = Number(expiryInput.trim());
+                if (![1, 3, 7, 30].includes(expiresDays)) {
+                  if (typeof showToast === "function") showToast("❌ 有效期只能是 1、3、7 或 30 天", 3000);
+                  return;
+                }
                 var res = await authFetch("/api/clawmate/share/create", {
                   method: "POST",
                   headers: {"Content-Type": "application/json"},
-                  body: JSON.stringify({root: state.rootId, path: entry.relPath}),
+                  body: JSON.stringify({root: state.rootId, path: entry.relPath, expires_days: expiresDays}),
                 });
                 if (res.ok) {
                   var data = await res.json();
@@ -1446,7 +1453,7 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
                     state.activeShares[state.rootId].push(entry.relPath);
                   }
                   setStatus("已生成分享链接");
-                  if (typeof showToast === "function") showToast("🔗 已复制分享链接 · 24小时有效", 3000);
+                  if (typeof showToast === "function") showToast("🔗 已复制分享链接 · " + expiresDays + "天有效", 3000);
                 }
               } catch (_) {}
             }

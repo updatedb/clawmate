@@ -2,7 +2,7 @@
 Share Routes — 分享链接生成与访问
 
 Endpoints:
-    POST /api/clawmate/share/create  — 为指定文件生成 24h 分享链接
+    POST /api/clawmate/share/create  — 为指定文件生成 1/3/7/30 天分享链接
     GET  /api/clawmate/share/{token}/data — 返回分享文件内容 JSON
     GET  /api/clawmate/share/{token}/raw  — 返回原始文件（媒体文件用）
 """
@@ -27,7 +27,8 @@ from service import safe_path, guess_category, file_info, preview_text
 router = APIRouter()
 
 SHARE_LINKS_FILE = "share_links.json"
-SHARE_TTL = 86400  # 24 hours
+SHARE_EXPIRY_DAYS = (1, 3, 7, 30)
+SHARE_TTL = 86400  # 兼容旧代码：默认 1 天
 
 
 def _get_share_file_path() -> Path:
@@ -75,7 +76,7 @@ def _find_link(token: str) -> dict | None:
 
 @router.post("/api/clawmate/share/create")
 async def share_create(request: Request):
-    """为指定文件生成 24h 分享链接"""
+    """为指定文件生成可选天数的分享链接"""
     try:
         body = await request.json()
     except Exception:
@@ -83,6 +84,14 @@ async def share_create(request: Request):
 
     root_id = str(body.get("root", "")).strip()
     file_path = str(body.get("path", "")).strip()
+
+    expires_days = body.get("expires_days", 1)
+    if (
+        isinstance(expires_days, bool)
+        or not isinstance(expires_days, int)
+        or expires_days not in SHARE_EXPIRY_DAYS
+    ):
+        raise HTTPException(status_code=400, detail="expires_days must be one of 1, 3, 7, 30")
 
     if not root_id or not file_path:
         raise HTTPException(status_code=400, detail="Missing root/path")
@@ -103,7 +112,7 @@ async def share_create(request: Request):
         raise HTTPException(status_code=400, detail="Cannot share a directory")
 
     now = int(time.time())
-    expires_at = now + SHARE_TTL
+    expires_at = now + expires_days * SHARE_TTL
 
     data = _load_share_links()
     data = _clean_expired(data)
@@ -152,6 +161,7 @@ async def share_create(request: Request):
         "token": token,
         "url": share_url,
         "expires_at": expires_at,
+        "expires_days": expires_days,
         "expires_str": expires_str,
         "file": safe_rel,
         "reused": bool(existing),

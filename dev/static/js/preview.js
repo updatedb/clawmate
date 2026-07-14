@@ -4220,15 +4220,22 @@
       } else {
         // Not shared — create share link
         btn.textContent = '⏳';
+        var expiryInput = prompt('请输入分享有效期（天）：1 / 3 / 7 / 30', '1');
+        if (expiryInput === null) return;
+        var expiresDays = Number(expiryInput.trim());
+        if (![1, 3, 7, 30].includes(expiresDays)) {
+          showToast('❌ 有效期只能是 1、3、7 或 30 天', 3000);
+          return;
+        }
         var res = await fetch('/api/clawmate/share/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ root: rootId, path: filePath }),
+          body: JSON.stringify({ root: rootId, path: filePath, expires_days: expiresDays }),
         });
         if (!res.ok) { showToast('❌ 分享链接生成失败 (' + res.status + ')', 3000); return; }
         var data = await res.json();
         await copyText(data.url, '✅ 分享链接已复制到剪贴板');
-        showToast('🔗 已复制 · ' + (data.reused ? '有效期已刷新' : '24小时有效'), 3000);
+        showToast('🔗 已复制 · ' + (data.reused ? '有效期已刷新为' + expiresDays + '天' : expiresDays + '天有效'), 3000);
         _isShared = true;
         updateShareButton();
       }
