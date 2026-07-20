@@ -3,6 +3,15 @@ from pathlib import Path
 from dev.cache_bust import StaticCacheMiddleware
 
 
+def test_index_leaves_app_script_versioning_to_cache_bust_middleware():
+    index_html = (
+        Path(__file__).resolve().parents[1] / "dev" / "static" / "index.html"
+    ).read_text(encoding="utf-8")
+
+    assert 'src="./js/app.js"' in index_html
+    assert 'src="./js/app.js?v=' not in index_html
+
+
 def test_html_cache_buster_versions_terminal_dist_assets(tmp_path: Path):
     terminal_js = tmp_path / "dist" / "terminal.js"
     terminal_css = tmp_path / "dist" / "terminal.css"

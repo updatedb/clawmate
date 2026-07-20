@@ -5,6 +5,7 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = ROOT / "dev" / "static" / "index.html"
 PREVIEW_HTML = ROOT / "dev" / "static" / "preview.html"
+APP_JS = ROOT / "dev" / "static" / "js" / "app.js"
 
 
 def test_agent_panel_has_terminal_toolbar_and_status_contract():
@@ -15,6 +16,33 @@ def test_agent_panel_has_terminal_toolbar_and_status_contract():
         assert f'id="{prefix}AgentSearch"' in html
         assert f'id="{prefix}AgentReconnect"' in html
         assert f'id="{prefix}BtnAgentHistory"' in html if prefix else 'id="btnAgentHistory"' in html
+
+
+def test_topbar_exposes_separate_file_and_content_search_actions():
+    html = INDEX_HTML.read_text(encoding="utf-8")
+    source = APP_JS.read_text(encoding="utf-8")
+
+    assert 'id="fileSearchBtn"' in html
+    assert 'id="contentSearchBtn"' in html
+    assert "async function fileSearch()" in source
+    assert "async function contentSearch()" in source
+
+
+def test_topbar_search_bindings_tolerate_a_stale_page_shell():
+    source = APP_JS.read_text(encoding="utf-8")
+
+    assert 'els.fileSearchBtn && els.fileSearchBtn.addEventListener("click", fileSearch);' in source
+    assert 'els.contentSearchBtn && els.contentSearchBtn.addEventListener("click", contentSearch);' in source
+    assert 'els.clearSearchBtn && els.clearSearchBtn.addEventListener("click", clearSearch);' in source
+
+
+def test_mobile_topbar_hides_file_and_content_search_text_at_768px_breakpoint():
+    css = (ROOT / "dev" / "static" / "css" / "style.css").read_text(
+        encoding="utf-8"
+    )
+    mobile_css = css[css.index("@media (max-width: 768px)"):css.index("@media (max-width: 480px)")]
+
+    assert "#fileSearchBtn span, #contentSearchBtn span { display: none; }" in mobile_css
 
 
 def test_terminal_panel_width_uses_same_responsive_track_as_grid():
@@ -57,6 +85,28 @@ def test_mobile_agent_header_hides_session_text_labels():
     assert ".agent-panel-header .agent-panel-btn-label { display: none; }" in css
     assert "#btnAgentHistory, #previewBtnAgentHistory," in css
     assert "#btnNewAgentSession, #previewBtnNewAgentSession {" in css
+
+
+def test_main_toolbar_hides_text_by_main_container_width():
+    css = (ROOT / "dev" / "static" / "css" / "style.css").read_text(
+        encoding="utf-8"
+    )
+    main_start = css.index(".main {")
+    assert "container-type: inline-size;" in css[main_start:main_start + 250]
+    assert "@container (max-width: 624px)" in css
+    assert ".toolbar-bottom .tb-left label" in css
+    assert ".toolbar-bottom #filterType" in css
+    assert ".toolbar-bottom #multiSelectToggle" in css
+    assert ".toolbar-bottom .tb-left button:not(.sort-pill) span" in css
+    assert ".toolbar-bottom .tb-right button span" in css
+    assert ".toolbar-bottom #sortTime .sort-label" not in css
+    assert ".toolbar-bottom #sortName .sort-label" not in css
+    assert ".toolbar-bottom #sortSize .sort-label" not in css
+    assert ".toolbar-bottom .sort-pill .sort-icon" not in css
+
+    app_js = APP_JS.read_text(encoding="utf-8")
+    assert 'p.el.querySelector(".sort-icon")' in app_js
+    assert 'p.el.querySelector(".sort-label")' in app_js
 
 
 def test_history_runtime_contract_includes_search_backend_and_pagination():

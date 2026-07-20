@@ -369,6 +369,17 @@ def _find_projects(root_path: Path, target: Path, max_depth: int,
     return projects
 
 
+def _project_cache_root(root_path: Path, target: Path) -> Path | None:
+    """Return the nearest project root whose .clawmate cache owns ``target``."""
+    candidate = target
+    while True:
+        if (candidate / ".clawmate").is_dir():
+            return candidate
+        if candidate == root_path:
+            return None
+        candidate = candidate.parent
+
+
 def search_content(query: str, root_id: str, rel_dir: str = "",
                    context_lines: int = 3, max_depth: int = 8,
                    max_filesize_mb: int = 5, timeout: float = 30.0,
@@ -418,51 +429,30 @@ def search_content(query: str, root_id: str, rel_dir: str = "",
     exclude_ext_set = set(e.lower().lstrip(".") for e in (exclude_ext or []))
     exclude_dir_set = set(d.lower() for d in (exclude_dir or []))
 
-    # Step 1: Discover project directories
-    projects = _find_projects(root_path, target, max_depth, exclude_dir_set, _deadline)
+    # Step 1: Search directly from the selected directory.  A project marker is
+    # only needed to locate the shared extraction cache, not to enable rg.
+    project_root = _project_cache_root(root_path, target)
+    cache_to_original: Dict[str, Path] = {}
 
-    if not projects:
-        # No projects found — content search has nothing to do
-        return {
-            "query": query,
-            "root": root_id,
-            "dir": safe_dir,
-            "total_matches": 0,
-            "total_files": 0,
-            "searched_files": 0,
-            "elapsed_ms": int((_time.time() - _start) * 1000),
-            "results_by_file": [],
-            "projects_found": 0,
-        }
-
-    # Step 2: For each project, extract PDF/Office text to cache
+    # Step 2: Extract documents from this subtree into its owning project cache.
     _processed_count = 0
-    for proj in projects:
-        if _time.time() > _deadline:
-            break
+    if project_root:
         try:
-            for entry in proj.rglob("*"):
+            for entry in target.rglob("*"):
                 if _time.time() > _deadline:
                     break
-                if not entry.is_file():
+                if not entry.is_file() or _is_junk_path(entry):
                     continue
-                if _is_junk_path(entry):
-                    continue
-                ext = entry.suffix.lower()
-                if ext in _CONTENT_EXTRACT_EXTS:
-                    extract_text(entry, proj)
+                if entry.suffix.lower() in _CONTENT_EXTRACT_EXTS:
+                    cache_file = extract_text(entry, project_root)
+                    if cache_file:
+                        cache_to_original[str(cache_file)] = entry
                     _processed_count += 1
         except (OSError, PermissionError):
-            continue
+            pass
 
-    # Step 3: Build rg command — search across all project dirs and their cache dirs
-    search_paths = [str(p) for p in projects]
-
-    # Also include cache directories so rg searches extracted text
-    for proj in projects:
-        cache_dir = proj / ".clawmate" / "cache" / "text"
-        if cache_dir.is_dir():
-            search_paths.append(str(cache_dir))
+    # Step 3: Search source text plus only this request's extracted cache files.
+    search_paths = [str(target), *cache_to_original.keys()]
 
     rg_bin = _RG_PATH or "rg"
     cmd = [
@@ -593,45 +583,21 @@ def search_content(query: str, root_id: str, rel_dir: str = "",
                         ]
                 _last_was_match.pop(file_path, None)
 
-    # Step 6: Post-process — map cache results back to original files
-    # Build a reverse mapping: cache_path -> original_file_path
-    cache_to_original: Dict[str, tuple] = {}
-    for proj in projects:
-        cache_dir = proj / ".clawmate" / "cache" / "text"
-        if not cache_dir.is_dir():
-            continue
-        for cache_file in cache_dir.iterdir():
-            if cache_file.suffix == ".txt":
-                # Parse hash from filename: {hash}_{mtime}.txt
-                cache_to_original[str(cache_file)] = (str(proj), cache_file.name)
-
-    # Replace cache file paths with original file references
+    # Step 6: Replace extracted cache file paths with their original files.
     resolved_results = {}
     for abs_path, info in matches_by_file.items():
         if abs_path in cache_to_original:
-            proj_path, cache_name = cache_to_original[abs_path]
-            # Try to find the original file
-            phash = cache_name.split("_")[0]
-            for proj in projects:
-                for entry in proj.rglob("*"):
-                    if _is_junk_path(entry):
-                        continue
-                    if entry.is_file() and _path_hash(entry) == phash:
-                        try:
-                            rel_path = str(entry.relative_to(root_path))
-                            key = rel_path
-                            if key in resolved_results:
-                                resolved_results[key]["match_count"] += info["match_count"]
-                                resolved_results[key]["matches"].extend(info["matches"])
-                            else:
-                                resolved_results[key] = {
-                                    "file": rel_path,
-                                    "match_count": info["match_count"],
-                                    "matches": info["matches"],
-                                }
-                        except ValueError:
-                            pass
-                        break
+            original_file = cache_to_original[abs_path]
+            rel_path = str(original_file.relative_to(root_path))
+            if rel_path in resolved_results:
+                resolved_results[rel_path]["match_count"] += info["match_count"]
+                resolved_results[rel_path]["matches"].extend(info["matches"])
+            else:
+                resolved_results[rel_path] = {
+                    "file": rel_path,
+                    "match_count": info["match_count"],
+                    "matches": info["matches"],
+                }
         else:
             resolved_results[abs_path] = info
 
@@ -691,6 +657,6 @@ def search_content(query: str, root_id: str, rel_dir: str = "",
         "searched_files": len(searched_files),
         "elapsed_ms": int((_time.time() - _start) * 1000),
         "results_by_file": results_by_file,
-        "projects_found": len(projects),
+        "projects_found": int(project_root is not None),
         "unavailable_types": unavailable,  # file types skipped due to missing deps
     }

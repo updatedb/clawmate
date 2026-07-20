@@ -1072,7 +1072,12 @@
     }
     try {
       pdfjsLib.GlobalWorkerOptions.workerSrc = '/clawmate/pdfjs/pdf.worker.min.js';
-      var pdf = await pdfjsLib.getDocument(rawUrl).promise;
+      var pdf = await pdfjsLib.getDocument({
+        url: rawUrl,
+        cMapUrl: '/clawmate/pdfjs/cmaps/',
+        cMapPacked: true,
+        standardFontDataUrl: '/clawmate/pdfjs/standard_fonts/'
+      }).promise;
       var outline = await pdf.getOutline();
       if (!outline || outline.length === 0) {
         // Fallback: show page number list
@@ -3623,11 +3628,34 @@
   // ============ Office / PDF Mode ============
   let officePdfCompletedItems = [];
   let officePdfCurrentMode = 'view'; // track which mode we're in
+  let pdfViewerScale = 1.5;
+
+  function postPdfZoom(delta) {
+    var iframe = document.getElementById('officeIframe');
+    if (iframe && iframe.contentWindow) {
+      iframe.contentWindow.postMessage({ type: 'zoom-pdf', delta: delta }, '*');
+    }
+  }
+
+  window.addEventListener('message', function(e) {
+    if (!e.data || e.data.type !== 'pdf-scale-change') return;
+    pdfViewerScale = e.data.scale;
+    var label = document.getElementById('pdfZoomLevel');
+    if (label) label.textContent = Math.round(pdfViewerScale * 100) + '%';
+  });
 
   function setupOfficePdfToolbar() {
     officePdfCurrentMode = onlyofficeMode;
     const dyn = document.getElementById('bottombarDynamic');
     dyn.innerHTML = '';
+    if (isPdfMode) {
+      pdfViewerScale = 1.5;
+      dyn.innerHTML = '<button class="preview-bottom-btn" id="pdfZoomOut" title="缩小页面">− 缩小</button>' +
+        '<span id="pdfZoomLevel" aria-live="polite">150%</span>' +
+        '<button class="preview-bottom-btn" id="pdfZoomIn" title="放大页面">+ 放大</button>';
+      document.getElementById('pdfZoomOut').addEventListener('click', function() { postPdfZoom(-1); });
+      document.getElementById('pdfZoomIn').addEventListener('click', function() { postPdfZoom(1); });
+    }
     // Office docs open in edit mode by default; no manual toggle needed
   }
 

@@ -667,6 +667,7 @@ button svg, .btn svg, a svg {
   flex-direction: column;
   overflow: hidden;
   grid-column: 2;
+  container-type: inline-size;
 }
 .main-scroll { flex: 1; overflow-y: auto; padding: 14px 20px 20px; }
 .toolbar { display: flex; flex-direction: column; gap: 0; padding: 0 20px; }
@@ -966,7 +967,8 @@ body.multiselect .list-item { grid-template-columns: 26px 1fr max-content max-co
   .search-wrap { flex: 1 1 0; min-width: 0; }
   .search-group .search-input { min-width: 0; flex: 1 1 0; font-size: 12px; height: 30px; padding: 0 26px 0 8px; box-sizing: border-box; border-radius: var(--radius-sm); }
   .search-group button { padding: 0 8px; font-size: 11px; height: 30px; box-sizing: border-box; white-space: nowrap; flex-shrink: 0; border-radius: var(--radius-sm); }
-  #searchBtn { display: inline-flex; align-items: center; gap: 3px; padding: 0 10px; height: 30px; border-radius: var(--radius-sm); }
+  #fileSearchBtn, #contentSearchBtn { display: inline-flex; align-items: center; gap: 3px; padding: 0 10px; height: 30px; border-radius: var(--radius-sm); }
+  #fileSearchBtn span, #contentSearchBtn span { display: none; }
   .search-group .search-clear { right: 2px; width: 20px; height: 20px; font-size: 14px; }
 
   /* Topbar actions: right-aligned */
@@ -1022,7 +1024,6 @@ body.multiselect .list-item { grid-template-columns: 26px 1fr max-content max-co
   .sort-pill { font-size: 11px; padding: 0 8px; height: 28px; }
   .tb-right { align-self: flex-end; }
   .tb-right button { font-size: 11px; padding: 0 8px; height: 28px; }
-  .tb-right button span { display: none; } /* icon only */
   /* Hide sort label on mobile */
   .tb-left label[for] { display: none; }
 
@@ -1112,8 +1113,8 @@ body.multiselect .list-item { grid-template-columns: 26px 1fr max-content max-co
   .search-wrap { flex: 1 1 0; min-width: 0; }
   .search-group .search-input { min-width: 0; flex: 1 1 0; font-size: 12px; height: 30px; padding: 0 24px 0 6px; border-radius: var(--radius-sm); }
   .search-group button { display: inline-flex; align-items: center; justify-content: center; gap: 0; height: 30px; padding: 0 6px; font-size: 13px; white-space: nowrap; flex-shrink: 0; min-width: 30px; border-radius: var(--radius-sm); }
-  #searchBtn { height: 30px; border-radius: var(--radius-sm); }
-  #searchBtn span { display: none; }
+  #fileSearchBtn, #contentSearchBtn { height: 30px; border-radius: var(--radius-sm); }
+  #fileSearchBtn span, #contentSearchBtn span { display: none; }
   .search-group .search-clear { right: 1px; width: 22px; height: 22px; font-size: 14px; }
   .topbar-btn { width: 30px; height: 30px; font-size: 13px; }
 
@@ -1640,13 +1641,6 @@ pre:hover .code-copy-btn,
 }
 
 @media (max-width: 1000px) {
-  .tb-left label { font-size: 0; padding: 0; }
-  #multiSelectToggle span,
-  #btnCreate span,
-  #viewGrid span,
-  #viewList span,
-  #agentSessionToggleBtn span,
-  #previewAgentSessionToggleBtn span { display: none; }
   .sort-pill { padding: 0 8px; }
 }
 
@@ -1655,16 +1649,27 @@ pre:hover .code-copy-btn,
   body.agent-open .sidebar { display: none; }
 }
 @media (max-width: 1300px) {
-  body.agent-open .tb-left label { font-size: 0; padding: 0; }
   body.agent-open .list-item > :nth-child(3),
   body.agent-open .list-item > :nth-child(4) { display: none; }
-  body.agent-open #multiSelectToggle span,
-  body.agent-open #btnCreate span,
-  body.agent-open #viewGrid span,
-  body.agent-open #viewList span,
-  body.agent-open #agentSessionToggleBtn span,
-  body.agent-open #previewAgentSessionToggleBtn span { display: none; }
   body.agent-open .sort-pill { padding: 0 8px; }
+}
+
+/* Compact toolbar labels according to the actual main content width. */
+@container (max-width: 624px) {
+  .toolbar-bottom #filterType,
+  .toolbar-bottom #multiSelectToggle {
+    display: none;
+  }
+
+  .toolbar-bottom .tb-left label,
+  .toolbar-bottom .tb-left button:not(.sort-pill) span,
+  .toolbar-bottom .tb-right button span {
+    display: none;
+  }
+
+  .toolbar-bottom .tb-left label {
+    padding: 0;
+  }
 }
 
 
