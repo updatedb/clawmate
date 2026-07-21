@@ -284,6 +284,37 @@ describe('main agent panel layout', () => {
     expect(getFontSizeForAgentPanelWidth(expectedMin20)).toBe(20);
   });
 
+  it('retries fitting after the preview terminal host becomes visible', () => {
+    const adapter = new AgentPanelAdapter();
+    const fit = vi.fn();
+    let visible = false;
+    let retry: (() => void) | undefined;
+    const host = document.createElement('div');
+    vi.spyOn(host, 'getBoundingClientRect').mockImplementation(() => ({
+      width: visible ? 600 : 0,
+      height: visible ? 480 : 0,
+    }) as DOMRect);
+
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('setTimeout', (callback: () => void) => {
+      retry = callback;
+      return 1 as unknown as ReturnType<typeof setTimeout>;
+    });
+    (adapter as any).fit = { fit };
+
+    (adapter as any).scheduleTerminalFit(host);
+    expect(fit).not.toHaveBeenCalled();
+    expect(retry).toBeTypeOf('function');
+
+    visible = true;
+    retry?.();
+    expect(fit).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
+  });
+
   it('renders OpenClaw Markdown while keeping line breaks', () => {
     const use = vi.fn().mockReturnThis();
     (window as any).markdownit = vi.fn(() => ({

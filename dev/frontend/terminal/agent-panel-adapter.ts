@@ -244,6 +244,7 @@ export class AgentPanelAdapter {
   private contextGeneration = 0;
   private panelWidth = this.readPanelWidth();
   private resizeObserver: ResizeObserver | null = null;
+  private terminalFitRetry: ReturnType<typeof setTimeout> | null = null;
   private historyQuery = '';
   private historyBackend = '';
   private historyOffset = 0;
@@ -440,6 +441,7 @@ export class AgentPanelAdapter {
     this.openclaw.close();
     this.wsClosedByUser = true;
     this.stopHeartbeat();
+    this.clearTerminalFitRetry();
     this.clearWsRetryTimer();
     this.socket?.close();
     this.socket = null;
@@ -1305,6 +1307,7 @@ export class AgentPanelAdapter {
   }
 
   private disposeTerminal(): void {
+    this.clearTerminalFitRetry();
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.terminal?.dispose();
@@ -1331,9 +1334,32 @@ export class AgentPanelAdapter {
     if (!target) return;
     const fit = () => {
       const rect = target.getBoundingClientRect();
-      if (rect.width > 80 && rect.height > 80) this.fit?.fit();
+      if (rect.width > 80 && rect.height > 80) {
+        this.clearTerminalFitRetry();
+        this.fit?.fit();
+        // Output may have reached xterm while its host was hidden.  Force the
+        // renderer to paint the buffer after the preview panel gets a size.
+        this.terminal?.refresh(0, Math.max(0, (this.terminal.rows || 1) - 1));
+        return;
+      }
+      // Preview opens the panel and its grid column in separate layout steps.
+      // A single double-rAF fit can therefore run while the xterm host is still
+      // zero-sized, leaving an otherwise connected terminal permanently blank.
+      if (this.terminalFitRetry === null) {
+        this.terminalFitRetry = setTimeout(() => {
+          this.terminalFitRetry = null;
+          this.scheduleTerminalFit(target);
+        }, 80);
+      }
     };
     requestAnimationFrame(() => requestAnimationFrame(fit));
+  }
+
+  private clearTerminalFitRetry(): void {
+    if (this.terminalFitRetry !== null) {
+      clearTimeout(this.terminalFitRetry);
+      this.terminalFitRetry = null;
+    }
   }
 
   private refreshTerminalLayout(): void {

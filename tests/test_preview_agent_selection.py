@@ -45,6 +45,15 @@ def test_preview_mermaid_success_path_does_not_reference_undefined_error():
     assert "} catch (err) {\n      var errMsg = err &&" in js
 
 
+def test_mermaid_inline_zoom_controls_do_not_trigger_pan_or_double_click_reset():
+    js = PREVIEW_JS.read_text(encoding="utf-8")
+    inline_zoom = js.split("function setupMermaidZoomDesktop(svg)", 1)[1].split(
+        "function openMermaidDialog(svg)", 1
+    )[0]
+
+    assert inline_zoom.count("if (e.target.closest('.mermaid-zoom-controls')) return;") == 2
+
+
 def test_preview_markdown_renderer_normalizes_dev_static_asset_paths():
     js = PREVIEW_JS.read_text(encoding="utf-8")
 

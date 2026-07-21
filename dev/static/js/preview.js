@@ -466,6 +466,7 @@
 
     // Pan (drag)
     container.addEventListener('mousedown', function(e) {
+      if (e.target.closest('.mermaid-zoom-controls')) return;
       if (e.button !== 0 || e.ctrlKey || e.metaKey) return;
       isPanning = true;
       panStartX = e.clientX - originX;
@@ -488,7 +489,8 @@
     });
 
     // Double-click to fit
-    container.addEventListener('dblclick', function() {
+    container.addEventListener('dblclick', function(e) {
+      if (e.target.closest('.mermaid-zoom-controls')) return;
       scale = 1; originX = 0; originY = 0;
       applyZoom();
     });
@@ -1753,6 +1755,66 @@
   let rawContent = '';
   var _skipFeedbackLoad = false;
 
+  // ============ Image Preview ============
+  const IMAGE_ZOOM_STEP = 0.1;
+  const IMAGE_ZOOM_MIN = 0.1;
+  const IMAGE_ZOOM_MAX = 5;
+  let imageZoomScale = 1;
+  let imageZoomBaseWidth = 0;
+  let imageZoomBaseHeight = 0;
+
+  function applyImageZoom() {
+    var img = document.getElementById('previewImage');
+    if (!img) return;
+    if (!imageZoomBaseWidth || !imageZoomBaseHeight) {
+      imageZoomBaseWidth = img.clientWidth;
+      imageZoomBaseHeight = img.clientHeight;
+    }
+    if (!imageZoomBaseWidth || !imageZoomBaseHeight) return;
+
+    img.style.transform = 'scale(' + imageZoomScale + ')';
+    img.style.transformOrigin = 'center';
+    if (imgWrapEl) {
+      imgWrapEl.style.width = Math.round(imageZoomBaseWidth * imageZoomScale) + 'px';
+      imgWrapEl.style.height = Math.round(imageZoomBaseHeight * imageZoomScale) + 'px';
+    }
+    var label = document.getElementById('imageZoomLevel');
+    if (label) label.textContent = Math.round(imageZoomScale * 100) + '%';
+  }
+
+  function resetImageZoom() {
+    imageZoomScale = 1;
+    imageZoomBaseWidth = 0;
+    imageZoomBaseHeight = 0;
+    var img = document.getElementById('previewImage');
+    if (img) {
+      img.style.transform = 'scale(1)';
+      img.style.transformOrigin = 'center';
+    }
+    if (imgWrapEl) {
+      imgWrapEl.style.width = '100%';
+      imgWrapEl.style.height = '';
+    }
+    var label = document.getElementById('imageZoomLevel');
+    if (label) label.textContent = '100%';
+  }
+
+  function setupImageZoomToolbar() {
+    var dyn = document.getElementById('bottombarDynamic');
+    if (!dyn) return;
+    dyn.innerHTML = '<button class="preview-bottom-btn" id="imageZoomOut" title="缩小图片">− 缩小</button>' +
+      '<span id="imageZoomLevel" aria-live="polite">100%</span>' +
+      '<button class="preview-bottom-btn" id="imageZoomIn" title="放大图片">+ 放大</button>';
+    document.getElementById('imageZoomOut').addEventListener('click', function() {
+      imageZoomScale = Math.max(IMAGE_ZOOM_MIN, imageZoomScale - IMAGE_ZOOM_STEP);
+      applyImageZoom();
+    });
+    document.getElementById('imageZoomIn').addEventListener('click', function() {
+      imageZoomScale = Math.min(IMAGE_ZOOM_MAX, imageZoomScale + IMAGE_ZOOM_STEP);
+      applyImageZoom();
+    });
+  }
+
   // ============ Image Sort ============
   // ── Client-side image navigation (no full page reload) ──────
   function navigateToImage(newFilePath) {
@@ -1774,6 +1836,13 @@
     // Update the image in-place
     var imgEl = document.getElementById('previewImage');
     if (imgEl) {
+      // Keep the selected scale, but measure the newly loaded image afresh.
+      imageZoomBaseWidth = 0;
+      imageZoomBaseHeight = 0;
+      if (imgWrapEl) {
+        imgWrapEl.style.width = '100%';
+        imgWrapEl.style.height = '';
+      }
       imgEl.src = '/api/clawmate/preview?root=' + encodeURIComponent(rootId) + '&path=' + encodeURIComponent(newFilePath);
       imgEl.style.display = '';
       // Remove any lingering error message from a previous failed image
@@ -1969,7 +2038,7 @@
   function buildImageSortPills() {
     const dyn = document.getElementById('bottombarDynamic');
     if (!dyn) return;
-    dyn.innerHTML = '';
+    dyn.querySelectorAll('.sort-pill').forEach(function(pill) { pill.remove(); });
 
     const pills = [
       { key: 'time', desc: '↓ 最新', asc: '↑ 最早' },
@@ -2034,7 +2103,7 @@
       // For binary file types, the API returns raw bytes — do NOT call res.json()
       if (isImageMode) {
         contentBody.innerHTML = '';
-        contentBody.style.cssText = 'display:flex;align-items:center;justify-content:center;position:relative;padding:12px;';
+        contentBody.style.cssText = 'display:flex;align-items:center;justify-content:center;position:relative;padding:12px;overflow:auto;';
 
         // Reset nav state and fetch sorted directory listing for prev/next
         imgNav = { prev: null, next: null, idx: 0, total: 0 };
@@ -2050,8 +2119,13 @@
 
         const img = document.createElement('img');
         img.id = 'previewImage';
-        img.src = `/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`;
         img.style.cssText = 'max-width:100%;max-height:70vh;object-fit:contain;border-radius:8px;';
+        img.onload = function() {
+          imageZoomBaseWidth = 0;
+          imageZoomBaseHeight = 0;
+          applyImageZoom();
+        };
+        img.src = `/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`;
         img.onerror = function() {
           this.style.display = 'none';
           const errDiv = document.createElement('div');
@@ -2071,6 +2145,7 @@
         contentBody.appendChild(wrap);
         removeLoading();
         setupMediaToolbar();
+        setupImageZoomToolbar();
         buildImageSortPills();
         renderImageFeedbackPanel();
         if (!_skipFeedbackLoad) loadCompletedFeedback();
