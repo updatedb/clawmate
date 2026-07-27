@@ -10,7 +10,7 @@
   // ── 文件类型常量 ──────────────────────────────────────────────
   global.AUDIO_EXTS = ['mp3','ogg','wav','flac','m4a','aac','wma'];
   global.VIDEO_EXTS = ['mp4','webm','mov','avi','mkv','wmv','flv','m4v'];
-  global.PLAIN_TEXT_EXTS = ['txt','csv','yaml','yml','py','js','ts','tsx','css','sh','bash','sql','toml','ini','conf','cfg','env','xml','gpx','kml','srt','log','json'];
+  global.PLAIN_TEXT_EXTS = ['txt','csv','yaml','yml','py','js','ts','tsx','css','sh','bash','sql','toml','ini','conf','cfg','env','xml','bpmn','gpx','kml','srt','log','json'];
   global.MARKDOWN_EXTS = ['md','markdown','rmd','mdx'];
   global.HTML_EXTS = ['html','htm'];
   global.OFFICE_EXTS = ['doc','docx','xls','xlsx','ppt','pptx','odt','ods','odp'];

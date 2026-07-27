@@ -50,6 +50,7 @@
   const isVideoMode = VIDEO_EXTS.includes(ext);
   const isMediaMode = isAudioMode || isVideoMode;
   const isPlainTextMode = PLAIN_TEXT_EXTS.includes(ext);
+  const isBpmnMode = ext === 'bpmn';
   const isMarkdownMode = MARKDOWN_EXTS.includes(ext);
   const isHtmlMode = HTML_EXTS.includes(ext);
   const isOfficeMode = OFFICE_EXTS.includes(ext);
@@ -192,6 +193,8 @@
   function createMarkdownRenderer(entryRelPath) {
     let mermaidIdx = 0;
     const mermaidStore = [];
+    let bpmnIdx = 0;
+    const bpmnStore = [];
 
     const md = window.markdownit({
       html: true,
@@ -251,11 +254,17 @@
         return `<div class="mermaid" data-mermaid-id="${id}"></div>`;
       }
 
+      if (language === 'bpmn') {
+        const id = bpmnIdx++;
+        bpmnStore[id] = raw;
+        return `<div class="bpmn-diagram" data-bpmn-id="${id}"><div class="bpmn-canvas"></div></div>`;
+      }
+
       // Let window.hljs.highlightAll() handle syntax highlighting after DOM insertion
       return `<pre><code class="${className}">${escHtml(raw)}</code></pre>`;
     };
 
-    return { md, mermaidStore };
+    return { md, mermaidStore, bpmnStore };
   }
 
   async function renderMermaid(div, mermaidStore) {
@@ -2388,6 +2397,24 @@
         return;
       }
 
+      // ======== BPMN 2.0 ========
+      if (isBpmnMode) {
+        contentBody.innerHTML = '<div class="bpmn-file-view"><div class="bpmn-canvas"></div></div>';
+        contentBody.style.cssText = 'display:flex;flex-direction:column;flex:1;min-height:0;padding:0;';
+        await window.BpmnPreview.renderFile(contentBody.firstChild, {
+          xml: content,
+          root: rootId,
+          path: filePath,
+          fileName: fileName.replace(/\.bpmn$/i, ''),
+          onSaved: function(xml) {
+            rawContent = xml;
+            loadContent();
+          }
+        });
+        removeLoading();
+        return;
+      }
+
       // ======== Markdown: render both views, then apply mode ========
       if (isMarkdownMode && window.markdownit && window.DOMPurify) {
         // Clear any previous content before building
@@ -2433,6 +2460,7 @@
 
         let html;
         let mermaidStore = [];
+        let bpmnStore = [];
         // Conditional load heavy vendors only when content needs them
         var loadPromises = [];
         if (content.indexOf('```mermaid') !== -1) loadPromises.push(ensureMermaid());
@@ -2442,6 +2470,7 @@
           const result = createMarkdownRenderer(filePath);
           const md = result.md;
           mermaidStore = result.mermaidStore;
+          bpmnStore = result.bpmnStore;
           window._mermaidStore = mermaidStore;
           html = md.render(content);
           if (window.DOMPurify) {
@@ -2496,6 +2525,17 @@
         // DEBUG:  About to call renderMermaid, mermaidStore has ' + mermaidStore.length + ' entries');
         try { await renderMermaid(mdDiv, mermaidStore); } catch (e) { console.error('[ClawMate] renderMermaid threw:', e); }
         setupMermaidResizeHandles(mdDiv);
+        var bpmnBlocks = mdDiv.querySelectorAll('.bpmn-diagram');
+        if (bpmnBlocks.length && window.BpmnPreview) {
+          try {
+            await window.BpmnPreview.ensureViewer();
+            for (var bpmnIndex = 0; bpmnIndex < bpmnBlocks.length; bpmnIndex++) {
+              var bpmnBlock = bpmnBlocks[bpmnIndex];
+              var bpmnId = bpmnBlock.getAttribute('data-bpmn-id');
+              await window.BpmnPreview.renderEmbedded(bpmnBlock, bpmnStore[bpmnId]);
+            }
+          } catch (e) { console.error('[ClawMate] BPMN 渲染失败:', e); }
+        }
         removeLoading();
         updateMarkdownDynamicButtons();
         if (!_skipFeedbackLoad) loadCompletedFeedback();
