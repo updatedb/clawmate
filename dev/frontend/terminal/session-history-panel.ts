@@ -62,9 +62,7 @@ export function formatHistoryRowMeta(session: Pick<HistorySession, 'id' | 'backe
     ? Math.max(0, Math.round((session.last_ts - session.first_ts) / 60))
     : null;
   const durationLabel = duration === null ? '' : duration >= 1 ? `时长${duration}分钟` : '时长<1分钟';
-  const label = session.id || session.backend || 'unknown';
   return [
-    label,
     formatSessionDateTime(session.ended_at || session.started_at),
     `${Number(session.turn_count || 0)}轮对话`,
     `${Number(session.instruction_count || 0)}条指令`,

@@ -15,6 +15,7 @@ if str(DEV) not in sys.path:
 import agent_routes
 from terminal_manager import SessionRequest, TerminalManager
 from terminal_protocol import encode_binary_frame
+from terminal_replay import OutputChunk
 
 
 def _tracking_manager_of(manager, logger_factory):
@@ -64,7 +65,10 @@ class FakeWebSocket:
     def __init__(self, messages: list[dict]):
         self.messages = iter(messages)
         self.text_frames: list[dict] = []
+        self.binary_frames: list[bytes] = []
         self.accepted = False
+        self.client_state = agent_routes.WebSocketState.CONNECTED
+        self.closes: list[tuple[int, str]] = []
 
     async def accept(self) -> None:
         self.accepted = True
@@ -77,6 +81,55 @@ class FakeWebSocket:
 
     async def send_text(self, data: str) -> None:
         self.text_frames.append(json.loads(data))
+
+    async def send_bytes(self, data: bytes) -> None:
+        self.binary_frames.append(data)
+
+    async def close(self, code: int = 1000, reason: str = "") -> None:
+        self.closes.append((code, reason))
+        self.client_state = agent_routes.WebSocketState.DISCONNECTED
+
+
+@pytest.mark.asyncio
+async def test_v2_sender_emits_explicit_replay_complete_after_boundary():
+    class SenderWebSocket:
+        def __init__(self):
+            self.binary_frames: list[bytes] = []
+            self.text_frames: list[dict] = []
+            self.client_state = agent_routes.WebSocketState.DISCONNECTED
+
+        async def send_bytes(self, data: bytes) -> None:
+            self.binary_frames.append(data)
+
+        async def send_text(self, data: str) -> None:
+            self.text_frames.append(json.loads(data))
+
+    class ReplaySession:
+        close_reason = ""
+
+        def __init__(self):
+            self.chunks = iter([OutputChunk(0, 6, b"replay")])
+
+        async def next_output(self, connection_id: str) -> OutputChunk:
+            try:
+                return next(self.chunks)
+            except StopIteration as exc:
+                raise ConnectionError from exc
+
+    websocket = SenderWebSocket()
+    connection = SimpleNamespace(id="browser", closed=False)
+
+    await agent_routes._send_terminal_v2_frames(
+        websocket,
+        ReplaySession(),
+        connection,
+        replay_latest=6,
+        last_output_ack=0,
+        replay_chunk_count=1,
+    )
+
+    assert len(websocket.binary_frames) == 1
+    assert websocket.text_frames == [{"v": 2, "type": "replay_complete", "sequence": 6}]
 
 
 @pytest.mark.asyncio
@@ -108,6 +161,28 @@ async def test_v2_hello_returns_ready_and_disconnect_unsubscribes(monkeypatch):
     assert websocket.text_frames[0]["session_id"]
     assert manager.diagnostics()["connection_count"] == 0
     await manager.close_all("test_complete")
+
+
+@pytest.mark.asyncio
+async def test_v2_terminate_closes_the_socket_once(monkeypatch):
+    async def factory(request: SessionRequest) -> FakePty:
+        return FakePty()
+
+    manager = TerminalManager(factory, replay_bytes=4096)
+    websocket = FakeWebSocket([
+        {"text": json.dumps({
+            "v": 2, "type": "hello", "client_id": "browser-1", "root": "root",
+            "dir": "project", "backend": "claude", "cols": 80, "rows": 24,
+        })},
+        {"text": json.dumps({"v": 2, "type": "terminate", "reason": "replaced"})},
+    ])
+    monkeypatch.setattr(agent_routes, "_terminal_v2_manager", manager)
+    monkeypatch.setattr(agent_routes, "resolve_session_cwd", lambda root, dir_: "/tmp/project")
+
+    await agent_routes.agent_terminal_v2(websocket)
+
+    assert websocket.closes == [(1000, "replaced")]
+    assert manager.diagnostics()["session_count"] == 0
 
 
 @pytest.mark.asyncio

@@ -135,7 +135,7 @@
     // 统一字体栈：优先使用 Noto Sans SC 确保中英文混排时字体一致
     var _mdFontStack = '-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","Noto Sans",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji"';
     if (resolved === 'dark') {
-      varsEl.textContent = '[data-theme=dark] .markdown-body { color:#f0f6fc; background-color:#0d1117; font-family:' + _mdFontStack + '; } [data-theme=dark] .markdown-body * { color:#f0f6fc; } [data-theme=dark] .markdown-body table tr { background-color:#0d1117; border-top:1px solid #3d444db3; } [data-theme=dark] .markdown-body table td,[data-theme=dark] .markdown-body table th { border:1px solid #3d444d; } [data-theme=dark] .markdown-body code { background-color:#656c7633; color:#e1e4e8; } [data-theme=dark] .markdown-body pre { background-color:#151b23; color:#f0f6fc; } [data-theme=dark] .markdown-body pre code { background:transparent; color:#f0f6fc; } [data-theme=dark] .markdown-body blockquote { color:#9198a1; border-left-color:#3d444d; }';
+      varsEl.textContent = '[data-theme=dark] .markdown-body { color:#f0f6fc; background-color:#0d1117; font-family:' + _mdFontStack + '; } [data-theme=dark] .markdown-body table tr { background-color:#0d1117; border-top:1px solid #3d444db3; } [data-theme=dark] .markdown-body table td,[data-theme=dark] .markdown-body table th { border:1px solid #3d444d; } [data-theme=dark] .markdown-body code { background-color:#656c7633; color:#e1e4e8; } [data-theme=dark] .markdown-body pre { background-color:#151b23; color:#f0f6fc; } [data-theme=dark] .markdown-body pre code { background:transparent; color:#f0f6fc; } [data-theme=dark] .markdown-body blockquote { color:#9198a1; border-left-color:#3d444d; }';
     } else {
       varsEl.textContent = '[data-theme=light] .markdown-body { color:#1f2328; background-color:#ffffff; font-family:' + _mdFontStack + '; } [data-theme=light] .markdown-body table tr { background-color:#ffffff; border-top:1px solid #d1d9e0b3; } [data-theme=light] .markdown-body table td,[data-theme=light] .markdown-body table th { border:1px solid #d1d9e0; } [data-theme=light] .markdown-body code { background:rgba(175,184,193,0.2); color:#d73a49; } [data-theme=light] .markdown-body pre { background:#f6f8fa; color:#1f2328; } [data-theme=light] .markdown-body pre code { background:transparent; color:#1f2328; } [data-theme=light] .markdown-body blockquote { color:#656d76; border-left-color:#d0d7de; }';
     }
@@ -212,7 +212,9 @@
       let href = token.attrGet('src') || '';
       const title = token.attrGet('title') || '';
       const text = token.content || '';
-      if (!/^https?:\/\//i.test(href) && !href.startsWith('/')) {
+      if (/^dev\/static\//i.test(href)) {
+        href = `/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(href.replace(/^dev\/static\//i, ''))}`;
+      } else if (!/^https?:\/\//i.test(href) && !href.startsWith('/')) {
         const dir = entryRelPath.split('/').slice(0, -1).join('/');
         const fullPath = dir ? dir + '/' + href : href;
         href = `/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(fullPath)}`;
@@ -325,6 +327,7 @@
           if (stroke.indexOf('NaN%') !== -1) el.setAttribute('stroke', stroke.replace(/hsl\([^)]*NaN%[^)]*\)/g, resolvedTheme === 'dark' ? '#58a6ff' : '#4f46e5'));
         });
       }
+    } catch (err) {
       var errMsg = err && (err.message || err.str || String(err));
       console.error('[ClawMate] Mermaid \u6e32\u67d3\u5931\u8d25:', errMsg, err);
       for (var i = 0; i < blocks.length; i++) {
@@ -463,6 +466,7 @@
 
     // Pan (drag)
     container.addEventListener('mousedown', function(e) {
+      if (e.target.closest('.mermaid-zoom-controls')) return;
       if (e.button !== 0 || e.ctrlKey || e.metaKey) return;
       isPanning = true;
       panStartX = e.clientX - originX;
@@ -485,10 +489,101 @@
     });
 
     // Double-click to fit
-    container.addEventListener('dblclick', function() {
+    container.addEventListener('dblclick', function(e) {
+      if (e.target.closest('.mermaid-zoom-controls')) return;
       scale = 1; originX = 0; originY = 0;
       applyZoom();
     });
+  }
+
+  function replaceMermaidForeignObjectsForPng(svg) {
+    Array.prototype.forEach.call(svg.querySelectorAll('foreignObject'), function(foreignObject) {
+      var textContent = (foreignObject.innerText || foreignObject.textContent || '').trim();
+      if (!textContent) {
+        foreignObject.remove();
+        return;
+      }
+
+      var width = parseFloat(foreignObject.getAttribute('width')) || 0;
+      var height = parseFloat(foreignObject.getAttribute('height')) || 0;
+      var x = parseFloat(foreignObject.getAttribute('x')) || 0;
+      var y = parseFloat(foreignObject.getAttribute('y')) || 0;
+      var label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      var lines = textContent.split(/\r?\n/).filter(Boolean);
+
+      label.setAttribute('x', x + width / 2);
+      label.setAttribute('y', y + height / 2);
+      label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('dominant-baseline', 'middle');
+      label.setAttribute('fill', '#333');
+      label.setAttribute('font-family', 'ui-monospace, SF Mono, Cascadia Code, Consolas, monospace');
+      label.setAttribute('font-size', '16px');
+
+      lines.forEach(function(line, index) {
+        var tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+        tspan.setAttribute('x', x + width / 2);
+        if (index > 0) tspan.setAttribute('dy', '1.2em');
+        tspan.textContent = line;
+        label.appendChild(tspan);
+      });
+      foreignObject.parentNode.replaceChild(label, foreignObject);
+    });
+  }
+
+  function exportMermaidSvgAsPng(svg) {
+    var exportSvg = svg.cloneNode(true);
+    exportSvg.style.transform = '';
+    exportSvg.style.transformOrigin = '';
+    exportSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    // foreignObject 会让 Chromium 的 canvas 变为不可导出，先转换标签为原生 SVG 文本。
+    replaceMermaidForeignObjectsForPng(exportSvg);
+
+    var viewBox = exportSvg.viewBox && exportSvg.viewBox.baseVal;
+    var width = Math.ceil((viewBox && viewBox.width) || parseFloat(exportSvg.getAttribute('width')) || svg.getBoundingClientRect().width || 1);
+    var height = Math.ceil((viewBox && viewBox.height) || parseFloat(exportSvg.getAttribute('height')) || svg.getBoundingClientRect().height || 1);
+    exportSvg.setAttribute('width', width);
+    exportSvg.setAttribute('height', height);
+
+    var svgUrl = URL.createObjectURL(new Blob([
+      new XMLSerializer().serializeToString(exportSvg)
+    ], { type: 'image/svg+xml;charset=utf-8' }));
+    var image = new Image();
+    image.onload = function() {
+      var canvas = document.createElement('canvas');
+      var pixelRatio = 2;
+      canvas.width = width * pixelRatio;
+      canvas.height = height * pixelRatio;
+      var context = canvas.getContext('2d');
+      if (!context) {
+        URL.revokeObjectURL(svgUrl);
+        showToast('导出 PNG 失败', 3000);
+        return;
+      }
+      context.scale(pixelRatio, pixelRatio);
+      context.drawImage(image, 0, 0, width, height);
+      URL.revokeObjectURL(svgUrl);
+      try {
+        canvas.toBlob(function(pngBlob) {
+          if (!pngBlob) {
+            showToast('导出 PNG 失败', 3000);
+            return;
+          }
+          var downloadUrl = URL.createObjectURL(pngBlob);
+          var link = document.createElement('a');
+          link.href = downloadUrl;
+          link.download = 'mermaid-diagram.png';
+          link.click();
+          URL.revokeObjectURL(downloadUrl);
+        }, 'image/png');
+      } catch (err) {
+        showToast('导出 PNG 失败', 3000);
+      }
+    };
+    image.onerror = function() {
+      URL.revokeObjectURL(svgUrl);
+      showToast('导出 PNG 失败', 3000);
+    };
+    image.src = svgUrl;
   }
 
   function openMermaidDialog(svg) {
@@ -513,7 +608,8 @@
     zoomGroup.style.cssText = 'position:static;display:flex;background:transparent;backdrop-filter:none;padding:0;';
     zoomGroup.innerHTML = '<button class="mermaid-zoom-btn" data-dzoom="out">−</button>' +
       '<button class="mermaid-zoom-btn" data-dzoom="reset">⊙</button>' +
-      '<button class="mermaid-zoom-btn" data-dzoom="in">+</button>';
+      '<button class="mermaid-zoom-btn" data-dzoom="in">+</button>' +
+      '<button class="mermaid-zoom-btn" data-dzoom="export" title="导出 PNG" aria-label="导出 PNG">⇩</button>';
     header.appendChild(zoomGroup);
 
     var closeBtn = document.createElement('button');
@@ -560,6 +656,7 @@
     zoomGroup.addEventListener('click', function(e) {
       var btn = e.target.closest('.mermaid-zoom-btn');
       if (!btn) return;
+      if (btn.dataset.dzoom === 'export') { exportMermaidSvgAsPng(clonedSvg); return; }
       if (btn.dataset.dzoom === 'in') { dScale = Math.min(5, dScale + 0.1); }
       else if (btn.dataset.dzoom === 'out') { dScale = Math.max(0.3, dScale - 0.1); }
       else { dScale = 1; dPanX = 0; dPanY = 0; }
@@ -1069,7 +1166,12 @@
     }
     try {
       pdfjsLib.GlobalWorkerOptions.workerSrc = '/clawmate/pdfjs/pdf.worker.min.js';
-      var pdf = await pdfjsLib.getDocument(rawUrl).promise;
+      var pdf = await pdfjsLib.getDocument({
+        url: rawUrl,
+        cMapUrl: '/clawmate/pdfjs/cmaps/',
+        cMapPacked: true,
+        standardFontDataUrl: '/clawmate/pdfjs/standard_fonts/'
+      }).promise;
       var outline = await pdf.getOutline();
       if (!outline || outline.length === 0) {
         // Fallback: show page number list
@@ -1210,17 +1312,50 @@
   let sourceDirty = false;
 
   // ── Line numbers for code / source views (per-row flex layout) ──
-  function renderCodeWithLineNumbers(rawContent, preEl) {
+  function normalizeHighlightLanguage(language) {
+    var lang = (language || '').toLowerCase();
+    var aliases = {
+      yml: 'yaml', node: 'javascript', 'node.js': 'javascript',
+      py: 'python', sh: 'bash', md: 'markdown', text: 'plaintext',
+      h: 'cpp', hpp: 'cpp', zsh: 'bash', fish: 'bash',
+      bat: 'dos', ps1: 'powershell', rb: 'ruby', rs: 'rust',
+      kt: 'kotlin', pl: 'perl', pm: 'perl'
+    };
+    return aliases[lang] || lang;
+  }
+
+  function highlightSourceLines(rawContent, language) {
+    var content = rawContent || '';
+    if (!window.hljs || !language) return content.split('\n').map(escHtml);
+
+    try {
+      var normalized = normalizeHighlightLanguage(language);
+      var highlighted = window.hljs.getLanguage(normalized)
+        ? window.hljs.highlight(content, {
+            language: normalized,
+            ignoreIllegals: true,
+          }).value
+        : window.hljs.highlightAuto(content).value;
+      var code = document.createElement('code');
+      code.innerHTML = highlighted;
+      return splitHighlightedHtmlByLines(code);
+    } catch (_) {
+      return content.split('\n').map(escHtml);
+    }
+  }
+
+  function renderCodeWithLineNumbers(rawContent, language) {
     const wrapper = document.createElement('div');
     wrapper.className = 'code-with-lines';
-    const lines = (rawContent || '').split('\n');
+    wrapper.dataset.language = language || '';
+    const lines = highlightSourceLines(rawContent, language);
     for (var i = 0; i < lines.length; i++) {
-      wrapper.appendChild(createCodeRow(i + 1, lines[i]));
+      wrapper.appendChild(createCodeRow(i + 1, '', lines[i] || '&nbsp;'));
     }
     return wrapper;
   }
 
-  function createCodeRow(num, text) {
+  function createCodeRow(num, text, highlightedHtml) {
     var row = document.createElement('div');
     row.className = 'code-row';
 
@@ -1230,25 +1365,27 @@
 
     var textSpan = document.createElement('code');
     textSpan.className = 'code-row-text';
-    textSpan.textContent = text;
+    if (highlightedHtml !== undefined) textSpan.innerHTML = highlightedHtml;
+    else textSpan.textContent = text;
 
     row.appendChild(numSpan);
     row.appendChild(textSpan);
     return row;
   }
 
-  function updateCodeLineNumbers(wrapper, rawContent) {
+  function updateCodeLineNumbers(wrapper, rawContent, language) {
     if (!wrapper) return;
-    var lines = (rawContent || '').split('\n');
+    var lang = language || wrapper.dataset.language || '';
+    var lines = highlightSourceLines(rawContent, lang);
     var rows = wrapper.querySelectorAll('.code-row');
 
     // Update existing rows
     for (var i = 0; i < lines.length; i++) {
       if (i < rows.length) {
         rows[i].querySelector('.code-row-num').textContent = i + 1;
-        rows[i].querySelector('.code-row-text').textContent = lines[i];
+        rows[i].querySelector('.code-row-text').innerHTML = lines[i] || '&nbsp;';
       } else {
-        wrapper.appendChild(createCodeRow(i + 1, lines[i]));
+        wrapper.appendChild(createCodeRow(i + 1, '', lines[i] || '&nbsp;'));
       }
     }
 
@@ -1300,6 +1437,19 @@
   function splitHighlightedHtmlByLines(codeEl) {
     var lines = [];
     var currentLine = [];
+    var activeTags = [];
+
+    function closeActiveTags() {
+      for (var i = activeTags.length - 1; i >= 0; i--) {
+        currentLine.push(activeTags[i].close);
+      }
+    }
+
+    function reopenActiveTags() {
+      for (var i = 0; i < activeTags.length; i++) {
+        currentLine.push(activeTags[i].open);
+      }
+    }
 
     function collect(nodes) {
       for (var i = 0; i < nodes.length; i++) {
@@ -1308,17 +1458,25 @@
           var parts = node.textContent.split('\n');
           for (var j = 0; j < parts.length; j++) {
             if (j > 0) {
+              closeActiveTags();
               lines.push(currentLine.join(''));
               currentLine = [];
+              reopenActiveTags();
             }
             currentLine.push(escHtml(parts[j]));
           }
         } else if (node.nodeType === Node.ELEMENT_NODE) {
           var tag = node.tagName.toLowerCase();
           var cls = node.className ? ' class="' + node.className + '"' : '';
-          currentLine.push('<' + tag + cls + '>');
+          var tagPair = {
+            open: '<' + tag + cls + '>',
+            close: '</' + tag + '>',
+          };
+          currentLine.push(tagPair.open);
+          activeTags.push(tagPair);
           collect(node.childNodes);
-          currentLine.push('</' + tag + '>');
+          activeTags.pop();
+          currentLine.push(tagPair.close);
         }
       }
     }
@@ -1327,6 +1485,7 @@
     if (currentLine.length > 0) {
       lines.push(currentLine.join(''));
     }
+    if (lines.length === 0) lines.push('');
 
     return lines;
   }
@@ -1688,6 +1847,66 @@
   let rawContent = '';
   var _skipFeedbackLoad = false;
 
+  // ============ Image Preview ============
+  const IMAGE_ZOOM_STEP = 0.1;
+  const IMAGE_ZOOM_MIN = 0.1;
+  const IMAGE_ZOOM_MAX = 5;
+  let imageZoomScale = 1;
+  let imageZoomBaseWidth = 0;
+  let imageZoomBaseHeight = 0;
+
+  function applyImageZoom() {
+    var img = document.getElementById('previewImage');
+    if (!img) return;
+    if (!imageZoomBaseWidth || !imageZoomBaseHeight) {
+      imageZoomBaseWidth = img.clientWidth;
+      imageZoomBaseHeight = img.clientHeight;
+    }
+    if (!imageZoomBaseWidth || !imageZoomBaseHeight) return;
+
+    img.style.transform = 'scale(' + imageZoomScale + ')';
+    img.style.transformOrigin = 'center';
+    if (imgWrapEl) {
+      imgWrapEl.style.width = Math.round(imageZoomBaseWidth * imageZoomScale) + 'px';
+      imgWrapEl.style.height = Math.round(imageZoomBaseHeight * imageZoomScale) + 'px';
+    }
+    var label = document.getElementById('imageZoomLevel');
+    if (label) label.textContent = Math.round(imageZoomScale * 100) + '%';
+  }
+
+  function resetImageZoom() {
+    imageZoomScale = 1;
+    imageZoomBaseWidth = 0;
+    imageZoomBaseHeight = 0;
+    var img = document.getElementById('previewImage');
+    if (img) {
+      img.style.transform = 'scale(1)';
+      img.style.transformOrigin = 'center';
+    }
+    if (imgWrapEl) {
+      imgWrapEl.style.width = '100%';
+      imgWrapEl.style.height = '';
+    }
+    var label = document.getElementById('imageZoomLevel');
+    if (label) label.textContent = '100%';
+  }
+
+  function setupImageZoomToolbar() {
+    var dyn = document.getElementById('bottombarDynamic');
+    if (!dyn) return;
+    dyn.innerHTML = '<button class="preview-bottom-btn" id="imageZoomOut" title="缩小图片">− 缩小</button>' +
+      '<span id="imageZoomLevel" aria-live="polite">100%</span>' +
+      '<button class="preview-bottom-btn" id="imageZoomIn" title="放大图片">+ 放大</button>';
+    document.getElementById('imageZoomOut').addEventListener('click', function() {
+      imageZoomScale = Math.max(IMAGE_ZOOM_MIN, imageZoomScale - IMAGE_ZOOM_STEP);
+      applyImageZoom();
+    });
+    document.getElementById('imageZoomIn').addEventListener('click', function() {
+      imageZoomScale = Math.min(IMAGE_ZOOM_MAX, imageZoomScale + IMAGE_ZOOM_STEP);
+      applyImageZoom();
+    });
+  }
+
   // ============ Image Sort ============
   // ── Client-side image navigation (no full page reload) ──────
   function navigateToImage(newFilePath) {
@@ -1709,6 +1928,13 @@
     // Update the image in-place
     var imgEl = document.getElementById('previewImage');
     if (imgEl) {
+      // Keep the selected scale, but measure the newly loaded image afresh.
+      imageZoomBaseWidth = 0;
+      imageZoomBaseHeight = 0;
+      if (imgWrapEl) {
+        imgWrapEl.style.width = '100%';
+        imgWrapEl.style.height = '';
+      }
       imgEl.src = '/api/clawmate/preview?root=' + encodeURIComponent(rootId) + '&path=' + encodeURIComponent(newFilePath);
       imgEl.style.display = '';
       // Remove any lingering error message from a previous failed image
@@ -1904,7 +2130,7 @@
   function buildImageSortPills() {
     const dyn = document.getElementById('bottombarDynamic');
     if (!dyn) return;
-    dyn.innerHTML = '';
+    dyn.querySelectorAll('.sort-pill').forEach(function(pill) { pill.remove(); });
 
     const pills = [
       { key: 'time', desc: '↓ 最新', asc: '↑ 最早' },
@@ -1969,7 +2195,7 @@
       // For binary file types, the API returns raw bytes — do NOT call res.json()
       if (isImageMode) {
         contentBody.innerHTML = '';
-        contentBody.style.cssText = 'display:flex;align-items:center;justify-content:center;position:relative;padding:12px;';
+        contentBody.style.cssText = 'display:flex;align-items:center;justify-content:center;position:relative;padding:12px;overflow:auto;';
 
         // Reset nav state and fetch sorted directory listing for prev/next
         imgNav = { prev: null, next: null, idx: 0, total: 0 };
@@ -1985,8 +2211,13 @@
 
         const img = document.createElement('img');
         img.id = 'previewImage';
-        img.src = `/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`;
         img.style.cssText = 'max-width:100%;max-height:70vh;object-fit:contain;border-radius:8px;';
+        img.onload = function() {
+          imageZoomBaseWidth = 0;
+          imageZoomBaseHeight = 0;
+          applyImageZoom();
+        };
+        img.src = `/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`;
         img.onerror = function() {
           this.style.display = 'none';
           const errDiv = document.createElement('div');
@@ -2006,6 +2237,7 @@
         contentBody.appendChild(wrap);
         removeLoading();
         setupMediaToolbar();
+        setupImageZoomToolbar();
         buildImageSortPills();
         renderImageFeedbackPanel();
         if (!_skipFeedbackLoad) loadCompletedFeedback();
@@ -2189,7 +2421,7 @@
           srcPre.className = 'raw-text';
         }
         contentBody.appendChild(srcPre);
-        const mdSrcWrapper = renderCodeWithLineNumbers(content);
+        const mdSrcWrapper = renderCodeWithLineNumbers(content, 'markdown');
         mdSrcWrapper.style.display = isRawMode ? '' : 'none';
         contentBody.appendChild(mdSrcWrapper);
 
@@ -2320,7 +2552,7 @@
           srcPre.textContent = content;
         }
         htmlWrap.appendChild(srcPre);
-        var htmlSrcWrapper = renderCodeWithLineNumbers(content);
+        var htmlSrcWrapper = renderCodeWithLineNumbers(content, 'html');
         htmlSrcWrapper.style.display = isRawMode ? '' : 'none';
         htmlSrcWrapper.style.flex = '1';
         htmlSrcWrapper.style.borderRadius = '0';
@@ -2366,7 +2598,7 @@
           updatePlainTextDynamicButtons();
         } else {
           // Display mode: per-line rows with line numbers
-          contentBody.appendChild(renderCodeWithLineNumbers(rawContent));
+          contentBody.appendChild(renderCodeWithLineNumbers(rawContent, ext));
           removeLoading();
           // Render outline sidebar for code (display mode: auto-open on desktop only)
           if (codeOutlineItems.length >= 2) {
@@ -3563,11 +3795,34 @@
   // ============ Office / PDF Mode ============
   let officePdfCompletedItems = [];
   let officePdfCurrentMode = 'view'; // track which mode we're in
+  let pdfViewerScale = 1.5;
+
+  function postPdfZoom(delta) {
+    var iframe = document.getElementById('officeIframe');
+    if (iframe && iframe.contentWindow) {
+      iframe.contentWindow.postMessage({ type: 'zoom-pdf', delta: delta }, '*');
+    }
+  }
+
+  window.addEventListener('message', function(e) {
+    if (!e.data || e.data.type !== 'pdf-scale-change') return;
+    pdfViewerScale = e.data.scale;
+    var label = document.getElementById('pdfZoomLevel');
+    if (label) label.textContent = Math.round(pdfViewerScale * 100) + '%';
+  });
 
   function setupOfficePdfToolbar() {
     officePdfCurrentMode = onlyofficeMode;
     const dyn = document.getElementById('bottombarDynamic');
     dyn.innerHTML = '';
+    if (isPdfMode) {
+      pdfViewerScale = 1.5;
+      dyn.innerHTML = '<button class="preview-bottom-btn" id="pdfZoomOut" title="缩小页面">− 缩小</button>' +
+        '<span id="pdfZoomLevel" aria-live="polite">150%</span>' +
+        '<button class="preview-bottom-btn" id="pdfZoomIn" title="放大页面">+ 放大</button>';
+      document.getElementById('pdfZoomOut').addEventListener('click', function() { postPdfZoom(-1); });
+      document.getElementById('pdfZoomIn').addEventListener('click', function() { postPdfZoom(1); });
+    }
     // Office docs open in edit mode by default; no manual toggle needed
   }
 
@@ -4160,15 +4415,22 @@
       } else {
         // Not shared — create share link
         btn.textContent = '⏳';
+        var expiryInput = prompt('请输入分享有效期（天）：1 / 3 / 7 / 30', '1');
+        if (expiryInput === null) return;
+        var expiresDays = Number(expiryInput.trim());
+        if (![1, 3, 7, 30].includes(expiresDays)) {
+          showToast('❌ 有效期只能是 1、3、7 或 30 天', 3000);
+          return;
+        }
         var res = await fetch('/api/clawmate/share/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ root: rootId, path: filePath }),
+          body: JSON.stringify({ root: rootId, path: filePath, expires_days: expiresDays }),
         });
         if (!res.ok) { showToast('❌ 分享链接生成失败 (' + res.status + ')', 3000); return; }
         var data = await res.json();
         await copyText(data.url, '✅ 分享链接已复制到剪贴板');
-        showToast('🔗 已复制 · ' + (data.reused ? '有效期已刷新' : '24小时有效'), 3000);
+        showToast('🔗 已复制 · ' + (data.reused ? '有效期已刷新为' + expiresDays + '天' : expiresDays + '天有效'), 3000);
         _isShared = true;
         updateShareButton();
       }

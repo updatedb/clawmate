@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
+import logging
 import os
+import signal
 import struct
 import termios
 import time
@@ -29,6 +31,7 @@ class SessionRequest:
 
 
 PtyFactory = Callable[[SessionRequest], Awaitable[PtyAdapter]]
+logger = logging.getLogger(__name__)
 
 
 class PosixPtyAdapter:
@@ -38,6 +41,7 @@ class PosixPtyAdapter:
         self.master_fd = master_fd
         self.process = process
         self._closed = False
+        self._termination_task: asyncio.Task[None] | None = None
         os.set_blocking(master_fd, False)
 
     async def read(self, size: int) -> bytes:
@@ -69,10 +73,54 @@ class PosixPtyAdapter:
             return
         self._closed = True
         if getattr(self.process, "returncode", None) is None:
-            self.process.terminate()
+            # The CLI is created with setsid(), so its PID is also the process
+            # group ID.  Newer Claude releases start several MCP helpers
+            # (Node/Chrome processes).  Signalling only the CLI leader leaves
+            # those helpers alive after a "new session" or backend switch,
+            # steadily exhausting memory and making subsequent terminal
+            # handshakes appear to hang.
+            pid = getattr(self.process, "pid", None)
+            if isinstance(pid, int) and pid > 0:
+                try:
+                    os.killpg(pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                else:
+                    self._termination_task = asyncio.create_task(
+                        self._reap_process_group(pid),
+                    )
+            else:
+                # Keep the adapter usable with lightweight test doubles and
+                # non-POSIX subprocess implementations.
+                self.process.terminate()
         try:
             os.close(self.master_fd)
         except OSError:
+            pass
+
+    async def _reap_process_group(self, pid: int) -> None:
+        """Escalate a stopped CLI group that ignores SIGTERM.
+
+        This deliberately runs outside TerminalManager's lock so replacing a
+        session can create and report ``ready`` immediately.
+        """
+        wait = getattr(self.process, "wait", None)
+        if not callable(wait):
+            return
+        try:
+            await asyncio.wait_for(wait(), timeout=3)
+            return
+        except asyncio.TimeoutError:
+            pass
+        except (ProcessLookupError, OSError):
+            return
+        try:
+            os.killpg(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            return
+        try:
+            await self.process.wait()
+        except (ProcessLookupError, OSError):
             pass
 
     async def _wait_for_fd(self, *, readable: bool) -> None:
@@ -127,6 +175,7 @@ class TerminalManager:
         self._keys: dict[str, str] = {}
         self._idle_since: dict[str, float] = {}
         self._created_at: dict[str, float] = {}
+        self._removal_tasks: set[asyncio.Task[None]] = set()
         self._lock = asyncio.Lock()
         self._next_id = 0
 
@@ -227,7 +276,22 @@ class TerminalManager:
                 del self._keys[key]
         await session.close(reason)
         if self._on_session_removed:
-            await self._on_session_removed(session_id, reason)
+            # History persistence can inspect CLI transcripts and touch the
+            # filesystem.  It must not hold the manager lock: a replacement
+            # terminal needs to be able to create and send `ready` while the
+            # old session is being archived.
+            task = asyncio.create_task(self._on_session_removed(session_id, reason))
+            self._removal_tasks.add(task)
+            task.add_done_callback(self._finish_removal_task)
+
+    def _finish_removal_task(self, task: asyncio.Task[None]) -> None:
+        self._removal_tasks.discard(task)
+        try:
+            task.result()
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("terminal session archival failed")
 
     def _require(self, session_id: str) -> TerminalSession:
         session = self._sessions.get(session_id)

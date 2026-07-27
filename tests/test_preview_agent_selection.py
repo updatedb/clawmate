@@ -37,4 +37,43 @@ def test_preview_selection_handler_reuses_single_range_binding():
     js = PREVIEW_JS.read_text(encoding="utf-8")
 
     assert "let range = null;" in js
+
+
+def test_preview_mermaid_success_path_does_not_reference_undefined_error():
+    js = PREVIEW_JS.read_text(encoding="utf-8")
+
+    assert "} catch (err) {\n      var errMsg = err &&" in js
+
+
+def test_mermaid_inline_zoom_controls_do_not_trigger_pan_or_double_click_reset():
+    js = PREVIEW_JS.read_text(encoding="utf-8")
+    inline_zoom = js.split("function setupMermaidZoomDesktop(svg)", 1)[1].split(
+        "function openMermaidDialog(svg)", 1
+    )[0]
+
+    assert inline_zoom.count("if (e.target.closest('.mermaid-zoom-controls')) return;") == 2
+
+
+def test_mermaid_expand_dialog_can_export_the_unzoomed_diagram_as_png():
+    js = PREVIEW_JS.read_text(encoding="utf-8")
+    dialog = js.split("function openMermaidDialog(svg)", 1)[1].split(
+        "// Close function", 1
+    )[0]
+
+    assert 'data-dzoom="export"' in dialog
+    assert "exportMermaidSvgAsPng(clonedSvg);" in dialog
+    assert "function exportMermaidSvgAsPng(svg)" in js
+    assert "function replaceMermaidForeignObjectsForPng(svg)" in js
+    assert "replaceMermaidForeignObjectsForPng(exportSvg);" in js
+    assert "querySelectorAll('foreignObject')" in js
+    assert "createElementNS('http://www.w3.org/2000/svg', 'text')" in js
+    assert "canvas.toBlob" in js
+    assert "mermaid-diagram.png" in js
+
+
+def test_preview_markdown_renderer_normalizes_dev_static_asset_paths():
+    js = PREVIEW_JS.read_text(encoding="utf-8")
+
+    assert "dev\\/static" in js
+    assert "asset/clawmate-logo.png" not in js[js.index("function createMarkdownRenderer"):js.index("function createMarkdownRenderer") + 2200]
     assert "const range = sel.getRangeAt(0);" not in js

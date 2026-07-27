@@ -8,6 +8,7 @@
  * that overlay on the same 6px track used by index and preview scrollbars. */
 .agent-panel-v2 .xterm-scrollable-element > .scrollbar.vertical {
   width: 6px !important;
+  min-width: 6px !important;
   background: transparent !important;
 }
 
@@ -42,6 +43,19 @@
 }
 .agent-panel-v2 .xterm {
   font-family: var(--font-mono, "JetBrains Mono", "Fira Code", monospace);
+}
+
+/* The xterm-viewport has background:#000 from xterm's CSS, creating a visible
+   black bar at the bottom when screen height < viewport height.  Bypass with
+   transparent so the themed scrollable-element background shows through. */
+.agent-panel-v2 .xterm-viewport {
+  background: var(--bg-code, #f8fafc) !important;
+}
+
+/* Hide the overview ruler canvas that xterm creates when overviewRuler.width
+   is set (we use that option only to shrink the scrollbar dimension). */
+.agent-panel-v2 .xterm-decoration-overview-ruler {
+  display: none !important;
 }
 
 .agent-panel-v2 .agent-toolbar {
@@ -117,24 +131,19 @@
 }
 .agent-toolbar-btn.icon { min-width: 28px; padding: 0 4px; font-family: Arial, sans-serif; }
 .agent-toolbar-btn.font-size-action { min-width: auto; padding: 0 7px; }
+.agent-btn-label { margin-left: 1px; }
 .agent-search-row {
   display: flex;
   gap: 4px;
+  align-items: center;
   padding: 5px 8px;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-secondary);
 }
 .agent-search-row[hidden] { display: none; }
-.agent-search-row input {
-  min-width: 0;
+.agent-search-row .search-wrap {
   flex: 1;
-  height: 25px;
-  padding: 0 8px;
-  border: 1px solid var(--border-color);
-  border-radius: 5px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font: 12px/1 var(--font-ui);
+  min-width: 0;
 }
 
 .terminal-status-overlay {
@@ -161,6 +170,7 @@
   }
   .agent-panel-v2 .agent-toolbar { min-height: 38px; padding: 5px 8px; }
   .agent-panel-v2 .agent-toolbar-btn { height: 28px; padding: 0 6px; }
+  .agent-toolbar-actions .agent-btn-label { display: none; }
 }
 
 /* ── Agent History Search ── */
@@ -169,60 +179,6 @@
   display: flex;
   flex: 1;
   min-width: 0;
-}
-.agent-history-search-wrap .agent-header-search {
-  height: 26px;
-  padding: 0 28px 0 8px;
-  border: 1px solid var(--border-color);
-  border-radius: 5px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: 12px;
-  outline: none;
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-  transition: background var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
-}
-.agent-history-search-wrap .agent-header-search::placeholder {
-  color: var(--text-muted);
-  opacity: 0.7;
-}
-.agent-history-search-wrap .agent-header-search::-webkit-search-decoration,
-.agent-history-search-wrap .agent-header-search::-webkit-search-cancel-button,
-.agent-history-search-wrap .agent-header-search::-webkit-search-results-button,
-.agent-history-search-wrap .agent-header-search::-webkit-search-results-decoration {
-  -webkit-appearance: none;
-  display: none;
-}
-.agent-history-search-wrap .agent-header-search:focus {
-  background: var(--bg-primary);
-  border-color: var(--accent);
-}
-.agent-history-search-clear {
-  position: absolute;
-  right: 3px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent !important;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: 50%;
-  flex-shrink: 0;
-  opacity: 0.7;
-  transition: opacity var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out);
-}
-.agent-history-search-clear:hover {
-  color: var(--text-primary);
-  background: var(--bg-tertiary) !important;
-  opacity: 1;
 }
 
 .agent-history-loading {
@@ -235,6 +191,6 @@
 @media (prefers-reduced-motion: reduce) {
   .agent-panel-v2,
   .terminal-status-overlay,
-  .agent-history-search-wrap .agent-header-search,
-  .agent-history-search-clear { transition: none; }
+  .search-input,
+  .search-clear { transition: none; }
 }

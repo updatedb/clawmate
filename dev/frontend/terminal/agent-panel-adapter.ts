@@ -22,8 +22,34 @@ export interface AgentFileContext {
   path?: string;
 }
 
+interface ConnectionTrace {
+  attempt: number;
+  startedAt: number;
+  backend: AgentInitOptions['backend'];
+  scope: string;
+}
+
 const AGENT_BACKEND_PREFERENCES_STORAGE_KEY = 'clawmate.agent.backend-preferences.v1';
 const VALID_AGENT_BACKENDS: readonly AgentInitOptions['backend'][] = ['claude', 'codex', 'openclaw'];
+
+/** Create a UUID even on HTTP LAN origins, where randomUUID is unavailable. */
+export function createAgentClientId(): string {
+  const cryptoApi = globalThis.crypto;
+  if (typeof cryptoApi?.randomUUID === 'function') return cryptoApi.randomUUID();
+
+  const bytes = new Uint8Array(16);
+  if (typeof cryptoApi?.getRandomValues === 'function') {
+    cryptoApi.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 function isAgentBackend(value: unknown): value is AgentInitOptions['backend'] {
   return typeof value === 'string' && VALID_AGENT_BACKENDS.includes(value as AgentInitOptions['backend']);
@@ -241,9 +267,11 @@ export class AgentPanelAdapter {
   private openclawAssistant: HTMLElement | null = null;
   private openclawSessionId = '';
   private pendingFileContext = '';
+  private hasRenderedTerminalOutput = false;
   private contextGeneration = 0;
   private panelWidth = this.readPanelWidth();
   private resizeObserver: ResizeObserver | null = null;
+  private terminalFitRetry: ReturnType<typeof setTimeout> | null = null;
   private historyQuery = '';
   private historyBackend = '';
   private historyOffset = 0;
@@ -257,6 +285,8 @@ export class AgentPanelAdapter {
   private wsClosedByUser = false;
   private defaultBackend: AgentInitOptions['backend'] = 'claude';
   private pendingFreshSession: (() => void) | null = null;
+  private connectionAttempt = 0;
+  private activeConnectionTrace: ConnectionTrace | null = null;
   private readonly wsMaxRetries = DEFAULT_RETRY.maxRetries;
   private readonly wsRetryBaseDelay = DEFAULT_RETRY.baseDelay;
   private readonly wsRetryMaxDelay = DEFAULT_RETRY.maxDelay;
@@ -370,6 +400,39 @@ export class AgentPanelAdapter {
       this.bindToolbar(prefix);
       if (!this.terminal) {
         this.terminal = new Terminal(terminalOptions(this.config.scrollback || 10000));
+        this.terminal.attachCustomKeyEventHandler((event) => {
+          // Only intercept keydown — keyup/keypress pass through
+          if (event.type !== 'keydown') return true;
+          if (!event.ctrlKey) return true;
+
+          const key = event.key.toLowerCase();
+
+          // Ctrl+C: Copy selected text if any, else pass through to PTY (SIGINT)
+          if (key === 'c') {
+            if (this.terminal?.hasSelection()) {
+              const text = this.terminal.getSelection();
+              navigator.clipboard.writeText(text).catch(() => {
+                try { document.execCommand('copy'); } catch { /* no clipboard */ }
+              });
+              this.terminal.clearSelection();
+              return false; // Don't send \x03 to PTY
+            }
+            return true; // No selection → send \x03 (SIGINT to PTY process)
+          }
+
+          // Ctrl+V: Paste from clipboard via async API
+          if (key === 'v') {
+            void this.pasteFromClipboard();
+            return false; // Don't send \x16 to PTY
+          }
+
+          // Ctrl+Z: Block entirely (prevents SIGTSTP from suspending the PTY process)
+          if (key === 'z') {
+            return false;
+          }
+
+          return true;
+        });
         this.fit = new FitAddon();
         this.search = new SearchAddon();
         this.terminal.loadAddon(this.fit);
@@ -387,6 +450,15 @@ export class AgentPanelAdapter {
             this.lastOutputAck = Math.max(this.lastOutputAck, sequence);
             this.sendControl({ type: 'output_ack', sequence });
           },
+          outputRendered: () => {
+            this.hasRenderedTerminalOutput = true;
+            this.prefillPendingFileContext();
+          },
+          replayComplete: () => {
+            this.terminal?.scrollToBottom();
+            this.setStatus('已连接');
+            this.logConnectionTrace('回放已渲染，状态已连接');
+          },
           maxBytes: 4 * 1024 * 1024,
         });
         this.terminal.onData((data) => this.sendInput(new TextEncoder().encode(data)));
@@ -403,6 +475,7 @@ export class AgentPanelAdapter {
     this.openclaw.close();
     this.wsClosedByUser = true;
     this.stopHeartbeat();
+    this.clearTerminalFitRetry();
     this.clearWsRetryTimer();
     this.socket?.close();
     this.socket = null;
@@ -476,6 +549,14 @@ export class AgentPanelAdapter {
 
   private connect(): void {
     if (!this.config || this.socket?.readyState === WebSocket.OPEN) return;
+    const trace: ConnectionTrace = {
+      attempt: ++this.connectionAttempt,
+      startedAt: performance.now(),
+      backend: this.config.backend,
+      scope: formatAgentScope(this.config.backend, this.config.rootId, this.config.dir),
+    };
+    this.activeConnectionTrace = trace;
+    this.logConnectionTrace('开始连接', { transportUrl: `${this.config.wsUrl}/v2` }, trace);
     this.wsClosedByUser = false;
     this.setStatus('连接中');
     const ws = new WebSocket(`${this.config.wsUrl}/v2`);
@@ -483,17 +564,21 @@ export class AgentPanelAdapter {
     ws.onopen = () => {
       this.wsRetryCount = 0;
       this.setStatus('连接中');
+      this.logConnectionTrace('WebSocket 已打开', {}, trace);
       this.startHeartbeat();
-      this.sendControl({ type: 'hello', client_id: crypto.randomUUID(), root: this.config!.rootId, dir: this.config!.dir, backend: this.config!.backend, cols: this.terminal?.cols || 80, rows: this.terminal?.rows || 24, last_output_ack: this.lastOutputAck });
-      if (this.pendingFileContext) {
-        const context = this.pendingFileContext;
-        this.pendingFileContext = '';
-        this.sendInput(new TextEncoder().encode(context));
-      }
+      this.sendControl({ type: 'hello', client_id: createAgentClientId(), root: this.config!.rootId, dir: this.config!.dir, backend: this.config!.backend, cols: this.terminal?.cols || 80, rows: this.terminal?.rows || 24, last_output_ack: this.lastOutputAck });
+      this.logConnectionTrace('已发送 hello，等待服务端 ready', { lastOutputAck: this.lastOutputAck }, trace);
     };
-    ws.onerror = () => { /* onclose will fire next */ };
+    ws.onerror = () => {
+      this.logConnectionTrace('WebSocket 错误，等待 close 事件', {}, trace, 'warn');
+    };
     ws.onclose = (event) => {
       if (this.socket !== ws) return;
+      this.logConnectionTrace('WebSocket 已关闭', {
+        code: event.code,
+        reason: event.reason || '(无原因)',
+        wasClean: event.wasClean,
+      }, trace, event.code === 1000 ? 'info' : 'warn');
       this.socket = null;
       this.stopHeartbeat();
       const freshSession = this.pendingFreshSession;
@@ -535,14 +620,61 @@ export class AgentPanelAdapter {
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === 'ready') {
+            const replayLatest = Number(msg.replay?.latest_sequence);
+            if (Number.isFinite(replayLatest)) {
+              const replaying = replayLatest > this.lastOutputAck;
+              this.logConnectionTrace('收到服务端 ready', {
+                sessionId: String(msg.session_id || ''),
+                replayLatest,
+                replaying,
+              }, trace);
+              if (replaying) this.setStatus('加载中');
+              this.output?.beginReplay(replayLatest);
+              if (!replaying) {
+                this.setStatus('已连接');
+                this.logConnectionTrace('状态已连接（无需回放）', {}, trace);
+                if (this.hasRenderedTerminalOutput) this.prefillPendingFileContext();
+              }
+            } else {
+              this.setStatus('已连接');
+              this.logConnectionTrace('状态已连接（服务端未提供回放边界）', {}, trace);
+            }
+          } else if (msg.type === 'replay_complete') {
+            this.terminal?.scrollToBottom();
             this.setStatus('已连接');
+            this.logConnectionTrace('回放完成，状态已连接', {
+              sequence: Number(msg.sequence || 0),
+            }, trace);
           } else if (msg.type === 'error') {
+            this.logConnectionTrace('服务端返回错误', {
+              message: String(msg.error?.message || msg.message || '连接错误'),
+            }, trace, 'warn');
             this.setStatus(String(msg.error?.message || msg.message || '连接错误'));
           }
         } catch { /* malformed text frame — ignore */ }
       }
     };
     this.socket = ws;
+  }
+
+  private logConnectionTrace(
+    stage: string,
+    details: Record<string, unknown> = {},
+    trace: ConnectionTrace | null = this.activeConnectionTrace,
+    level: 'info' | 'warn' = 'info',
+  ): void {
+    if (!trace) return;
+    const elapsedMs = Math.round(performance.now() - trace.startedAt);
+    const payload = {
+      attempt: trace.attempt,
+      backend: trace.backend,
+      scope: trace.scope,
+      elapsedMs,
+      ...details,
+    };
+    const message = `[AgentTerminal] ${stage} +${elapsedMs}ms`;
+    if (level === 'warn') console.warn(message, payload);
+    else console.info(message, payload);
   }
 
   private bindToolbar(prefix: string): void {
@@ -562,15 +694,20 @@ export class AgentPanelAdapter {
       if (!searchRow?.hidden) searchInput?.focus();
     };
     if (searchInput) searchInput.oninput = () => runSearch(true);
+    const searchClear = document.getElementById(id('AgentSearchClear'));
+    if (searchClear) searchClear.onclick = () => {
+      if (!searchInput) return;
+      searchInput.value = '';
+      this.search?.clearDecorations();
+      searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+      searchInput.focus();
+    };
     if (searchPrev) searchPrev.onclick = () => runSearch(false);
     if (searchNext) searchNext.onclick = () => runSearch(true);
     const clear = document.getElementById(id('AgentClear'));
-    if (clear) clear.onclick = () => this.terminal?.clear();
-    const copy = document.getElementById(id('AgentCopy'));
-    if (copy) copy.onclick = () => {
-      const text = this.terminal?.getSelection() || '';
-      if (text && navigator.clipboard) void navigator.clipboard.writeText(text);
-    };
+    if (clear) clear.onclick = () => this.sendInput(new Uint8Array([0x0c]));
+    const paste = document.getElementById(id('AgentPaste'));
+    if (paste) paste.onclick = () => { void this.pasteFromClipboard(); };
     const adjustFont = (delta: number) => {
       if (!this.terminal) return;
       const oldFontSize = this.terminal.options.fontSize || 14;
@@ -687,11 +824,17 @@ export class AgentPanelAdapter {
       }
       return;
     }
-    if (this.socket?.readyState === WebSocket.OPEN) {
-      this.sendInput(new TextEncoder().encode(context));
-    } else {
-      this.pendingFileContext = context;
-    }
+    // Wait for the first rendered terminal output before pre-filling the
+    // editable line. Sending it through the WebSocket races the CLI's
+    // welcome output and turns the reference into a separate user turn.
+    this.pendingFileContext = context;
+  }
+
+  private prefillPendingFileContext(): void {
+    if (!this.pendingFileContext) return;
+    const context = this.pendingFileContext;
+    this.pendingFileContext = '';
+    this.terminal?.input(context, true);
   }
 
   /** Derive a stable scope key from the current config for message caching. */
@@ -842,7 +985,7 @@ export class AgentPanelAdapter {
       overlay = document.createElement('section');
       overlay.id = panelId;
       overlay.className = 'agent-history-overlay hidden';
-      overlay.innerHTML = '<div class="agent-history-overlay-header"><div class="agent-history-list-header"><span class="agent-history-overlay-title agent-history-header-label"><svg class="agent-history-title-icon agent-history-header-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 7v5l3 2"></path></svg><span>历史会话</span></span><div class="agent-history-controls"><span class="agent-history-search-wrap"><input class="agent-history-search-input agent-header-search" type="search" placeholder="搜索会话内容…" aria-label="搜索历史会话"><button class="agent-history-search-clear" type="button" aria-label="清除搜索"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 4 10 11"></path><path d="M10 11l-6 2"></path><path d="M10 11l-4 5"></path><path d="M10 11l-1 7"></path><path d="M10 11l2 7"></path><path d="M10 11l5 5"></path><path d="M10 11l7 2"></path></svg></button></span><select class="agent-history-backend-input agent-backend-select" aria-label="按 backend 过滤"><option value="">全部</option><option value="claude">Claude</option><option value="codex">Codex</option><option value="openclaw">OpenClaw</option></select></div><button class="agent-history-overlay-close agent-history-header-close" type="button" aria-label="关闭历史会话"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div><div class="agent-history-detail-header" hidden><button class="agent-history-back agent-history-header-label" type="button"><svg class="agent-history-header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg><span>历史列表</span></button><span class="agent-history-detail-title"></span><button class="agent-history-detail-close agent-history-header-close" type="button" aria-label="关闭历史会话"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div></div><div class="agent-history-overlay-body"><div class="agent-history-date-axis"></div><div class="agent-history-list"></div><div class="agent-history-pagination"><button class="agent-history-prev" type="button">‹ 上一页</button><span class="agent-history-page-info">0 / 0</span><button class="agent-history-next" type="button">下一页 ›</button></div><article class="agent-history-detail hidden"><div class="agent-history-detail-body"></div></article></div></div>';
+      overlay.innerHTML = '<div class="agent-history-overlay-header"><div class="agent-history-list-header"><span class="agent-history-overlay-title agent-history-header-label"><svg class="agent-history-title-icon agent-history-header-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 7v5l3 2"></path></svg><span>历史会话</span></span><div class="agent-history-controls"><span class="agent-history-search-wrap search-wrap"><input class="agent-history-search-input search-input" type="search" placeholder="搜索会话内容…" aria-label="搜索历史会话"><button class="agent-history-search-clear search-clear" type="button" aria-label="清除搜索"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 4 10 11"></path><path d="M10 11l-6 2"></path><path d="M10 11l-4 5"></path><path d="M10 11l-1 7"></path><path d="M10 11l2 7"></path><path d="M10 11l5 5"></path><path d="M10 11l7 2"></path></svg></button></span><select class="agent-history-backend-input agent-backend-select" aria-label="按 backend 过滤"><option value="">全部</option><option value="claude">Claude</option><option value="codex">Codex</option></select></div><button class="agent-history-overlay-close agent-history-header-close" type="button" aria-label="关闭历史会话"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div><div class="agent-history-detail-header" hidden><button class="agent-history-back agent-history-header-label" type="button"><svg class="agent-history-header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg><span>历史列表</span></button><span class="agent-history-detail-title"></span><button class="agent-history-detail-close agent-history-header-close" type="button" aria-label="关闭历史会话"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div></div><div class="agent-history-overlay-body"><div class="agent-history-date-axis"></div><div class="agent-history-list"></div><div class="agent-history-pagination"><button class="agent-history-prev" type="button">‹ 上一页</button><span class="agent-history-page-info">0 / 0</span><button class="agent-history-next" type="button">下一页 ›</button></div><article class="agent-history-detail hidden"><div class="agent-history-detail-body"></div></article></div></div>';
       const panel = document.getElementById(prefix ? 'previewAgentPanel' : 'agentPanel');
       panel?.appendChild(overlay);
       overlay.querySelector('.agent-history-overlay-close')?.addEventListener('click', () => overlay?.classList.add('hidden'));
@@ -1094,7 +1237,7 @@ export class AgentPanelAdapter {
     const body = overlay.querySelector('.agent-history-detail-body');
     if (!list || !detail || !title || !body) return;
     this.showHistoryDetail(overlay);
-    title.textContent = String(session.title || `${session.backend || 'agent'}:${session.root || this.config.rootId}:${session.project || 'root'}`);
+    title.textContent = String(session.id || session.title || `${session.backend || 'agent'}:${session.root || this.config.rootId}:${session.project || 'root'}`);
     body.textContent = '加载中…';
     const query = new URLSearchParams({
       root: String(session.root || this.config.rootId),
@@ -1252,6 +1395,7 @@ export class AgentPanelAdapter {
   }
 
   private disposeTerminal(): void {
+    this.clearTerminalFitRetry();
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.terminal?.dispose();
@@ -1259,6 +1403,7 @@ export class AgentPanelAdapter {
     this.fit = null;
     this.search = null;
     this.output = null;
+    this.hasRenderedTerminalOutput = false;
     const prefix = this.config?.domPrefix === 'preview' ? 'preview' : '';
     const host = document.getElementById(prefix ? 'previewXtermContainer' : 'xtermContainer');
     if (host) host.innerHTML = '';
@@ -1278,9 +1423,32 @@ export class AgentPanelAdapter {
     if (!target) return;
     const fit = () => {
       const rect = target.getBoundingClientRect();
-      if (rect.width > 80 && rect.height > 80) this.fit?.fit();
+      if (rect.width > 80 && rect.height > 80) {
+        this.clearTerminalFitRetry();
+        this.fit?.fit();
+        // Output may have reached xterm while its host was hidden.  Force the
+        // renderer to paint the buffer after the preview panel gets a size.
+        this.terminal?.refresh(0, Math.max(0, (this.terminal.rows || 1) - 1));
+        return;
+      }
+      // Preview opens the panel and its grid column in separate layout steps.
+      // A single double-rAF fit can therefore run while the xterm host is still
+      // zero-sized, leaving an otherwise connected terminal permanently blank.
+      if (this.terminalFitRetry === null) {
+        this.terminalFitRetry = setTimeout(() => {
+          this.terminalFitRetry = null;
+          this.scheduleTerminalFit(target);
+        }, 80);
+      }
     };
     requestAnimationFrame(() => requestAnimationFrame(fit));
+  }
+
+  private clearTerminalFitRetry(): void {
+    if (this.terminalFitRetry !== null) {
+      clearTimeout(this.terminalFitRetry);
+      this.terminalFitRetry = null;
+    }
   }
 
   private refreshTerminalLayout(): void {
@@ -1318,7 +1486,7 @@ export class AgentPanelAdapter {
     const wasOpen = this.isOpen();
     this.openclaw.close();
     if (this.config.backend === 'openclaw') {
-      this.openclawSessionId = crypto.randomUUID();
+      this.openclawSessionId = createAgentClientId();
       this.clearOpenClawMessages(this.config.domPrefix === 'preview' ? 'preview' : '');
     }
     this.wsClosedByUser = true;
@@ -1343,5 +1511,16 @@ export class AgentPanelAdapter {
 
   private sendInput(data: Uint8Array): void {
     if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(encodeInputFrame(this.nextSequence++, data));
+  }
+
+  private async pasteFromClipboard(): Promise<void> {
+    try {
+      const readText = navigator.clipboard?.readText?.bind(navigator.clipboard);
+      if (!readText) return;
+      const text = await readText();
+      if (text) this.sendInput(new TextEncoder().encode(text));
+    } catch {
+      // Clipboard access is best-effort on mobile browsers and insecure contexts.
+    }
   }
 }

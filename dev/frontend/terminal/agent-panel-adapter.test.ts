@@ -10,9 +10,17 @@ vi.mock('@xterm/addon-fit', () => ({
   FitAddon: class FitAddon {},
 }));
 
-import { AgentPanelAdapter, formatAgentScope, getAgentPanelWidthBounds, getFontSizeForAgentPanelWidth, renderOpenClawMarkdown, scaleAgentPanelWidth, syncMainAgentPanelLayout } from './agent-panel-adapter';
+import { AgentPanelAdapter, createAgentClientId, formatAgentScope, getAgentPanelWidthBounds, getFontSizeForAgentPanelWidth, renderOpenClawMarkdown, scaleAgentPanelWidth, syncMainAgentPanelLayout } from './agent-panel-adapter';
 
 describe('main agent panel layout', () => {
+  it('creates a client ID when randomUUID is unavailable in an HTTP context', () => {
+    vi.stubGlobal('crypto', {});
+
+    expect(createAgentClientId()).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+
+    vi.unstubAllGlobals();
+  });
+
   it('uses the configured backend when no project preference exists', () => {
     localStorage.clear();
     document.body.innerHTML = '<select id="agentBackendSelect"><option value="claude">Claude</option><option value="codex">Codex</option><option value="openclaw">OpenClaw</option></select>';
@@ -162,6 +170,54 @@ describe('main agent panel layout', () => {
     vi.unstubAllGlobals();
   });
 
+  it('sends Ctrl+L for the clear-screen toolbar action instead of clearing xterm locally', () => {
+    class FakeWebSocket {
+      static OPEN = 1;
+      readyState = FakeWebSocket.OPEN;
+      send = vi.fn();
+    }
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+    document.body.innerHTML = '<button id="AgentClear"></button>';
+    const adapter = new AgentPanelAdapter();
+    const terminalClear = vi.fn();
+    const socket = new FakeWebSocket();
+    (adapter as any).terminal = { clear: terminalClear };
+    (adapter as any).socket = socket;
+
+    (adapter as any).bindToolbar('');
+    document.getElementById('AgentClear')?.click();
+
+    expect(terminalClear).not.toHaveBeenCalled();
+    const frame = socket.send.mock.calls[0][0] as Uint8Array;
+    expect(new TextDecoder().decode(frame.slice(8))).toBe('\x0c');
+    vi.unstubAllGlobals();
+  });
+
+  it('pastes clipboard text into the terminal from the toolbar button', async () => {
+    class FakeWebSocket {
+      static OPEN = 1;
+      readyState = FakeWebSocket.OPEN;
+      send = vi.fn();
+    }
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+    const readText = vi.fn().mockResolvedValue('mobile paste');
+    vi.stubGlobal('navigator', { clipboard: { readText } });
+    document.body.innerHTML = '<button id="AgentPaste"></button><span id="agentStatus"></span>';
+    const adapter = new AgentPanelAdapter();
+    const socket = new FakeWebSocket();
+    (adapter as any).terminal = { options: { fontSize: 14 } };
+    (adapter as any).socket = socket;
+
+    (adapter as any).bindToolbar('');
+    document.getElementById('AgentPaste')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(readText).toHaveBeenCalledOnce();
+    const frame = socket.send.mock.calls[0][0] as Uint8Array;
+    expect(new TextDecoder().decode(frame.slice(8))).toBe('mobile paste');
+    vi.unstubAllGlobals();
+  });
+
   it('waits for v2 termination before opening a fresh session', () => {
     class FakeWebSocket {
       static OPEN = 1;
@@ -208,6 +264,46 @@ describe('main agent panel layout', () => {
     vi.unstubAllGlobals();
   });
 
+  it('logs elapsed connection phases through the connected state', () => {
+    class FakeWebSocket {
+      static OPEN = 1;
+      static last: FakeWebSocket | null = null;
+      readyState = 0;
+      onopen: (() => void) | null = null;
+      onclose: ((event: CloseEvent) => void) | null = null;
+      onerror: (() => void) | null = null;
+      onmessage: ((event: { data: string }) => void) | null = null;
+      send = vi.fn();
+      close = vi.fn();
+      constructor() { FakeWebSocket.last = this; }
+    }
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+    vi.stubGlobal('crypto', { randomUUID: () => 'trace-client' });
+    document.body.innerHTML = '<span id="AgentStatus"></span>';
+    const adapter = new AgentPanelAdapter();
+    adapter.init({ backend: 'codex', wsUrl: 'ws://test', rootId: 'root', dir: 'project' });
+
+    (adapter as any).connect();
+    FakeWebSocket.last?.onopen?.();
+    FakeWebSocket.last?.onmessage?.({
+      data: JSON.stringify({ type: 'ready', session_id: 'terminal-1', replay: { latest_sequence: 0 } }),
+    });
+
+    expect(document.getElementById('AgentStatus')?.textContent).toBe('已连接');
+    expect(info.mock.calls.map(([message]) => String(message))).toEqual(expect.arrayContaining([
+      expect.stringContaining('[AgentTerminal] 开始连接'),
+      expect.stringContaining('[AgentTerminal] WebSocket 已打开'),
+      expect.stringContaining('[AgentTerminal] 已发送 hello'),
+      expect.stringContaining('[AgentTerminal] 收到服务端 ready'),
+      expect.stringContaining('[AgentTerminal] 状态已连接'),
+    ]));
+
+    adapter.close();
+    info.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
   it('derives width bounds from font size and readable terminal columns', () => {
     document.body.innerHTML = '<div class="content"></div>';
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1920 });
@@ -222,18 +318,49 @@ describe('main agent panel layout', () => {
     // This matches FitAddon's floor‑division logic without a per‑cell margin.
     const CHROME = 14 + 8; // XTERM_SCROLLBAR_WIDTH + FLAT_SAFETY_MARGIN
     const expectedMin10 = Math.round(10 * 0.625 * 84) + CHROME; // 547
-    const expectedMin22 = Math.round(22 * 0.625 * 84) + CHROME; // 1177
+    const expectedMin20 = Math.round(20 * 0.625 * 84) + CHROME; // 1072
     expect(getAgentPanelWidthBounds(10).min).toBe(expectedMin10);
-    expect(getAgentPanelWidthBounds(22).min).toBe(expectedMin22);
+    expect(getAgentPanelWidthBounds(20).min).toBe(expectedMin20);
     // max is capped at availableMax when no sidebar on 1920px:
     //   1920 − 0(sidebar) − 315 − 5 = 1600
-    // Since maxReadable (1177) < 1600, max = max(min, 1177).
-    expect(getAgentPanelWidthBounds(22).max).toBe(expectedMin22);
-    expect(scaleAgentPanelWidth(524, 10, 22)).toBe(1153);
+    // Since maxReadable (1072) < 1600, max = max(min, 1072).
+    expect(getAgentPanelWidthBounds(20).max).toBe(expectedMin20);
+    expect(scaleAgentPanelWidth(524, 10, 20)).toBe(1048);
     expect(getFontSizeForAgentPanelWidth(expectedMin10)).toBe(10);
     // width = 700 → largest fontSize whose bounds.min ≤ 700
     expect(getFontSizeForAgentPanelWidth(700)).toBe(12);
-    expect(getFontSizeForAgentPanelWidth(expectedMin22)).toBe(22);
+    expect(getFontSizeForAgentPanelWidth(expectedMin20)).toBe(20);
+  });
+
+  it('retries fitting after the preview terminal host becomes visible', () => {
+    const adapter = new AgentPanelAdapter();
+    const fit = vi.fn();
+    let visible = false;
+    let retry: (() => void) | undefined;
+    const host = document.createElement('div');
+    vi.spyOn(host, 'getBoundingClientRect').mockImplementation(() => ({
+      width: visible ? 600 : 0,
+      height: visible ? 480 : 0,
+    }) as DOMRect);
+
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('setTimeout', (callback: () => void) => {
+      retry = callback;
+      return 1 as unknown as ReturnType<typeof setTimeout>;
+    });
+    (adapter as any).fit = { fit };
+
+    (adapter as any).scheduleTerminalFit(host);
+    expect(fit).not.toHaveBeenCalled();
+    expect(retry).toBeTypeOf('function');
+
+    visible = true;
+    retry?.();
+    expect(fit).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
   });
 
   it('renders OpenClaw Markdown while keeping line breaks', () => {
@@ -287,6 +414,29 @@ describe('main agent panel layout', () => {
     vi.unstubAllGlobals();
   });
 
+  it('prefills Codex file context after terminal startup output renders', () => {
+    class FakeWebSocket {
+      static OPEN = 1;
+      readyState = FakeWebSocket.OPEN;
+      send = vi.fn();
+    }
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+    const adapter = new AgentPanelAdapter();
+    const terminal = { input: vi.fn() };
+    const socket = new FakeWebSocket();
+    (adapter as any).config = { backend: 'codex' };
+    (adapter as any).terminal = terminal;
+    (adapter as any).socket = socket;
+
+    (adapter as any).injectFileContext({ path: 'robocar/prd/trip.md' }, 'preview');
+
+    expect(terminal.input).not.toHaveBeenCalled();
+    (adapter as any).prefillPendingFileContext();
+    expect(terminal.input).toHaveBeenCalledWith('@robocar/prd/trip.md\n', true);
+    expect(socket.send).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
   it('renders grouped history rows with metadata and export/delete actions', async () => {
     document.body.innerHTML = `
       <aside id="agentPanel"><button id="btnAgentHistory"></button></aside>
@@ -298,7 +448,7 @@ describe('main agent panel layout', () => {
         total: 1,
         sessions: [{
           id: 'session-1', title: 'Fix history', backend: 'codex', state: 'ended',
-          started_at: new Date(2026, 6, 11, 9, 8, 7).getTime() / 1000,
+          started_at: new Date(2099, 0, 1, 9, 8, 7).getTime() / 1000,
           turn_count: 2, instruction_count: 3, first_ts: 100, last_ts: 220,
           root: 'root', project: 'project',
         }],
@@ -312,12 +462,14 @@ describe('main agent panel layout', () => {
     const overlay = document.getElementById('agentHistoryOverlay')!;
     expect(overlay.querySelector('.agent-history-overlay-header .agent-history-controls')).toBeTruthy();
     expect(overlay.querySelector('.agent-history-search-clear')).toBeTruthy();
-    expect(overlay.textContent).toContain('Today');
+    expect(Array.from(overlay.querySelectorAll<HTMLSelectElement>('.agent-history-backend-input option'))
+      .map((option) => option.value)).toEqual(['', 'claude', 'codex']);
+    expect(overlay.textContent).toContain('2099-01-01');
     expect(overlay.querySelector('.agent-history-list .agent-history-group-title')).toBeNull();
     expect(overlay.textContent).toContain('Fix history');
-    expect(overlay.textContent).toContain('session-1');
+    expect(overlay.querySelector('.agent-history-item-meta')?.textContent).not.toContain('session-1');
     expect(overlay.textContent).not.toContain('codex · ');
-    expect(overlay.textContent).toContain('2026-07-11 09:08:07');
+    expect(overlay.textContent).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
     expect(overlay.textContent).toContain('2轮对话');
     expect(overlay.textContent).toContain('3条指令');
     expect(overlay.textContent).not.toContain('查看');
@@ -335,7 +487,7 @@ describe('main agent panel layout', () => {
     `;
     const session = {
       id: 'search-session', title: 'Search result', backend: 'codex', state: 'ended',
-      started_at: new Date(2026, 6, 11, 9, 0, 0).getTime() / 1000,
+      started_at: new Date(2099, 0, 1, 9, 0, 0).getTime() / 1000,
       turn_count: 1, instruction_count: 1, root: 'root', project: 'project',
     };
     const fetchMock = vi.fn()
@@ -352,7 +504,7 @@ describe('main agent panel layout', () => {
     search.dispatchEvent(new Event('input', { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect((document.querySelector('.agent-history-date-axis') as HTMLElement)?.hidden).toBe(true);
-    expect(document.querySelector('.agent-history-list .agent-history-group-title')?.textContent).toBe('Today');
+    expect(document.querySelector('.agent-history-list .agent-history-group-title')?.textContent).toBe('2099-01-01');
     vi.unstubAllGlobals();
   });
 
@@ -385,6 +537,8 @@ describe('main agent panel layout', () => {
     expect(body.textContent).toContain('09:08:07');
     expect(body.textContent).toContain('question');
     expect(body.textContent).toContain('answer');
+    expect(document.querySelector('.agent-history-detail-title')?.textContent)
+      .toBe('session-1');
     expect((document.querySelector('.agent-history-list-header') as HTMLElement)?.hidden).toBe(true);
     expect((document.querySelector('.agent-history-detail-header') as HTMLElement)?.hidden).toBe(false);
     expect((document.querySelector('.agent-history-pagination') as HTMLElement)?.hidden).toBe(true);

@@ -45,5 +45,6 @@ export function terminalOptions(scrollback: number): ITerminalOptions {
     allowProposedApi: false,
     fontFamily: resolveFontFamily(),
     theme: terminalTheme(),
+    overviewRuler: { width: 6 },
   };
 }

@@ -836,7 +836,11 @@ async def _on_v2_session_removed(session_id: str, reason: str) -> None:
     if logger:
         try:
             log_dir = Path(getattr(logger, "log_dir", ""))
-            _collect_transcript(
+            # Transcript files can be large.  Archival runs after a terminal
+            # has been removed, so keep its synchronous scan off the event
+            # loop and never delay the replacement terminal's `ready` frame.
+            await asyncio.to_thread(
+                _collect_transcript,
                 SimpleNamespace(
                     logger=logger,
                     key=key,
@@ -851,11 +855,34 @@ async def _on_v2_session_removed(session_id: str, reason: str) -> None:
             logger_module.warning("v2 session logger aclose failed for %s: %s", session_id, exc)
 
 
-async def _send_terminal_v2_frames(ws: WebSocket, session, connection) -> None:
+async def _send_terminal_v2_frames(
+    ws: WebSocket,
+    session,
+    connection,
+    *,
+    replay_latest: int = 0,
+    last_output_ack: int = 0,
+    replay_chunk_count: int = 0,
+) -> None:
+    replay_pending = replay_latest > last_output_ack
     try:
+        if replay_pending and replay_chunk_count == 0:
+            await ws.send_text(json.dumps({
+                "v": PROTOCOL_VERSION,
+                "type": "replay_complete",
+                "sequence": replay_latest,
+            }))
+            replay_pending = False
         while not connection.closed:
             chunk = await session.next_output(connection.id)
             await ws.send_bytes(encode_binary_frame(chunk.start, chunk.data))
+            if replay_pending and chunk.end >= replay_latest:
+                await ws.send_text(json.dumps({
+                    "v": PROTOCOL_VERSION,
+                    "type": "replay_complete",
+                    "sequence": replay_latest,
+                }))
+                replay_pending = False
     except ConnectionError:
         pass
     finally:
@@ -951,7 +978,8 @@ async def agent_terminal_v2(ws: WebSocket):
             except Exception as exc:
                 logger.warning("failed to init v2 session logger for session=%s: %s", session.id, exc)
         # ─────────────────────────────────────────────────────────────
-        connection = await manager.subscribe(session.id, client_id, int(hello.get("last_output_ack") or 0))
+        last_output_ack = int(hello.get("last_output_ack") or 0)
+        connection = await manager.subscribe(session.id, client_id, last_output_ack)
         await session.resize(client_id, cols, rows)
         await ws.send_text(json.dumps({
             "v": PROTOCOL_VERSION,
@@ -960,11 +988,18 @@ async def agent_terminal_v2(ws: WebSocket):
             "session_id": session.id,
             "connection_count": len(session.connections),
             "replay": {
-                "earliest_sequence": session.replay.earliest_sequence,
-                "latest_sequence": session.replay.latest_sequence,
+                "earliest_sequence": connection.replay_earliest,
+                "latest_sequence": connection.replay_latest,
             },
         }))
-        sender_task = asyncio.create_task(_send_terminal_v2_frames(ws, session, connection))
+        sender_task = asyncio.create_task(_send_terminal_v2_frames(
+            ws,
+            session,
+            connection,
+            replay_latest=connection.replay_latest,
+            last_output_ack=last_output_ack,
+            replay_chunk_count=connection.replay_chunk_count,
+        ))
         while True:
             message = await ws.receive()
             if message.get("bytes") is not None:
@@ -1007,8 +1042,11 @@ async def agent_terminal_v2(ws: WebSocket):
             elif kind == "terminate":
                 reason = str(control.get("reason") or "manual")
                 await manager.terminate(session.id, reason)
-                if ws.client_state == WebSocketState.CONNECTED:
-                    await ws.close(code=1000, reason=reason)
+                # Closing the session wakes _send_terminal_v2_frames(), whose
+                # finally block owns the single WebSocket close.  Closing here
+                # as well races that task and raises "Cannot call send once a
+                # close message has been sent", leaving a fresh-session
+                # transition in an indeterminate client state.
                 return
             elif kind == "heartbeat":
                 await ws.send_text(json.dumps({"v": PROTOCOL_VERSION, "type": "heartbeat_ack"}))

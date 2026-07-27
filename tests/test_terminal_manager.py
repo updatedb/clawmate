@@ -2,6 +2,7 @@ import asyncio
 from dataclasses import dataclass
 import os
 import pty
+import signal
 import tty
 
 import pytest
@@ -100,6 +101,32 @@ async def test_terminate_removes_the_session_and_closes_its_tasks():
 
 
 @pytest.mark.asyncio
+async def test_terminate_does_not_block_a_replacement_on_history_cleanup():
+    factory = Factory([])
+    cleanup_started = asyncio.Event()
+    unblock_cleanup = asyncio.Event()
+
+    async def on_session_removed(session_id: str, reason: str) -> None:
+        cleanup_started.set()
+        await unblock_cleanup.wait()
+
+    manager = TerminalManager(
+        factory,
+        replay_bytes=4096,
+        on_session_removed=on_session_removed,
+    )
+    first = await manager.get_or_create(request())
+
+    await asyncio.wait_for(manager.terminate(first.id, "replaced"), timeout=0.1)
+    replacement = await asyncio.wait_for(manager.get_or_create(request()), timeout=0.1)
+
+    assert replacement.id != first.id
+    await asyncio.wait_for(cleanup_started.wait(), timeout=0.1)
+    unblock_cleanup.set()
+    await manager.close_all("test_complete")
+
+
+@pytest.mark.asyncio
 async def test_process_eof_removes_session_and_runs_archive_callback():
     factory = Factory([])
     removed: list[tuple[str, str]] = []
@@ -150,6 +177,27 @@ async def test_posix_pty_adapter_transfers_bytes_and_terminates_process():
         assert process.terminated is True
         with pytest.raises(OSError):
             os.fstat(master_fd)
+    finally:
+        os.close(slave_fd)
+
+
+@pytest.mark.asyncio
+async def test_posix_pty_adapter_terminates_the_whole_cli_process_group(monkeypatch):
+    class Process:
+        pid = 4242
+        returncode = None
+
+        def terminate(self):
+            raise AssertionError("a CLI process group must be terminated, not only its leader")
+
+    signals: list[tuple[int, signal.Signals]] = []
+    monkeypatch.setattr(os, "killpg", lambda pid, sig: signals.append((pid, sig)))
+
+    master_fd, slave_fd = pty.openpty()
+    adapter = PosixPtyAdapter(master_fd, Process())
+    try:
+        await adapter.terminate()
+        assert signals == [(4242, signal.SIGTERM)]
     finally:
         os.close(slave_fd)
         try:

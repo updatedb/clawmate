@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import ipaddress
 
 from fastapi import APIRouter, Query, HTTPException, Request
 from fastapi.responses import JSONResponse, FileResponse, RedirectResponse, StreamingResponse
@@ -79,10 +80,18 @@ ONLYOFFICE_TOKEN_TTL = 3600
 def _agent_ws_url(request: Request) -> str:
     """Build the agent WebSocket URL for the frontend.
 
-    Uses public_base_url when behind a TLS-terminating proxy (e.g. nginx),
-    otherwise falls back to the request's scheme and host.
+    Public requests use public_base_url so TLS-terminating proxies keep using
+    WSS.  A browser that opened ClawMate through a LAN address must instead
+    stay on that same LAN origin: sending it to the public hostname creates a
+    NAT hairpin path, where WebSocket upgrades can remain pending for minutes
+    before this process receives them.
     """
     from urllib.parse import urlparse
+
+    request_host = request.url.hostname or ""
+    if _is_local_network_host(request_host):
+        proto = "wss" if request.url.scheme == "https" else "ws"
+        return f"{proto}://{request.url.netloc}/api/clawmate/agent/terminal"
 
     public_base = get_public_base_url(request)
     if public_base:
@@ -94,6 +103,18 @@ def _agent_ws_url(request: Request) -> str:
     proto = "wss" if request.url.scheme == "https" else "ws"
     host = request.url.netloc
     return f"{proto}://{host}/api/clawmate/agent/terminal"
+
+
+def _is_local_network_host(host: str) -> bool:
+    """Whether a request host is a loopback/private address or LAN alias."""
+    normalized = host.strip().lower().rstrip(".")
+    if normalized == "localhost" or normalized.endswith(".local") or normalized.endswith(".lan"):
+        return True
+    try:
+        address = ipaddress.ip_address(normalized)
+    except ValueError:
+        return False
+    return address.is_private or address.is_loopback or address.is_link_local
 
 
 def _get_onlyoffice_secret() -> str:
@@ -972,6 +993,12 @@ def _request_is_https(request: Request) -> bool:
     forwarded_proto = request.headers.get("x-forwarded-proto", "")
     if forwarded_proto:
         return forwarded_proto.split(",")[0].strip() == "https"
+    # A LAN browser can deliberately access the service over plain HTTP while
+    # public_base_url remains HTTPS for the external reverse proxy.  Its login
+    # cookie must not be Secure, otherwise the browser drops it and immediately
+    # redirects back to the login page.
+    if _is_local_network_host(request.url.hostname or ""):
+        return request.url.scheme == "https"
     # 检查 public_base_url 配置
     try:
         base = config().public_base_url
