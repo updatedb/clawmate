@@ -107,26 +107,55 @@
     await ensureViewer();
     var viewer = new ViewerConstructor({ container: canvasElement });
     await viewer.importXML(xml);
-    viewer.get('canvas').zoom('fit-viewport');
+    fitViewer(viewer);
     return viewer;
   }
 
-  async function exportSvg(viewer, fileName) {
-    var result = await viewer.saveSVG();
-    downloadBlob(new Blob([result.svg], { type: 'image/svg+xml;charset=utf-8' }), fileName + '.svg');
+  function fitViewer(viewer) {
+    var canvas = viewer.get('canvas');
+    canvas.resized();
+    canvas.zoom('fit-viewport');
+    requestAnimationFrame(function() {
+      canvas.resized();
+      canvas.zoom('fit-viewport');
+      centerViewerViewport(viewer);
+    });
+  }
+
+  function centerViewerViewport(viewer) {
+    var container = viewer.get('canvas').getContainer();
+    var viewport = container && container.querySelector('.viewport');
+    if (!viewport) return;
+    var bounds = viewport.getBBox();
+    var rect = container.getBoundingClientRect();
+    var scale = viewer.get('canvas').zoom() || 1;
+    var x = (rect.width - bounds.width * scale) / 2 - bounds.x * scale;
+    var y = (rect.height - bounds.height * scale) / 2 - bounds.y * scale;
+    viewport.setAttribute('transform', 'matrix(' + scale + ' 0 0 ' + scale + ' ' + x + ' ' + y + ')');
+  }
+
+  function applyCurrentThemeToSvg(svgText) {
+    var root = document.documentElement;
+    var dark = root.getAttribute('data-theme') === 'dark' || document.body.getAttribute('data-theme') === 'dark';
+    var background = dark ? '#0b1220' : '#ffffff';
+    var themeCss = dark
+      ? '.djs-shape .djs-visual > rect:first-child,.djs-shape .djs-visual > circle:first-child,.djs-shape .djs-visual > ellipse:first-child,.djs-shape .djs-visual > path:first-child,.djs-shape .djs-visual > polygon:first-child{fill:#1e293b!important;stroke:#dbeafe!important}.djs-connection .djs-visual>path{stroke:#cbd5e1!important}.djs-connection marker path{fill:#cbd5e1!important;stroke:#cbd5e1!important}.djs-shape .djs-visual>path:not(:first-child){fill:#dbeafe!important;stroke:#dbeafe!important}.djs-label,.djs-label tspan{fill:#f8fafc!important}'
+      : '';
+    return svgText.replace(/<svg([^>]*)>/i, '<svg$1><style>' + themeCss + '</style><rect data-bpmn-export-background="true" width="100%" height="100%" fill="' + background + '"/>');
   }
 
   async function exportPng(viewer, fileName) {
     var result = await viewer.saveSVG();
-    svgStringToPng(result.svg, fileName + '.png');
+    svgStringToPng(applyCurrentThemeToSvg(result.svg), fileName + '.png');
   }
 
-  function createToolbar(fileName, includeEditor) {
+  function createToolbar(fileName, includeEditor, includePngExport, includeExpand) {
     return '<div class="bpmn-toolbar" aria-label="BPMN 图表工具">' +
+      '<button type="button" class="bpmn-tool-btn" data-bpmn-action="zoom-out" title="缩小">−</button>' +
       '<button type="button" class="bpmn-tool-btn" data-bpmn-action="fit" title="适配画布">⊙</button>' +
-      '<button type="button" class="bpmn-tool-btn" data-bpmn-action="fullscreen" title="全屏查看">□</button>' +
-      '<button type="button" class="bpmn-tool-btn" data-bpmn-action="svg" title="导出 SVG">SVG</button>' +
-      '<button type="button" class="bpmn-tool-btn" data-bpmn-action="png" title="导出 PNG">⇩</button>' +
+      '<button type="button" class="bpmn-tool-btn" data-bpmn-action="zoom-in" title="放大">+</button>' +
+      (includePngExport ? '<button type="button" class="bpmn-tool-btn" data-bpmn-action="png" title="导出 PNG">⇩</button>' : '') +
+      (includeExpand ? '<button type="button" class="bpmn-tool-btn" data-bpmn-action="expand" title="展开图表">□</button>' : '') +
       (includeEditor ? '<button type="button" class="bpmn-tool-btn bpmn-edit-btn" data-bpmn-action="edit">编辑 BPMN</button>' : '') +
       '</div>';
   }
@@ -153,45 +182,145 @@
   }
 
   function installToolbar(container, viewer, fileName, options) {
-    container.insertAdjacentHTML('beforeend', createToolbar(fileName, !!options.editable));
+    container.insertAdjacentHTML('beforeend', createToolbar(fileName, !!options.editable, options.pngExport !== false, !!options.expand));
     container.querySelector('.bpmn-toolbar').addEventListener('click', function(event) {
       var button = event.target.closest('[data-bpmn-action]');
       if (!button) return;
       var action = button.dataset.bpmnAction;
-      if (action === 'fit') viewer.get('canvas').zoom('fit-viewport');
-      else if (action === 'fullscreen') openViewerDialog(options.xml, fileName);
-      else if (action === 'svg') exportSvg(viewer, fileName);
+      if (action === 'zoom-out') zoomViewer(viewer, -0.1);
+      else if (action === 'fit') fitViewer(viewer);
+      else if (action === 'zoom-in') zoomViewer(viewer, 0.1);
       else if (action === 'png') exportPng(viewer, fileName);
+      else if (action === 'expand') openBpmnExpandDialog(options.xml, options.title || fileName, options);
+      else if (action === 'edit' && options.onEdit) options.onEdit(container);
       else if (action === 'edit') openEditor(options);
     });
   }
 
-  async function openViewerDialog(xml, fileName) {
-    var existing = document.querySelector('.bpmn-expand-overlay');
-    if (existing) existing.remove();
-    var overlay = document.createElement('div');
-    overlay.className = 'bpmn-expand-overlay';
-    overlay.innerHTML = '<div class="bpmn-expand-dialog"><div class="bpmn-expand-header"><span>' + escHtml(fileName) +
-      '</span><div><button type="button" class="bpmn-tool-btn" data-dialog-action="fit">⊙</button><button type="button" class="bpmn-tool-btn" data-dialog-action="png">⇩</button><button type="button" class="bpmn-expand-close" aria-label="Close">×</button></div></div><div class="bpmn-canvas bpmn-dialog-canvas"></div></div>';
-    document.body.appendChild(overlay);
-    document.body.style.overflow = 'hidden';
-    var viewer;
-    try {
-      viewer = await createViewer(overlay.querySelector('.bpmn-dialog-canvas'), xml);
-    } catch (error) {
-      showDialogError(overlay, overlay.querySelector('.bpmn-expand-dialog'), xml, error, viewer);
-      return;
+  function zoomViewer(viewer, delta) {
+    var canvas = viewer.get('canvas');
+    var currentZoom = canvas.zoom();
+    canvas.zoom(Math.max(0.3, Math.min(5, currentZoom + delta)));
+    requestAnimationFrame(function() { centerViewerViewport(viewer); });
+  }
+
+  function setupBpmnResizeHandle(container) {
+    if (!container.classList.contains('bpmn-diagram') || container.querySelector('.bpmn-resize-handle')) return;
+    var handle = document.createElement('div');
+    handle.className = 'bpmn-resize-handle';
+    handle.style.touchAction = 'none';
+    container.appendChild(handle);
+    var dragging = false, startY, startHeight, pointerId;
+    handle.addEventListener('pointerdown', function(event) {
+      dragging = true;
+      pointerId = event.pointerId;
+      startY = event.clientY;
+      startHeight = container.getBoundingClientRect().height;
+      handle.classList.add('dragging');
+      handle.setPointerCapture(pointerId);
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'ns-resize';
+      event.preventDefault();
+    });
+    handle.addEventListener('pointermove', function(event) {
+      if (!dragging) return;
+      var height = Math.max(100, Math.min(window.innerHeight * 0.9, startHeight + event.clientY - startY));
+      container.style.height = height + 'px';
+    });
+    function stopResize() {
+      if (!dragging) return;
+      dragging = false;
+      handle.classList.remove('dragging');
+      handle.releasePointerCapture(pointerId);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
     }
-    function close() {
-      viewer.destroy();
-      overlay.remove();
+    handle.addEventListener('pointerup', stopResize);
+    handle.addEventListener('pointercancel', stopResize);
+  }
+
+  async function openBpmnExpandDialog(xml, title, options) {
+    options = options || {};
+    var existing = document.querySelector('.mermaid-expand-overlay');
+    if (existing) {
+      existing.remove();
       document.body.style.overflow = '';
     }
+    var overlay = document.createElement('div');
+    overlay.className = 'mermaid-expand-overlay';
+    overlay.innerHTML = '<div class="mermaid-expand-dialog"><div class="mermaid-expand-header"><span class="mermaid-expand-title">' + escHtml(title) +
+      '</span><div class="mermaid-expand-actions"></div></div><div class="mermaid-expand-body"><div class="bpmn-modal-canvas"></div></div></div>';
+    document.body.appendChild(overlay);
+    document.body.style.overflow = 'hidden';
+    requestAnimationFrame(function() { overlay.classList.add('active'); });
+    var canvas = overlay.querySelector('.bpmn-modal-canvas');
+    var actions = overlay.querySelector('.mermaid-expand-actions');
+    var instance = null;
+    var editing = false;
+
+    function close() {
+      if (instance) instance.destroy();
+      document.body.style.overflow = '';
+      overlay.remove();
+    }
+    function renderViewerActions() {
+      actions.innerHTML = '<div class="mermaid-zoom-controls" style="position:static;display:flex;background:transparent;backdrop-filter:none;padding:0;">' +
+        '<button class="mermaid-zoom-btn" data-bpmn-expand="out" title="缩小">−</button>' +
+        '<button class="mermaid-zoom-btn" data-bpmn-expand="fit" title="适配画布">⊙</button>' +
+        '<button class="mermaid-zoom-btn" data-bpmn-expand="in" title="放大">+</button>' +
+        '<button class="mermaid-zoom-btn" data-bpmn-expand="png" title="导出 PNG">⇩</button></div>' +
+        (options.onSaveXml ? '<button type="button" class="mermaid-zoom-btn" data-bpmn-expand="edit" aria-label="编辑 BPMN" title="编辑 BPMN">✎</button>' : '') +
+        '<button class="mermaid-expand-close" aria-label="Close">×</button>';
+    }
+    function renderEditorActions() {
+      actions.innerHTML = '<button type="button" class="mermaid-zoom-btn" data-bpmn-expand="save" aria-label="保存 BPMN" title="保存 BPMN">💾</button>' +
+        '<button class="mermaid-expand-close" aria-label="Close">×</button>';
+    }
+    async function renderViewer() {
+      if (instance) instance.destroy();
+      canvas.innerHTML = '';
+      instance = await createViewer(canvas, xml);
+      editing = false;
+      renderViewerActions();
+    }
+    async function renderModalEditor() {
+      if (instance) instance.destroy();
+      canvas.innerHTML = '';
+      await ensureModeler();
+      instance = new ModelerConstructor({ container: canvas });
+      await instance.importXML(xml);
+      fitViewer(instance);
+      editing = true;
+      renderEditorActions();
+    }
+    try {
+      await renderViewer();
+    } catch (error) {
+      showError(overlay.querySelector('.mermaid-expand-dialog'), xml, error);
+      return;
+    }
     overlay.addEventListener('click', function(event) {
-      if (event.target === overlay || event.target.closest('.bpmn-expand-close')) close();
-      var action = event.target.dataset && event.target.dataset.dialogAction;
-      if (action === 'fit') viewer.get('canvas').zoom('fit-viewport');
-      if (action === 'png') exportPng(viewer, fileName);
+      if (event.target === overlay || event.target.closest('.mermaid-expand-close')) return close();
+      var action = event.target.dataset && event.target.dataset.bpmnExpand;
+      if (!action) return;
+      if (action === 'out') zoomViewer(instance, -0.1);
+      else if (action === 'fit') fitViewer(instance);
+      else if (action === 'in') zoomViewer(instance, 0.1);
+      else if (action === 'png') exportPng(instance, options.pngFileName || 'bpmn-diagram');
+      else if (action === 'edit' && !editing) {
+        renderModalEditor().catch(function(error) { showError(canvas, xml, error); });
+      } else if (action === 'save' && editing) {
+        (async function() {
+          try {
+            var saved = await instance.saveXML({ format: true });
+            await options.onSaveXml(saved.xml);
+            xml = saved.xml;
+            await renderViewer();
+          } catch (error) {
+            window.alert('保存失败：' + (error.message || error));
+          }
+        })();
+      }
     });
   }
 
@@ -216,6 +345,7 @@
       '</span><div><button type="button" class="bpmn-save-btn">保存</button><button type="button" class="bpmn-expand-close" aria-label="Close">×</button></div></div><div class="bpmn-editor-canvas"></div><div class="bpmn-editor-status" aria-live="polite"></div></div>';
     document.body.appendChild(overlay);
     document.body.style.overflow = 'hidden';
+    requestAnimationFrame(function() { overlay.classList.add('active'); });
     var modeler;
     try {
       await ensureModeler();
@@ -250,10 +380,54 @@
     });
   }
 
-  async function renderEmbedded(container, xml) {
+  async function openInlineEditor(container, options) {
+    container.innerHTML = '<div class="bpmn-editor-canvas bpmn-inline-editor"></div>';
+    var modeler;
+    var dirty = false;
+    function notify() {
+      if (options.onEditingChange) options.onEditingChange({ dirty: dirty, save: save, cancel: cancel });
+    }
+    function cancel() {
+      if (modeler) modeler.destroy();
+      if (options.onCancelled) options.onCancelled();
+    }
+    async function save() {
+      try {
+        var xml;
+        if (options.saveXml) {
+          var saved = await modeler.saveXML({ format: true });
+          xml = await options.saveXml(saved.xml);
+        } else {
+          xml = await saveBpmn(options.root, options.path, modeler);
+        }
+        if (options.onSaved) options.onSaved(xml);
+      } catch (error) {
+        if (options.onSaveError) options.onSaveError(error);
+      }
+    }
+    try {
+      await ensureModeler();
+      modeler = new ModelerConstructor({ container: container.querySelector('.bpmn-inline-editor') });
+      await modeler.importXML(options.xml);
+      fitViewer(modeler);
+      modeler.on('commandStack.changed', function() {
+        dirty = true;
+        notify();
+      });
+      notify();
+      return modeler;
+    } catch (error) {
+      showError(container, options.xml, error);
+      if (options.onSaveError) options.onSaveError(error);
+      return null;
+    }
+  }
+
+  async function renderEmbedded(container, xml, options) {
     try {
       var viewer = await createViewer(container.querySelector('.bpmn-canvas'), xml);
-      installToolbar(container, viewer, 'bpmn-diagram', { xml: xml, editable: false });
+      installToolbar(container, viewer, 'bpmn-diagram', Object.assign({ xml: xml, editable: false, expand: true, pngExport: false }, options || {}));
+      setupBpmnResizeHandle(container);
       return viewer;
     } catch (error) {
       showError(container, xml, error);
@@ -264,7 +438,7 @@
   async function renderFile(container, options) {
     try {
       var viewer = await createViewer(container.querySelector('.bpmn-canvas'), options.xml);
-      installToolbar(container, viewer, options.fileName, Object.assign({}, options, { editable: true }));
+      installToolbar(container, viewer, options.fileName, Object.assign({}, options, { fullscreen: false, pngExport: false }));
       return viewer;
     } catch (error) {
       showError(container, options.xml, error);
@@ -276,6 +450,8 @@
     ensureViewer: ensureViewer,
     renderEmbedded: renderEmbedded,
     renderFile: renderFile,
-    openEditor: openEditor
+    exportPng: exportPng,
+    openEditor: openEditor,
+    openInlineEditor: openInlineEditor
   };
 })();

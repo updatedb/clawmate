@@ -51,6 +51,7 @@
   const isMediaMode = isAudioMode || isVideoMode;
   const isPlainTextMode = PLAIN_TEXT_EXTS.includes(ext);
   const isBpmnMode = ext === 'bpmn';
+  var bpmnFileViewer = null;
   const isMarkdownMode = MARKDOWN_EXTS.includes(ext);
   const isHtmlMode = HTML_EXTS.includes(ext);
   const isOfficeMode = OFFICE_EXTS.includes(ext);
@@ -612,6 +613,15 @@
     var header = document.createElement('div');
     header.className = 'mermaid-expand-header';
 
+    var title = document.createElement('span');
+    title.className = 'mermaid-expand-title';
+    var svgTitle = svg.querySelector('title');
+    title.textContent = (svgTitle && svgTitle.textContent.trim()) || fileName;
+    header.appendChild(title);
+
+    var actions = document.createElement('div');
+    actions.className = 'mermaid-expand-actions';
+
     var zoomGroup = document.createElement('div');
     zoomGroup.className = 'mermaid-zoom-controls';
     zoomGroup.style.cssText = 'position:static;display:flex;background:transparent;backdrop-filter:none;padding:0;';
@@ -619,13 +629,14 @@
       '<button class="mermaid-zoom-btn" data-dzoom="reset">⊙</button>' +
       '<button class="mermaid-zoom-btn" data-dzoom="in">+</button>' +
       '<button class="mermaid-zoom-btn" data-dzoom="export" title="导出 PNG" aria-label="导出 PNG">⇩</button>';
-    header.appendChild(zoomGroup);
+    actions.appendChild(zoomGroup);
 
     var closeBtn = document.createElement('button');
     closeBtn.className = 'mermaid-expand-close';
     closeBtn.setAttribute('aria-label', 'Close');
     closeBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
-    header.appendChild(closeBtn);
+    actions.appendChild(closeBtn);
+    header.appendChild(actions);
 
     // Scrollable body
     var body = document.createElement('div');
@@ -1737,6 +1748,87 @@
     }
   }
 
+  function setupBpmnFileEditButtons(container, xml) {
+    var dyn = document.getElementById('bottombarDynamic');
+    var editGroup = document.getElementById('bottombarEditGroup');
+    var editSep = document.getElementById('bottombarEditSep');
+    dyn.innerHTML = '';
+    dyn.style.display = 'none';
+    editGroup.innerHTML = '';
+    editGroup.style.display = 'flex';
+    if (editSep) editSep.style.display = 'flex';
+
+    function showEditButton() {
+      editGroup.innerHTML = '';
+      var editBtn = document.createElement('button');
+      editBtn.className = 'preview-bottom-btn';
+      editBtn.id = 'btnBpmnEdit';
+      editBtn.textContent = '✏️ 编辑';
+      editBtn.addEventListener('click', enterBpmnEditMode);
+      editGroup.appendChild(editBtn);
+    }
+
+    function showEditorButtons(state) {
+      editGroup.innerHTML = '';
+      if (state.dirty) {
+        var saveBtn = document.createElement('button');
+        saveBtn.className = 'preview-bottom-btn active';
+        saveBtn.id = 'btnBpmnSave';
+        saveBtn.textContent = '💾 保存';
+        saveBtn.addEventListener('click', state.save);
+        editGroup.appendChild(saveBtn);
+      }
+      var cancelBtn = document.createElement('button');
+      cancelBtn.className = 'preview-bottom-btn active';
+      cancelBtn.id = 'btnBpmnCancel';
+      cancelBtn.textContent = '❌ 取消';
+      cancelBtn.addEventListener('click', state.cancel);
+      editGroup.appendChild(cancelBtn);
+    }
+
+    function enterBpmnEditMode() {
+      window.BpmnPreview.openInlineEditor(container, {
+        xml: xml,
+        root: rootId,
+        path: filePath,
+        onEditingChange: showEditorButtons,
+        onSaved: function(savedXml) {
+          rawContent = savedXml;
+          showToast('已保存', 2000);
+          loadContent();
+        },
+        onCancelled: function() {
+          loadContent();
+        },
+        onSaveError: function(error) {
+          showToast('保存失败：' + (error.message || error), 3000);
+        }
+      });
+    }
+
+    showEditButton();
+  }
+
+  function updateMarkdownBpmnSource(index, xml) {
+    var currentIndex = -1;
+    rawContent = rawContent.replace(/```bpmn[^\n]*\n([\s\S]*?)```/gi, function(block) {
+      currentIndex += 1;
+      return currentIndex === Number(index) ? '```bpmn\n' + xml.trim() + '\n```' : block;
+    });
+  }
+
+  async function saveMarkdownBpmnBlock(index, xml) {
+    updateMarkdownBpmnSource(index, xml);
+    var response = await fetch('/api/clawmate/save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ root: rootId, path: filePath, content: rawContent })
+    });
+    var data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.detail || '保存失败');
+    showToast('已保存', 2000);
+    return xml;
+  }
+
   // ============ Raw Mode Toggle ============
   let isRawMode = false;
   // isHtmlMode defined above
@@ -2401,16 +2493,16 @@
       if (isBpmnMode) {
         contentBody.innerHTML = '<div class="bpmn-file-view"><div class="bpmn-canvas"></div></div>';
         contentBody.style.cssText = 'display:flex;flex-direction:column;flex:1;min-height:0;padding:0;';
-        await window.BpmnPreview.renderFile(contentBody.firstChild, {
+        var bpmnFileView = contentBody.firstChild;
+        bpmnFileViewer = await window.BpmnPreview.renderFile(bpmnFileView, {
           xml: content,
           root: rootId,
           path: filePath,
-          fileName: fileName.replace(/\.bpmn$/i, ''),
-          onSaved: function(xml) {
-            rawContent = xml;
-            loadContent();
-          }
+          fileName: fileName.replace(/\.bpmn$/i, '')
         });
+        var bpmnExportButton = document.getElementById('btnPdf');
+        if (bpmnExportButton) bpmnExportButton.title = '导出 PNG 图';
+        setupBpmnFileEditButtons(bpmnFileView, content);
         removeLoading();
         return;
       }
@@ -2532,7 +2624,12 @@
             for (var bpmnIndex = 0; bpmnIndex < bpmnBlocks.length; bpmnIndex++) {
               var bpmnBlock = bpmnBlocks[bpmnIndex];
               var bpmnId = bpmnBlock.getAttribute('data-bpmn-id');
-              await window.BpmnPreview.renderEmbedded(bpmnBlock, bpmnStore[bpmnId]);
+              await window.BpmnPreview.renderEmbedded(bpmnBlock, bpmnStore[bpmnId], {
+                title: fileName,
+                onSaveXml: (function(id) {
+                  return function(xml) { return saveMarkdownBpmnBlock(id, xml); };
+                })(bpmnId)
+              });
             }
           } catch (e) { console.error('[ClawMate] BPMN 渲染失败:', e); }
         }
@@ -4042,7 +4139,13 @@
   }
 
   document.getElementById('btnPdf').addEventListener('click', () => {
-    if (isPdfMode) {
+    if (isBpmnMode) {
+      if (bpmnFileViewer) {
+        window.BpmnPreview.exportPng(bpmnFileViewer, fileName.replace(/\.bpmn$/i, ''));
+      } else {
+        showToast('BPMN 图尚未加载完成', 2000);
+      }
+    } else if (isPdfMode) {
       // PDF: open raw in new tab — browser's native PDF viewer handles multi-page print
       const rawUrl = `/api/clawmate/raw?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`;
       const pdfWindow = window.open(rawUrl, '_blank');
