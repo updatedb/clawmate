@@ -1698,7 +1698,23 @@
   font-size: 11px;
   color: var(--text-muted);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
+.version-modal-commit {
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  background: var(--accent);
+  color: #fff;
+  padding: 5px 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.version-modal-commit:hover:not(:disabled) { filter: brightness(1.05); }
+.version-modal-commit:disabled { opacity: 0.55; cursor: not-allowed; }
 
 /* Version history modal — mobile bottom sheet */
 @media (max-width: 768px) {

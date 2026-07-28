@@ -166,6 +166,18 @@ def _git_diff(file_path: Path, from_hash: str, to_hash: str | None = None) -> st
     return diff_text
 
 
+def _build_commit_message(file_path: Path, numstat: str | None) -> str:
+    """Build a concise Chinese commit subject from one file's diff stat."""
+    if not numstat:
+        return f"新增文档：{file_path.name}"
+
+    parts = numstat.strip().split("\t", 2)
+    if len(parts) != 3 or parts[0] == "-" or parts[1] == "-":
+        return f"更新文档：{file_path.name}"
+
+    return f"更新文档：{file_path.name}（新增 {parts[0]} 行，删除 {parts[1]} 行）"
+
+
 # ── Commit endpoint ───────────────────────────────────────────────
 
 
@@ -173,7 +185,7 @@ def _git_diff(file_path: Path, from_hash: str, to_hash: str | None = None) -> st
 async def clawmate_version_commit(request: Request):
     """Git add + commit a file after save.
 
-    Request body: {root, path, message?}
+    Request body: {root, path}
     Returns: ``{ok: true, hash, short_hash}`` or ``{ok: false, detail: ...}``
     """
     try:
@@ -183,8 +195,6 @@ async def clawmate_version_commit(request: Request):
 
     root_id = str(body.get("root", "")).strip()
     rel_path = str(body.get("path", "")).strip()
-    commit_msg = body.get("message", "")
-
     if not root_id or not rel_path:
         raise HTTPException(status_code=422, detail="Missing root/path")
 
@@ -208,11 +218,28 @@ async def clawmate_version_commit(request: Request):
     if rel_to_git is None:
         return JSONResponse(content={"ok": False, "detail": "无法计算文件相对路径"})
 
-    # Generate commit message if none provided
-    if not commit_msg:
-        commit_msg = f"Update {target.name}"
-
     try:
+        status_result = subprocess.run(
+            ["git", "status", "--porcelain", "--", rel_to_git],
+            cwd=str(git_root), capture_output=True, timeout=5,
+        )
+        if not status_result.stdout.strip():
+            return JSONResponse(content={"ok": True, "note": "no_changes"})
+
+        tracked_result = subprocess.run(
+            ["git", "ls-files", "--", rel_to_git],
+            cwd=str(git_root), capture_output=True, timeout=5,
+        )
+        numstat = None
+        if tracked_result.stdout.strip():
+            numstat_result = subprocess.run(
+                ["git", "diff", "--numstat", "HEAD", "--", rel_to_git],
+                cwd=str(git_root), capture_output=True, timeout=5,
+            )
+            if numstat_result.returncode == 0:
+                numstat = numstat_result.stdout.decode("utf-8", errors="replace")
+        commit_msg = _build_commit_message(target, numstat)
+
         # git add
         add_result = subprocess.run(
             ["git", "add", "--", rel_to_git],
@@ -226,7 +253,7 @@ async def clawmate_version_commit(request: Request):
 
         # git commit
         commit_result = subprocess.run(
-            ["git", "commit", "-m", commit_msg],
+            ["git", "commit", "--only", "-m", commit_msg, "--", rel_to_git],
             cwd=str(git_root), capture_output=True, timeout=10,
         )
 

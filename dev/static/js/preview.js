@@ -4672,8 +4672,10 @@
   function initVersionModal() {
     var modal = document.getElementById('versionModal');
     var closeBtn = document.getElementById('versionModalClose');
+    var commitBtn = document.getElementById('versionModalCommit');
     if (!modal || !closeBtn) return;
     closeBtn.addEventListener('click', closeVersionModal);
+    if (commitBtn) commitBtn.addEventListener('click', commitVersionFromModal);
     modal.addEventListener('click', function(e) {
       if (e.target === modal) closeVersionModal();
     });
@@ -4682,6 +4684,55 @@
         closeVersionModal();
       }
     });
+  }
+
+  function setVersionModalFooter(message) {
+    var footerText = document.getElementById('versionModalFooterText');
+    if (footerText) footerText.textContent = message;
+  }
+
+  function updateVersionCommitButton() {
+    var commitBtn = document.getElementById('versionModalCommit');
+    if (!commitBtn) return;
+    var canCommit = _versionInfo && _versionInfo.in_git &&
+      (!_versionInfo.tracked || _versionInfo.is_dirty);
+    commitBtn.classList.toggle('hidden', !(_versionInfo && _versionInfo.in_git));
+    commitBtn.disabled = !canCommit;
+  }
+
+  async function commitVersionFromModal() {
+    var commitBtn = document.getElementById('versionModalCommit');
+    if (!commitBtn || commitBtn.disabled) return;
+    commitBtn.disabled = true;
+    commitBtn.textContent = '提交中...';
+    setVersionModalFooter('正在生成变更摘要并提交当前文档...');
+
+    try {
+      var res = await fetch('/api/clawmate/version/commit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ root: rootId, path: filePath }),
+      });
+      var data = await res.json();
+      if (!data.ok) {
+        setVersionModalFooter('提交失败：' + (data.detail || res.status));
+        return;
+      }
+      if (data.note === 'no_changes') {
+        setVersionModalFooter('当前文档没有可提交的变更');
+        return;
+      }
+      showToast('✅ 已提交版本 ' + (data.short_hash || ''), 2000);
+      await fetchVersionInfo();
+      await openVersionModal();
+    } catch (e) {
+      setVersionModalFooter('提交失败：' + e.message);
+    } finally {
+      if (commitBtn && document.getElementById('versionModal').style.display !== 'none') {
+        commitBtn.textContent = '提交版本';
+        updateVersionCommitButton();
+      }
+    }
   }
 
   function closeVersionModal() {
@@ -4730,14 +4781,14 @@
     if (dw) dw.classList.toggle('hidden', !(_versionInfo && _versionInfo.tracked && _versionInfo.is_dirty));
 
     // Footer
-    var footer = document.getElementById('versionModalFooter');
-    if (footer && _versionInfo) {
+    if (_versionInfo) {
       if (_versionInfo.tracked) {
-        footer.textContent = '点击单个 commit 查看该版本引入的变更';
+        setVersionModalFooter('点击单个 commit 查看该版本引入的变更');
       } else {
-        footer.textContent = '文件尚未提交到 Git 仓库';
+        setVersionModalFooter('文件尚未提交到 Git 仓库');
       }
     }
+    updateVersionCommitButton();
 
     // Load commit list
     await loadVersionCommitList();
