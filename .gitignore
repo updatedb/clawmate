@@ -65,6 +65,7 @@ openclaw-*-test.png
 
 # Local IDE/agent config
 .claude/
+.worktrees/
 
 # Runtime session data
 .clawmate/sessions/
