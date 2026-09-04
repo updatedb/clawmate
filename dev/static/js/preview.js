@@ -289,11 +289,46 @@
         return `<div class="bpmn-diagram" data-bpmn-id="${id}"><div class="bpmn-canvas"></div></div>`;
       }
 
+      if (language === 'bpmn-file') {
+        const id = bpmnIdx++;
+        bpmnStore[id] = { fileRef: raw.trim() };
+        return `<div class="bpmn-diagram" data-bpmn-id="${id}"><div class="bpmn-canvas"></div></div>`;
+      }
+
       // Let window.hljs.highlightAll() handle syntax highlighting after DOM insertion
       return `<pre><code class="${className}">${escHtml(raw)}</code></pre>`;
     };
 
     return { md, mermaidStore, bpmnStore };
+  }
+
+  function resolveBpmnFilePath(markdownPath, fileRef) {
+    var ref = String(fileRef || '').trim().replace(/\\/g, '/');
+    if (!ref || /[\r\n]/.test(ref) || ref.startsWith('/') || /^[a-z][a-z0-9+.-]*:/i.test(ref)) {
+      throw new Error('BPMN 文件引用必须是相对 .bpmn 路径');
+    }
+    var parts = String(markdownPath || '').split('/').slice(0, -1).concat(ref.split('/'));
+    var resolved = [];
+    for (var i = 0; i < parts.length; i++) {
+      var part = parts[i];
+      if (!part || part === '.') continue;
+      if (part === '..') {
+        if (!resolved.length) throw new Error('BPMN 文件引用不能超出当前根目录');
+        resolved.pop();
+      } else {
+        resolved.push(part);
+      }
+    }
+    var path = resolved.join('/');
+    if (!/\.bpmn$/i.test(path)) throw new Error('BPMN 文件引用必须指向 .bpmn 文件');
+    return path;
+  }
+
+  async function loadReferencedBpmnFile(bpmnPath, refreshToken) {
+    var response = await fetch(buildPreviewUrl(bpmnPath, refreshToken), refreshToken ? { cache: 'no-store' } : undefined);
+    var data = await response.json();
+    if (!response.ok || typeof data.content !== 'string') throw new Error(data.detail || '无法读取 BPMN 文件');
+    return data.content;
   }
 
   async function renderMermaid(div, mermaidStore) {
@@ -1857,6 +1892,17 @@
     return xml;
   }
 
+  async function saveReferencedBpmnFile(bpmnPath, xml) {
+    var response = await fetch('/api/clawmate/save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ root: rootId, path: bpmnPath, content: xml })
+    });
+    var data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.detail || '保存 BPMN 文件失败');
+    showToast('已保存 ' + bpmnPath, 2000);
+    return xml;
+  }
+
   // ============ Raw Mode Toggle ============
   let isRawMode = false;
   // isHtmlMode defined above
@@ -2655,11 +2701,18 @@
             for (var bpmnIndex = 0; bpmnIndex < bpmnBlocks.length; bpmnIndex++) {
               var bpmnBlock = bpmnBlocks[bpmnIndex];
               var bpmnId = bpmnBlock.getAttribute('data-bpmn-id');
-              await window.BpmnPreview.renderEmbedded(bpmnBlock, bpmnStore[bpmnId], {
-                title: fileName,
-                onSaveXml: (function(id) {
-                  return function(xml) { return saveMarkdownBpmnBlock(id, xml); };
-                })(bpmnId)
+              var bpmnSource = bpmnStore[bpmnId];
+              var bpmnXml = bpmnSource;
+              var bpmnPath = null;
+              if (bpmnSource && typeof bpmnSource === 'object' && bpmnSource.fileRef) {
+                bpmnPath = resolveBpmnFilePath(filePath, bpmnSource.fileRef);
+                bpmnXml = await loadReferencedBpmnFile(bpmnPath, refreshToken);
+              }
+              await window.BpmnPreview.renderEmbedded(bpmnBlock, bpmnXml, {
+                title: bpmnPath || fileName,
+                onSaveXml: bpmnPath
+                  ? (function(path) { return function(xml) { return saveReferencedBpmnFile(path, xml); }; })(bpmnPath)
+                  : (function(id) { return function(xml) { return saveMarkdownBpmnBlock(id, xml); }; })(bpmnId)
               });
             }
           } catch (e) { console.error('[ClawMate] BPMN 渲染失败:', e); }

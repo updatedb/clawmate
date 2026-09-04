@@ -34,6 +34,17 @@ def test_markdown_bpmn_fence_uses_the_bpmn_renderer():
     assert "onSaveXml" in BPMN_JS.read_text(encoding="utf-8")
 
 
+def test_markdown_can_embed_and_save_a_relative_bpmn_file():
+    preview = PREVIEW_JS.read_text(encoding="utf-8")
+
+    assert "language === 'bpmn-file'" in preview
+    assert "function resolveBpmnFilePath" in preview
+    assert "function loadReferencedBpmnFile" in preview
+    assert "function saveReferencedBpmnFile" in preview
+    assert "path: bpmnPath" in preview
+    assert "bpmnStore[id] = { fileRef: raw.trim() };" in preview
+
+
 def test_bpmn_module_supports_preview_edit_and_export():
     source = BPMN_JS.read_text(encoding="utf-8")
 
@@ -145,4 +156,4 @@ def test_preview_cache_busts_bpmn_modal_assets():
     html = PREVIEW_HTML.read_text(encoding="utf-8")
 
     assert './css/style.css?v=20260727-bpmn-modal-theme' in html
-    assert './js/bpmn-preview.js?v=20260727-bpmn-modal-theme' in html
+    assert './js/bpmn-preview.js?v=20260727-bpmn-file' in html

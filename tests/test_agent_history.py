@@ -17,6 +17,28 @@ if str(DEV) not in sys.path:
 import agent_routes
 
 
+def test_find_codex_binary_prefers_path_before_legacy_candidate(tmp_path, monkeypatch):
+    path_bin = tmp_path / "path-bin"
+    path_bin.mkdir()
+    path_codex = path_bin / "codex"
+    path_codex.write_text("#!/bin/sh\n", encoding="utf-8")
+    path_codex.chmod(0o755)
+
+    legacy_codex = tmp_path / "legacy-codex"
+    legacy_codex.write_text("#!/bin/sh\n", encoding="utf-8")
+    legacy_codex.chmod(0o755)
+
+    def fake_expanduser(path: str) -> str:
+        if ".npm-global/bin/codex" in path:
+            return str(legacy_codex)
+        return str(tmp_path / "missing-codex")
+
+    monkeypatch.setenv("PATH", str(path_bin))
+    monkeypatch.setattr(agent_routes.os.path, "expanduser", fake_expanduser)
+
+    assert agent_routes._find_codex_binary() == str(path_codex)
+
+
 def _write_session(log_dir: Path, session_id: str, chat_lines: list[dict] | None):
     if chat_lines is not None:
         with (log_dir / f"{session_id}.chat.jsonl").open("w", encoding="utf-8") as f:

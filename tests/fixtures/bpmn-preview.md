@@ -1,5 +1,11 @@
 # BPMN 内嵌预览
 
+# 引用独立 BPMN 文件
+
+```bpmn-file
+./sample-process.bpmn
+```
+
 ```bpmn
 <?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="https://clawmate.local/bpmn">

@@ -607,13 +607,13 @@ def _resolve_root_dir(root_id: str) -> Path | None:
 
 def _find_binary(name: str, candidates: list[str]) -> str:
     """Find a CLI binary from a list of candidate paths, falling back to PATH."""
-    for candidate in candidates:
-        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-            return candidate
     import shutil
     found = shutil.which(name)
     if found:
         return found
+    for candidate in candidates:
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
     raise RuntimeError(f"{name} CLI not found in PATH")
 
 def _find_claude_binary() -> str:
