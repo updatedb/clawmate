@@ -1135,9 +1135,9 @@
     /* Mobile back button: hidden on desktop, shares topbar-btn base */
     .mobile-back-btn { display: none; }
 
-    /* ===== Narrow screen: auto-hide outline when feedback/agent panel is open ===== */
+    /* ===== Narrow screen: JavaScript marks auto-hidden outlines explicitly ===== */
     @media (max-width: 1500px) {
-      body.preview-panel-open .preview-left { display: none; }
+      .preview-left.responsive-hidden { display: none; }
     }
 
     /* ===== Mobile Responsive (≤768px) ===== */

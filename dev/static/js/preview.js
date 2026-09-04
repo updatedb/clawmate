@@ -191,7 +191,35 @@
   // ============ Markdown Renderer Setup ============
   if (window.hljs) window.hljs.configure({ ignoreUnescapedHTML: true });
 
-  function createMarkdownRenderer(entryRelPath) {
+  function buildPreviewUrl(path, refreshToken) {
+    var url = `/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(path)}`;
+    return refreshToken ? url + '&_clawmate_refresh=' + encodeURIComponent(refreshToken) : url;
+  }
+
+  function buildStaticAssetUrl(path, refreshToken) {
+    var url = './' + path.replace(/^\/?dev\/static\//i, '');
+    return refreshToken ? url + '?_clawmate_refresh=' + encodeURIComponent(refreshToken) : url;
+  }
+
+  function refreshRenderedImageSources(container, refreshToken) {
+    if (!container) return;
+    container.querySelectorAll('img[src]').forEach(function(image) {
+      try {
+        var source = new URL(image.getAttribute('src'), window.location.origin);
+        if (source.origin !== window.location.origin) return;
+        if (source.pathname === '/api/clawmate/preview' && refreshToken) {
+          source.searchParams.set('_clawmate_refresh', refreshToken);
+          image.src = source.href;
+        } else if (/^\/dev\/static\//i.test(source.pathname)) {
+          source.pathname = '/clawmate/' + source.pathname.replace(/^\/dev\/static\//i, '');
+          if (refreshToken) source.searchParams.set('_clawmate_refresh', refreshToken);
+          image.src = source.href;
+        }
+      } catch (_) {}
+    });
+  }
+
+  function createMarkdownRenderer(entryRelPath, refreshToken) {
     let mermaidIdx = 0;
     const mermaidStore = [];
     let bpmnIdx = 0;
@@ -216,12 +244,12 @@
       let href = token.attrGet('src') || '';
       const title = token.attrGet('title') || '';
       const text = token.content || '';
-      if (/^dev\/static\//i.test(href)) {
-        href = `/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(href.replace(/^dev\/static\//i, ''))}`;
+      if (/^\/?dev\/static\//i.test(href)) {
+        href = buildStaticAssetUrl(href, refreshToken);
       } else if (!/^https?:\/\//i.test(href) && !href.startsWith('/')) {
         const dir = entryRelPath.split('/').slice(0, -1).join('/');
         const fullPath = dir ? dir + '/' + href : href;
-        href = `/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(fullPath)}`;
+        href = buildPreviewUrl(fullPath, refreshToken);
       }
       return `<img src="${href}" alt="${escHtml(text)}"${title ? ` title="${escHtml(title)}"` : ''}>`;
     };
@@ -762,15 +790,15 @@
     document.addEventListener('keydown', escHandler);
   }
 
-  function buildTOC(div) {
+  function buildTOC(div, preserveSidebarVisibility) {
     const headings = div.querySelectorAll('h1, h2, h3, h4');
     if (headings.length < 2) {
       // No meaningful TOC — collapse left sidebar
-      closeLeftSidebar();
+      if (!preserveSidebarVisibility) closeLeftSidebar();
       return;
     }
     // Show sidebar and build TOC (on mobile: keep hidden, user opens via topbar)
-    if (window.innerWidth >= 768) {
+    if (!preserveSidebarVisibility && window.innerWidth >= 768) {
       openLeftSidebar();
     }
     headings.forEach((h, i) => { if (!h.id) h.id = `heading-${i}`; });
@@ -2287,9 +2315,11 @@
   }
 
   // ============ Load & Render Content ============
-  async function loadContent() {
+  async function loadContent(options = {}) {
     // Clean up Office/PDF mode class from body (will be re-added if needed)
     const contentBody = document.getElementById('contentBody');
+    const refreshToken = options.forceRefresh ? `${Date.now()}-${Math.random().toString(36).slice(2)}` : '';
+    const previewFetchOptions = refreshToken ? { cache: 'no-store' } : undefined;
     codeOutlineItems = [];
 
     try {
@@ -2318,7 +2348,7 @@
           imageZoomBaseHeight = 0;
           applyImageZoom();
         };
-        img.src = `/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`;
+        img.src = buildPreviewUrl(filePath, refreshToken);
         img.onerror = function() {
           this.style.display = 'none';
           const errDiv = document.createElement('div');
@@ -2353,7 +2383,7 @@
         return;
       }
 
-      const res = await fetch(`/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`);
+      const res = await fetch(buildPreviewUrl(filePath, refreshToken), previewFetchOptions);
       if (!res.ok) {
         contentBody.innerHTML = `<div class="preview-error">无法加载文件 (${res.status})</div>`;
         return;
@@ -2559,7 +2589,7 @@
         if (content.indexOf('$') !== -1) loadPromises.push(ensureKatex());
         if (loadPromises.length) await Promise.all(loadPromises);
         try {
-          const result = createMarkdownRenderer(filePath);
+          const result = createMarkdownRenderer(filePath, refreshToken);
           const md = result.md;
           mermaidStore = result.mermaidStore;
           bpmnStore = result.bpmnStore;
@@ -2586,10 +2616,11 @@
         }
         // Parse succeeded — render markdown
         mdDiv.innerHTML = html;
+        refreshRenderedImageSources(mdDiv, refreshToken);
         contentBody.appendChild(mdDiv);
         window._mermaidContainer = mdDiv;
 
-        buildTOC(mdDiv);
+        buildTOC(mdDiv, options.preserveOutlineState);
         openLinksInNewTab(mdDiv);
         addCopyButtons(mdDiv);
 
@@ -2774,7 +2805,15 @@
   // Topbar outline toggle button (must be after sidebar declarations)
   const btnToggleLeft = document.getElementById('btnToggleLeft');
   btnToggleLeft.addEventListener('click', () => {
-    if (leftSidebar.classList.contains('hidden')) {
+    if (leftSidebar.classList.contains('responsive-hidden')) {
+      // A narrow viewport hid the outline only because another panel is open.
+      // The explicit user action takes precedence and must reveal real content.
+      outlineForcedOpen = true;
+      leftSidebar.classList.remove('responsive-hidden');
+      if (leftSidebar.classList.contains('hidden')) openLeftSidebar();
+      syncOutlineToggleState();
+      updateGridColumns();
+    } else if (leftSidebar.classList.contains('hidden')) {
       openLeftSidebar();
     } else {
       closeLeftSidebar();
@@ -2783,7 +2822,8 @@
     if (isPlainTextMode && codeOutlineItems.length >= 2) updatePlainTextDynamicButtons();
   });
   // Initialize active state based on current sidebar visibility
-  btnToggleLeft.classList.toggle('active', !leftSidebar.classList.contains('hidden'));
+  let outlineForcedOpen = false;
+  syncOutlineToggleState();
 
   // --- Right panel resize ---
   const resizeHandle = document.getElementById('previewResizeHandle');
@@ -2797,13 +2837,7 @@
   let dragStartWidth = 0;
 
   function updateGridColumns() {
-    var lHidden = leftSidebar.classList.contains('hidden');
-    // Also account for CSS-driven hide at narrow width (≤1500px + panel open)
-    if (!lHidden && window.innerWidth <= 1500) {
-      var rightOpen = rightSidebar && !rightSidebar.classList.contains('hidden');
-      var agentOpen = agentPanel && !agentPanel.classList.contains('hidden');
-      if (rightOpen || agentOpen) lHidden = true;
-    }
+    var lHidden = !isLeftSidebarVisible();
     const rHidden = rightSidebar.classList.contains('hidden');
     const agentHidden = agentPanel ? agentPanel.classList.contains('hidden') : true;
     const lW = lHidden ? '0px' : '240px';
@@ -2830,6 +2864,26 @@
   var _leftCloseTimer = null;
   var _rightCloseTimer = null;
 
+  function isLeftSidebarVisible() {
+    return !leftSidebar.classList.contains('hidden') && !leftSidebar.classList.contains('responsive-hidden');
+  }
+
+  function syncOutlineToggleState() {
+    btnToggleLeft.classList.toggle('active', isLeftSidebarVisible());
+  }
+
+  function syncResponsiveOutlineVisibility() {
+    var rightOpen = rightSidebar && !rightSidebar.classList.contains('hidden');
+    var agentOpen = agentPanel && !agentPanel.classList.contains('hidden');
+    var shouldHide = !outlineForcedOpen && (
+      window.innerWidth <= 768 ||
+      (window.innerWidth <= 1500 && (rightOpen || agentOpen))
+    );
+    leftSidebar.classList.toggle('responsive-hidden', shouldHide);
+    syncOutlineToggleState();
+    updateGridColumns();
+  }
+
   function openLeftSidebar() {
     if (!leftSidebar.classList.contains('hidden')) return;
     clearTimeout(_leftCloseTimer);
@@ -2841,15 +2895,16 @@
     leftSidebar.offsetHeight;                   // reflow: w=240, translateX(-240px)
     leftSidebar.classList.remove('hidden');     // slide-in: -100% → 0
     leftSidebar.style.display = '';             // let CSS handle display
-    btnToggleLeft.classList.add('active');
+    syncOutlineToggleState();
   }
 
   function closeLeftSidebar() {
     if (leftSidebar.classList.contains('hidden')) return;
+    outlineForcedOpen = false;
     clearTimeout(_leftCloseTimer);
     leftSidebar.style.display = 'flex';         // override global .hidden
     leftSidebar.classList.add('hidden');        // slide-out: 0 → -100%
-    btnToggleLeft.classList.remove('active');
+    syncOutlineToggleState();
     _leftCloseTimer = setTimeout(function () {
       leftSidebar.style.display = '';           // let global .hidden take over
       updateGridColumns();                      // grid column → 0px
@@ -2860,10 +2915,6 @@
     if (!rightSidebar.classList.contains('hidden')) return;
     console.log('[ClawMate] openRightSidebar called. Stack:', new Error().stack);
     clearTimeout(_rightCloseTimer);
-    // Mutual exclusion: close left sidebar only on narrow screens
-    if (window.innerWidth <= 1500 && leftSidebar && !leftSidebar.classList.contains('hidden')) {
-      closeLeftSidebar();
-    }
     // Snap agent panel closed instantly (no transition) to avoid overlap flicker
     if (agentPanel && !agentPanel.classList.contains('hidden')) {
       agentPanel.style.transition = 'none';
@@ -2947,7 +2998,7 @@
   rightSidebar.classList.add('hidden');
   updateGridColumns();
 
-  // Track body class for CSS-driven left sidebar auto-hide at narrow widths
+  // Keep responsive outline visibility and button state in sync with side panels.
   function _syncPanelOpenClass() {
     var rightOpen = rightSidebar && !rightSidebar.classList.contains('hidden');
     var agentOpen = agentPanel && !agentPanel.classList.contains('hidden');
@@ -2958,27 +3009,21 @@
       agentOpen = false;
     }
     document.body.classList.toggle('preview-panel-open', rightOpen || agentOpen);
+    syncResponsiveOutlineVisibility();
   }
 
-  // Watch for CSS-driven left sidebar auto-hide at ≤1500px (same as index logic)
+  // Restore the outline when the viewport grows, unless the user had explicitly
+  // closed it. On narrow screens, a user may still force the outline open.
   if (window.matchMedia) {
     window.matchMedia('(max-width: 1500px)').addEventListener('change', function (e) {
       if (!e.matches) {
-        // Window widened beyond 1500px — restore outline if it was auto-hidden
-        if (leftSidebar.classList.contains('hidden')) {
-          var rightOpen = rightSidebar && !rightSidebar.classList.contains('hidden');
-          var agentOpen = agentPanel && !agentPanel.classList.contains('hidden');
-          if (rightOpen || agentOpen) {
-            openLeftSidebar();
-            return;
-          }
-        }
+        outlineForcedOpen = false;
       }
-      // Recalculate grid to shrink/expand the left column
-      updateGridColumns();
-      // Sync button state
-      var lHidden = leftSidebar.classList.contains('hidden');
-      btnToggleLeft.classList.toggle('active', !lHidden);
+      syncResponsiveOutlineVisibility();
+    });
+    window.matchMedia('(max-width: 768px)').addEventListener('change', function (e) {
+      if (!e.matches) outlineForcedOpen = false;
+      syncResponsiveOutlineVisibility();
     });
   }
 
@@ -4117,9 +4162,15 @@
     btnRefreshContent.addEventListener('click', async function () {
       btnRefreshContent.classList.add('spinning');
       _skipFeedbackLoad = true;
+      var outlineWasOpen = !leftSidebar.classList.contains('hidden');
       try {
-        await loadContent();
+        await loadContent({ preserveOutlineState: true, forceRefresh: true });
       } finally {
+        // Rendering a new Markdown body rebuilds the TOC. Restore the user's
+        // explicit panel choice after that rebuild instead of applying the
+        // normal desktop auto-open behavior.
+        if (outlineWasOpen) openLeftSidebar();
+        else closeLeftSidebar();
         _skipFeedbackLoad = false;
         btnRefreshContent.classList.remove('spinning');
       }
@@ -7025,10 +7076,6 @@
       var isOpen = !agentPanel.classList.contains('hidden');
 
       if (!isOpen) {
-        // Mutual exclusion: close left sidebar only on narrow screens
-        if (window.innerWidth <= 1500 && leftSidebar && !leftSidebar.classList.contains('hidden')) {
-          closeLeftSidebar();
-        }
         // Snap feedback panel closed instantly (no transition) to avoid overlap flicker
         if (rightSidebar && !rightSidebar.classList.contains('hidden')) {
           rightSidebar.style.transition = 'none';
