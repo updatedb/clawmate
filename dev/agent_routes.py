@@ -211,7 +211,7 @@ async def _openclaw_gateway_connect():
                 "mode": "backend",
             },
             "role": "operator",
-            "scopes": ["operator.read", "operator.write"],
+            "scopes": ["operator.read", "operator.write", "operator.admin"],
             "auth": {"token": token},
         },
     }))
@@ -227,6 +227,51 @@ async def _openclaw_gateway_connect():
     except Exception:
         await upstream.close()
         raise
+
+
+async def _openclaw_bootstrap_session(upstream, session_key: str, cwd: str, agent_id: str = "") -> bool:
+    """Create/resume the Gateway session so its spawned cwd is pinned to the project dir.
+
+    The Gateway only lets a session's working directory be set at creation time:
+    ``sessions.create`` accepts ``cwd`` (recorded as ``sessionRoot``/``spawnedCwd``),
+    while ``chat.send`` deliberately has no ``cwd`` parameter.  For a path outside the
+    agent's configured workspace the Gateway additionally requires ``operator.admin``,
+    which is why the proxy connects with admin scope and bootstraps here.
+
+    The request is idempotent: re-calling ``sessions.create`` with the same ``key``
+    resolves to the already-created session (same ``sessionId``) rather than resetting
+    its transcript, so this is safe to issue on every WebSocket reconnect.
+
+    Returns True on success.  Failure is non-fatal — the session remains usable with
+    the agent's default workspace, so callers log and continue.
+    """
+    if not cwd:
+        return False
+    request_id = f"clawmate-create-{uuid.uuid4()}"
+    params = {"key": session_key, "cwd": cwd}
+    if agent_id:
+        params["agentId"] = agent_id
+    await upstream.send(json.dumps({
+        "type": "req",
+        "id": request_id,
+        "method": "sessions.create",
+        "params": params,
+    }))
+    while True:
+        frame = json.loads(await asyncio.wait_for(upstream.recv(), timeout=8))
+        if frame.get("type") != "res" or frame.get("id") != request_id:
+            continue  # interleaved session-events / unrelated frames
+        if frame.get("ok"):
+            logger.info(
+                "OpenClaw session cwd bootstrap ok: key=%s cwd=%s",
+                session_key, cwd,
+            )
+            return True
+        logger.warning(
+            "OpenClaw session cwd bootstrap rejected: key=%s error=%s",
+            session_key, frame.get("error") or {},
+        )
+        return False
 
 
 def _openclaw_proxy_event(frame: dict) -> dict | None:
@@ -1027,6 +1072,17 @@ async def agent_openclaw_proxy(ws: WebSocket):
         await ws.send_text(json.dumps({"type": "error", "text": f"OpenClaw connection failed: {exc}"}))
         await ws.close(code=1011)
         return
+
+    # Pin this session's cwd to the project directory so the agent's file tools
+    # and pwd resolve against the opened project rather than the default workspace.
+    # This mirrors how the PTY (claude/codex) backends spawn with resolve_session_cwd().
+    try:
+        if _resolve_root_dir(root):
+            await _openclaw_bootstrap_session(
+                upstream, session_key, resolve_session_cwd(root, dir_), agent_id,
+            )
+    except Exception as exc:
+        logger.warning("OpenClaw session cwd bootstrap failed: %s", exc)
 
     async def relay_gateway_events():
         async for raw in upstream:

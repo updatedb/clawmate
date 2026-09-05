@@ -380,6 +380,11 @@ export class AgentPanelAdapter {
       host.classList.add('hidden');
       chat.classList.remove('hidden');
       this.bindChat(prefix);
+      // Each agent-panel instance gets its own OpenClaw session id so that
+      // different tabs/pages (even on the same project) do not share a Gateway
+      // conversation.  Generated eagerly on first open; startFreshSession()
+      // rotates it to begin a brand-new conversation.
+      if (!this.openclawSessionId) this.openclawSessionId = createAgentClientId();
       this.openclaw.connect(
         { wsUrl: this.config.openclawWsUrl || this.config.wsUrl, rootId: this.config.rootId, dir: this.config.dir, agentId: this.config.agentId || '', sessionId: this.openclawSessionId },
         (message) => this.handleOpenClawMessage(message, prefix),
@@ -843,7 +848,11 @@ export class AgentPanelAdapter {
   private _openClawScopeKey(): string {
     const cfg = this.config;
     if (!cfg) return '';
-    return this._scopeKey(cfg.rootId, cfg.dir, cfg.project, cfg.backend);
+    const base = this._scopeKey(cfg.rootId, cfg.dir, cfg.project, cfg.backend);
+    // Include the per-instance OpenClaw session id so message caches never leak
+    // across tabs/pages (or across a fresh session).  PTY backends have no
+    // session id, so they keep the project-scoped key unchanged.
+    return cfg.backend === 'openclaw' && this.openclawSessionId ? `${base}:${this.openclawSessionId}` : base;
   }
 
   private _scopeKey(rootId: string, dir: string, project?: string, backend?: AgentInitOptions['backend']): string {
@@ -1488,8 +1497,12 @@ export class AgentPanelAdapter {
     const wasOpen = this.isOpen();
     this.openclaw.close();
     if (this.config.backend === 'openclaw') {
+      // Save the current conversation under the OLD instance scope before
+      // rotating to a fresh session id; otherwise the just-finished session's
+      // messages would be cached under the new (empty) key and vanish.
+      const oldScopeKey = this._openClawScopeKey();
       this.openclawSessionId = createAgentClientId();
-      this.clearOpenClawMessages(this.config.domPrefix === 'preview' ? 'preview' : '');
+      this.clearOpenClawMessages(this.config.domPrefix === 'preview' ? 'preview' : '', oldScopeKey);
     }
     this.wsClosedByUser = true;
     this.clearWsRetryTimer();

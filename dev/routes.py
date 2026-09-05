@@ -110,9 +110,29 @@ def _agent_ws_url(request: Request) -> str:
 
 
 def _openclaw_ws_url(request: Request) -> str:
-    """Build the same-origin WebSocket URL for the OpenClaw Gateway proxy."""
+    """Build the same-origin WebSocket URL for the OpenClaw Gateway proxy.
+
+    Public requests use public_base_url so a TLS-terminating reverse proxy
+    keeps the browser on WSS; a browser opened over a LAN address stays on
+    that same LAN origin to avoid a NAT hairpin.
+    """
+    from urllib.parse import urlparse
+
+    request_host = request.url.hostname or ""
+    if _is_local_network_host(request_host):
+        proto = "wss" if request.url.scheme == "https" else "ws"
+        return f"{proto}://{request.url.netloc}/api/clawmate/agent/openclaw"
+
+    public_base = get_public_base_url(request)
+    if public_base:
+        parsed = urlparse(public_base)
+        proto = "wss" if parsed.scheme == "https" else "ws"
+        host = parsed.netloc
+        return f"{proto}://{host}/api/clawmate/agent/openclaw"
+
     proto = "wss" if request.url.scheme == "https" else "ws"
-    return f"{proto}://{request.url.netloc}/api/clawmate/agent/openclaw"
+    host = request.url.netloc
+    return f"{proto}://{host}/api/clawmate/agent/openclaw"
 
 
 def _is_local_network_host(host: str) -> bool:
