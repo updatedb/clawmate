@@ -20,12 +20,16 @@ import signal
 import struct
 import termios
 import time
+import uuid
 import re as _re
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlparse, urlunparse
+
+import websockets
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
@@ -159,6 +163,102 @@ def _openclaw_session_key(agent_id: str, root: str, dir_: str, session_id: str =
     scope = _session_key(root, dir_, "openclaw").replace(":", "-").replace("/", "-")
     suffix = f":{session_id}" if session_id else ""
     return f"agent:{agent_id or 'default'}:clawmate:{scope}{suffix}"
+
+
+def _openclaw_gateway_ws_url(gateway_url: str) -> str:
+    """Return the Gateway WebSocket URL for the server-side backend identity.
+
+    This proxy connects as a server-side backend (gateway-client / mode:backend),
+    so it must NOT send a browser Origin header.  Sending one makes the Gateway
+    treat the connection as a device-less browser client and clears the operator
+    scopes, causing every subsequent ``chat.send`` to fail with ``missing scope:
+    operator.write``.
+    """
+    parsed = urlparse(gateway_url)
+    if parsed.scheme not in {"http", "https", "ws", "wss"} or not parsed.netloc:
+        raise ValueError("OpenClaw Gateway URL is invalid")
+    ws_scheme = "wss" if parsed.scheme in {"https", "wss"} else "ws"
+    ws_url = urlunparse((ws_scheme, parsed.netloc, parsed.path or "", "", parsed.query, ""))
+    return ws_url
+
+
+async def _openclaw_gateway_connect():
+    """Open an authenticated OpenClaw Gateway protocol-v4 connection."""
+    cfg = load_cfg()
+    token = cfg.agent.openclaw_token.strip()
+    if not token:
+        raise RuntimeError("OpenClaw Gateway token is not configured")
+    ws_url = _openclaw_gateway_ws_url(cfg.openclaw.gateway_url)
+    upstream = await websockets.connect(ws_url, open_timeout=8, close_timeout=3)
+    request_id = f"clawmate-connect-{uuid.uuid4()}"
+    await upstream.send(json.dumps({
+        "type": "req",
+        "id": request_id,
+        "method": "connect",
+        "params": {
+            "minProtocol": 4,
+            "maxProtocol": 4,
+            "client": {
+                # This proxy runs on the Gateway host and keeps the shared
+                # Gateway credential server-side.  The protocol reserves the
+                # gateway-client/backend identity for this loopback-only
+                # control-plane path; presenting as webchat-ui instead makes
+                # it a device-less browser client with no operator scopes.
+                "id": "gateway-client",
+                "displayName": "ClawMate",
+                "version": "1.0.0",
+                "platform": "linux",
+                "mode": "backend",
+            },
+            "role": "operator",
+            "scopes": ["operator.read", "operator.write"],
+            "auth": {"token": token},
+        },
+    }))
+    try:
+        while True:
+            frame = json.loads(await asyncio.wait_for(upstream.recv(), timeout=8))
+            if frame.get("type") != "res" or frame.get("id") != request_id:
+                continue  # e.g. the expected connect.challenge event
+            if frame.get("ok"):
+                return upstream
+            error = frame.get("error") or {}
+            raise RuntimeError(str(error.get("message") or "OpenClaw Gateway rejected connection"))
+    except Exception:
+        await upstream.close()
+        raise
+
+
+def _openclaw_proxy_event(frame: dict) -> dict | None:
+    """Translate Gateway chat events to the small chat contract used by UI."""
+    if (
+        frame.get("type") == "res"
+        and str(frame.get("id") or "").startswith("clawmate-chat-")
+        and not frame.get("ok")
+    ):
+        error = frame.get("error") or {}
+        return {
+            "type": "error",
+            "text": str(error.get("message") or "OpenClaw request failed"),
+        }
+    if frame.get("type") != "event" or frame.get("event") != "chat":
+        return None
+    payload = frame.get("payload")
+    if not isinstance(payload, dict):
+        return None
+    state = payload.get("state")
+    if state == "delta":
+        return {
+            "type": "assistant_replace" if payload.get("replace") else "assistant",
+            "text": str(payload.get("deltaText") or ""),
+            "final": False,
+        }
+    if state == "final":
+        text = _extract_openclaw_text(payload.get("message"))
+        return {"type": "assistant_replace", "text": text, "final": True} if text else {"type": "assistant", "text": "", "final": True}
+    if state in {"error", "aborted"}:
+        return {"type": "error", "text": str(payload.get("errorMessage") or "OpenClaw request failed")}
+    return None
 
 @dataclass
 class _AgentSession:
@@ -903,6 +1003,82 @@ async def agent_terminal_diagnostics():
             "idle_session_count": 0,
         })
     return JSONResponse(manager.diagnostics())
+
+
+@router.websocket("/api/clawmate/agent/openclaw")
+async def agent_openclaw_proxy(ws: WebSocket):
+    """Same-origin browser proxy for the OpenClaw Gateway protocol v4.
+
+    The browser-facing contract deliberately remains the small JSON chat
+    contract consumed by ``OpenClawTransport``.  Gateway credentials and its
+    protocol-specific Origin/header requirements stay on the server.
+    """
+    await ws.accept()
+    root = str(ws.query_params.get("root") or "")
+    dir_ = str(ws.query_params.get("dir") or "")
+    agent_id = str(ws.query_params.get("agentId") or "").strip()
+    session_id = str(ws.query_params.get("session") or "").strip()
+    session_key = _openclaw_session_key(agent_id, root, dir_, session_id)
+
+    try:
+        upstream = await _openclaw_gateway_connect()
+    except Exception as exc:
+        logger.warning("OpenClaw Gateway proxy connection failed: %s", exc)
+        await ws.send_text(json.dumps({"type": "error", "text": f"OpenClaw connection failed: {exc}"}))
+        await ws.close(code=1011)
+        return
+
+    async def relay_gateway_events():
+        async for raw in upstream:
+            try:
+                frame = json.loads(raw)
+            except (TypeError, json.JSONDecodeError):
+                continue
+            translated = _openclaw_proxy_event(frame)
+            if translated:
+                await ws.send_text(json.dumps(translated, ensure_ascii=False))
+
+    async def relay_browser_input():
+        while True:
+            text = await ws.receive_text()
+            message = text.rstrip("\r\n")
+            if not message:
+                continue
+            await ws.send_text(json.dumps({"type": "user", "text": message}, ensure_ascii=False))
+            await upstream.send(json.dumps({
+                "type": "req",
+                "id": f"clawmate-chat-{uuid.uuid4()}",
+                "method": "chat.send",
+                "params": {
+                    "sessionKey": session_key,
+                    **({"agentId": agent_id} if agent_id else {}),
+                    "message": message,
+                    # Do not dispatch the panel conversation to an external
+                    # channel; it belongs only to this Gateway session.
+                    "deliver": False,
+                    "idempotencyKey": str(uuid.uuid4()),
+                },
+            }))
+
+    await ws.send_text(json.dumps({"type": "info", "text": "OpenClaw Gateway protocol v4 connected"}))
+    gateway_task = asyncio.create_task(relay_gateway_events())
+    browser_task = asyncio.create_task(relay_browser_input())
+    done, pending = await asyncio.wait(
+        {gateway_task, browser_task}, return_when=asyncio.FIRST_COMPLETED
+    )
+    for task in pending:
+        task.cancel()
+    await asyncio.gather(*pending, return_exceptions=True)
+    for task in done:
+        try:
+            task.result()
+        except WebSocketDisconnect:
+            pass
+        except Exception as exc:
+            logger.info("OpenClaw proxy closed: %s", exc)
+    await upstream.close()
+    if ws.client_state == WebSocketState.CONNECTED:
+        await ws.close()
 
 
 @router.websocket("/api/clawmate/agent/terminal/v2")

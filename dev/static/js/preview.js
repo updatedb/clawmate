@@ -7098,7 +7098,7 @@
   })();
 
   // ============ Agent Overlay (preview page) ============
-  var _agentConfig = { backend: 'claude', wsUrl: '', agentId: '', scrollback: 10000 };
+  var _agentConfig = { backend: 'claude', wsUrl: '', openclawWsUrl: '', agentId: '', scrollback: 10000 };
 
   /** Fetch agent config from getRootsConfig cached data */
   async function _fetchAgentConfig() {
@@ -7107,6 +7107,7 @@
       if (cfg && cfg.agent) {
         _agentConfig.backend = cfg.agent.backend || 'claude';
         _agentConfig.wsUrl = cfg.agent.ws_url || '';
+        _agentConfig.openclawWsUrl = cfg.agent.openclaw_ws_url || '';
         _agentConfig.scrollback = cfg.agent.scrollback || 10000;
       }
       if (cfg && cfg.roots) {
@@ -7155,6 +7156,7 @@
               domPrefix: 'preview',  // use #previewXtermContainer etc.
               backend: _agentConfig.backend,
               wsUrl: _agentConfig.wsUrl,
+              openclawWsUrl: _agentConfig.openclawWsUrl,
               scrollback: _agentConfig.scrollback,
               rootId: rootId,
               dir: agentDir,

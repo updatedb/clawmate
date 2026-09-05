@@ -68,6 +68,10 @@ async def public_config(request: Request):
         "agent": {
             "backend": cfg.agent.backend,
             "ws_url": _agent_ws_url(request),
+            # OpenClaw uses Gateway protocol v4, rather than the PTY protocol
+            # used by Claude and Codex.  Keep its authenticated connection
+            # server-side so the Gateway token is never sent to the browser.
+            "openclaw_ws_url": _openclaw_ws_url(request),
             "scrollback": cfg.agent.scrollback,
         },
         "feedback_tags": [{"label": t.label, "prompt": t.agent_prompt} for t in load_task_templates() if t.frontend.get("tooltip") or t.frontend.get("panel")],
@@ -103,6 +107,12 @@ def _agent_ws_url(request: Request) -> str:
     proto = "wss" if request.url.scheme == "https" else "ws"
     host = request.url.netloc
     return f"{proto}://{host}/api/clawmate/agent/terminal"
+
+
+def _openclaw_ws_url(request: Request) -> str:
+    """Build the same-origin WebSocket URL for the OpenClaw Gateway proxy."""
+    proto = "wss" if request.url.scheme == "https" else "ws"
+    return f"{proto}://{request.url.netloc}/api/clawmate/agent/openclaw"
 
 
 def _is_local_network_host(host: str) -> bool:

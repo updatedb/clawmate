@@ -10,6 +10,8 @@ import { formatHistoryDateLabel, formatHistoryRowMeta, formatSessionDateTime, gr
 export interface AgentInitOptions {
   backend: 'claude' | 'codex' | 'openclaw';
   wsUrl: string;
+  /** Same-origin proxy for the authenticated OpenClaw Gateway protocol. */
+  openclawWsUrl?: string;
   rootId: string;
   dir: string;
   project?: string;
@@ -379,7 +381,7 @@ export class AgentPanelAdapter {
       chat.classList.remove('hidden');
       this.bindChat(prefix);
       this.openclaw.connect(
-        { wsUrl: this.config.wsUrl, rootId: this.config.rootId, dir: this.config.dir, agentId: this.config.agentId || '', sessionId: this.openclawSessionId },
+        { wsUrl: this.config.openclawWsUrl || this.config.wsUrl, rootId: this.config.rootId, dir: this.config.dir, agentId: this.config.agentId || '', sessionId: this.openclawSessionId },
         (message) => this.handleOpenClawMessage(message, prefix),
         (status) => this.setStatus(status === 'connected' ? '已连接' : status === 'connecting' ? '连接中' : '连接断开'),
       );

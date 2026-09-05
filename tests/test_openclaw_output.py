@@ -18,6 +18,29 @@ def test_openclaw_text_extractor_handles_final_message_content():
     assert agent_routes._extract_openclaw_text(payload) == "收到，测试正常 ✅"
 
 
+def test_openclaw_proxy_returns_chat_request_errors_to_the_browser():
+    frame = {
+        "type": "res",
+        "id": "clawmate-chat-test",
+        "ok": False,
+        "error": {"code": "FORBIDDEN", "message": "missing scope: operator.write"},
+    }
+
+    assert agent_routes._openclaw_proxy_event(frame) == {
+        "type": "error",
+        "text": "missing scope: operator.write",
+    }
+
+
+def test_openclaw_proxy_ignores_successful_chat_request_acknowledgements():
+    assert agent_routes._openclaw_proxy_event({
+        "type": "res",
+        "id": "clawmate-chat-test",
+        "ok": True,
+        "payload": {},
+    }) is None
+
+
 def test_openclaw_session_key_is_scoped_to_root_and_project(tmp_path, monkeypatch):
     root_path = tmp_path / "webprojects"
     (root_path / "clawmate" / ".clawmate").mkdir(parents=True)

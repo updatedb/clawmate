@@ -30,6 +30,16 @@ def test_terminal_assets_are_shipped_without_runtime_cdn_dependencies():
     assert "npm test" in workflow
 
 
+def test_service_worker_refreshes_protocol_bearing_agent_assets_from_network():
+    service_worker = (ROOT / "dev/static/sw.js").read_text(encoding="utf-8")
+
+    assert "const APP_CODE_ASSETS = new Set([" in service_worker
+    assert "'/clawmate/dist/terminal.js'" in service_worker
+    assert "'/clawmate/js/app.js'" in service_worker
+    assert "if (APP_CODE_ASSETS.has(url.pathname))" in service_worker
+    assert "event.respondWith(networkFirst(request, STATIC_CACHE));" in service_worker
+
+
 def test_replay_exposes_loading_status_until_terminal_output_is_restored():
     source = (ROOT / "dev/frontend/terminal/agent-panel-adapter.ts").read_text(encoding="utf-8")
 

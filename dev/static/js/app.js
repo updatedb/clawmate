@@ -2952,6 +2952,7 @@ function _initAgent() {
     window.Agent.init({
       backend: state.agentConfig.backend || "claude",
       wsUrl: state.agentConfig.ws_url || "",
+      openclawWsUrl: state.agentConfig.openclaw_ws_url || "",
       scrollback: state.agentConfig.scrollback || 10000,
       rootId: state.rootId || "",
       dir: state.dir || "",

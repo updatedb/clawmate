@@ -2,12 +2,12 @@
 // network-first for HTML, stale-while-revalidate for vendor libs.
 //
 // ════ MAINTENANCE ════
-// When adding a new static file (JS/CSS/image), add it to PRECACHE_URLS
-// below and bump CACHE_VERSION (any unique string will do — date, hash, etc).
-// The ?v= query strings on HTML <script>/<link> tags are NO LONGER NEEDED —
-// proper HTTP Cache-Control headers on the server handle that now.
+// Core application code is network-first, so a frontend protocol update cannot
+// leave an older terminal client talking to an incompatible backend endpoint.
+// Keep CACHE_VERSION distinct for deployments that must invalidate an already
+// installed worker's app-shell cache.
 //
-const CACHE_VERSION = 'v20260721-terminal-fit-retry-v20';
+const CACHE_VERSION = 'v20260905-openclaw-proxy-v21';
 const STATIC_CACHE = 'clawmate-static-' + CACHE_VERSION;
 const VENDOR_CACHE = 'clawmate-vendor-' + CACHE_VERSION;
 const API_CACHE = 'clawmate-api-' + CACHE_VERSION;
@@ -33,6 +33,23 @@ const PRECACHE_URLS = [
   '/clawmate/asset/clawmate-logo.png',
   '/clawmate/manifest.json',
 ];
+
+// These files define the browser-to-service protocol and must not be served
+// indefinitely from a cache-first app shell. Images and other static assets
+// remain cache-first below for offline performance.
+const APP_CODE_ASSETS = new Set([
+  '/clawmate/js/app.js',
+  '/clawmate/js/preview.js',
+  '/clawmate/js/preview-common.js',
+  '/clawmate/js/topbar.js',
+  '/clawmate/js/icons.js',
+  '/clawmate/dist/terminal.js',
+  '/clawmate/dist/terminal.css',
+  '/clawmate/css/style.css',
+  '/clawmate/css/preview.css',
+  '/clawmate/css/tokens.css',
+  '/clawmate/css/login.css',
+]);
 
 // ── Install — pre-cache core app shell ──────────────────────────────
 self.addEventListener('install', (event) => {
@@ -83,7 +100,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static app assets (CSS, JS, images) — cache-first
+  // Protocol-bearing application code — network-first. A stale terminal.js
+  // can otherwise keep routing an OpenClaw chat through the PTY endpoint.
+  if (APP_CODE_ASSETS.has(url.pathname)) {
+    event.respondWith(networkFirst(request, STATIC_CACHE));
+    return;
+  }
+
+  // Static images and other non-code assets — cache-first.
   if (url.pathname.startsWith('/clawmate/')) {
     event.respondWith(cacheFirst(request, STATIC_CACHE));
     return;
