@@ -878,6 +878,12 @@ function renderBreadcrumbs() {
   refreshBtn.addEventListener('click', function (e) {
     e.preventDefault();
     invalidateDirCache();
+    // Manual refresh is treated as a "clean slate" view: clear this page
+    // session's change marks so the re-loaded directory shows no stale
+    // 新增/已修改 tags. Only the breadcrumb refresh button clears these;
+    // the SSE auto-refresh chain must NOT clear them, or the tags would be
+    // wiped before rendering and the feature would break.
+    _recentChanges = {};
     if (state.rootId) loadDir(state.dir);
     else loadConfig();
   });
@@ -1303,6 +1309,17 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
       card.appendChild(title);
       card.appendChild(meta);
 
+      // Session-scoped change marking (only for this page's watch session).
+      var _changeKind = _recentChanges[entry.relPath];
+      if (_changeKind) {
+        card.classList.add(_changeKind === 'added' ? 'change-added' : 'change-modified');
+        const _badge = document.createElement('span');
+        _badge.className = 'recent-change-badge ' + (_changeKind === 'added' ? 'added' : 'modified');
+        _badge.textContent = _changeKind === 'added' ? '新增' : '已修改';
+        _badge.title = '本次会话中检测到变更';
+        thumb.appendChild(_badge);
+      }
+
       // ── Content match badge (only during search mode) ──
       if (state.searchResults) {
         var _matchData = _getContentMatchForEntry(entry.relPath);
@@ -1593,6 +1610,17 @@ function renderList(markdownEntries, folderEntries, otherEntries) {
       var mo = dt.getMonth() + 1, d = dt.getDate(), h = dt.getHours(), mi = dt.getMinutes();
       mtime.textContent = isNaN(dt.getTime()) ? "-" : (mo + '/' + d + ' ' + String(h).padStart(2,'0') + ':' + String(mi).padStart(2,'0'));
 
+      // Session-scoped change marking (only for this page's watch session).
+      var _changeKind = _recentChanges[entry.relPath];
+      if (_changeKind) {
+        const _badge = document.createElement('span');
+        _badge.className = 'recent-change-badge ' + (_changeKind === 'added' ? 'added' : 'modified');
+        _badge.textContent = _changeKind === 'added' ? '新增' : '已修改';
+        _badge.title = '本次会话中检测到变更';
+        name.appendChild(_badge);
+        mtime.classList.add('mtime-changed');
+      }
+
       row.appendChild(name);
       row.appendChild(type);
       row.appendChild(size);
@@ -1848,6 +1876,96 @@ function invalidateDirCache() {
   for (var k in _dirCache) delete _dirCache[k];
 }
 
+// ── Live directory watch (SSE) ───────────────────────────────────────────
+// The backend pushes change events for the directory currently open. We keep a
+// page-session map of recent changes (path -> "added" | "modified") so rows can
+// be tagged until the user navigates away or reloads the page. Nothing here is
+// persisted — it all lives in JS memory.
+let _fsEventSource = null;
+let _fsDirKey = "";       // "rootId:dir" the current EventSource is bound to
+let _recentChanges = {};  // relPath -> "added" | "modified"
+let _fsRefreshTimer = null;
+const _FS_REFRESH_DEBOUNCE = 400;
+
+function _currentFsDirKey() {
+  return state.rootId + ':' + (state.dir || '');
+}
+
+function _connectFsWatch() {
+  if (!state.rootId) { _disconnectFsWatch(); return; }
+  const key = _currentFsDirKey();
+  // Already watching this exact directory — keep the connection.
+  if (_fsEventSource && _fsDirKey === key) return;
+  // Switching directories: session-scoped marks from the previous directory
+  // are discarded (so returning to a directory does not resurrect them).
+  _recentChanges = {};
+  _disconnectFsWatch();
+  const url = '/api/clawmate/fs/events?root=' + encodeURIComponent(state.rootId)
+    + '&dir=' + encodeURIComponent(state.dir || '');
+  let es;
+  try {
+    es = new EventSource(url);
+  } catch (e) {
+    setStatus('目录监听初始化失败');
+    return;
+  }
+  _fsEventSource = es;
+  _fsDirKey = key;
+  es.onmessage = function (evt) {
+    let data;
+    try { data = JSON.parse(evt.data); } catch (_) { return; }
+    if (!data) return;
+    // Only react to events for the directory currently on screen, never a
+    // stale connection's dir (prevents cross-directory refresh).
+    if (_currentFsDirKey() !== key) return;
+    if (data.type === 'change') {
+      if (data.kind === 'added' || data.kind === 'modified') {
+        _recentChanges[data.path] = data.kind;
+      } else if (data.kind === 'deleted') {
+        delete _recentChanges[data.path];
+      }
+      _scheduleFsRefresh();
+    } else if (data.type === 'refresh') {
+      // Overflow/burst fallback: the backend coalesced a burst into a single
+      // "refresh", meaning a full re-list of this directory (no per-path mark).
+      _scheduleFsRefresh();
+    }
+  };
+  es.onerror = function () {
+    // EventSource reconnects automatically. Keep errors quiet to avoid noise.
+    if (window.console && console.warn) console.warn('[clawmate] fs event source error, readyState=' + es.readyState);
+  };
+}
+
+function _disconnectFsWatch() {
+  if (_fsEventSource) {
+    _fsEventSource.close();
+    _fsEventSource = null;
+  }
+  _fsDirKey = "";
+  if (_fsRefreshTimer) { clearTimeout(_fsRefreshTimer); _fsRefreshTimer = null; }
+}
+
+// Close the live watch when the page is unloaded/hidden.
+window.addEventListener('pagehide', function () { _disconnectFsWatch(); });
+window.addEventListener('beforeunload', function () { _disconnectFsWatch(); });
+
+function _dirCacheKey(dir) { return state.rootId + ':' + (dir || ''); }
+
+function _scheduleFsRefresh() {
+  const key = _currentFsDirKey();
+  if (_fsRefreshTimer) clearTimeout(_fsRefreshTimer);
+  _fsRefreshTimer = setTimeout(function () {
+    _fsRefreshTimer = null;
+    // User navigated to another directory while debouncing — do not refresh it
+    // with this directory's change event.
+    if (_currentFsDirKey() !== key) return;
+    // Bypass only this directory's 30s cache so the view reflects the change.
+    delete _dirCache[_dirCacheKey(state.dir)];
+    loadDir(state.dir);
+  }, _FS_REFRESH_DEBOUNCE);
+}
+
 async function loadDir(dir) {
   if (!state.rootId) {
     setStatus("请先选择根目录");
@@ -1884,6 +2002,7 @@ async function loadDir(dir) {
     updateUrl();
     await loadSidebarParent(state.dir);
     await loadActiveShares();
+    _connectFsWatch();
     render();
     if (window.Agent) window.Agent.updateRoot(state.rootId, state.dir, state.project);
     return;
@@ -1915,6 +2034,7 @@ async function loadDir(dir) {
   // Also load parent dir for sidebar
   await loadSidebarParent(state.dir);
   await loadActiveShares();  // refresh share status
+  _connectFsWatch();
   render();
 }
 
@@ -2018,7 +2138,27 @@ function handleEntryClick(entry) {
 
 function openEntryPreview(entry) {
   if (!entry || entry.is_dir) return;
-  const previewUrl = `/clawmate/preview.html?root=${encodeURIComponent(state.rootId)}&file=${encodeURIComponent(entry.relPath)}`;
+  var relPath = entry.relPath;
+  // Opening a file clears this file's session change mark in place (no full
+  // re-render, so grid/list scroll + pagination stay intact). Other entries'
+  // marks remain untouched. Directories are handled by handleEntryClick and
+  // already reset marks via loadDir/_connectFsWatch, so skip them here.
+  if (_recentChanges[relPath]) {
+    delete _recentChanges[relPath];
+    document.querySelectorAll('[data-path="' + CSS.escape(relPath) + '"]').forEach(function (el) {
+      var badge = el.querySelector('.recent-change-badge');
+      if (badge) badge.remove();
+      // Clear every change-marking highlight class from the container and any
+      // inner nodes so the visual mark fully disappears in both views without
+      // a full re-render: grid puts it on the card (.card.change-added / .card.change-modified)
+      // while list puts mtime-changed on the mtime span (a child of the row).
+      var nodes = [el].concat(Array.prototype.slice.call(el.querySelectorAll('.mtime-changed')));
+      nodes.forEach(function (node) {
+        if (node.classList) node.classList.remove('mtime-changed', 'change-added', 'change-modified');
+      });
+    });
+  }
+  const previewUrl = `/clawmate/preview.html?root=${encodeURIComponent(state.rootId)}&file=${encodeURIComponent(relPath)}`;
   window.open(previewUrl, '_blank');
 }
 

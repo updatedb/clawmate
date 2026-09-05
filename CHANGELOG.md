@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.52 (2026-09-06)
+### 目录自动监听刷新 + 会话级变更标记
+- **后端（watchdog/inotify，事件驱动）**：新增 `dev/fs_watch.py` 文件监听服务，按客户端订阅的 `root+dir` 用 watchdog（Linux 底层 inotify）**非递归**监听「当前打开的目录」本身（1 个 inotify watch，与目录条目数量无关，不逐文件扫描）；引用计数（无客户端即停）、快速连续事件 debounce（0.4s，落在 300-500ms）；正常运行时**零轮询**，仅事件驱动。新增依赖 `watchdog`。
+- **大目录/溢出兜底**：单个 debounce 窗口观察到大量不同路径（疑似 inotify 事件队列溢出，watchdog 对 `IN_Q_OVERFLOW`/wd==-1 静默丢弃，见 `inotify_c.py`）时，合并为一次 `refresh` 事件，让前端做一次完整重列（仅异常时扫描，平时零轮询）。
+- **后端（SSE）**：新增 `dev/fs_routes.py` 端点 `GET /api/clawmate/fs/events?root=&dir=`，`text/event-stream` 推送 `{type:"change", path:<相对root路径>, kind:"added"|"modified"|"deleted"}`；沿用现有 AuthMiddleware 鉴权（会话 cookie），局域网/本机自动放行；断开自动退订。
+- **前端（app.js）**：`loadDir` 打开目录后建立当前目录的 SSE 连接，切目录关闭旧连接/开新连接，离开/关闭页面关闭；维护页面会话级 `recentChanges`（path→kind），收到变更即 `debounce`（400ms）刷新当前目录（绕过该目录 30s 缓存）；仅当事件目录与当前查看目录一致才刷新，避免串目录。
+- **前端标记**：列表行与画廊卡片对「本次页面打开期间」新增/修改的条目加 `新增`/`已修改` tag（`.recent-change-badge`）并高亮 mtime（`.mtime-changed`）；删除只刷新不标记。标记仅存于 JS 内存，刷新页面或切换目录后消失（会话级、不追溯历史）。
+- **测试**：新增 `tests/test_fs_watch.py` — 监听服务新增/修改/删除事件与路由校验（422/503）。
+- **修复（手动刷新不清标记）**：面包屑「刷新当前目录」按钮此前只清目录缓存，未清页面会话级 `_recentChanges`，导致刷新后 `新增`/`已修改` tag 残留（仅 F5 或切目录才清除）。现于该按钮 click 处理中、重新加载目录前执行 `_recentChanges = {}`，将手动刷新视为「干净视图」；SSE 自动刷新链（`_scheduleFsRefresh`/`loadDir` 内部/`_connectFsWatch` 收 change）不清，保 tag 功能不失效。
+
+### 修复（点击打开文件清除标记）
+- **前端（app.js `openEntryPreview`）**：会话级「新增/已修改」标记此前只能靠 F5/切目录/手动刷新清除，点击文件打开预览后该文件标记仍残留。现于打开预览前，对该文件**就地**清除标记：从 `_recentChanges` 删除该路径，并移除对应 `[data-path]` 节点上的 `.recent-change-badge` 与全部变更高亮 class（`.mtime-changed` / `.card.change-added` / `.card.change-modified`），覆盖画廊（grid）与列表（list）两种视图；只清被点击的这一条，其它条目标记保留，且不触发整列表重渲（不丢分页/滚动），SSE 自动刷新链与面包屑手动刷新清标记行为不变。
+
 ## v1.51 (2026-07-09)
 ### 分页阈值调整
 - **主列表** grid 卡片模式分页：60 → **66** 条/页

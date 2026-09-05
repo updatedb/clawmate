@@ -75,3 +75,16 @@ openclaw-*-test.png
 
 # Docs (not for public)
 docs/
+
+# Agent runtime artifacts (OpenClaw persona/memory seeds — not app code)
+SOUL.md
+IDENTITY.md
+USER.md
+memory/
+
+# Tool/generated artifacts
+.superpowers/
+output/
+
+# ClawMate runtime data (cache, feedback, sessions) — keep locally, not committed
+.clawmate/

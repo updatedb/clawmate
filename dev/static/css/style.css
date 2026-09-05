@@ -915,6 +915,39 @@ body.multiselect .list-item { grid-template-columns: 26px 1fr max-content max-co
 .list-item > :nth-child(3),
 .list-item > :nth-child(4),
 .list-item > :nth-child(5) { text-align: right; flex-shrink: 0; }
+
+/* ===== Session change marking (live directory watch) ===== */
+/* Badge shown next to a file/dir that changed during this page session. */
+.recent-change-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 16px;
+  padding: 0 6px;
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 8px;
+  line-height: 1;
+  vertical-align: middle;
+  flex-shrink: 0;
+  user-select: none;
+  white-space: nowrap;
+}
+.recent-change-badge.added { color: #fff; background: var(--accent); }
+.recent-change-badge.modified { color: var(--warning-text, #a16207); background: var(--warning-bg, #fef9c3); }
+
+/* Highlights applied to the mtime cell / row when the entry changed. */
+.list-item .mtime-changed { color: var(--accent); font-weight: 600; }
+
+/* Grid gallery cards changed during this session. */
+.card.change-added, .card.change-modified { border-color: var(--accent-border); }
+.card.change-added .thumb, .card.change-modified .thumb { background: var(--accent-light); }
+.card.change-added .meta span:first-child,
+.card.change-modified .meta span:first-child { color: var(--accent); font-weight: 700; }
+/* Position the change badge inside the gallery thumb (top-left corner). */
+.card .recent-change-badge { position: absolute; top: 6px; left: 6px; z-index: 2; }
+
 /* Hide size/type progressively at narrower widths */
 @media (max-width: 700px) {
   .list-item > :nth-child(4) { display: none; }
