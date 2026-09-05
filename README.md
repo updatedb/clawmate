@@ -10,57 +10,51 @@
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 <!-- ALL-CLAWMATE-BADGES:END -->
 
-ClawMate 是 AI Agent 工作流的**一站式中台**，将传统分散的文件管理、内容预览、反馈收集和 AI 编码四个环节整合为一个无缝闭环：
+ClawMate 是面向多种 Agent 工具的**一站式工作流中台**，以产出物为核心，重点承载文件管理与项目管理；Claude Code、Codex、OpenClaw 等 Agent 是可自由接入的执行工具，也是放大工作效率的能力引擎。ClawMate 将文件、项目、预览、协作和执行能力汇聚到同一个工作空间，形成“发现问题 → 发起反馈 → Agent 执行 → 回看结果”的持续迭代闭环：
 
-1. **远程文件管理** — 多 root 目录树，覆盖上传、搜索、移动、分享等全生命周期操作
-2. **全格式预览** — Markdown（Mermaid/KaTeX）、Office（ONLYOFFICE）、PDF、代码高亮、音视频、压缩包等开箱即用
-3. **即时反馈** — 预览页选中文本即出浮层，填写备注提交，反馈进入 pending→in_progress→done 状态机全程可追溯
-4. **Agent 自动修复** — 反馈直接路由到活跃的 Agent 终端（PTY 注入或 webhook 唤醒），AI 读取 → 修改 → 保存，闭环完成
-5. **项目持续迭代** — 五阶段分层计划（Phase I-V）+ CLAWLIST 进度跟踪 + `.clawmate/` marker session 隔离，多项目并行推进
+1. **远程文件管理** — 以多 root 目录树为入口，覆盖上传、搜索、预览、移动、分享和下载等完整文件生命周期。
+2. **项目管理能力** — 支持将普通目录快速转换为项目，并结合 Git 集成、五阶段分层计划（Phase I-V）和 CLAWLIST 进度跟踪，持续细化项目目标；通过 `.clawmate/` marker 实现项目隔离、会话隔离与多会话并行推进。
+3. **多 Agent 集成能力** — 提供统一的 Agent 面板，支持 Claude Code、Codex 和 OpenClaw 三类后端自由切换；以项目为核心组织多 Agent 协同，支持会话历史回放。Claude/Codex 通过 xterm.js PTY 提供完整 CLI，OpenClaw 通过 Markdown 聊天与 Gateway 协议协作。
+4. **全格式文档预览与编辑能力** — 开箱支持 Markdown（Mermaid/KaTeX）、Office（ONLYOFFICE）、PDF、代码高亮、图片、音视频和压缩包，并为可编辑格式提供在线修改与保存回写能力。
+5. **Agent 及时交互反馈能力** — Agent 可自动识别当前项目；用户在预览页选中内容即可精确定位文件与上下文，反馈支持多任务延迟合并提交，并进入 `pending → in_progress → done/failed` 状态机；任务可直接注入活跃 PTY，或通过 webhook 唤醒 Agent。
+6. **Skill 连接人与 Agent 的桥梁** — 通过 `/clawmate` Skill 在 Agent 中生成可访问的 ClawMate 链接、自动切换 ClawMate 项目，并统一调用文件、项目和反馈能力。ClawMate 与 Agent 既能深度协同，也可完全独立工作，保留灵活的使用方式。
 
-集成 **Claude Code**、**Codex** 和 **OpenClaw** 三后端 Agent 面板——右上角一键切换，无需修改配置。Claude/Codex 通过 xterm.js PTY 提供完整 CLI 体验（60fps），OpenClaw 通过 Markdown 聊天 + Gateway 协议支持多 Agent 协作。在浏览器中完成从文件浏览到 AI 执行的完整闭环，无需离开 ClawMate。
-
-### Terminal v2 灰度发布
-
-终端资源由本地锁定的 `@xterm/xterm@6.0.0` bundle 提供，不依赖运行时 CDN。默认保持兼容路径；在 `agent.terminal_v2` 设为 `true` 后，Claude/Codex 会使用协议 v2（二进制终端数据帧、受限回放及队列），出现问题时将该开关设回 `false` 即可回退。构建资源：`npm ci && npm run build:terminal`。
+在浏览器中，用户无需离开 ClawMate，即可完成从文件浏览、项目协作到 AI 执行和结果复核的完整闭环。
 
 ### 业务架构
 
 ```mermaid
 flowchart LR
+    subgraph AGENT_GROUP["Agent 后端"]
+        direction LR
+        CC["🤖 Claude Code"]
+        CX["⚡ Codex"]
+        OC["🔗 OpenClaw"]
+    end
+
+    SKILL["Skill<br/>/clawmate 命令入口"]
     CM["ClawMate<br/>一站式中台"]
 
-    CM --> SKILL["skill<br/>命令入口"]
-    CM --> API["API<br/>程序入口"]
+    subgraph DOMAIN_GROUP["ClawMate 业务域"]
+        direction LR
+        FS["📁 filesystem<br/>文件管理"]
+        PJ["📋 project<br/>项目管理"]
+        FB["💬 feedback<br/>反馈闭环"]
+    end
 
-    SKILL --> FS["📁 filesystem<br/>文件管理"]
-    API --> FS
-    FS --> CX["⚡ codex<br/>PTY CLI"]
-    FS --> CC["🤖 claude<br/>PTY CLI"]
-    FS --> OC["🔗 openclaw<br/>Gateway 协议"]    
-
-
-    SKILL --> PJ["📋 project<br/>项目管理"]
-    API --> PJ
-    PJ --> CX["⚡ codex<br/>PTY CLI"]
-    PJ --> CC["🤖 claude<br/>PTY CLI"]
-    PJ --> OC["🔗 openclaw<br/>Gateway 协议"]    
-
-    SKILL --> FB["💬 feedback<br/>反馈闭环"]
-    API --> FB
-    FB --> CC["🤖 claude<br/>PTY CLI"]
-    FB --> CX["⚡ codex<br/>PTY CLI"]
-    FB --> OC["🔗 openclaw<br/>Gateway 协议"]    
+    AGENT_GROUP --> SKILL --> CM
+    CM -->|Agent CLI| AGENT_GROUP
+    CM --> DOMAIN_GROUP
 
 ```
 
 | 层级 | 说明 |
 |------|------|
-| **入口** | skill（`/clawmate ...` 命令）和 API（HTTP/WebSocket）两种方式访问 |
-| **功能域** | filesystem（文件管理）、project（项目管理）、feedback（反馈闭环）三大业务模块 |
-| **后端** | openclaw / codex / claude 三引擎，右上角 badge 一键切换，任一引擎可驱动任一功能 |
+| **Agent 层** | Claude Code、Codex、OpenClaw 三类 Agent，经 Skill 发起请求，并通过对应 Agent CLI 接收执行结果 |
+| **Skill 层** | `/clawmate ...` 命令入口，负责把 Agent 请求转换为可执行的 ClawMate 操作 |
+| **中台层** | ClawMate 统一编排 filesystem、project、feedback 三大业务域，并调度 Agent CLI 执行任务 |
 
-> 图中连线表示**主要侧重**，不是绑定。三个 badge 随时切换，同一 session 内可混合使用不同后端处理不同任务。
+> 图中连线表示能力关系，不代表后端绑定。三个 Agent 可自由切换，并通过同一 Skill 入口访问 ClawMate 的文件、项目和反馈能力。
 
 ---
 
@@ -73,6 +67,7 @@ flowchart LR
 | 操作 | 能力 |
 |------|------|
 | 浏览 | 画廊/列表双视图、类型过滤、多字段排序 |
+| 目录监控 | watchdog/inotify 事件驱动；当前目录变更自动刷新，并对新增/修改条目打会话级「新增/已修改」标记（刷新/切目录/打开文件即消失） |
 | 搜索 | 递归全文搜索，彩色文件类型标签 |
 | 上传 | 拖拽上传 + Ctrl+V 剪切板粘贴图片 |
 | 组织 | 新建目录、重命名、移动、删除 |
@@ -97,6 +92,8 @@ flowchart LR
 | **Claude Code** | xterm.js PTY 终端 | 完整 CLI（Read/Write/Edit/Bash），60fps |
 | **Codex** | xterm.js PTY 终端 | 完整 CLI（Read/Write/Edit/Bash），60fps |
 | **OpenClaw** | Markdown 聊天 | chat.send 协议，Gateway 多 Agent 协作 |
+
+**OpenClaw 细节**：浏览器经同源 `wss://…/api/clawmate/agent/openclaw` 代理连接 Gateway（协议 v4），凭证/令牌留在服务端；会话按 `root + project + 面板实例` 三级隔离，跨项目/多标签不串；并把会话工作目录钉到 `resolve_session_cwd()` 指向的项目目录，使 openclaw 的文件工具与 `pwd` 作用于所打开的项目而非默认工作区；人格从各 agent 自身工作区读取。
 
 Feedback 任务智能路由：PTY 活跃时直接注入终端执行，否则通过 webhook 唤醒。
 
@@ -234,46 +231,9 @@ openclaw gateway restart
 
 ---
 
-## 架构
+## 系统架构
 
-```mermaid
-flowchart TB
-    subgraph Browser["浏览器"]
-        UI["index.html (文件管理 + Agent 面板)<br/>preview.html (预览 + 反馈)"]
-    end
-
-    subgraph Server["FastAPI :5533"]
-        API["/api/clawmate/*<br/>文件 CRUD / 搜索 / 预览"]
-        AGENT_WS["agent_routes<br/>WebSocket PTY 终端 / 聊天"]
-        FEEDBACK["feedback_api<br/>反馈 CRUD + 状态流转"]
-        TASK["task_runner<br/>任务执行 + cron 唤醒"]
-        AUTH["auth 登录认证"]
-    end
-
-    subgraph Backend["Agent 后端"]
-        CLAUDE["Claude Code / Codex<br/>pty.spawn() PTY 终端"]
-        OC_GW["OpenClaw Gateway<br/>chat.send 协议"]
-    end
-
-    UI --> API
-    UI --> AGENT_WS
-    AGENT_WS --> CLAUDE
-    AGENT_WS --> OC_GW
-    API --> FEEDBACK
-    API --> TASK
-    TASK --> AGENT_WS
-```
-
-| 模块 | 功能 |
-|------|------|
-| `routes.py` | 文件 CRUD、搜索、预览、压缩包、移动 |
-| `feedback_api.py` | 反馈闭环 CRUD + 四态流转 |
-| `agent_routes.py` | Agent WebSocket（PTY + 聊天双模） |
-| `task_runner.py` | 任务执行引擎 + cron 扫描唤醒 |
-| `auth.py` | Session 认证 + local_hosts 白名单 |
-| `config.py` | 类型化配置加载 + TTL 缓存 |
-| `store.py` | 反馈存储引擎（纯函数接口） |
-| `service.py` | 核心服务（文件操作、搜索、压缩包） |
+[![ClawMate 系统架构](assets/cm-system-arch.png)](docs/architecture/clawmate-runtime-architecture.html)
 
 ---
 
