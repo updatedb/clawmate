@@ -42,6 +42,61 @@ console.log(JSON.stringify({
     assert "execute:'" not in share
 
 
+def test_review_templates_refresh_from_api_over_session_cache_and_filter_by_extension():
+    """A cached old template must not override the current /config response."""
+    preview = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
+    common = ROOT / "dev/static/js/preview-common.js"
+    loader = preview.split("  async function getRootsConfig() {", 1)[1].split(
+        "\n\n  function getRelativePath", 1
+    )[0]
+    loader = "async function getRootsConfig() {" + loader
+    old_config = {"task_templates": [
+        {"id": "old", "source": "selection", "action": "old", "frontend": {"tooltip": True}, "match_ext": ["*"]}
+    ]}
+    new_config = {"task_templates": [
+        {"id": "new-md", "source": "selection", "action": "new_md", "frontend": {"tooltip": True}, "match_ext": ["md"]},
+        {"id": "new-exe", "source": "selection", "action": "new_exe", "frontend": {"panel": True}, "match_ext": ["exe"]},
+    ]}
+    script = """
+const fs = require('fs');
+const vm = require('vm');
+const oldConfig = JSON.parse(process.argv[2]);
+const newConfig = JSON.parse(process.argv[3]);
+const context = {
+  initCalls: 0,
+  window: {},
+  sessionStorage: {
+    getItem: () => JSON.stringify(oldConfig),
+    setItem: () => {},
+  },
+  fetch: async () => ({ ok: true, json: async () => newConfig }),
+};
+vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), context);
+vm.runInNewContext(`
+  let _cachedRootsConfig = null;
+  let _taskTemplates = [];
+  function initPstTags() { initCalls++; }
+  ${process.argv[4]}
+  globalThis.loadRootsConfig = getRootsConfig;
+  globalThis.activeTemplates = () => _taskTemplates;
+`, context);
+(async () => {
+  const config = await context.loadRootsConfig();
+  const mdActions = context.window.getSelectionActionTemplates(
+    context.activeTemplates(), 'notes.md').map(t => t.action);
+  console.log(JSON.stringify({ config, mdActions, initCalls: context.initCalls }));
+})().catch(err => { console.error(err); process.exit(1); });
+"""
+    result = subprocess.run(
+        ["node", "-e", script, str(common), json.dumps(old_config), json.dumps(new_config), loader],
+        check=True, capture_output=True, text=True,
+    )
+    outcome = json.loads(result.stdout)
+    assert outcome["config"] == new_config
+    assert outcome["mdActions"] == ["new_md"]
+    assert outcome["initCalls"] == 1
+
+
 def test_preview_uses_single_atomic_execute_request_for_feedback_submission():
     """Batch execution has no user-visible plan/confirm/task-run loop."""
     source = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")

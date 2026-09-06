@@ -4161,8 +4161,15 @@
   let _cachedRootsConfig = null;
   async function getRootsConfig() {
     if (_cachedRootsConfig) return _cachedRootsConfig;
-    const cached = sessionStorage.getItem('clawmate-roots-config');
-    if (cached) { _cachedRootsConfig = JSON.parse(cached); return _cachedRootsConfig; }
+    // Keep the last roots config as an offline fallback, but always refresh
+    // task_templates from /config on a new review-page load. Templates drive
+    // visible review actions, so a sessionStorage value must never win over
+    // the server's current configuration.
+    let cached = null;
+    try {
+      const raw = sessionStorage.getItem('clawmate-roots-config');
+      if (raw) cached = JSON.parse(raw);
+    } catch (_) {}
     try {
       const res = await fetch('/api/clawmate/config');
       if (res.ok) {
@@ -4173,6 +4180,11 @@
         return data;
       }
     } catch (_) {}
+    if (cached) {
+      _cachedRootsConfig = cached;
+      if (cached.task_templates) { _taskTemplates = cached.task_templates; initPstTags(); }
+      return cached;
+    }
     return null;
   }
 
