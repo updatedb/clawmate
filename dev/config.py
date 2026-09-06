@@ -120,6 +120,13 @@ class AuthConfig:
 
 
 @dataclass
+class ProjectConfig:
+    """Project-management settings."""
+    git_user_email: str = "updatedb@qq.com"
+    git_user_name: str = "OpenClaw"
+
+
+@dataclass
 class AppConfig:
     roots: list[RootEntry] = field(default_factory=list)
     default_root_id: str = ""
@@ -133,6 +140,7 @@ class AppConfig:
     onlyoffice: OnlyOfficeConfig = field(default_factory=OnlyOfficeConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
     search: SearchConfig = field(default_factory=SearchConfig)
+    project: ProjectConfig = field(default_factory=ProjectConfig)
 
     # ── 便捷方法 ──
 

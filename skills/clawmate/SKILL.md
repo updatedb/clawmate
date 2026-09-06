@@ -441,7 +441,7 @@ mkdir -p {项目根路径}/{.clawmate,research,collect,prd,dev,test}
 ```bash
 cd {项目根路径}
 git init
-git config user.email "openclaw@openclaw.ai"
+git config user.email "updatedb@qq.com"
 git config user.name "OpenClaw"
 ```
 

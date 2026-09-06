@@ -34,6 +34,10 @@
       "DEEPSEEK_API_KEY": ""
     }
   },
+  "project": {
+    "git_user_email": "updatedb@qq.com",
+    "git_user_name": "OpenClaw"
+  },
   "onlyoffice": {
     "api_js_url": "http://onlyoffice.lan/web-apps/apps/api/documents/api.js",
     "jwt_secret": "change-me-in-production",

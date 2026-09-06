@@ -88,3 +88,6 @@ output/
 
 # ClawMate runtime data (cache, feedback, sessions) — keep locally, not committed
 .clawmate/
+
+# Generated skill (skill_workshop auto-capture) — keep out of the repo
+skills/openclaw-workspace-artifacts/

@@ -1396,6 +1396,27 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
               .catch(function () { alert('移动失败'); });
           };
         });
+        if (entry.is_dir && !entry.marker && !(entry.relPath || '').includes('/')) {
+          addItem('folder-project', '转换为项目', function () {
+            var pname = entry.name;
+            var msg = '将目录「' + pname + '」转换为 ClawMate 项目？\n\n将创建：\n- .clawmate/（项目标识/运行态）\n- PROJECT_NOTE.md（项目入口/决策）\n- CLAWLIST.md（任务清单）\n- AGENTS.md（agent 操作规范）\n- .gitignore + git init 初始提交';
+            if (!confirm(msg)) return;
+            authFetch('/api/clawmate/project/convert', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ root: state.rootId, path: entry.relPath })
+            })
+              .then(function (r) { return r.json(); })
+              .then(function (data) {
+                if (data.ok) {
+                  setStatus('已转换为项目：' + (data.project || pname));
+                  invalidateDirCache();
+                  if (state.rootId) loadDir(state.dir); else loadConfig();
+                } else { alert('转换失败：' + (data.detail || data.error || '未知错误')); }
+              })
+              .catch(function () { alert('转换失败'); });
+          });
+        }
         if (entry.is_dir) {
           addItem('download', '下载', function () {
             triggerBatchDownload(buildBatchDownloadLink(entry.relPath), entry.name);
