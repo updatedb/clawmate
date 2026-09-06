@@ -36,9 +36,9 @@
     "desc": "按 position 定位章节 → 在章节内匹配 content → 按 note 思路修改"
   },
   {
-    "id": "review_explain",
-    "label": "📈 扩展",
-    "action": "explain",
+    "id": "review_replace",
+    "label": "📈 替换",
+    "action": "replace",
     "scope": "document",
     "source": "selection",
     "match": {
@@ -46,7 +46,7 @@
         "*"
       ]
     },
-    "agent_prompt": "详细解释选中内容",
+    "agent_prompt": "替换中内容",
     "frontend": {
       "tooltip": true,
       "panel": true
@@ -115,7 +115,7 @@
     "source": "selection",
     "match": {
       "ext": [
-        "*"
+        "exe"
       ]
     },
     "agent_prompt": "文档审批通过，执行方案。\n读取 {file} 中的方案，在 project 范围内实施。",
