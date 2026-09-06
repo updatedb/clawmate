@@ -317,11 +317,16 @@
     .fb-card:hover { border-color: var(--text-muted); box-shadow: var(--card-shadow); }
     .fb-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: var(--bg-secondary); }
     .fb-card-header { display: flex; align-items: center; gap: var(--space-1); min-width: 0; width: 100%; }
+    .fb-card-header .fb-btn-delete { flex: 0 0 auto; margin-left: 0; }
     .fb-card-status { font-size: 14px; flex-shrink: 0; }
     .fb-card-id { font-family: var(--font-mono); font-size: var(--font-size-xs); color: var(--text-secondary); flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .fb-card-time { font-size: 10px; color: var(--text-muted); flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .fb-card-stage-time { font-variant-numeric: tabular-nums; }
     .fb-card-action { max-width: 96px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 6px; border-radius: var(--radius-full); background: var(--accent-light); color: var(--accent-hover); font-size: 10px; font-weight: 600; flex: 0 1 auto; }
+    /* Shared feedback metadata: action precedes locator in every card state. */
+    .fb-card-meta { display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
+    .fb-card-meta .fb-card-position,
+    .fb-card-meta .review-card-position { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .fb-card-note {
       color: var(--text-primary);
       font-size: 12px;
@@ -908,6 +913,11 @@
       overflow: hidden;
       text-overflow: ellipsis;
       padding: 2px 0;
+    }
+    @media (max-width: 480px) {
+      .fb-card-header .fb-card-id { flex: 1 1 calc(100% - 132px); }
+      .fb-card-meta .fb-card-position,
+      .fb-card-meta .review-card-position { flex: 1 1 140px; white-space: normal; word-break: break-word; }
     }
     .fb-card-result {
       font-size: 12px;

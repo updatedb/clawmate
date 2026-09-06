@@ -5076,6 +5076,23 @@
     return input;
   }
 
+  // Keep action and locator as adjacent metadata across pending, completed and
+  // review cards. The header reserves its trailing slot for the status pill.
+  function _appendFeedbackMeta(card, item, positionClass, positionText, showAction) {
+    var meta = document.createElement('div');
+    meta.className = 'fb-card-meta';
+    var action = document.createElement('span');
+    action.className = 'fb-card-action';
+    action.textContent = _actionLabel(item.action) || '—';
+    var position = document.createElement('div');
+    position.className = positionClass || 'fb-card-position';
+    position.textContent = positionText || _feedbackPositionLabel(item);
+    if (showAction !== false) meta.appendChild(action);
+    meta.appendChild(position);
+    card.appendChild(meta);
+    return position;
+  }
+
   // ============ Feedback Card Factory ============
   // Unified factory for creating pending feedback cards.
   // Used by: tooltip "加入待办", panel "+ 添加反馈", and renderFeedbackPanel.
@@ -5096,15 +5113,15 @@
     // Assign creation timestamp if not set
     if (!item.created) item.created = new Date().toISOString();
 
-    // Header: position display + delete button (top-right corner)
+    // Header: ID/time/status, with delete independently pinned at the right.
     const headerRow = document.createElement('div');
-    headerRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;';
-    const locationEl = document.createElement('span');
-    locationEl.style.cssText = 'font-size:11px;color:var(--text-muted);font-family:monospace;';
+    headerRow.className = 'fb-card-header';
+    const idEl = document.createElement('span'); idEl.className = 'fb-card-id'; idEl.textContent = item.id ? 'FD-' + item.id : '';
     const createdDate = item.created ? new Date(item.created) : new Date();
     const ts = `${String(createdDate.getMonth()+1).padStart(2,'0')}-${String(createdDate.getDate()).padStart(2,'0')} ${String(createdDate.getHours()).padStart(2,'0')}:${String(createdDate.getMinutes()).padStart(2,'0')}`;
-    locationEl.textContent = ts;
-    headerRow.appendChild(locationEl);
+    const locationEl = document.createElement('span'); locationEl.className = 'fb-card-time fb-card-stage-time'; locationEl.textContent = ts;
+    const status = document.createElement('span'); status.className = 'fb-status-pill pending'; status.textContent = '待提交';
+    headerRow.appendChild(idEl); headerRow.appendChild(locationEl); headerRow.appendChild(status);
     const delBtn = document.createElement('button');
     delBtn.className = 'fb-btn-delete';
     delBtn.textContent = '✕';
@@ -5131,11 +5148,8 @@
     headerRow.appendChild(delBtn);
     card.appendChild(headerRow);
 
-    // Position editable input — format depends on item type
-    const positionLabel = document.createElement('div');
-    positionLabel.className = 'fb-card-position';
-    positionLabel.textContent = _feedbackPositionLabel(item);
-    card.appendChild(positionLabel);
+    // Action then position (the selected action remains editable below).
+    const positionLabel = _appendFeedbackMeta(card, item, null, null, false);
     const posInput = document.createElement('input');
     posInput.type = 'text';
     posInput.className = 'fb-card-position-edit';
@@ -5292,7 +5306,7 @@
     card.className = 'fb-card' + (item.id === selectedPendingId ? ' selected' : '');
     card.dataset.id = item.id;
 
-    // Header order is shared with all feedback states: ID, status, time, X.
+    // Header order is shared with all feedback states: ID, time, status, X.
     var head = document.createElement('div');
     head.className = 'fb-card-header';
     var id = document.createElement('span'); id.className = 'fb-card-id';
@@ -5313,13 +5327,11 @@
       clearHL();
       renderFeedbackPanel();
     });
-    head.appendChild(id); head.appendChild(status); head.appendChild(meta); head.appendChild(del);
+    head.appendChild(id); head.appendChild(meta); head.appendChild(status); head.appendChild(del);
     card.appendChild(head);
 
-    // Position
-    var positionLabel = document.createElement('div'); positionLabel.className = 'fb-card-position';
-    positionLabel.textContent = _feedbackPositionLabel(item);
-    card.appendChild(positionLabel);
+    // Action then position; tag controls below remain the source of edits.
+    var positionLabel = _appendFeedbackMeta(card, item, null, null, false);
     var pos = document.createElement('input'); pos.type='text'; pos.className='fb-card-position-edit';
     pos.value = _feedbackPosition(item) || (item.startLine > 0 ? 'Line '+item.startLine+'-'+item.endLine : '');
     pos.placeholder = '定位：—（Line {start}-{end}）';
@@ -5536,14 +5548,10 @@
     // Build header with delete button
     const header = document.createElement('div');
     header.className = 'fb-card-header';
-    header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;';
-    const left = document.createElement('div');
-    left.style.cssText = 'display:flex;align-items:center;gap:var(--space-1);min-width:0;flex:1;';
     const time = document.createElement('span'); time.className = 'fb-card-time fb-card-stage-time'; time.textContent = String(item.updated || item.created || '').substring(5, 16);
     const id = document.createElement('span'); id.className = 'fb-card-id'; id.textContent = item.id || '';
-    const action = document.createElement('span'); action.className = 'fb-card-action'; action.textContent = _actionLabel(item.action) || '—';
     const status = document.createElement('span'); status.className = 'fb-card-status'; status.innerHTML = statusIcon;
-    left.appendChild(time); left.appendChild(id); left.appendChild(action); left.appendChild(status);
+    header.appendChild(id); header.appendChild(time); header.appendChild(status);
     const delBtn = document.createElement('button');
     delBtn.className = 'fb-btn-delete';
     delBtn.textContent = '✕';
@@ -5574,7 +5582,6 @@
         }
       } catch (_) {}
     });
-    header.appendChild(left);
     header.appendChild(delBtn);
     card.appendChild(header);
 
@@ -5588,10 +5595,7 @@
     note.className = 'fb-card-note';
     note.textContent = item.user_note || item.note || '（无备注）';
     card.appendChild(note);
-    const pos = document.createElement('div');
-    pos.className = 'fb-card-position';
-    pos.textContent = _feedbackPositionLabel(item);
-    card.appendChild(pos);
+    _appendFeedbackMeta(card, item);
 
     // 处理结果: only show for done/failed items with result text
     const isDoneFailed = item.status === 'done' || item.status === 'failed';
@@ -7337,15 +7341,10 @@
     head.appendChild(id);
     var status = document.createElement('span'); status.className = 'fb-status-pill ' + (item.status || 'pending');
     status.textContent = _statusLabel(item.status);
-    head.appendChild(status);
     var time = document.createElement('span'); time.className = 'fb-card-time fb-card-stage-time';
     time.textContent = String(item.updated || item.created || '').substring(5, 16);
     head.appendChild(time);
-    if (item.status !== 'pending_review') {
-      var action = document.createElement('span'); action.className = 'fb-card-action';
-      action.textContent = _actionLabel(item.action) || '—';
-      head.appendChild(action);
-    }
+    head.appendChild(status);
 
     // ✕ delete (fb-btn-delete) → marks item deleted (已取消), shown in 已执行.
     var del = document.createElement('button');
@@ -7361,9 +7360,7 @@
     head.appendChild(del);
     card.appendChild(head);
 
-    var pos = document.createElement('div'); pos.className = 'review-card-position';
-    pos.textContent = (item.file || '') + ' · ' + _feedbackPositionLabel(item);
-    card.appendChild(pos);
+    _appendFeedbackMeta(card, item, 'review-card-position', (item.file || '') + ' · ' + _feedbackPositionLabel(item), item.status !== 'pending_review');
 
     // Content: editable textarea only for 待评审 (pending_review)
     var isPendingReview = (item.status === 'pending_review');

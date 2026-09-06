@@ -626,25 +626,29 @@
         else shareSubmitted = shareSubmitted.filter(function(i){ return i.id !== it.id; });
         _shareRender();
       });
-      head.appendChild(id); head.appendChild(status); head.appendChild(time);
+      head.appendChild(id); head.appendChild(time); head.appendChild(status); head.appendChild(del);
+      card.appendChild(head);
+
+      // Action then locator, matching the review and preview cards.
+      var feedbackMeta = document.createElement('div'); feedbackMeta.className = 'fb-card-meta';
       if (isReadOnly) {
         var action = document.createElement('span'); action.className = 'fb-card-action';
         var actionMatch = _shareSelectionTemplates().find(function(t){ return t.action === it.action; });
         action.textContent = actionMatch ? actionMatch.label : ({ modify:'🔧 修改', delete:'🗑 删除', explain:'📈 扩展', simplify:'📉 简化', translate:'🌐 翻译', add:'➕ 追加', execute:'⚡ 执行方案' }[it.action] || '—');
-        head.appendChild(action);
+        feedbackMeta.appendChild(action);
       }
-      head.appendChild(del);
-      card.appendChild(head);
 
       // 定位
       if (isReadOnly) {
         var roPos = document.createElement('div'); roPos.className = 'fb-card-position';
         roPos.textContent = '定位：' + (_sharePosition(it) || '—');
-        card.appendChild(roPos);
+        feedbackMeta.appendChild(roPos);
+        card.appendChild(feedbackMeta);
       } else {
         var posLabel = document.createElement('div'); posLabel.className = 'fb-card-position';
         posLabel.textContent = '定位：' + (_sharePosition(it) || '—');
-        card.appendChild(posLabel);
+        feedbackMeta.appendChild(posLabel);
+        card.appendChild(feedbackMeta);
         var pos = document.createElement('input'); pos.type='text'; pos.className='fb-card-position-edit';
         pos.value = _sharePosition(it);
         pos.placeholder = '定位：—（Line {start}-{end}）';

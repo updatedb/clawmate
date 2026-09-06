@@ -52,3 +52,25 @@ def test_feedback_lists_share_scroll_and_card_inset_contract():
     assert "var cardList = document.createElement('div');" in PREVIEW
     assert "cardList.className = 'fb-card-list';" in PREVIEW
     assert ".share-right .preview-right-body { padding: 0; min-height: 0; }" in SHARE
+
+def test_feedback_card_action_position_and_header_status_layout_contract():
+    """Every feedback view keeps action before position, status in header, and X last."""
+    preview = PREVIEW
+    share = SHARE
+    css = CSS
+
+    helper = preview.split("function _appendFeedbackMeta", 1)[1].split("// ============ Feedback Card Factory", 1)[0]
+    assert helper.index("meta.appendChild(action)") < helper.index("meta.appendChild(position)")
+    assert "header.appendChild(id); header.appendChild(time); header.appendChild(status);" in preview
+    assert "head.appendChild(time);\n    head.appendChild(status);" in preview
+    assert "head.appendChild(id); head.appendChild(meta); head.appendChild(status); head.appendChild(del);" in preview
+    assert "item.status !== 'pending_review'" in preview
+
+    share_card = share.split("function _shareBuildCard(it)", 1)[1].split("// Selection tooltip logic", 1)[0]
+    assert share_card.index("feedbackMeta.appendChild(action);") < share_card.index("feedbackMeta.appendChild(roPos);")
+    assert "head.appendChild(id); head.appendChild(time); head.appendChild(status); head.appendChild(del);" in share_card
+    assert "if (isReadOnly)" in share_card
+
+    assert ".fb-card-meta { display: flex;" in css
+    assert ".fb-card-header .fb-btn-delete { flex: 0 0 auto;" in css
+    assert "@media (max-width: 480px)" in css
