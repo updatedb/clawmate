@@ -56,3 +56,25 @@ def test_share_view_exposes_feedback_but_not_review_or_execution_controls():
     assert "share-fb-toolbar" not in source
     assert "/api/clawmate/review/" not in source
     assert "/api/clawmate/task/run" not in source
+
+
+def test_share_and_review_share_dynamic_action_templates_and_readonly_views():
+    """本轮需求：action 动态取后台 task_templates（不写死）、已提交/只读视图压缩、
+    已提交隐藏提交评审按钮。"""
+    share = (ROOT / "dev/static/share-view.html").read_text(encoding="utf-8")
+    js = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
+    # 分享页动态加载 /api/clawmate/config 的 task_templates
+    assert "_shareLoadTemplates" in share
+    assert "/config" in share
+    assert "_shareSelectionTemplates" in share
+    # 分享页已提交只读（fb-card-completed + 只读字段），且提交评审按钮按视图显隐
+    assert "fb-card-completed" in share
+    assert "shareFbSubmit" in share
+    assert "classList.toggle('hidden', shareFbFilter" in share
+    # 评审面板：待提交/待评审共享统一 action 标签组（动态），只读视图无 textarea
+    assert "_buildActionTags" in js
+    assert "_taskTemplates" in js
+    assert "review-card-content" in js  # 只读视图用 div 展示，非 textarea
+    assert "review-card-note" in js
+    # 浮窗 action 来源动态，不再写死列表
+    assert "match_ext" in js

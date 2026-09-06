@@ -5295,6 +5295,9 @@
     note.addEventListener('click', function(e){ e.stopPropagation(); });
     card.appendChild(note);
 
+    // Action tag group (dynamic from task_templates, same as 浮窗/待评审)
+    card.appendChild(_buildActionTags(item, function(){ renderFeedbackPanel(); }, false));
+
     // Submit-to-review button (提交评审)
     var actions = document.createElement('div');
     actions.className = 'fb-card-actions';
@@ -5305,9 +5308,9 @@
     submit.addEventListener('click', function(e){
       e.stopPropagation();
       if (submit.disabled) return;
-      if (!item.note || !item.note.trim()) { item.note = ''; }
-      if (!item.action) item.action = 'modify';
-      if (!item.scope) item.scope = 'document';
+      if (!item.text || !item.text.trim()) { showToastSafe('请填写选中内容'); return; }
+      if (!item.note || !item.note.trim()) { showToastSafe('请填写建议'); return; }
+      if (!item.action) { item.action = 'modify'; item.scope = 'document'; }
       submit.disabled = true; submit.textContent = '...';
       submitSingleItem(item).finally(function(){ submit.disabled = false; submit.textContent = '提交评审'; });
     });
@@ -7336,8 +7339,44 @@
     }
   }
 
+  // Unified action tag group (dynamic from task_templates). Reused by the
+  // pending card, the review card, and the flotation tooltip so 待提交/待评审/
+  // 浮窗 always share the same action list. onChange fires with the chosen
+  // {action, scope, task_id}. Read-only mode renders static labels.
+  function _buildActionTags(item, onChange, readOnly) {
+    var row = document.createElement('div');
+    row.className = 'pst-tags';
+    row.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;';
+    var ext = (filePath || '').split('.').pop().toLowerCase();
+    var tags = _taskTemplates.filter(function(t) {
+      return t.source === 'selection' && (t.match_ext.indexOf('*') >= 0 || t.match_ext.indexOf(ext) >= 0);
+    });
+    if (!tags.length) {
+      tags = [
+        {label:'🔧 修改',action:'modify',scope:'document',id:'review_modify'},
+        {label:'🗑 删除',action:'delete',scope:'document',id:'review_delete'},
+        {label:'📈 扩展',action:'explain',scope:'document',id:'review_explain'},
+        {label:'📉 简化',action:'simplify',scope:'document',id:'review_simplify'},
+      ];
+    }
+    tags.forEach(function(t) {
+      var b = document.createElement('button');
+      b.className = 'pst-tag';
+      b.textContent = t.label;
+      if (item.action === t.action) b.classList.add('active');
+      b.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (readOnly) return;
+        item.action = t.action; item.scope = t.scope; item.task_id = t.id;
+        if (onChange) onChange();
+      });
+      row.appendChild(b);
+    });
+    return row;
+  }
+
   // Build a review card. Behaviour per filter (需求):
-  //  待评审 pending_review — reviewer edits content/note then 评审通过/拒绝 (direct edit).
+  //  待评审 pending_review — reviewer edits content/note/action then 评审通过/拒绝 (direct edit).
   //  已评审 approved/planned — read-only, top-right ✕ rejects, only 执行反馈.
   //  已拒绝 rejected / 已执行 executed — read-only.
   function buildReviewCard(item, project) {
@@ -7397,6 +7436,8 @@
       noteTa.rows = 3;
       noteTa.addEventListener('input', function(){ item.note = noteTa.value; });
       card.appendChild(noteTa);
+      // Editable action tag group (same source as 待提交/浮窗)
+      card.appendChild(_buildActionTags(item, function(){ renderReviewPanel(); }, false));
     } else {
       var content = document.createElement('div'); content.className = 'review-card-content';
       content.textContent = item.content || '';

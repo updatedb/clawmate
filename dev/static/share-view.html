@@ -531,6 +531,27 @@
     var _shareAuthor = '';
     var _shareSelSavedText = '';
 
+    // Action templates loaded dynamically from /api/clawmate/config (matches the
+    // review panel). Selection actions only, tooltip/panel-enabled.
+    var _shareTemplates = [];
+    function _shareSelectionTemplates() {
+      var ext = (_shareFile || '').split('.').pop().toLowerCase();
+      var list = _shareTemplates.filter(function(t) {
+        return t.source === 'selection' && t.frontend && (t.frontend.tooltip || t.frontend.panel) &&
+          (t.match_ext.indexOf('*') >= 0 || t.match_ext.indexOf(ext) >= 0);
+      });
+      return list.length ? list : _shareTemplates.filter(function(t) {
+        return t.source === 'selection' && t.frontend && (t.frontend.tooltip || t.frontend.panel);
+      });
+    }
+    // Load once on init.
+    function _shareLoadTemplates() {
+      return fetch(API_BASE + '/config')
+        .then(function(r){ return r.json(); })
+        .then(function(d){ if (d && d.task_templates) _shareTemplates = d.task_templates; })
+        .catch(function(){ _shareTemplates = []; });
+    }
+
     function _shareEsc(s) { var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
     function _shareFbStatus(msg, ok) { shareFbStatusEl.textContent = msg || ''; shareFbStatusEl.className = 'share-fb-status' + (ok ? ' ok' : msg ? ' err' : ''); }
     function _shareSelRenderStatus(msg, ok) { shareSelStatus.textContent = msg || ''; shareSelStatus.className = 'pst-status' + (ok ? ' pst-status-ok' : msg ? ' pst-status-error' : ''); }
@@ -545,12 +566,13 @@
 
     // Feedback card: reuses the shared fb-card components so it matches the
     // review panel exactly (时间/定位/选中内容/建议/动作). Delete uses fb-btn-delete.
+    // 待提交 = editable; 已提交 = read-only (backend pending_review).
     function _shareBuildCard(it) {
+      var isReadOnly = (shareFbFilter === 'submitted'); // 已提交 only-read card
       var card = document.createElement('div');
-      card.className = 'fb-card';
+      card.className = 'fb-card' + (isReadOnly ? ' fb-card-completed' : '');
 
-      // Header row: time + id + fb-btn-delete (top-right). No status badge —
-      // the share surface has no status concept (only 待提交/已提交 views).
+      // Header row: time + id + fb-btn-delete (top-right). No status badge.
       var head = document.createElement('div'); head.className = 'fb-card-header';
       head.style.cssText = 'display:flex;align-items:center;gap:6px;';
       var id = document.createElement('span'); id.className = 'fb-card-id';
@@ -567,41 +589,64 @@
       head.appendChild(id); head.appendChild(time); head.appendChild(del);
       card.appendChild(head);
 
-      // 定位 (editable in 待提交)
-      var pos = document.createElement('input'); pos.type='text'; pos.className='fb-card-position-edit';
-      pos.value = it.position || '';
-      pos.placeholder = 'Line {start}-{end} — 定位';
-      pos.addEventListener('input', function(){ it.position = pos.value; });
-      pos.addEventListener('click', function(e){ e.stopPropagation(); });
-      card.appendChild(pos);
+      // 定位
+      if (isReadOnly) {
+        var roPos = document.createElement('div'); roPos.className = 'fb-card-position';
+        roPos.textContent = it.position ? ('定位：' + it.position) : '定位：—';
+        card.appendChild(roPos);
+      } else {
+        var pos = document.createElement('input'); pos.type='text'; pos.className='fb-card-position-edit';
+        pos.value = it.position || '';
+        pos.placeholder = 'Line {start}-{end} — 定位';
+        pos.addEventListener('input', function(){ it.position = pos.value; });
+        pos.addEventListener('click', function(e){ e.stopPropagation(); });
+        card.appendChild(pos);
+      }
 
-      // 选中内容 (editable in 待提交)
-      var text = document.createElement('textarea'); text.className = 'fb-note-input';
-      text.value = it.text || ''; text.rows = 2;
-      text.placeholder = '选中内容';
-      text.style.cssText = 'font-size:11px;font-family:monospace;color:var(--text-secondary);';
-      text.addEventListener('input', function(){ it.text = text.value; });
-      text.addEventListener('click', function(e){ e.stopPropagation(); });
-      card.appendChild(text);
+      // 选中内容
+      if (isReadOnly) {
+        var roText = document.createElement('div'); roText.className = 'fb-card-selection';
+        roText.textContent = it.text || '（未填写选中内容）';
+        card.appendChild(roText);
+      } else {
+        var text = document.createElement('textarea'); text.className = 'fb-note-input';
+        text.value = it.text || ''; text.rows = 2;
+        text.placeholder = '<必填>选中内容';
+        text.style.cssText = 'font-size:11px;font-family:monospace;color:var(--text-secondary);';
+        text.addEventListener('input', function(){ it.text = text.value; });
+        text.addEventListener('click', function(e){ e.stopPropagation(); });
+        card.appendChild(text);
+      }
 
-      // 建议 (editable in 待提交)
-      var note = document.createElement('textarea'); note.className = 'fb-note-input';
-      note.value = it.note || ''; note.rows = 3;
-      note.placeholder = '<必填>简要说明改动需求';
-      note.addEventListener('input', function(){ it.note = note.value; });
-      note.addEventListener('click', function(e){ e.stopPropagation(); });
-      card.appendChild(note);
+      // 建议
+      if (isReadOnly) {
+        var roNote = document.createElement('div'); roNote.className = 'fb-card-note';
+        roNote.textContent = '建议：' + (it.note || '—');
+        card.appendChild(roNote);
+      } else {
+        var note = document.createElement('textarea'); note.className = 'fb-note-input';
+        note.value = it.note || ''; note.rows = 3;
+        note.placeholder = '<必填>简要说明改动需求';
+        note.addEventListener('input', function(){ it.note = note.value; });
+        note.addEventListener('click', function(e){ e.stopPropagation(); });
+        card.appendChild(note);
+      }
 
-      // 操作 tag group (edit in 待提交)
+      // 操作 tag group (edit in 待提交; dynamic from task_templates)
+      var selections = _shareSelectionTemplates();
       var tagRow = document.createElement('div'); tagRow.className = 'pst-tags';
       tagRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;';
-      [['修改','modify'],['删除','delete'],['扩展','explain'],['简化','simplify']].forEach(function(p){
+      var _defaults = [['🔧 修改','modify'],['🗑 删除','delete'],['📈 扩展','explain'],['📉 简化','simplify']];
+      var opts = selections.length ? selections.map(function(t){ return {label:t.label,action:t.action,scope:t.scope,task_id:t.id}; }) :
+        _defaults.map(function(p){ return {label:p[0],action:p[1],scope:'document',task_id:'review_'+p[1]}; });
+      opts.forEach(function(p){
         var b = document.createElement('button'); b.className = 'pst-tag';
-        b.textContent = p[0];
-        if (it.action === p[1]) b.classList.add('active');
+        b.textContent = p.label;
+        if (it.action === p.action) b.classList.add('active');
         b.addEventListener('click', function(e){
           e.stopPropagation();
-          it.action = p[1]; it.scope = 'document';
+          if (isReadOnly) return;
+          it.action = p.action; it.scope = p.scope; it.task_id = p.task_id;
           _shareRender();
         });
         tagRow.appendChild(b);
@@ -617,7 +662,8 @@
           e.stopPropagation();
           if (submit.disabled) return;
           if (!it.note || !it.note.trim()) { _shareFbStatus('请填写建议（必填）', false); return; }
-          if (!it.action) it.action = 'modify';
+          if (!it.text || !it.text.trim()) { _shareFbStatus('请填写选中内容', false); return; }
+          if (!it.action) { it.action = 'modify'; it.scope = 'document'; }
           submit.disabled = true;
           _shareSubmitPending([it]).finally(function(){ submit.disabled = false; });
         });
@@ -638,6 +684,9 @@
       }
       source.forEach(function(it) { shareFbCardList.appendChild(_shareBuildCard(it)); });
       _shareActiveFilter();
+      // 提交评审 only in 待提交 (已提交 is read-only)
+      var submitBtn = document.getElementById('shareFbSubmit');
+      if (submitBtn) submitBtn.classList.toggle('hidden', shareFbFilter !== 'pending');
     }
 
     function openShareFeedback() { shareRight.classList.remove('hidden'); shareRight.classList.add('open'); }
@@ -661,7 +710,7 @@
       if (!sel) { _shareSelRenderStatus('请先选中内容', false); return; }
       if (!note) { _shareSelRenderStatus('请填写建议', false); shareSelNote.focus(); return; }
       var action = _shareSelAction();
-      sharePending.push({ id: 'FD-' + (++_shareFbId), position: shareSelLocation.value.trim(), text: sel.slice(0,800), note: note, action: action, scope: (action === 'execute' ? 'project' : 'document') });
+      sharePending.push({ id: 'FD-' + (++_shareFbId), position: shareSelLocation.value.trim(), text: sel.slice(0,800), note: note, action: action, scope: _shareSelScope() });
       _shareSelNoteReset();
       shareSelTooltip.classList.add('hidden');
       shareFbFilter = 'pending'; openShareFeedback(); _shareRender();
@@ -674,8 +723,9 @@
       var note = shareSelNote.value.trim();
       if (!sel) { _shareSelRenderStatus('请先选中内容', false); return; }
       if (!note) { _shareSelRenderStatus('请填写建议', false); shareSelNote.focus(); return; }
+      if (!_shareSelAction()) { _shareSelRenderStatus('请选择操作类型', false); return; }
       var action = _shareSelAction();
-      var item = { id: 'FD-' + (++_shareFbId), position: shareSelLocation.value.trim(), text: sel.slice(0,800), note: note, action: action, scope: (action === 'execute' ? 'project' : 'document') };
+      var item = { id: 'FD-' + (++_shareFbId), position: shareSelLocation.value.trim(), text: sel.slice(0,800), note: note, action: action, scope: _shareSelScope() };
       _shareSelNoteReset();
       _shareSubmitPending([item]);
     });
@@ -718,11 +768,14 @@
       }
     }
 
-    // Selection tooltip logic (mirror review-panel text selection)
+    // Selection tooltip logic (mirror review-panel text selection). Actions come
+    // from task_templates dynamically (same source as the review panel).
     function _shareInitTags() {
       shareSelTags.innerHTML = '';
-      [['🗑 删除','delete'],['🔧 修改','modify'],['📈 扩展','explain'],['📉 简化','simplify'],['⚡ 执行','execute']].forEach(function(p){
-        var b = document.createElement('button'); b.className = 'pst-tag'; b.textContent = p[0]; b.setAttribute('data-action', p[1]);
+      var opts = _shareSelectionTemplates();
+      if (!opts.length) opts = [{label:'🔧 修改',action:'modify',scope:'document'},{label:'🗑 删除',action:'delete',scope:'document'},{label:'📈 扩展',action:'explain',scope:'document'},{label:'📉 简化',action:'simplify',scope:'document'}];
+      opts.forEach(function(t){
+        var b = document.createElement('button'); b.className = 'pst-tag'; b.textContent = t.label; b.setAttribute('data-action', t.action); b.setAttribute('data-scope', t.scope||'document');
         b.addEventListener('click', function(){
           shareSelTags.querySelectorAll('.pst-tag').forEach(function(x){ x.classList.remove('active'); });
           b.classList.add('active');
@@ -733,7 +786,11 @@
     }
     function _shareSelAction() {
       var a = shareSelTags.querySelector('.pst-tag.active');
-      return a ? a.getAttribute('data-action') : 'modify';
+      return a ? (a.getAttribute('data-action') || 'modify') : 'modify';
+    }
+    function _shareSelScope() {
+      var a = shareSelTags.querySelector('.pst-tag.active');
+      return a ? (a.getAttribute('data-scope') || 'document') : 'document';
     }
     function _shareSelNoteReset() { shareSelNote.value = ''; if (shareSelLocation) shareSelLocation.value = ''; _shareSelRenderStatus(''); }
     function _handleShareSelection() {
@@ -800,7 +857,8 @@
       _shareAuthor = v;
     })();
 
-    _shareRender();
+    // Load action templates first, then render (actions shared with review panel).
+    _shareLoadTemplates().then(_shareRender);
 
     async function loadContent() {
       try {
