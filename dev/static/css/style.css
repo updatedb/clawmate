@@ -3265,6 +3265,10 @@ pre:hover .code-copy-btn,
 .project-panel-close:hover, .project-panel-close:focus-visible { color: var(--text-primary); background: var(--bg-tertiary); outline: none; }
 .project-panel-body { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; padding: 10px 12px; overflow-y: auto; font-size: 12px; }
 .project-panel-section { min-width: 0; }
+.project-panel-hint { margin: 4px 0; color: var(--text-secondary); font-size: 11px; line-height: 1.4; }
+.project-panel-section li > span:nth-child(2) { flex: 1; min-width: 0; }
+.project-panel-signal { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid var(--border-color); padding-top: 9px; }
+.project-panel-check { color: var(--text-secondary); }
 .project-panel-section ul { margin: 5px 0 0; padding: 0; list-style: none; }
 .project-panel-section li { display: flex; gap: 6px; align-items: center; padding: 3px 0; }
 .project-panel-action, .project-panel-review { border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); border-radius: 4px; cursor: pointer; padding: 3px 7px; font: inherit; }

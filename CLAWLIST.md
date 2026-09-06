@@ -327,3 +327,28 @@ Task: schema 补全 action/scope/task_id 字段、note 优先保留不因模板�
 - "路径"→"位置" 按钮重命名、导航到父目录
 - 清理：.playwright-mcp/（22MB）、test PDF（9.6MB）、归档已完成 plans/specs
 
+## v1.52 目录自动监听刷新 + 会话级变更标记 ✅ (2026-09-06)
+- 新增 dev/fs_watch.py（watchdog/inotify 非递归监听当前目录，引用计数、0.4s debounce、正常运行时零轮询）与 dev/fs_routes.py（GET /api/clawmate/fs/events SSE 事件流）
+- 前端 app.js：loadDir 建立/切换/关闭当前目录 SSE 连接；会话级 recentChanges（path→kind），400ms debounce 刷新当前目录（绕过 30s 缓存）
+- 列表/卡片对本次会话新增/修改条目加「新增」「已修改」badge + mtime 高亮（删除只刷新不标记）
+- 修复：面包屑手动刷新清 _recentChanges（视为干净视图）；点击文件打开预览就地清除该条标记
+- 新增依赖 watchdog；新增 tests/test_fs_watch.py
+
+## v1.52 后续迭代（未发布版本号）✅ (2026-09-06~09-07)
+### 反馈/评审统一
+- unified 3-row feedback/review panels + review workflow gate（5488121）
+- unify feedback/review cards、sharing-surface parity、deleted state（d7f9ea9）
+- unify feedback actions from task_templates and readonly views（e3aeb5a）；icon buttons for review panel toolbar（1e9834b）
+- review panel interactions per state（7ee1c0f）；reuse review-panel framework for share surface（9c7f8f2）；share page feedback panel / 提交评审按钮修复（be39ccd、30dd321、9c92020）
+- 反馈与评审卡片流程细化：metadata/position/action/样式统一、draft 隔离持久化、删除与取消分离、approve 执行任务统一（2b1db22）
+- refactor(feedback): split audit journal and canonicalize payloads（66f1626，feedback_schema/store/task_runner/share_routes）
+- 选择 action 模板过滤统一（035afb7）；评审 action 模板从 config 刷新（29c1dd6）
+### 项目管理
+- 目录转项目：POST /api/clawmate/project/convert（f7bab2d）
+- 项目面板 + 概览聚合 + 推荐任务（P2/P3）：overview 聚合 CLAWLIST 待办、评审计数、推荐任务（c55e6eb）
+- 可运行推荐任务 + 抽屉化项目面板：新增 /tasks/{task_id}/run、/clawlist/complete 与版本提交联动 project.json（7d3d1a6）
+### 终端与 Agent
+- OpenClaw 网关代理（49fd9a8）与会话作用域（cwd）隔离、per-panel isolation（e01b33d）
+### 预览
+- 引用 .bpmn 文件预览：bpmn-file 围栏，回写源 .bpmn 文件（1d5cabf）
+

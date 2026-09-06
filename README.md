@@ -13,7 +13,7 @@
 ClawMate 是面向多种 Agent 工具的**一站式工作流中台**，以产出物为核心，重点承载文件管理与项目管理；Claude Code、Codex、OpenClaw 等 Agent 是可自由接入的执行工具，也是放大工作效率的能力引擎。ClawMate 将文件、项目、预览、协作和执行能力汇聚到同一个工作空间，形成“发现问题 → 发起反馈 → Agent 执行 → 回看结果”的持续迭代闭环：
 
 1. **远程文件管理** — 以多 root 目录树为入口，覆盖上传、搜索、预览、移动、分享和下载等完整文件生命周期。
-2. **项目管理能力** — 支持将普通目录快速转换为项目，并结合 Git 集成、五阶段分层计划（Phase I-V）和 CLAWLIST 进度跟踪，持续细化项目目标；通过 `.clawmate/` marker 实现项目隔离、会话隔离与多会话并行推进。
+2. **项目管理能力** — 支持将普通目录快速转换为项目，并结合 Git 集成、五阶段分层计划（Phase I-V）和 CLAWLIST 进度跟踪，持续细化项目目标；支持项目隔离、会话隔离与多会话并行推进。
 3. **多 Agent 集成能力** — 提供统一的 Agent 面板，支持 Claude Code、Codex 和 OpenClaw 三类后端自由切换；以项目为核心组织多 Agent 协同，支持会话历史回放。Claude/Codex 通过 xterm.js PTY 提供完整 CLI，OpenClaw 通过 Markdown 聊天与 Gateway 协议协作。
 4. **全格式文档预览与编辑能力** — 开箱支持 Markdown（Mermaid/KaTeX）、Office（ONLYOFFICE）、PDF、代码高亮、图片、音视频和压缩包，并为可编辑格式提供在线修改与保存回写能力。
 5. **Agent 及时交互反馈能力** — Agent 可自动识别当前项目；用户在预览页选中内容即可精确定位文件与上下文，反馈支持多任务延迟合并提交，并进入 `pending → in_progress → done/failed` 状态机；任务可直接注入活跃 PTY，或通过 webhook 唤醒 Agent。

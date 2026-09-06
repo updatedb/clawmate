@@ -2504,22 +2504,36 @@ async function refreshProjectPanel() {
 function renderProjectPanel(reviewMode) {
   const data = _projectOverview;
   if (!data || !data.ok || !projectPanelBody) return;
-  const todo = data.todo || {}, rv = data.review || {}, recs = data.recommendations || [];
+  const rv = data.review || {}, recs = data.recommendations || [];
+  const actions = data.actions || [], projectTasks = data.project_tasks || [];
   if (projectPanelSummary) projectPanelSummary.textContent = data.status_summary || data.project || '';
   if (reviewMode) {
-    projectPanelBody.innerHTML = '<div class="project-panel-review-view"><button class="project-panel-review" data-project-back>← 项目概况</button><h4>评审面板</h4><p>待评审 (' + (rv.pending_review || 0) + ')</p><p>请在文件预览的评审面板中完成已有的审批、计划和确认流程。</p></div>';
+    const implementation = reviewMode === 'implementation';
+    const title = implementation ? '实施反馈' : '评审反馈';
+    const count = implementation ? (rv.approved || 0) : (rv.pending_review || 0);
+    const detail = implementation ? '请在文件预览的反馈面板中执行已批准的反馈。' : '请在文件预览的评审面板中完成已有的审批、计划和确认流程。';
+    projectPanelBody.innerHTML = '<div class="project-panel-review-view"><button class="project-panel-review" data-project-back>← 项目概况</button><h4>' + title + '</h4><p>' + title + '（' + count + '条）</p><p>' + detail + '</p></div>';
     projectPanelBody.querySelector('[data-project-back]').onclick = () => renderProjectPanel(false);
     return;
   }
-  let html = '<div class="project-panel-section"><b>待办 (' + (todo.total || 0) + ')</b><ul>';
-  html += (todo.items || []).slice(0, 5).map(i => '<li><button class="project-panel-action" data-clawlist-task="' + _esc(i) + '">✓</button><span>' + _esc(i) + '</span></li>').join('') || '<li>无未完成待办</li>';
+  let html = '<div class="project-panel-section"><b>推荐任务</b><p class="project-panel-hint">来源：.clawmate/project.json 的 recommended_tasks；格式示例：{ id, label, prompt, frequency }。</p><ul>';
+  html += recs.map(r => '<li><span>' + _esc(r.label) + '</span><button class="project-panel-action" data-project-task="' + _esc(r.id) + '">执行</button></li>').join('') || '<li>暂无推荐任务</li>';
   html += '</ul></div>';
-  html += '<div class="project-panel-section"><button class="project-panel-review" data-project-review>待评审 (' + (rv.pending_review || 0) + ')</button></div>';
-  html += '<div class="project-panel-section"><b>推荐任务</b><ul>';
-  html += recs.map(r => '<li><span>' + _esc(r.label) + '</span><button class="project-panel-action" data-project-task="' + _esc(r.id) + '">执行</button></li>').join('') || '<li>暂无推荐</li>';
+  html += actions.map(item => '<div class="project-panel-section project-panel-signal"><span>' + _esc(item.label) + '</span><button class="project-panel-action" data-project-action="' + _esc(item.id) + '" title="来源：' + _esc(item.source) + '">' + _esc(item.action) + '</button></div>').join('');
+  html += '<div class="project-panel-section"><b>项目任务</b><p class="project-panel-hint">来源：CLAWLIST.md（提交更新后的任务清单）。</p><ul>';
+  html += projectTasks.map(item => '<li><span class="project-panel-check">' + (item.completed ? '☑' : '☐') + '</span><span>' + _esc(item.task) + '</span>' + (item.completed ? '' : '<button class="project-panel-action" data-clawlist-task="' + _esc(item.task) + '">完成</button>') + '</li>').join('') || '<li>暂无项目任务</li>';
   html += '</ul></div>';
   projectPanelBody.innerHTML = html;
-  projectPanelBody.querySelector('[data-project-review]').onclick = () => renderProjectPanel(true);
+  projectPanelBody.querySelectorAll('[data-project-action]').forEach(btn => btn.onclick = () => {
+    const action = btn.getAttribute('data-project-action');
+    if (action === 'review_feedback') renderProjectPanel('review');
+    else if (action === 'implement_feedback') renderProjectPanel('implementation');
+    else if (action === 'commit_version' || action === 'maintain_project_docs' || action === 'update_meeting_agenda' || action === 'update_meeting_conclusion') {
+      const task = recs.find(item => item.id === action || ((action === 'update_meeting_agenda' || action === 'update_meeting_conclusion') && item.id === 'update_meeting_info'));
+      if (task) projectPanelBody.querySelector('[data-project-task="' + CSS.escape(task.id) + '"]')?.click();
+      else setStatus('该行动需要先在 project.json 的 recommended_tasks 中配置对应任务');
+    }
+  });
   projectPanelBody.querySelectorAll('[data-clawlist-task]').forEach(btn => btn.onclick = async () => {
     const task = btn.getAttribute('data-clawlist-task'); btn.disabled = true;
     const res = await authFetch('/api/clawmate/project/' + encodeURIComponent(state.rootId) + '/' + encodeURIComponent(state.project) + '/clawlist/complete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({task})});

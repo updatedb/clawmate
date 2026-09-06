@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -104,6 +105,7 @@ def test_clawlist_completion_requires_one_exact_unchecked_match(tmp_path):
 
 
 def test_main_project_panel_is_switchable_and_auto_opens_once_per_session_project():
+
     root = Path(__file__).resolve().parents[1]
     html = (root / "dev" / "static" / "index.html").read_text(encoding="utf-8")
     js = (root / "dev" / "static" / "js" / "app.js").read_text(encoding="utf-8")
@@ -119,6 +121,24 @@ def test_main_project_panel_is_switchable_and_auto_opens_once_per_session_projec
     assert 'if (_isProjectPanelOpen()) _setProjectPanelOpen(false);' in js
     assert ".project-panel { display: flex; flex-direction: column; overflow: hidden; position: fixed;" in css
     assert "_setProjectPanelOpen(!_isProjectPanelOpen())" in js
-    assert "待评审 (" in js
+    assert "推荐任务" in js
+    assert "recommended_tasks；格式示例" in js
+    assert 'data-project-review>待评审 (' not in js
+    assert "project_tasks" in js
+    assert "data-project-action" in js
     assert "/clawlist/complete" in js
     assert "/tasks/" in js
+
+def test_panel_actions_have_explicit_sources_and_hide_zero_counts(tmp_path):
+    from project_routes import _clawlist_tasks, _project_panel_actions
+    now = datetime(2026, 9, 7, tzinfo=timezone.utc)
+    p = _mk_project(tmp_path, clawlist="- [x] 已完成需求\n- [ ] 待办需求\n", feedback={"items": [
+        {"status": "pending_review"}, {"status": "approved"},
+    ]}, project_json={"project_panel": {"maintenance_required": True, "meetings": [{
+        "starts_at": (now + timedelta(days=3)).isoformat(), "ends_at": (now - timedelta(days=2)).isoformat(),
+    }]}})
+    actions = _project_panel_actions(p, _count_review(p), _read_project_json(p), now=now)
+    assert {action["id"] for action in actions} >= {"review_feedback", "implement_feedback", "maintain_project_docs", "update_meeting_agenda", "update_meeting_conclusion"}
+    assert all(action["source"] for action in actions)
+    assert _clawlist_tasks(p) == [{"task": "已完成需求", "completed": True}, {"task": "待办需求", "completed": False}]
+    assert _project_panel_actions(p, {"pending_review": 0, "approved": 0}, {}, now=now) == []

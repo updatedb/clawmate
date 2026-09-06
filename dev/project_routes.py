@@ -20,6 +20,7 @@ import re
 import subprocess
 import tempfile
 import threading
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -394,6 +395,71 @@ def _count_clawlist_todo(target: Path) -> tuple[int, list[str]]:
     return len(items), items
 
 
+
+def _clawlist_tasks(target: Path) -> list[dict]:
+    """Return checklist entries in file order; CLAWLIST remains the source of truth."""
+    path = target / "CLAWLIST.md"
+    if not path.exists():
+        return []
+    tasks: list[dict] = []
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            match = re.match(r"^\s*-\s*\[([ xX])\]\s*(.*)$", line)
+            if match and match.group(2).strip():
+                tasks.append({"task": match.group(2).strip(), "completed": match.group(1).lower() == "x"})
+    except Exception:
+        return []
+    return tasks
+
+
+def _changed_project_file_count(target: Path) -> int:
+    """Count dirty files without staging or otherwise modifying the repository."""
+    result = _run_git(target, ["status", "--porcelain", "--untracked-files=all"])
+    if not result or result.returncode != 0:
+        return 0
+    return sum(1 for line in result.stdout.splitlines() if line.strip())
+
+
+def _parse_project_datetime(value: object) -> datetime | None:
+    """Parse an optional project.json timestamp as an aware UTC datetime."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _project_panel_actions(target: Path, review: dict, cfg: dict, *, now: datetime | None = None) -> list[dict]:
+    """Create source-labelled actionable rows from local project state."""
+    now = now or datetime.now(timezone.utc)
+    actions: list[dict] = []
+    pending_review = int(review.get("pending_review") or 0)
+    if pending_review:
+        actions.append({"id": "review_feedback", "label": f"待评审条目（{pending_review}条）", "action": "评审反馈", "kind": "review", "source": ".clawmate/feedback.json"})
+    ready_execution = int(review.get("approved") or 0)
+    if ready_execution:
+        actions.append({"id": "implement_feedback", "label": f"待执行条件（{ready_execution}条）", "action": "实施反馈", "kind": "implementation", "source": ".clawmate/feedback.json（approved）"})
+    changed_files = _changed_project_file_count(target)
+    if changed_files:
+        actions.append({"id": "commit_version", "label": f"{changed_files}个项目文件发生变化", "action": "提交版本", "kind": "commit", "source": "git status --porcelain"})
+    panel = cfg.get("project_panel") if isinstance(cfg.get("project_panel"), dict) else {}
+    if panel.get("maintenance_required") is True:
+        actions.append({"id": "maintain_project_docs", "label": "Agents | Clawlist | Project_note信息已过期", "action": "维护项目", "kind": "maintenance", "source": ".clawmate/project.json → project_panel.maintenance_required"})
+    meetings = panel.get("meetings", [])
+    if isinstance(meetings, dict):
+        meetings = [meetings]
+    if not isinstance(meetings, list):
+        meetings = []
+    upcoming = any(now <= start <= now + timedelta(days=14) for item in meetings if isinstance(item, dict) for start in [_parse_project_datetime(item.get("starts_at"))] if start)
+    recently_ended = any(now - timedelta(days=7) <= end <= now for item in meetings if isinstance(item, dict) for end in [_parse_project_datetime(item.get("ends_at"))] if end)
+    if upcoming:
+        actions.append({"id": "update_meeting_agenda", "label": "新会议在2周内举行", "action": "更新会议议题", "kind": "meeting", "source": ".clawmate/project.json → project_panel.meetings[].starts_at"})
+    if recently_ended:
+        actions.append({"id": "update_meeting_conclusion", "label": "会议结束1周内", "action": "更新会议结论", "kind": "meeting", "source": ".clawmate/project.json → project_panel.meetings[].ends_at"})
+    return actions
+
 def _count_review(target: Path) -> dict:
     """Count review items by status from .clawmate/feedback.json."""
     path = target / ".clawmate" / "feedback.json"
@@ -561,10 +627,11 @@ async def project_overview(root: str, project: str):
     if not (target / ".clawmate").is_dir():
         raise HTTPException(status_code=404, detail="Not a ClawMate project")
 
-    todo_total, todo_items = _count_clawlist_todo(target)
     review = _count_review(target)
     recs = _recommendations_for(target)
     pj = _read_project_json(target)
+    project_tasks = _clawlist_tasks(target)
+    actions = _project_panel_actions(target, review, pj)
 
     return JSONResponse(content={
         "ok": True,
@@ -574,7 +641,9 @@ async def project_overview(root: str, project: str):
         "type": pj.get("type", "generic"),
         "type_label": _PROJECT_TYPE_LABELS.get(str(pj.get("type", "generic")).lower(), "通用"),
         "status_summary": pj.get("status_summary", ""),
-        "todo": {"total": todo_total, "items": todo_items[:30]},
+        "todo": {"total": sum(not item["completed"] for item in project_tasks), "items": [item["task"] for item in project_tasks if not item["completed"]][:30]},
+        "project_tasks": project_tasks[:30],
         "review": review,
         "recommendations": recs,
+        "actions": actions,
     })
