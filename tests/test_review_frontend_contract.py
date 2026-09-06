@@ -97,3 +97,51 @@ def test_feedback_cards_follow_status_visibility_order_sorting_and_manual_refres
     assert "确认删除该反馈" not in js
     assert "closeRightSidebar();" in js
     assert "position: static;" in css
+
+
+def test_feedback_position_contract_uses_canonical_position_and_visible_fallback():
+    """All client submissions normalize legacy location and every card labels an empty locator."""
+    js = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
+    share = (ROOT / "dev/static/share-view.html").read_text(encoding="utf-8")
+    store = (ROOT / "dev/store.py").read_text(encoding="utf-8")
+    share_routes = (ROOT / "dev/share_routes.py").read_text(encoding="utf-8")
+
+    assert "function _feedbackPosition(item)" in js
+    assert "return '定位：' + (_feedbackPosition(item) || '—');" in js
+    assert "position: _feedbackPosition(item)" in js
+    assert "position: _feedbackPosition(it)" in js
+    assert "_feedbackPositionLabel(item)" in js
+    assert "item.status === 'deleted' ? '已取消'" in js
+    assert "function _sharePosition(item)" in share
+    assert "'定位：' + (_sharePosition(it) || '—')" in share
+    assert "position: _sharePosition(it)" in share
+    assert 'sel.get("position") or sel.get("location")' in store
+    assert 'selection.get("position") or selection.get("location")' in share_routes
+
+
+def test_share_history_and_panel_state_contracts():
+    """Share history uses the token-scoped API; tooltip sends preserve panel state."""
+    share = (ROOT / "dev/static/share-view.html").read_text(encoding="utf-8")
+    routes = (ROOT / "dev/share_routes.py").read_text(encoding="utf-8")
+    assert "'/share/' + TOKEN + '/feedback'" in share
+    assert "await _shareLoadSubmitted();" in share
+    assert "preservePanelState: panelWasOpen" in share
+    assert "if (!options.preservePanelState) closeShareFeedback();" in share
+    assert "syncShareFeedbackButton" in share
+    assert "aria-pressed=\"false\"" in share
+    assert "_shareStatusLabel(it.status)" in share
+    assert "time.textContent = String(it.updated || it.created || '').substring(5,16);" in share
+    assert "创建 ' + String(it.created" not in share
+    assert "item.get(\"share_token_id\") == token_id" in routes
+    assert "_feedback_paths_match(safe_rel, item.get(\"file\", \"\"))" in routes
+
+
+def test_feedback_card_times_show_only_last_updated_time():
+    """Review, completed, and share feedback cards show updated time before created time."""
+    js = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
+    share = (ROOT / "dev/static/share-view.html").read_text(encoding="utf-8")
+
+    assert js.count("String(item.updated || item.created || '').substring(5, 16)") >= 3
+    assert "function _feedbackStage(item)" not in js
+    assert "time.textContent = String(it.updated || it.created || '').substring(5,16);" in share
+    assert "创建 ' + String(it.created" not in share

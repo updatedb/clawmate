@@ -133,7 +133,12 @@ def list_items(
     """
     path = _get_feedback_path(root_id, project)
     data = _read_feedback(path)
-    items = list(data.get("items", []))
+    # Normalize old on-disk records at the API boundary as well as on create:
+    # callers always receive the canonical `position` field.
+    items = [
+        {**item, "position": str(item.get("position") or item.get("location") or "").strip()}
+        for item in data.get("items", [])
+    ]
 
     if status and status != "all":
         items = [i for i in items if i.get("status") == status]
@@ -287,7 +292,9 @@ def _create_items_locked(
         note = str(sel.get("note", "")).strip()
         _action_from_sel = str(sel.get("action", "")).strip()
         _scope_from_sel = str(sel.get("scope", "")).strip()
-        position = str(sel.get("position", "") or "").strip()
+        # `position` is canonical; accept legacy `location` so a field-name
+        # migration cannot silently discard a locator.
+        position = str(sel.get("position") or sel.get("location") or "").strip()
 
         # action/scope：优先使用前端传入值，降级到从 note 匹配标签
         _action, _scope = _action_from_sel, _scope_from_sel
@@ -506,7 +513,7 @@ def create_execution_plan(root_id: str, project: str, item_ids: list[str]) -> di
         files = sorted({str(i.get("file", "")) for i in selected})
         operations = [{"item_id": i["id"], "task_id": i.get("task_id", ""),
                        "action": i.get("action", "modify"), "file": i.get("file", ""),
-                       "content": i.get("content", ""), "position": i.get("position", ""),
+                       "content": i.get("content", ""), "position": i.get("position") or i.get("location", ""),
                        "note": i.get("note", "")} for i in selected]
         task = {"id": task_id, "status": "planned", "item_ids": item_ids,
                 "files": files, "operations": operations,

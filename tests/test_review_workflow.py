@@ -69,3 +69,18 @@ def test_list_items_matches_equivalent_relative_paths(review_project):
     # project-prefixed path (or vice versa).
     assert len(store.list_items("root", "project", file="project/note.md")[0]) == 1
     assert len(store.list_items("root", "project", file="note.md")[0]) == 1
+
+
+def test_create_items_normalizes_legacy_location_to_position(review_project):
+    created = store.create_items("root", "project", "project/note.md", [{
+        "text": "selected text", "note": "keep locator", "location": "Line 2",
+    }])
+
+    assert created[0]["position"] == "Line 2"
+
+    stored = review_project.parent / ".clawmate" / "feedback.json"
+    data = store._read_feedback(stored)
+    data["items"].append({"id": "FD-legacy", "file": "project/note.md", "location": "Line 3"})
+    stored.write_text(__import__("json").dumps(data), encoding="utf-8")
+    listed, _ = store.list_items("root", "project")
+    assert next(item for item in listed if item["id"] == "FD-legacy")["position"] == "Line 3"

@@ -87,3 +87,31 @@ def test_create_share_reuses_token_and_updates_expiry(share_client, monkeypatch)
     assert second["token"] == first["token"]
     assert second["reused"] is True
     assert second["expires_at"] == now + 100 + 30 * 86400
+
+
+def test_share_feedback_history_is_limited_to_its_token_and_file(share_client, monkeypatch):
+    now = 1_700_000_000
+    monkeypatch.setattr(share_routes.time, "time", lambda: now)
+    token = share_client.post(
+        "/api/clawmate/share/create",
+        json={"root": "root-a", "path": "note.md"},
+    ).json()["token"]
+    token_id = share_routes.hashlib.sha256(token.encode()).hexdigest()[:16]
+    monkeypatch.setattr(share_routes, "find_project_marker", lambda root, path: "project-a")
+    monkeypatch.setattr(
+        "store.list_items",
+        lambda *args, **kwargs: ([
+            {"id": "FD-visible", "share_token_id": token_id, "file": "project-a/note.md", "status": "approved", "created": "2026-01-01 10:00:00", "updated": "2026-01-02 10:00:00", "action": "modify", "content": "visible", "note": "keep", "position": "Line 1"},
+            {"id": "FD-other-token", "share_token_id": "other", "file": "note.md", "content": "hidden"},
+            {"id": "FD-other-file", "share_token_id": token_id, "file": "other.md", "content": "hidden"},
+        ], 1),
+    )
+
+    response = share_client.get(f"/api/clawmate/share/{token}/feedback")
+
+    assert response.status_code == 200
+    assert response.json()["items"] == [{
+        "id": "FD-visible", "status": "approved", "created": "2026-01-01 10:00:00",
+        "updated": "2026-01-02 10:00:00", "action": "modify", "content": "visible",
+        "note": "keep", "position": "Line 1",
+    }]

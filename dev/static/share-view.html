@@ -176,7 +176,7 @@
         <button class="topbar-btn" id="btnToggleToc" title="切换大纲">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
         </button>
-        <button class="topbar-btn" id="btnShareFeedback" title="反馈">
+        <button class="topbar-btn" id="btnShareFeedback" title="打开反馈" aria-pressed="false">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         </button>
         <button class="topbar-btn" id="themeToggle" title="切换主题">
@@ -528,6 +528,13 @@
     var shareSubmitted = []; // same shape, submitted/已提交
     var _shareFbId = 0;
     var shareFbFilter = 'pending';
+
+    // `position` is canonical; render legacy `location` records as a
+    // compatibility fallback and submit only the normalized position value.
+    function _sharePosition(item) {
+      if (!item) return '';
+      return String(item.position || item.location || '').trim();
+    }
     var _shareAuthor = '';
     var _shareSelSavedText = '';
 
@@ -563,6 +570,9 @@
       var btns = shareRight.querySelectorAll('[data-share-filter]');
       btns.forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-share-filter') === shareFbFilter); });
     }
+    function _shareStatusLabel(status) {
+      return ({pending_review:'已提交', approved:'已评审', rejected:'已拒绝', planned:'已计划', in_progress:'处理中', executed:'已执行', failed:'失败'})[status] || status || '已提交';
+    }
 
     // Feedback card: reuses the shared fb-card components so it matches the
     // review panel exactly (时间/定位/选中内容/建议/动作). Delete uses fb-btn-delete.
@@ -572,14 +582,14 @@
       var card = document.createElement('div');
       card.className = 'fb-card' + (isReadOnly ? ' fb-card-completed' : '');
 
-      // Header matches review cards: lifecycle time + feedback ID + action.
+      // Header matches review cards: last feedback time + ID + action.
       var head = document.createElement('div'); head.className = 'fb-card-header';
       var id = document.createElement('span'); id.className = 'fb-card-id';
       id.textContent = it.id || '';
       var status = document.createElement('span'); status.className = 'fb-status-pill ' + (isReadOnly ? 'pending_review' : 'pending');
-      status.textContent = isReadOnly ? '已提交' : '待提交';
+      status.textContent = isReadOnly ? _shareStatusLabel(it.status) : '待提交';
       var time = document.createElement('span'); time.className = 'fb-card-time fb-card-stage-time';
-      time.textContent = (isReadOnly ? '提交 ' : '创建 ') + String(it.updated || it.created || '').substring(5,16);
+      time.textContent = String(it.updated || it.created || '').substring(5,16);
       var del = document.createElement('button'); del.className = 'fb-btn-delete'; del.textContent = '✕'; del.title = '删除';
       del.addEventListener('click', function(e) {
         e.stopPropagation();
@@ -600,13 +610,16 @@
       // 定位
       if (isReadOnly) {
         var roPos = document.createElement('div'); roPos.className = 'fb-card-position';
-        roPos.textContent = it.position ? ('定位：' + it.position) : '定位：—';
+        roPos.textContent = '定位：' + (_sharePosition(it) || '—');
         card.appendChild(roPos);
       } else {
+        var posLabel = document.createElement('div'); posLabel.className = 'fb-card-position';
+        posLabel.textContent = '定位：' + (_sharePosition(it) || '—');
+        card.appendChild(posLabel);
         var pos = document.createElement('input'); pos.type='text'; pos.className='fb-card-position-edit';
-        pos.value = it.position || '';
-        pos.placeholder = 'Line {start}-{end} — 定位';
-        pos.addEventListener('input', function(){ it.position = pos.value; });
+        pos.value = _sharePosition(it);
+        pos.placeholder = '定位：—（Line {start}-{end}）';
+        pos.addEventListener('input', function(){ it.position = pos.value; posLabel.textContent = '定位：' + (_sharePosition(it) || '—'); });
         pos.addEventListener('click', function(e){ e.stopPropagation(); });
         card.appendChild(pos);
       }
@@ -699,8 +712,15 @@
       if (submitBtn) submitBtn.classList.toggle('hidden', shareFbFilter !== 'pending');
     }
 
-    function openShareFeedback() { shareRight.classList.remove('hidden'); shareRight.classList.add('open'); }
-    function closeShareFeedback() { shareRight.classList.add('hidden'); shareRight.classList.remove('open'); }
+    function syncShareFeedbackButton() {
+      var btn = document.getElementById('btnShareFeedback');
+      var isOpen = !shareRight.classList.contains('hidden');
+      btn.classList.toggle('active', isOpen);
+      btn.setAttribute('aria-pressed', String(isOpen));
+      btn.title = isOpen ? '关闭反馈' : '打开反馈';
+    }
+    function openShareFeedback() { shareRight.classList.remove('hidden'); shareRight.classList.add('open'); syncShareFeedbackButton(); }
+    function closeShareFeedback() { shareRight.classList.add('hidden'); shareRight.classList.remove('open'); syncShareFeedbackButton(); }
     function toggleShareFeedback() {
       if (shareRight.classList.contains('hidden')) openShareFeedback();
       else closeShareFeedback();
@@ -736,9 +756,10 @@
       if (!_shareSelAction()) { _shareSelRenderStatus('请选择操作类型', false); return; }
       var action = _shareSelAction();
       var item = { id: 'FD-' + (++_shareFbId), created: new Date().toISOString(), position: shareSelLocation.value.trim(), text: sel.slice(0,800), note: note, action: action, scope: _shareSelScope() };
+      var panelWasOpen = !shareRight.classList.contains('hidden');
       _shareSelNoteReset();
       shareSelTooltip.classList.add('hidden');
-      _shareSubmitPending([item]);
+      _shareSubmitPending([item], { preservePanelState: panelWasOpen });
     });
 
     // 面板「添加反馈」→ hint user to select text
@@ -753,12 +774,13 @@
       _shareSubmitPending(sharePending.slice());
     });
 
-    async function _shareSubmitPending(list) {
+    async function _shareSubmitPending(list, options) {
+      options = options || {};
       var btn = document.getElementById('shareFbSubmit'); if (btn) btn.disabled = true;
       _shareFbStatus('提交中...', false);
       try {
         var payload = { author: _shareAuthor, selections: list.map(function(it) {
-          return { text: it.text, note: it.note, action: it.action || 'modify', position: it.position || '' };
+          return { text: it.text, note: it.note, action: it.action || 'modify', position: _sharePosition(it) };
         }) };
         var response = await fetch(API_BASE + '/share/' + TOKEN + '/feedback', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
         var data = await response.json();
@@ -772,6 +794,8 @@
           var c = Object.assign({}, it);
           c.id = ids[idx] || it.id;
           if (!c.created) c.created = new Date().toISOString();
+          c.status = 'pending_review';
+          c.updated = c.updated || c.created;
           return c;
         });
         shareSubmitted = shareSubmitted.concat(submittedItems);
@@ -779,7 +803,9 @@
         shareFbFilter = 'submitted';
         _shareRender();
         _shareFbStatus('✅ 已提交评审（' + list.length + ' 条）', true);
-        closeShareFeedback();
+        // A selection-tooltip submission must leave the panel exactly as the
+        // user had it; panel/card submissions retain their close-on-success UX.
+        if (!options.preservePanelState) closeShareFeedback();
       } catch (err) {
         _shareFbStatus('❌ ' + err.message, false);
       } finally {
@@ -879,6 +905,19 @@
     // Load action templates first, then render (actions shared with review panel).
     _shareLoadTemplates().then(_shareRender);
 
+    async function _shareLoadSubmitted() {
+      var response = await fetch(API_BASE + '/share/' + TOKEN + '/feedback');
+      if (!response.ok) throw new Error('加载历史反馈失败 (' + response.status + ')');
+      var data = await response.json();
+      shareSubmitted = (data.items || []).map(function(item) {
+        return {
+          id: item.id || '', status: item.status || '', created: item.created || '', updated: item.updated || '',
+          action: item.action || '', text: item.content || '', note: item.note || '', position: _sharePosition(item)
+        };
+      });
+      _shareRender();
+    }
+
     async function loadContent() {
       try {
         var res = await fetch(API_BASE + '/share/' + TOKEN + '/data');
@@ -890,6 +929,7 @@
         // Store root/file for image path rewriting
         _shareRoot = data.root || '';
         _shareFile = data.path || '';
+        await _shareLoadSubmitted();
         document.getElementById('shareExpiry').textContent = data.expires_str ? '⏳ ' + data.expires_str + ' 前有效' : '⏳ -';
 
         var ext = data.suffix ? data.suffix.replace('.','').toLowerCase() : '';
@@ -935,6 +975,7 @@
         body.innerHTML = '<div class="share-error">❌ 加载出错: ' + e.message + '</div>';
       }
     }
+    syncShareFeedbackButton();
     loadContent();
   })();
   </script>

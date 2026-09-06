@@ -5,6 +5,7 @@ Endpoints:
     POST /api/clawmate/share/create  — 为指定文件生成 1/3/7/30 天分享链接
     GET  /api/clawmate/share/{token}/data — 返回分享文件内容 JSON
     GET  /api/clawmate/share/{token}/raw  — 返回原始文件（媒体文件用）
+    GET  /api/clawmate/share/{token}/feedback — 返回该分享链接提交的反馈
 """
 
 from __future__ import annotations
@@ -306,7 +307,7 @@ async def share_feedback_create(token: str, request: Request):
             continue
         normalized.append({"text": str(selection.get("text") or selection.get("content") or "").strip(),
             "note": str(selection.get("note", "")).strip()[:4000],
-            "position": str(selection.get("position", "")).strip()[:240],
+            "position": str(selection.get("position") or selection.get("location") or "").strip()[:240],
             "start_line": selection.get("start_line") or selection.get("startLine") or 0,
             "end_line": selection.get("end_line") or selection.get("endLine") or 0,
             "context_before": str(selection.get("context_before", ""))[-240:],
@@ -320,6 +321,39 @@ async def share_feedback_create(token: str, request: Request):
     if not items:
         raise HTTPException(status_code=409, detail="重复反馈")
     return {"ok": True, "ids": [i["id"] for i in items]}
+
+
+@router.get("/api/clawmate/share/{token}/feedback")
+async def share_feedback_list(token: str):
+    """Return only feedback submitted through this token for its shared file."""
+    link = _find_link(token)
+    if not link:
+        raise HTTPException(status_code=410, detail="链接已过期或不存在")
+    try:
+        root_path, _, safe_rel = safe_path(link["root"], link["file"])
+        project = find_project_marker(root_path, safe_rel)
+    except Exception:
+        project = ""
+    if not project:
+        raise HTTPException(status_code=422, detail="共享文件不属于已初始化项目")
+
+    # A token is a public capability, so do not expose the project's general
+    # feedback list. Match both its non-reversible token identifier and the
+    # shared file (including legacy root-relative/project-prefixed paths).
+    from store import _feedback_paths_match, list_items
+    token_id = hashlib.sha256(token.encode()).hexdigest()[:16]
+    try:
+        items, _ = list_items(link["root"], project, file=safe_rel)
+    except (FileNotFoundError, ValueError):
+        items = []
+    fields = ("id", "status", "created", "updated", "action", "content", "note", "position")
+    visible = [
+        {field: item.get(field, "") for field in fields}
+        for item in items
+        if item.get("share_token_id") == token_id
+        and _feedback_paths_match(safe_rel, item.get("file", ""))
+    ]
+    return {"items": visible}
 
 
 @router.get("/api/clawmate/share/{token}/raw")

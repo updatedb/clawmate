@@ -3988,7 +3988,7 @@
 
     // Completed items — split pending/in_progress vs done/failed
     const pendingOrProgress = mediaCompletedItems.filter(i => i.status === 'pending' || i.status === 'in_progress');
-    const doneOrFailed = mediaCompletedItems.filter(i => i.status === 'done' || i.status === 'failed');
+    const doneOrFailed = mediaCompletedItems.filter(i => i.status === 'done' || i.status === 'failed' || i.status === 'deleted');
     if (pendingOrProgress.length > 0) {
       const sep = document.createElement('div');
       sep.className = 'fb-section-sep';
@@ -4015,7 +4015,7 @@
       const res = await fetch(`/api/clawmate/feedback/list?root=${encodeURIComponent(rootId)}&project=${encodeURIComponent(project)}&file=${encodeURIComponent(fn)}`);
       if (!res.ok) return;
       const data = await res.json();
-      mediaCompletedItems = (data.items || []).filter(i => i.status !== 'deleted').sort((a, b) => (b.updated || '').localeCompare(a.updated || ''));
+      mediaCompletedItems = (data.items || []).sort((a, b) => (b.updated || '').localeCompare(a.updated || ''));
       renderMediaFeedbackPanel();
     } catch (_) {}
   }
@@ -4151,7 +4151,7 @@
       const res = await fetch(`/api/clawmate/feedback/list?root=${encodeURIComponent(rootId)}&project=${encodeURIComponent(project)}&file=${encodeURIComponent(fn)}`);
       if (!res.ok) return;
       const data = await res.json();
-      officePdfCompletedItems = (data.items || []).filter(i => i.status !== 'deleted').sort((a, b) => (b.updated || '').localeCompare(a.updated || ''));
+      officePdfCompletedItems = (data.items || []).sort((a, b) => (b.updated || '').localeCompare(a.updated || ''));
       renderOfficePdfFeedbackPanel();
     } catch (_) {}
   }
@@ -5027,6 +5027,38 @@
   let officePdfPendingItems = [];
   let imagePendingItems = [];
 
+  // `position` is the API/storage contract. Older feedback records may use
+  // `location`, so use it only as a read compatibility fallback.
+  function _feedbackPosition(item) {
+    if (!item) return '';
+    var position = item.position;
+    if (position !== undefined && position !== null && String(position).trim()) return String(position).trim();
+    var location = item.location;
+    return location === undefined || location === null ? '' : String(location).trim();
+  }
+
+  function _feedbackPositionLabel(item) {
+    return '定位：' + (_feedbackPosition(item) || '—');
+  }
+
+  function _appendEditablePosition(card, item, placeholder) {
+    var label = document.createElement('div');
+    label.className = 'fb-card-position';
+    label.textContent = _feedbackPositionLabel(item);
+    card.appendChild(label);
+    var input = document.createElement('input');
+    input.type = 'text'; input.className = 'fb-card-position-edit';
+    input.value = _feedbackPosition(item); input.placeholder = placeholder;
+    input.title = '位置（可编辑）';
+    input.addEventListener('input', function() {
+      item.position = input.value;
+      label.textContent = _feedbackPositionLabel(item);
+    });
+    input.addEventListener('click', function(e) { e.stopPropagation(); });
+    card.appendChild(input);
+    return input;
+  }
+
   // ============ Feedback Card Factory ============
   // Unified factory for creating pending feedback cards.
   // Used by: tooltip "加入待办", panel "+ 添加反馈", and renderFeedbackPanel.
@@ -5082,14 +5114,19 @@
     card.appendChild(headerRow);
 
     // Position editable input — format depends on item type
+    const positionLabel = document.createElement('div');
+    positionLabel.className = 'fb-card-position';
+    positionLabel.textContent = _feedbackPositionLabel(item);
+    card.appendChild(positionLabel);
     const posInput = document.createElement('input');
     posInput.type = 'text';
     posInput.className = 'fb-card-position-edit';
     // 优先用 item.position，回退到 startLine 组合
-    var _posVal = item.position || '';
+    var _posVal = _feedbackPosition(item);
     if (!_posVal && item.startLine > 0) {
       _posVal = 'Line ' + item.startLine + '-' + item.endLine;
     }
+    if (!_feedbackPosition(item) && _posVal) item.position = _posVal;
     posInput.value = _posVal;
     if (itemType === 'text') {
       posInput.placeholder = 'Line {start}-{end} — 手动填写位置';
@@ -5103,6 +5140,7 @@
     posInput.title = '位置（可编辑）';
     posInput.addEventListener('input', () => {
       item.position = posInput.value;
+      positionLabel.textContent = _feedbackPositionLabel(item);
       var m = posInput.value.match(/(\d+)(?:-(\d+))?/);
       if (m) {
         item.startLine = parseInt(m[1], 10);
@@ -5245,8 +5283,7 @@
     var meta = document.createElement('span');
     meta.className = 'fb-card-time fb-card-stage-time';
     if (!item.created) item.created = new Date().toISOString();
-    var d = new Date(item.created);
-    meta.textContent = String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+    meta.textContent = String(item.updated || item.created || '').substring(5, 16);
     var del = document.createElement('button');
     del.className = 'fb-btn-delete'; del.textContent = '✕';
     del.addEventListener('click', function(e){
@@ -5260,11 +5297,15 @@
     card.appendChild(head);
 
     // Position
+    var positionLabel = document.createElement('div'); positionLabel.className = 'fb-card-position';
+    positionLabel.textContent = _feedbackPositionLabel(item);
+    card.appendChild(positionLabel);
     var pos = document.createElement('input'); pos.type='text'; pos.className='fb-card-position-edit';
-    pos.value = item.position || (item.startLine > 0 ? 'Line '+item.startLine+'-'+item.endLine : '');
-    pos.placeholder = 'Line {start}-{end} — 位置';
+    pos.value = _feedbackPosition(item) || (item.startLine > 0 ? 'Line '+item.startLine+'-'+item.endLine : '');
+    pos.placeholder = '定位：—（Line {start}-{end}）';
     pos.addEventListener('input', function(){
       item.position = pos.value;
+      positionLabel.textContent = _feedbackPositionLabel(item);
       var m = pos.value.match(/(\d+)(?:-(\d+))?/);
       if (m) { item.startLine = parseInt(m[1],10); item.endLine = m[2]?parseInt(m[2],10):item.startLine; }
     });
@@ -5418,7 +5459,7 @@
           body: JSON.stringify({
             root: rootId,
             file: filePath,
-            selections: [{ task_id: 'review_modify', content: selection || note, note: note || '', position: position || note }],
+            selections: [{ task_id: 'review_modify', content: selection || note, note: note || '', position: position }],
           }),
         });
         const data = await res.json();
@@ -5460,7 +5501,8 @@
     var statusLabel =
       item.status === 'done' || item.status === 'executed' ? '已执行' :
       item.status === 'in_progress' ? '执行中' :
-      item.status === 'failed' ? '执行失败' : '待处理';
+      item.status === 'failed' ? '执行失败' :
+      item.status === 'deleted' ? '已取消' : '待处理';
     var statusIcon = '<span class="fb-status-pill ' + (item.status || 'pending') + '">' + statusLabel + '</span>';
 
     // Truncate selection display at 80 chars
@@ -5476,7 +5518,7 @@
     header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;';
     const left = document.createElement('div');
     left.style.cssText = 'display:flex;align-items:center;gap:var(--space-1);min-width:0;flex:1;';
-    const time = document.createElement('span'); time.className = 'fb-card-time fb-card-stage-time'; time.textContent = _feedbackStage(item);
+    const time = document.createElement('span'); time.className = 'fb-card-time fb-card-stage-time'; time.textContent = String(item.updated || item.created || '').substring(5, 16);
     const id = document.createElement('span'); id.className = 'fb-card-id'; id.textContent = item.id || '';
     const action = document.createElement('span'); action.className = 'fb-card-action'; action.textContent = _actionLabel(item.action) || '—';
     const status = document.createElement('span'); status.className = 'fb-card-status'; status.innerHTML = statusIcon;
@@ -5527,7 +5569,7 @@
     card.appendChild(note);
     const pos = document.createElement('div');
     pos.className = 'fb-card-position';
-    pos.textContent = item.position || item.location || '';
+    pos.textContent = _feedbackPositionLabel(item);
     card.appendChild(pos);
 
     // 处理结果: only show for done/failed items with result text
@@ -5588,7 +5630,7 @@
     }
 
     addRow('文件', item.file || '');
-    addRow('选中位置', item.position || item.location || '');
+    addRow('选中位置', _feedbackPosition(item) || '—');
     addRow('选区内容', item.selection_content || item.text || item.content || '', 'selection');
     addRow('用户备注', item.user_note || item.note || '', 'selection');
     addRow('处理结果', item.result || item.processing_result || '', 'result');
@@ -5697,7 +5739,7 @@
       const res = await fetch(`/api/clawmate/feedback/list?root=${encodeURIComponent(rootId)}&project=${encodeURIComponent(project)}&file=${encodeURIComponent(fn)}`);
       if (!res.ok) return;
       const data = await res.json();
-      imageCompletedItems = (data.items || []).filter(i => i.status !== 'deleted').sort((a, b) => (b.updated || '').localeCompare(a.updated || ''));
+      imageCompletedItems = (data.items || []).sort((a, b) => (b.updated || '').localeCompare(a.updated || ''));
       renderImageFeedbackPanel();
     } catch (_) {}
   }
@@ -5719,7 +5761,7 @@
       const res = await fetch(`/api/clawmate/feedback/list?root=${encodeURIComponent(rootId)}&project=${encodeURIComponent(project)}&file=${encodeURIComponent(fn)}`);
       if (!res.ok) return;
       const data = await res.json();
-      completedItems = (data.items || []).filter(i => i.status !== 'deleted').sort((a, b) => (b.updated || '').localeCompare(a.updated || ''));
+      completedItems = (data.items || []).sort((a, b) => (b.updated || '').localeCompare(a.updated || ''));
       renderFeedbackPanel();
     } catch (_) {}
   }
@@ -5733,7 +5775,7 @@
   function buildTaskSelection(item) {
     // 将 feedback panel 的 item 转为 task/run 的 selection 格式
     const taskId = item.task_id || (item.action ? 'review_' + item.action : 'review_modify');
-    return { task_id: taskId, content: item.text || item.content || '', note: item.note || '', position: item.position || '' };
+    return { task_id: taskId, content: item.text || item.content || '', note: item.note || '', position: _feedbackPosition(item) };
   }
 
   async function submitSingleItem(item) {
@@ -5762,9 +5804,9 @@
           selPayload.startLine = item.startLine;
           selPayload.endLine = item.endLine || item.startLine;
         }
-        selPayload.position = item.position || '';
+        selPayload.position = _feedbackPosition(item);
       } else {
-        selPayload.position = item.position || '';
+        selPayload.position = _feedbackPosition(item);
       }
       const res = await fetch('/api/clawmate/feedback', {
         method: 'POST',
@@ -5839,12 +5881,10 @@
           root: rootId,
           file: filePath,
           selections: pendingArray.map(it => {
-            const p = { task_id: it.task_id || (it.action ? 'review_' + it.action : 'review_modify'), content: it.text || it.content || '', note: it.note || '', position: it.position || '' };
+            const p = { task_id: it.task_id || (it.action ? 'review_' + it.action : 'review_modify'), content: it.text || it.content || '', note: it.note || '', position: _feedbackPosition(it) };
             if ((itemType === 'text' || itemType === 'markdown') && it.startLine > 0) {
               p.startLine = it.startLine;
               p.endLine = it.endLine || it.startLine;
-            } else if (it.position) {
-              p.position = it.position;
             }
             return p;
           }),
@@ -7139,14 +7179,6 @@
     return map[status] || status;
   }
 
-  function _feedbackStage(item) {
-    var status = item.status || '';
-    var label = (status === 'approved' || status === 'planned' || status === 'rejected') ? '评审' :
-      (status === 'in_progress' || status === 'executed' || status === 'failed' || status === 'deleted') ? '执行' :
-      item.source === 'share' ? '提交' : '创建';
-    return label + ' ' + String(item.updated || item.created || '').substring(5, 16);
-  }
-
   function _feedbackPathsMatch(left, right) {
     function normalize(path) { return String(path || '').replace(/\\/g, '/').split('/').filter(function(part) { return part && part !== '.'; }).join('/'); }
     left = normalize(left); right = normalize(right);
@@ -7279,7 +7311,7 @@
     status.textContent = _statusLabel(item.status);
     head.appendChild(status);
     var time = document.createElement('span'); time.className = 'fb-card-time fb-card-stage-time';
-    time.textContent = _feedbackStage(item);
+    time.textContent = String(item.updated || item.created || '').substring(5, 16);
     head.appendChild(time);
     if (item.status !== 'pending_review') {
       var action = document.createElement('span'); action.className = 'fb-card-action';
@@ -7302,7 +7334,7 @@
     card.appendChild(head);
 
     var pos = document.createElement('div'); pos.className = 'review-card-position';
-    pos.textContent = (item.file || '') + (item.position ? ' · ' + item.position : '');
+    pos.textContent = (item.file || '') + ' · ' + _feedbackPositionLabel(item);
     card.appendChild(pos);
 
     // Content: editable textarea only for 待评审 (pending_review)
