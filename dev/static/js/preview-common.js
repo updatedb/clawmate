@@ -70,6 +70,26 @@
     global.showToast(msg || '已复制');
   };
 
+  // Single source of truth for actions offered for a selected file. Both the
+  // review page and public share page receive templates from /config (where
+  // extensions are exposed as match_ext); accepting match.ext too keeps this
+  // helper usable with the on-disk template shape in deterministic tests.
+  global.getSelectionActionTemplates = function(templates, fileOrExt) {
+    var list = Array.isArray(templates) ? templates : [];
+    var ext = String(fileOrExt || '').split('.').pop().toLowerCase();
+    var allowed = list.filter(function(template) {
+      if (!template || template.source !== 'selection') return false;
+      if (!template.frontend || !(template.frontend.tooltip || template.frontend.panel)) return false;
+      var matchExt = Array.isArray(template.match_ext) ? template.match_ext :
+        (template.match && Array.isArray(template.match.ext) ? template.match.ext : []);
+      return matchExt.indexOf('*') >= 0 || matchExt.indexOf(ext) >= 0;
+    });
+    // Only an unavailable/empty API response gets a fallback. A configured
+    // template that simply does not match this extension must yield no action.
+    if (list.length) return allowed;
+    return [{ id: 'review_replace', label: '📈 替换', action: 'replace', scope: 'document' }];
+  };
+
   // ── Position 生成 ──────────────────────────────────────────────
   global.getPosValue = function(ext, startLine, endLine) {
     if (!startLine) return '';

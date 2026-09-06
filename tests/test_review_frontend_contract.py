@@ -1,7 +1,45 @@
+import json
 from pathlib import Path
+import subprocess
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_selection_action_filter_is_shared_extension_safe_and_execute_free_fallback():
+    """The shared client filter must not leak exe-only actions to text files."""
+    common = ROOT / "dev/static/js/preview-common.js"
+    templates = json.loads((ROOT / "task_templates.json").read_text(encoding="utf-8"))
+    script = """
+const fs = require('fs');
+const vm = require('vm');
+const context = { window: {} };
+vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), context);
+const templates = JSON.parse(process.argv[2]);
+const filter = context.window.getSelectionActionTemplates;
+console.log(JSON.stringify({
+  md: filter(templates, 'notes.md').map(t => t.action),
+  exe: filter(templates, 'setup.exe').map(t => t.action),
+  fallback: filter([], 'notes.md').map(t => t.action),
+}));
+"""
+    result = subprocess.run(
+        ["node", "-e", script, str(common), json.dumps(templates)],
+        check=True, capture_output=True, text=True,
+    )
+    filtered = json.loads(result.stdout)
+    assert "execute" not in filtered["md"]
+    assert "execute" in filtered["exe"]
+    assert filtered["fallback"] == ["replace"]
+
+    preview = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
+    share = (ROOT / "dev/static/share-view.html").read_text(encoding="utf-8")
+    assert "getSelectionActionTemplates(_taskTemplates" in preview
+    assert "getSelectionActionTemplates(_shareTemplates" in share
+    assert "match_ext.indexOf" not in preview
+    assert "match_ext.indexOf" not in share
+    assert "action: 'execute'" not in preview
+    assert "execute:'" not in share
 
 
 def test_preview_uses_single_atomic_execute_request_for_feedback_submission():
@@ -78,8 +116,8 @@ def test_share_and_review_share_dynamic_action_templates_and_readonly_views():
     assert "_taskTemplates" in js
     assert "review-card-content" in js  # 只读视图用 div 展示，非 textarea
     assert "review-card-note" in js
-    # 浮窗 action 来源动态，不再写死列表
-    assert "match_ext" in js
+    # 浮窗 action 来源动态，并委托给与分享页相同的扩展过滤入口
+    assert "getSelectionActionTemplates" in js
 
 
 def test_card_submit_review_uses_the_same_button_style_as_review_approval():

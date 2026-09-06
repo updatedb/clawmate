@@ -5263,20 +5263,7 @@
     const tagRow = document.createElement('div');
     tagRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;';
     var _ext = (filePath || '').split('.').pop().toLowerCase();
-    var _tagMap = _taskTemplates.length ? _taskTemplates.filter(function(t) {
-      return t.source === 'selection' &&
-        (t.match_ext.indexOf('*') >= 0 || t.match_ext.indexOf(_ext) >= 0);
-    }) : [];
-    // 当 _taskTemplates 为空时使用硬编码兜底（兼容旧部署）
-    if (!_tagMap.length) {
-      _tagMap = [
-        { label: '🗑 删除', action: 'delete', scope: 'document' },
-        { label: '🔧 修改', action: 'modify', scope: 'document' },
-        { label: '📈 扩展', action: 'explain', scope: 'document' },
-        { label: '📉 简化', action: 'simplify', scope: 'document' },
-        { label: '⚡ 执行', action: 'execute', scope: 'project' },
-      ];
-    }
+    var _tagMap = getSelectionActionTemplates(_taskTemplates, _ext);
     _tagMap.forEach(function(t) {
       const btn = document.createElement('button');
       btn.textContent = t.label;
@@ -5290,9 +5277,6 @@
         } else {
           item.action = t.action;
           item.scope = t.scope;
-          if (t.action === 'execute' && typeof filePath !== 'undefined') {
-            item.text = '读取文件' + filePath;
-          }
         }
         if (isImageMode) renderImageFeedbackPanel();
         else if (isMediaMode) renderMediaFeedbackPanel();
@@ -6445,9 +6429,7 @@
     var container = document.getElementById('pstTags');
     if (!container) return;
     container.innerHTML = '';
-    var filtered = _taskTemplates.filter(function(t) {
-      return t.source === 'selection' && (t.match_ext.indexOf('*') >= 0 || t.match_ext.indexOf(ext) >= 0);
-    });
+    var filtered = getSelectionActionTemplates(_taskTemplates, ext);
     if (!filtered.length) return;
     filtered.forEach(function(t) {
       var btn = document.createElement('button');
@@ -6894,16 +6876,7 @@
       if (fbTags) {
         fbTags.innerHTML = '';
         var ex = (filePath || '').split('.').pop().toLowerCase();
-        var filtered = _taskTemplates.filter(function(t) {
-          return t.source === 'selection' && (t.match_ext.indexOf('*') >= 0 || t.match_ext.indexOf(ex) >= 0);
-        });
-        if (!filtered.length) {
-          filtered = [
-            { id: 'review_modify', label: '🔧 修改', action: 'modify', scope: 'document', agent_prompt: '修改' },
-            { id: 'review_delete', label: '🗑 删除', action: 'delete', scope: 'document', agent_prompt: '删除' },
-            { id: 'review_explain', label: '📈 扩展', action: 'explain', scope: 'document', agent_prompt: '扩展说明' },
-          ];
-        }
+        var filtered = getSelectionActionTemplates(_taskTemplates, ex);
         mobileSelTaskId = '';
         filtered.forEach(function(t) {
           var tag = document.createElement('button');
@@ -7231,8 +7204,7 @@
     for (var i = 0; i < _taskTemplates.length; i++) {
       if (_taskTemplates[i].action === action) return _taskTemplates[i].label;
     }
-    var map = { modify: '🔧 修改', delete: '🗑 删除', explain: '📈 扩展', simplify: '📉 简化',
-                translate: '🌐 翻译', add: '➕ 追加', execute: '⚡ 执行方案' };
+    var map = { replace: '📈 替换' };
     return map[action] || action;
   }
 
@@ -7309,17 +7281,7 @@
     row.className = 'pst-tags';
     row.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;';
     var ext = (filePath || '').split('.').pop().toLowerCase();
-    var tags = _taskTemplates.filter(function(t) {
-      return t.source === 'selection' && (t.match_ext.indexOf('*') >= 0 || t.match_ext.indexOf(ext) >= 0);
-    });
-    if (!tags.length) {
-      tags = [
-        {label:'🔧 修改',action:'modify',scope:'document',id:'review_modify'},
-        {label:'🗑 删除',action:'delete',scope:'document',id:'review_delete'},
-        {label:'📈 扩展',action:'explain',scope:'document',id:'review_explain'},
-        {label:'📉 简化',action:'simplify',scope:'document',id:'review_simplify'},
-      ];
-    }
+    var tags = getSelectionActionTemplates(_taskTemplates, ext);
     tags.forEach(function(t) {
       var b = document.createElement('button');
       b.className = 'pst-tag';
