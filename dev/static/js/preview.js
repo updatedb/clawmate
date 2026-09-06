@@ -5233,6 +5233,97 @@
     return card;
   }
 
+  // Renders the client-side pending cards (待提交) for the review panel
+  // (text/markdown mode). Each card is editable (position / content / note)
+  // and carries a single 「提交评审」 button; submitting turns it into a
+  // pending_review (待评审) item.
+  function createReviewPendingCard(item) {
+    var card = document.createElement('div');
+    card.className = 'fb-card' + (item.id === selectedPendingId ? ' selected' : '');
+    card.dataset.id = item.id;
+
+    // Header: timestamp + delete (X)
+    var head = document.createElement('div');
+    head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;';
+    var meta = document.createElement('span');
+    meta.style.cssText = 'font-size:11px;color:var(--text-muted);font-family:monospace;';
+    if (!item.created) item.created = new Date().toISOString();
+    var d = new Date(item.created);
+    meta.textContent = String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+    var del = document.createElement('button');
+    del.className = 'fb-btn-delete'; del.textContent = '✕';
+    del.addEventListener('click', function(e){
+      e.stopPropagation();
+      pendingItems = pendingItems.filter(function(i){ return i.id !== item.id; });
+      if (selectedPendingId === item.id) selectedPendingId = null;
+      clearHL();
+      renderFeedbackPanel();
+    });
+    head.appendChild(meta); head.appendChild(del);
+    card.appendChild(head);
+
+    // Position
+    var pos = document.createElement('input'); pos.type='text'; pos.className='fb-card-position-edit';
+    pos.value = item.position || (item.startLine > 0 ? 'Line '+item.startLine+'-'+item.endLine : '');
+    pos.placeholder = 'Line {start}-{end} — 位置';
+    pos.addEventListener('input', function(){
+      item.position = pos.value;
+      var m = pos.value.match(/(\d+)(?:-(\d+))?/);
+      if (m) { item.startLine = parseInt(m[1],10); item.endLine = m[2]?parseInt(m[2],10):item.startLine; }
+    });
+    pos.addEventListener('click', function(e){ e.stopPropagation(); });
+    card.appendChild(pos);
+
+    // Content (selection text) — editable
+    var sel = document.createElement('textarea');
+    sel.className = 'fb-note-input';
+    sel.value = item.text || '';
+    sel.placeholder = '<选填>粘贴针对的文中内容';
+    sel.rows = 2;
+    sel.style.cssText = 'font-size:11px;color:var(--text-muted);font-family:monospace;background:var(--bg-code);border-radius:4px;padding:6px 8px;white-space:pre-wrap;word-break:break-all;line-height:1.4;border:1px solid var(--border-color);width:100%;box-sizing:border-box;resize:vertical;';
+    sel.addEventListener('input', function(){ item.text = sel.value; });
+    sel.addEventListener('click', function(e){ e.stopPropagation(); });
+    card.appendChild(sel);
+
+    // Note — editable
+    var note = document.createElement('textarea');
+    note.className = 'fb-note-input';
+    note.placeholder = '<必填>简要说明改动需求';
+    note.value = item.note || '';
+    note.rows = 3;
+    note.addEventListener('input', function(){ item.note = note.value; });
+    note.addEventListener('click', function(e){ e.stopPropagation(); });
+    card.appendChild(note);
+
+    // Submit-to-review button (提交评审)
+    var actions = document.createElement('div');
+    actions.className = 'fb-card-actions';
+    actions.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+    var submit = document.createElement('button');
+    submit.className = 'fb-btn-submit';
+    submit.textContent = '提交评审';
+    submit.addEventListener('click', function(e){
+      e.stopPropagation();
+      if (submit.disabled) return;
+      if (!item.note || !item.note.trim()) { item.note = ''; }
+      if (!item.action) item.action = 'modify';
+      if (!item.scope) item.scope = 'document';
+      submit.disabled = true; submit.textContent = '...';
+      submitSingleItem(item).finally(function(){ submit.disabled = false; submit.textContent = '提交评审'; });
+    });
+    actions.appendChild(submit);
+    card.appendChild(actions);
+
+    // Click card to select/highlight
+    card.addEventListener('click', function(e){
+      if (e.target.closest('input, textarea, button, select')) return;
+      if (selectedPendingId === item.id) { selectedPendingId = null; clearHL(); }
+      else { selectedPendingId = item.id; if (item.text) scrollToText(item.text); }
+      renderFeedbackPanel();
+    });
+    return card;
+  }
+
   function renderFeedbackPanel() {
     // Renders the client-side pending cards (待提交). The toolbar (添加反馈 /
     // 提交反馈 / 执行反馈 / 关闭) and filter row are rendered separately by
@@ -5249,14 +5340,14 @@
       const empty = document.createElement('div');
       empty.className = 'fb-empty';
       empty.style.marginTop = '12px';
-      empty.textContent = '选中文本后点击「📋 加入待办」即可累积，再点「提交反馈」发送';
+      empty.textContent = '选中文本后点击「📋 加入待办」即可累积，再点「提交评审」发送';
       cardList.appendChild(empty);
       body.scrollTop = savedScrollTop;
       return;
     }
 
     [...pendingItems].reverse().forEach(function (item) {
-      cardList.appendChild(createFeedbackCard(item));
+      cardList.appendChild(createReviewPendingCard(item));
     });
     body.scrollTop = savedScrollTop;
   }
@@ -6440,7 +6531,9 @@
       openRightSidebar();
     }
 
-    renderFeedbackPanel();
+    // Jump to 待提交 filter so the added draft is editable there
+    _reviewFilter = 'pending';
+    renderReviewPanel();
     setTimeout(hideTooltip, 800);
   });
 
@@ -6507,9 +6600,9 @@
       if (res.ok && data.ok) {
         // 恢复按钮状态（hideTooltip 不会重置按钮，避免新选中时仍显示 disabled "⏳ ...")
         btn.disabled = false;
-        btn.textContent = '⚡ 立刻执行';
+        btn.textContent = '提交反馈';
         // Immediately close tooltip and auto-open sidebar
-        st.textContent = '✅ 已发送';
+        st.textContent = '✅ 已提交，进入待评审';
         st.className = 'pst-status pst-status-ok';
         hideTooltip();
         // Auto-open right sidebar
@@ -6519,18 +6612,21 @@
         // Start polling with returned IDs
         var ids = data.ids || [];
         _startDesktopPolling(ids, loadCompletedFeedback);
+        // Show the 待评审 list (already-submitted items land here, only deletable)
+        _reviewFilter = 'pending_review';
+        renderReviewPanel();
       } else {
         const err = data;
         st.textContent = '❌ ' + (err.detail || '发送失败');
         st.className = 'pst-status pst-status-error';
         btn.disabled = false;
-        btn.textContent = '⚡ 立刻执行';
+        btn.textContent = '提交反馈';
       }
     } catch (e) {
       st.textContent = '❌ 网络错误';
       st.className = 'pst-status pst-status-error';
       btn.disabled = false;
-      btn.textContent = '⚡ 立刻执行';
+      btn.textContent = '提交反馈';
     }
   });
 
@@ -7160,10 +7256,11 @@
     return data;
   }
 
-  // Filter categories → status lists (''/client means local pending cards)
+  // Filter categories → status lists (''/client means local pending cards).
+  // 已提交 lives in the share/feedback panel only; in the review panel it is
+  // rendered as 待评审 (same pending_review data).
   var _reviewFilterDefs = [
     { key: 'pending',        label: '待提交',           client: true  },
-    { key: 'submitted',      label: '已提交',           statuses: []   },
     { key: 'pending_review', label: '待评审',           statuses: ['pending_review'] },
     { key: 'approved',       label: '已评审',           statuses: ['approved', 'planned'] },
     { key: 'rejected',       label: '已拒绝',           statuses: ['rejected'] },
@@ -7209,13 +7306,23 @@
 
     panel.innerHTML = '<div class="review-loading">加载评审项…</div>';
     try {
-      var res = await fetch('/api/clawmate/feedback/list?root=' + encodeURIComponent(rootId) + '&project=' + encodeURIComponent(project));
+      // Only the current project + current file (需求 6/7)
+      var listUrl = '/api/clawmate/feedback/list?root=' + encodeURIComponent(rootId) + '&project=' + encodeURIComponent(project);
+      if (filePath) listUrl += '&file=' + encodeURIComponent(filePath);
+      var res = await fetch(listUrl);
       var data = await res.json();
       var items = (data.items || []);
-      // 已提交 = everything already persisted to the project feedback file
-      if (_reviewFilter !== 'submitted') {
-        items = items.filter(function(i) { return (def.statuses || []).indexOf(i.status) >= 0; });
+      // Only current file (belt-and-suspenders, since the URL already filters)
+      if (filePath) {
+        var want = String(filePath);
+        var wantBase = want.split('/').pop();
+        items = items.filter(function(i) {
+          var f = String(i.file || '');
+          return f === want || f === wantBase || f.endsWith('/' + wantBase) || f.includes(want);
+        });
       }
+      // status must match the active filter
+      items = items.filter(function(i) { return (def.statuses || []).indexOf(i.status) >= 0; });
       panel.innerHTML = '';
       if (!items.length) {
         var empty = document.createElement('div'); empty.className = 'fb-empty';
@@ -7228,37 +7335,77 @@
     }
   }
 
+  // Build a review card. Behaviour per filter (需求):
+  //  待评审 pending_review — reviewer edits content/note then 评审通过/拒绝 (direct edit).
+  //  已评审 approved/planned — read-only, top-right ✕ rejects, only 执行反馈.
+  //  已拒绝 rejected / 已执行 executed — read-only.
   function buildReviewCard(item, project) {
     var card = document.createElement('article');
     card.className = 'review-card';
 
-    // Header: selection checkbox (approved) + status
     var head = document.createElement('div'); head.className = 'review-card-head';
+
+    // Status badge on the left, editable for pending_review
+    var status = document.createElement('span'); status.className = 'review-card-status';
+    status.textContent = _statusLabel(item.status);
+    head.appendChild(status);
+
+    // Top-right: for approved (已评审) a ✕ to reject; for others a checkbox for
+    // multi-select (approved) is placed left; rejected/executed no corner action.
     if (item.status === 'approved') {
       var check = document.createElement('input'); check.type = 'checkbox';
       check.checked = _reviewSelected.has(item.id);
-      check.title = '选择此已评审建议';
+      check.title = '选择此已评审建议（用于执行反馈）';
       check.addEventListener('change', function() {
         if (check.checked) _reviewSelected.add(item.id); else _reviewSelected.delete(item.id);
       });
       head.appendChild(check);
+      var reject = document.createElement('button');
+      reject.className = 'preview-bottom-btn danger';
+      reject.textContent = '✕';
+      reject.title = '拒绝（移除已评审）';
+      reject.addEventListener('click', async function(){
+        var reason = prompt('拒绝理由（必填）','');
+        if (reason === null) return;
+        await _reviewRequest('/api/clawmate/review/decision', {root:rootId,project:project,ids:[item.id],decision:'rejected',reason:reason});
+        renderReviewPanel();
+      });
+      head.appendChild(reject);
     }
-    var status = document.createElement('span'); status.className = 'review-card-status';
-    status.textContent = _statusLabel(item.status);
-    head.appendChild(status);
     card.appendChild(head);
 
     var pos = document.createElement('div'); pos.className = 'review-card-position';
     pos.textContent = (item.file || '') + (item.position ? ' · ' + item.position : '');
     card.appendChild(pos);
 
-    var content = document.createElement('div'); content.className = 'review-card-content';
-    content.textContent = item.content || '';
-    card.appendChild(content);
+    // Content: editable textarea only for 待评审 (pending_review)
+    var isPendingReview = (item.status === 'pending_review');
+    var noteText = item.note || '';
+    if (isPendingReview) {
+      var contentTa = document.createElement('textarea');
+      contentTa.className = 'fb-note-input';
+      contentTa.value = item.content || '';
+      contentTa.placeholder = '选中内容（评审时可编辑）';
+      contentTa.rows = 2;
+      contentTa.style.cssText = 'font-size:11px;font-family:monospace;background:var(--bg-code);border-radius:4px;padding:6px 8px;white-space:pre-wrap;word-break:break-all;line-height:1.4;border:1px solid var(--border-color);width:100%;box-sizing:border-box;resize:vertical;color:var(--text-primary);';
+      contentTa.addEventListener('input', function(){ item.content = contentTa.value; });
+      card.appendChild(contentTa);
 
-    var note = document.createElement('div'); note.className = 'review-card-note';
-    note.innerHTML = '<strong>建议：</strong>' + _reviewEscape(item.note || '') + (item.review_reason ? '<div><strong>评审意见：</strong>' + _reviewEscape(item.review_reason) + '</div>' : '');
-    card.appendChild(note);
+      var noteTa = document.createElement('textarea');
+      noteTa.className = 'fb-note-input';
+      noteTa.value = noteText;
+      noteTa.placeholder = '建议（评审时可编辑）';
+      noteTa.rows = 3;
+      noteTa.addEventListener('input', function(){ item.note = noteTa.value; });
+      card.appendChild(noteTa);
+    } else {
+      var content = document.createElement('div'); content.className = 'review-card-content';
+      content.textContent = item.content || '';
+      card.appendChild(content);
+      var note = document.createElement('div'); note.className = 'review-card-note';
+      note.innerHTML = '<strong>建议：</strong>' + _reviewEscape(item.note || '') + (item.review_reason ? '<div><strong>评审意见：</strong>' + _reviewEscape(item.review_reason) + '</div>' : '');
+      card.appendChild(note);
+    }
 
     var actions = document.createElement('div'); actions.className = 'review-card-actions';
     var act = function(label, fn, danger) {
@@ -7267,25 +7414,25 @@
       b.textContent = label; b.addEventListener('click', fn); actions.appendChild(b);
     };
 
-    var retryRefine = function() { renderReviewPanel(); };
-
     if (item.status === 'pending_review') {
       act('评审通过', async function() {
         await _reviewRequest('/api/clawmate/review/decision', {root:rootId,project:project,ids:[item.id],decision:'approved'});
-        retryRefine();
+        renderReviewPanel();
       });
       act('评审拒绝', async function() {
         var reason = prompt('拒绝理由（必填）','');
         if (reason === null) return;
         await _reviewRequest('/api/clawmate/review/decision', {root:rootId,project:project,ids:[item.id],decision:'rejected',reason:reason});
-        retryRefine();
+        renderReviewPanel();
       });
     }
     if (item.status === 'approved') {
-      act('创建执行计划', async function() {
+      act('执行反馈', async function() {
         var d = await _reviewRequest('/api/clawmate/review/plan', {root:rootId,project:project,ids:[item.id]});
-        alert('执行计划：\n影响文件：' + (d.task.files || []).join('\n') + '\n预计操作：' + JSON.stringify(d.task.operations));
-        retryRefine();
+        alert('执行计划：\n影响文件：' + (d.task.files || []).join('\n') + '\n即将确认并执行。');
+        var c = await _reviewRequest('/api/clawmate/review/confirm', {root:rootId,project:project,task_id:d.task.id});
+        await _reviewRequest('/api/clawmate/task/run', {root:rootId,project:project,file:item.file,review_task_id:d.task.id,selections:[{task_id:item.task_id||'review_modify'}]});
+        renderReviewPanel();
       });
     }
     if (item.status === 'planned') {
@@ -7293,34 +7440,10 @@
         if (!confirm('确认执行计划并唤醒 Agent？')) return;
         var d = await _reviewRequest('/api/clawmate/review/confirm', {root:rootId,project:project,task_id:item.execution_task_id});
         await _reviewRequest('/api/clawmate/task/run', {root:rootId,project:project,file:item.file,review_task_id:d.task.id,selections:[{task_id:item.task_id||'review_modify'}]});
-        retryRefine();
+        renderReviewPanel();
       });
     }
-    card.appendChild(actions);
-
-    // Reviewer refine request: may only complete requested items; the selected
-    // content/scope stays read-only (immutable for the executor).
-    if (item.status === 'pending_review') {
-      var refineRow = document.createElement('div'); refineRow.className = 'review-refine-row';
-      refineRow.innerHTML = '<textarea placeholder="请求完善内容（仅补充请求事项，不改动选中内容/范围）"></textarea>'
-        + '<div class="refine-actions"><button class="preview-bottom-btn">请求完善</button></div>'
-        + '<div class="review-refine-hint"></div>';
-      var ta = refineRow.querySelector('textarea');
-      var applyBtn = refineRow.querySelector('button');
-      var hint = refineRow.querySelector('.review-refine-hint');
-      if (_reviewRefine[item.id]) {
-        ta.value = _reviewRefine[item.id];
-        hint.textContent = '已记录完善请求（待评审人补充）';
-      }
-      applyBtn.addEventListener('click', function() {
-        var t = ta.value.trim();
-        if (!t) { hint.textContent = '请填写完善请求'; hint.style.color = 'var(--danger)'; return; }
-        _reviewRefine[item.id] = t;
-        hint.textContent = '✅ 已请求完善：仅完善请求事项，不改动选中内容/范围';
-        hint.style.color = 'var(--success, #16a34a)';
-      });
-      card.appendChild(refineRow);
-    }
+    if (actions.childElementCount) card.appendChild(actions);
     return card;
   }
 
@@ -7342,11 +7465,15 @@
   var btnReviewSubmit = document.getElementById('btnReviewSubmit');
   if (btnReviewSubmit) btnReviewSubmit.addEventListener('click', async function() {
     if (!pendingItems.length) { showToastSafe('暂无待提交反馈'); return; }
-    var missing = pendingItems.filter(function(i) { return !i.action; });
-    if (missing.length) { showToastSafe('有 ' + missing.length + ' 条未选择操作类型'); return; }
+    var missing = pendingItems.filter(function(i) { return !i.note || !i.note.trim(); });
+    if (missing.length) { showToastSafe('有 ' + missing.length + ' 条未填写建议'); return; }
     var btn = btnReviewSubmit; if (btn) btn.disabled = true;
+    var before = pendingItems.length;
     try {
       await submitAllItems(btn, { itemType: 'text' });
+      // switch to 待评审 list so the newly submitted items are visible
+      _reviewFilter = 'pending_review';
+      renderReviewPanel();
     } finally {
       if (btn) btn.disabled = false;
     }
@@ -7354,13 +7481,16 @@
   var btnReviewExec = document.getElementById('btnReviewExec');
   if (btnReviewExec) btnReviewExec.addEventListener('click', async function() {
     var project = _reviewProject();
-    if (!pendingItems.length && !_reviewSelected.size) { showToastSafe('请先添加并提交反馈，或勾选已评审建议'); return; }
     var ids = Array.from(_reviewSelected);
-    if (!ids.length) { showToastSafe('请先选择至少一条已评审建议'); return; }
+    if (!ids.length) { showToastSafe('请先勾选至少一条已评审建议'); return; }
     try {
       var d = await _reviewRequest('/api/clawmate/review/plan', {root:rootId,project:project,ids:ids});
       alert('执行计划已创建：' + d.task.id + '\n影响文件：' + (d.task.files || []).join('\n') + '\n即将确认并执行。');
       var c = await _reviewRequest('/api/clawmate/review/confirm', {root:rootId,project:project,task_id:d.task.id});
+      // fire the agent for each affected file
+      for (var i = 0; i < (d.task.files || []).length; i++) {
+        await _reviewRequest('/api/clawmate/task/run', {root:rootId,project:project,file:d.task.files[i],review_task_id:d.task.id,selections:[{task_id:'review_modify'}]});
+      }
       _reviewSelected.clear();
       renderReviewPanel();
     } catch (err) {

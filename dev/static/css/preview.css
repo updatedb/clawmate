@@ -213,7 +213,7 @@
     .fb-card-list {
       flex: 1;
       overflow-y: auto;
-      padding: 0 8px 8px;
+      padding: 10px 8px 8px;
       display: flex;
       flex-direction: column;
       gap: 6px;
@@ -463,6 +463,8 @@
       margin-bottom: 10px; padding: 10px;
       background: var(--bg-secondary);
     }
+    /* first card top spacing inside the scrollable body */
+    .preview-right-body > .review-card:first-child { margin-top: 10px; }
     .review-card-position { font-size: 11px; color: var(--text-muted); font-family: monospace; }
     .review-card-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
     .review-card-content { font-size: 12px; white-space: pre-wrap; word-break: break-word; background: var(--bg-code); border-radius: 4px; padding: 6px 8px; line-height: 1.5; }
