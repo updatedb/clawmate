@@ -346,7 +346,9 @@ async def share_feedback_list(token: str):
         items, _ = list_items(link["root"], project, file=safe_rel)
     except (FileNotFoundError, ValueError):
         items = []
-    fields = ("id", "status", "created", "updated", "action", "content", "note", "position")
+    # Keep `location` as a read-only legacy alias so the public card can use
+    # the same position compatibility fallback as the review surface.
+    fields = ("id", "status", "created", "updated", "action", "content", "note", "position", "location")
     visible = [
         {field: item.get(field, "") for field in fields}
         for item in items

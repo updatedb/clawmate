@@ -5027,6 +5027,23 @@
   let officePdfPendingItems = [];
   let imagePendingItems = [];
 
+  // Unsubmitted review drafts are browser-local only, never server
+  // pending_review records. Scope storage to the same root/project/file tuple
+  // used by feedback APIs so drafts cannot cross files or projects.
+  function _reviewPendingStorageKey() {
+    return 'clawmate.review-pending.v1:' + rootId + ':' + ((filePath || '').split('/')[0] || '') + ':' + filePath;
+  }
+  function _persistReviewPending() {
+    try { localStorage.setItem(_reviewPendingStorageKey(), JSON.stringify(pendingItems)); } catch (e) {}
+  }
+  function _restoreReviewPending() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(_reviewPendingStorageKey()) || '[]');
+      pendingItems = Array.isArray(saved) ? saved : [];
+      pendingItems.forEach(function(item) { idCounter = Math.max(idCounter, Number(item.id) || 0); });
+    } catch (e) { pendingItems = []; }
+  }
+
   // `position` is the API/storage contract. Older feedback records may use
   // `location`, so use it only as a read compatibility fallback.
   function _feedbackPosition(item) {
@@ -5101,6 +5118,7 @@
         officePdfPendingItems = officePdfPendingItems.filter(i => i.id !== item.id);
       } else {
         pendingItems = pendingItems.filter(i => i.id !== item.id);
+        _persistReviewPending();
       }
       if (selectedPendingId === item.id) selectedPendingId = null;
       clearHL();
@@ -5146,6 +5164,7 @@
         item.startLine = parseInt(m[1], 10);
         item.endLine = m[2] ? parseInt(m[2], 10) : item.startLine;
       }
+      if (!isImageMode && !isMediaMode && !isOfficePdfMode) _persistReviewPending();
     });
     posInput.addEventListener('click', e => e.stopPropagation());
     card.appendChild(posInput);
@@ -5158,7 +5177,7 @@
       selInput.placeholder = '<选填>粘贴针对的文中内容';
       selInput.rows = 2;
       selInput.style.cssText = 'font-size:11px;color:var(--text-muted);font-family:monospace;background:var(--bg-code);border-radius:4px;padding:6px 8px;white-space:pre-wrap;word-break:break-all;line-height:1.4;border:1px solid var(--border-color);width:100%;box-sizing:border-box;resize:vertical;';
-      selInput.addEventListener('input', () => { item.text = selInput.value; });
+      selInput.addEventListener('input', () => { item.text = selInput.value; if (!isImageMode && !isMediaMode && !isOfficePdfMode) _persistReviewPending(); });
       selInput.addEventListener('click', e => e.stopPropagation());
       card.appendChild(selInput);
     }
@@ -5172,7 +5191,7 @@
     noteInput.rows = 3;
     noteInput.readOnly = false;
     noteInput.disabled = false;
-    noteInput.addEventListener('input', () => { item.note = noteInput.value; });
+    noteInput.addEventListener('input', () => { item.note = noteInput.value; if (!isImageMode && !isMediaMode && !isOfficePdfMode) _persistReviewPending(); });
     noteInput.addEventListener('click', e => e.stopPropagation());
     card.appendChild(noteInput);
 
@@ -5214,7 +5233,7 @@
         if (isImageMode) renderImageFeedbackPanel();
         else if (isMediaMode) renderMediaFeedbackPanel();
         else if (isOfficePdfMode) renderOfficePdfFeedbackPanel();
-        else renderFeedbackPanel();
+        else { _persistReviewPending(); renderFeedbackPanel(); }
       });
       tagRow.appendChild(btn);
     });
@@ -5289,6 +5308,7 @@
     del.addEventListener('click', function(e){
       e.stopPropagation();
       pendingItems = pendingItems.filter(function(i){ return i.id !== item.id; });
+      _persistReviewPending();
       if (selectedPendingId === item.id) selectedPendingId = null;
       clearHL();
       renderFeedbackPanel();
@@ -5308,6 +5328,7 @@
       positionLabel.textContent = _feedbackPositionLabel(item);
       var m = pos.value.match(/(\d+)(?:-(\d+))?/);
       if (m) { item.startLine = parseInt(m[1],10); item.endLine = m[2]?parseInt(m[2],10):item.startLine; }
+      _persistReviewPending();
     });
     pos.addEventListener('click', function(e){ e.stopPropagation(); });
     card.appendChild(pos);
@@ -5319,7 +5340,7 @@
     sel.placeholder = '<选填>粘贴针对的文中内容';
     sel.rows = 2;
     sel.style.cssText = 'font-size:11px;color:var(--text-muted);font-family:monospace;background:var(--bg-code);border-radius:4px;padding:6px 8px;white-space:pre-wrap;word-break:break-all;line-height:1.4;border:1px solid var(--border-color);width:100%;box-sizing:border-box;resize:vertical;';
-    sel.addEventListener('input', function(){ item.text = sel.value; });
+    sel.addEventListener('input', function(){ item.text = sel.value; _persistReviewPending(); });
     sel.addEventListener('click', function(e){ e.stopPropagation(); });
     card.appendChild(sel);
 
@@ -5329,7 +5350,7 @@
     note.placeholder = '<必填>简要说明改动需求';
     note.value = item.note || '';
     note.rows = 3;
-    note.addEventListener('input', function(){ item.note = note.value; });
+    note.addEventListener('input', function(){ item.note = note.value; _persistReviewPending(); });
     note.addEventListener('click', function(e){ e.stopPropagation(); });
     card.appendChild(note);
 
@@ -5829,6 +5850,7 @@
         } else {
           pendingItems = pendingItems.filter(i => i.id !== item.id);
         }
+        _persistReviewPending();
         if (selectedPendingId === item.id) selectedPendingId = null;
         clearHL();
         hideTooltip();
@@ -5894,6 +5916,7 @@
       if (res.ok && data.ok) {
         // Immediately clear pending items and close windows
         pendingArray.length = 0;  // Clear in-place
+        if (pendingArray === pendingItems) _persistReviewPending();
         selectedPendingId = null;
         clearHL();
         hideTooltip();
@@ -6483,6 +6506,7 @@
     var _itemTaskId = _mapEntry ? (_mapEntry.task_id || '') : '';
     const item = { id: ++idCounter, text: _itemText, startLine, endLine, position: rawPosition, note, action: _itemAction, scope: _itemScope, task_id: _itemTaskId, type: _itemType };
     pendingItems.push(item);
+    _persistReviewPending();
 
     st.textContent = `✅ 已加入面板（共 ${pendingItems.length} 条）`;
     st.className = 'pst-status pst-status-ok';
@@ -7247,12 +7271,15 @@
       items = items.filter(function(i) { return (def.statuses || []).indexOf(i.status) >= 0; })
         .sort(function(a, b) { return String(b.updated || b.created || '').localeCompare(String(a.updated || a.created || '')); });
       panel.innerHTML = '';
+      var cardList = document.createElement('div');
+      cardList.className = 'fb-card-list';
+      panel.appendChild(cardList);
       if (!items.length) {
         var empty = document.createElement('div'); empty.className = 'fb-empty';
         empty.textContent = '暂无' + def.label;
-        panel.appendChild(empty); return;
+        cardList.appendChild(empty); return;
       }
-      items.forEach(function(item) { panel.appendChild(buildReviewCard(item, project)); });
+      items.forEach(function(item) { cardList.appendChild(buildReviewCard(item, project)); });
     } catch (err) {
       panel.innerHTML = '<div class="fb-empty">❌ ' + _reviewEscape(err.message) + '</div>';
     }
@@ -7287,6 +7314,7 @@
         e.stopPropagation();
         if (readOnly) return;
         item.action = t.action; item.scope = t.scope; item.task_id = t.id;
+        if (_reviewFilter === 'pending') _persistReviewPending();
         if (onChange) onChange();
       });
       row.appendChild(b);
@@ -7412,6 +7440,7 @@
     if (rightSidebar.classList.contains('hidden')) openRightSidebar();
     var item = { id: ++idCounter, text: '', startLine: 0, endLine: 0, note: '', type: 'text', _isNew: true };
     pendingItems.push(item);
+    _persistReviewPending();
     _reviewFilter = 'pending';
     renderReviewPanel();
     // Focus the card's note field after a tick so typing starts immediately
@@ -7464,6 +7493,7 @@
   // Helper: toast fallback if showToast is unavailable in this scope
   function showToastSafe(msg) { if (typeof showToast === 'function') showToast(msg, 2500); else window.alert(msg); }
 
+  _restoreReviewPending();
   // Initial render of the unified panel once (idempotent).
   if (document.getElementById('previewFilterBar')) renderReviewPanel();
 

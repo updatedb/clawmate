@@ -200,6 +200,7 @@
     .preview-right-body {
       flex: 1;
       overflow: hidden;
+      min-height: 0;
       padding: 0;
       display: flex;
       flex-direction: column;
@@ -213,12 +214,16 @@
     .fb-card-list {
       flex: 1;
       overflow-y: auto;
+      min-height: 0;
       padding: 10px 8px 8px;
       display: flex;
       flex-direction: column;
       gap: 6px;
       align-items: center;
     }
+    /* Every filter (local pending and server-backed review states) uses the
+       same scrollable list and horizontal card inset. */
+    .fb-card-list > .fb-card { margin: 0; width: 100%; }
 
     .fb-section-sep {
       display: flex;

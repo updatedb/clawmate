@@ -136,7 +136,8 @@
     .share-right.hidden { translate: 100%; pointer-events: none; }
     .share-right .preview-right-header { padding: 10px 12px; }
     .share-right .preview-right-filter { padding: 8px 12px; }
-    .share-right .preview-right-body { padding: 10px 12px; }
+    .share-right .preview-right-body { padding: 0; min-height: 0; }
+    .share-right .fb-card-list { padding: 10px 12px 8px; }
     /* 分享页浮窗需在所有视口可用。preview.css 的移动端规则用 !important 隐藏
        .preview-selection-tooltip，这里以更高优先级 + !important 覆盖，只认 .hidden。 */
     .preview-selection-tooltip { display: none !important; }
@@ -535,8 +536,36 @@
       if (!item) return '';
       return String(item.position || item.location || '').trim();
     }
+    // Drafts are strictly local. Include both capability token and shared
+    // file so another share surface cannot restore them.
+    function _sharePendingStorageKey() {
+      return 'clawmate.share-pending.v1:' + TOKEN + ':' + (_shareFile || '');
+    }
+    function _sharePersistPending() {
+      try { localStorage.setItem(_sharePendingStorageKey(), JSON.stringify(sharePending)); } catch (e) {}
+    }
+    function _shareRestorePending() {
+      try {
+        var saved = JSON.parse(localStorage.getItem(_sharePendingStorageKey()) || '[]');
+        sharePending = Array.isArray(saved) ? saved : [];
+        sharePending.forEach(function(item) {
+          _shareFbId = Math.max(_shareFbId, Number(String(item.id || '').replace(/^FD-/, '')) || 0);
+        });
+      } catch (e) { sharePending = []; }
+    }
+    // Same line-based location contract used by the review tooltip. `position`
+    // is canonical; legacy `location` is read only through _sharePosition.
+    function _shareSelectionLocation(text) {
+      var source = String(_shareRawContent || '');
+      var index = source.indexOf(text);
+      if (index < 0) return { position: '', start_line: 0, end_line: 0 };
+      var start = (source.slice(0, index).match(/\n/g) || []).length + 1;
+      var end = start + (String(text).match(/\n/g) || []).length;
+      return { position: 'Line ' + start + '-' + end, start_line: start, end_line: end };
+    }
     var _shareAuthor = '';
     var _shareSelSavedText = '';
+    var _shareRawContent = '';
 
     // Action templates loaded dynamically from /api/clawmate/config (matches the
     // review panel). Selection actions only, tooltip/panel-enabled.
@@ -593,7 +622,7 @@
       var del = document.createElement('button'); del.className = 'fb-btn-delete'; del.textContent = '✕'; del.title = '删除';
       del.addEventListener('click', function(e) {
         e.stopPropagation();
-        if (shareFbFilter === 'pending') sharePending = sharePending.filter(function(i){ return i.id !== it.id; });
+        if (shareFbFilter === 'pending') { sharePending = sharePending.filter(function(i){ return i.id !== it.id; }); _sharePersistPending(); }
         else shareSubmitted = shareSubmitted.filter(function(i){ return i.id !== it.id; });
         _shareRender();
       });
@@ -619,7 +648,7 @@
         var pos = document.createElement('input'); pos.type='text'; pos.className='fb-card-position-edit';
         pos.value = _sharePosition(it);
         pos.placeholder = '定位：—（Line {start}-{end}）';
-        pos.addEventListener('input', function(){ it.position = pos.value; posLabel.textContent = '定位：' + (_sharePosition(it) || '—'); });
+        pos.addEventListener('input', function(){ it.position = pos.value; posLabel.textContent = '定位：' + (_sharePosition(it) || '—'); _sharePersistPending(); });
         pos.addEventListener('click', function(e){ e.stopPropagation(); });
         card.appendChild(pos);
       }
@@ -634,7 +663,7 @@
         text.value = it.text || ''; text.rows = 2;
         text.placeholder = '<必填>选中内容';
         text.style.cssText = 'font-size:11px;font-family:monospace;color:var(--text-secondary);';
-        text.addEventListener('input', function(){ it.text = text.value; });
+        text.addEventListener('input', function(){ it.text = text.value; _sharePersistPending(); });
         text.addEventListener('click', function(e){ e.stopPropagation(); });
         card.appendChild(text);
       }
@@ -648,7 +677,7 @@
         var note = document.createElement('textarea'); note.className = 'fb-note-input';
         note.value = it.note || ''; note.rows = 3;
         note.placeholder = '<必填>简要说明改动需求';
-        note.addEventListener('input', function(){ it.note = note.value; });
+        note.addEventListener('input', function(){ it.note = note.value; _sharePersistPending(); });
         note.addEventListener('click', function(e){ e.stopPropagation(); });
         card.appendChild(note);
       }
@@ -668,6 +697,7 @@
         b.addEventListener('click', function(e){
           e.stopPropagation();
           it.action = p.action; it.scope = p.scope; it.task_id = p.task_id;
+          _sharePersistPending();
           _shareRender();
         });
         tagRow.appendChild(b);
@@ -740,7 +770,9 @@
       if (!sel) { _shareSelRenderStatus('请先选中内容', false); return; }
       if (!note) { _shareSelRenderStatus('请填写建议', false); shareSelNote.focus(); return; }
       var action = _shareSelAction();
-      sharePending.push({ id: 'FD-' + (++_shareFbId), created: new Date().toISOString(), position: shareSelLocation.value.trim(), text: sel.slice(0,800), note: note, action: action, scope: _shareSelScope() });
+      var location = _shareSelectionLocation(sel);
+      sharePending.push({ id: 'FD-' + (++_shareFbId), created: new Date().toISOString(), position: shareSelLocation.value.trim() || location.position, start_line: location.start_line, end_line: location.end_line, text: sel.slice(0,800), note: note, action: action, scope: _shareSelScope() });
+      _sharePersistPending();
       _shareSelNoteReset();
       shareSelTooltip.classList.add('hidden');
       shareFbFilter = 'pending'; openShareFeedback(); _shareRender();
@@ -755,7 +787,8 @@
       if (!note) { _shareSelRenderStatus('请填写建议', false); shareSelNote.focus(); return; }
       if (!_shareSelAction()) { _shareSelRenderStatus('请选择操作类型', false); return; }
       var action = _shareSelAction();
-      var item = { id: 'FD-' + (++_shareFbId), created: new Date().toISOString(), position: shareSelLocation.value.trim(), text: sel.slice(0,800), note: note, action: action, scope: _shareSelScope() };
+      var location = _shareSelectionLocation(sel);
+      var item = { id: 'FD-' + (++_shareFbId), created: new Date().toISOString(), position: shareSelLocation.value.trim() || location.position, start_line: location.start_line, end_line: location.end_line, text: sel.slice(0,800), note: note, action: action, scope: _shareSelScope() };
       var panelWasOpen = !shareRight.classList.contains('hidden');
       _shareSelNoteReset();
       shareSelTooltip.classList.add('hidden');
@@ -780,7 +813,7 @@
       _shareFbStatus('提交中...', false);
       try {
         var payload = { author: _shareAuthor, selections: list.map(function(it) {
-          return { text: it.text, note: it.note, action: it.action || 'modify', position: _sharePosition(it) };
+          return { text: it.text, note: it.note, action: it.action || 'modify', position: _sharePosition(it), start_line: it.start_line || it.startLine || 0, end_line: it.end_line || it.endLine || 0 };
         }) };
         var response = await fetch(API_BASE + '/share/' + TOKEN + '/feedback', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
         var data = await response.json();
@@ -800,6 +833,7 @@
         });
         shareSubmitted = shareSubmitted.concat(submittedItems);
         sharePending = sharePending.filter(function(it){ return !pendingIds.has(it.id); });
+        _sharePersistPending();
         shareFbFilter = 'submitted';
         _shareRender();
         _shareFbStatus('✅ 已提交评审（' + list.length + ' 条）', true);
@@ -929,6 +963,8 @@
         // Store root/file for image path rewriting
         _shareRoot = data.root || '';
         _shareFile = data.path || '';
+        _shareRawContent = data.content || '';
+        _shareRestorePending();
         await _shareLoadSubmitted();
         document.getElementById('shareExpiry').textContent = data.expires_str ? '⏳ ' + data.expires_str + ' 前有效' : '⏳ -';
 
