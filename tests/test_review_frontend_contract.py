@@ -128,6 +128,18 @@ def test_review_feedback_submission_preserves_template_action_scope_and_task_id(
     assert "scope: it.scope || 'document'" in submit_all
 
 
+def test_selection_tooltip_action_state_is_scoped_away_from_feedback_cards():
+    """Selecting or closing the floating tooltip must not clear active actions
+    on pending feedback cards, which deliberately share the pst-tag style."""
+    js = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
+    hide_tooltip = js.split("function hideTooltip()", 1)[1].split("function findContentBody", 1)[0]
+    init_tags = js.split("function initPstTags()", 1)[1].split("function _resolvePstAction", 1)[0]
+    assert "pstTags.querySelectorAll('.pst-tag')" in hide_tooltip
+    assert "container.querySelectorAll('.pst-tag')" in init_tags
+    assert "document.querySelectorAll('.pst-tag')" not in hide_tooltip
+    assert "document.querySelectorAll('.pst-tag')" not in init_tags
+
+
 def test_feedback_position_contract_uses_canonical_position_and_visible_fallback():
     """All client submissions normalize legacy location and every card labels an empty locator."""
     js = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")

@@ -6034,7 +6034,11 @@
     tooltip.style.display = 'none';
     savedRange = null;
     clearHL();
-    document.querySelectorAll('.pst-tag').forEach(function(b) { b.classList.remove('active'); });
+    // The feedback panel cards use the same pst-tag class.  Clearing every
+    // matching tag here made the selection tooltip mutate unrelated cards.
+    // Keep tooltip state strictly inside its own tag container.
+    var pstTags = document.getElementById('pstTags');
+    if (pstTags) pstTags.querySelectorAll('.pst-tag').forEach(function(b) { b.classList.remove('active'); });
     document.getElementById('pstNote').value = '';
     _lastPstTag = '';
     _lastPstSelection = null;
@@ -6426,7 +6430,9 @@
         var tag = this.getAttribute('data-tag');
         _lastPstTag = tag;
         _lastPstSelection = { action: t.action, scope: t.scope, task_id: t.id };
-        document.querySelectorAll('.pst-tag').forEach(function(b) { b.classList.remove('active'); });
+        // Do not clear action buttons in feedback cards; only this tooltip's
+        // tag row participates in the tooltip's single-selection state.
+        container.querySelectorAll('.pst-tag').forEach(function(b) { b.classList.remove('active'); });
         this.classList.add('active');
         var noteEl = document.getElementById('pstNote');
         noteEl.placeholder = '例如：' + tag;
