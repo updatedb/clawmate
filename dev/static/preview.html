@@ -84,12 +84,14 @@
       <div id="previewResizeHandle" class="preview-resize-handle hidden"></div>
       <!-- Right: Feedback Panel -->
       <aside class="preview-right" id="rightSidebar">
-        <div class="preview-right-header"><span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> 评审</span></div>
-        <div class="preview-right-actions" id="previewActionsBar">
-          <button class="preview-bottom-btn" id="btnReviewAdd" type="button" title="添加反馈">添加反馈</button>
-          <button class="preview-bottom-btn" id="btnReviewSubmit" type="button" title="提交反馈">提交反馈</button>
-          <button class="preview-bottom-btn" id="btnReviewExec" type="button" title="执行反馈">执行反馈</button>
-          <button class="preview-bottom-btn" id="btnCloseRight" type="button" title="关闭面板">关闭</button>
+        <div class="preview-right-header">
+          <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> 评审</span>
+          <div class="preview-right-actions" id="previewActionsBar">
+            <button class="agent-panel-btn" id="btnReviewAdd" type="button" title="添加反馈"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span class="agent-panel-btn-label">添加反馈</span></button>
+            <button class="agent-panel-btn" id="btnReviewSubmit" type="button" title="提交反馈"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg><span class="agent-panel-btn-label">提交反馈</span></button>
+            <button class="agent-panel-btn" id="btnReviewExec" type="button" title="执行反馈"><svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="6 3 20 12 6 21"/></svg><span class="agent-panel-btn-label">执行反馈</span></button>
+            <button class="agent-panel-btn" id="btnCloseRight" type="button" title="关闭面板"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg><span class="agent-panel-btn-label">关闭</span></button>
+          </div>
         </div>
         <div class="preview-right-filter" id="previewFilterBar"></div>
         <div class="preview-right-body" id="feedbackBody">

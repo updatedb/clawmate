@@ -438,22 +438,26 @@
     .preview-bottom-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
     .preview-bottom-btn.danger:hover { background: rgba(220,38,38,0.3); border-color: rgba(220,38,38,0.5); }
 
-    /* ── Review panel: 3-row layout (title / actions / filter / list) ── */
+    /* ── Review panel: 3-row layout (title+actions / filter / list) ── */
     .preview-right-header {
       flex-shrink: 0;
+      gap: 8px;
     }
+    /* 标题 + 操作按钮保持同一行，不换行，风格与 agent panel 一致 */
+    .preview-right-header > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .preview-right-actions {
-      display: flex; gap: 6px; padding: 0 12px 8px;
-      border-bottom: 1px solid var(--border-color);
-      flex-shrink: 0; flex-wrap: wrap;
+      display: flex; align-items: center; gap: 6px;
+      flex-shrink: 0; white-space: nowrap;
     }
-    .preview-right-actions .preview-bottom-btn { height: 30px; padding: 0 10px; font-size: 12px; }
+    .preview-right-actions .agent-panel-btn { height: 28px; padding: 0 9px; font-size: 12px; }
+    .preview-right-actions .agent-panel-btn svg { width: 13px; height: 13px; }
+    .preview-right-actions .agent-panel-btn.hidden { display: none; }
     .preview-right-filter {
       display: flex; gap: 4px; padding: 8px 12px;
       border-bottom: 1px solid var(--border-color);
-      flex-shrink: 0; flex-wrap: wrap;
+      flex-shrink: 0; flex-wrap: nowrap; overflow-x: auto;
     }
-    .preview-right-filter .preview-bottom-btn { height: 28px; padding: 0 9px; font-size: 11px; }
+    .preview-right-filter .preview-bottom-btn { height: 28px; padding: 0 9px; font-size: 11px; flex-shrink: 0; }
     .review-card {
       border: 1px solid var(--border-color); border-radius: 8px;
       margin-bottom: 10px; padding: 10px;

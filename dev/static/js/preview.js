@@ -7187,6 +7187,11 @@
       b.addEventListener('click', function() { _reviewFilter = def.key; renderReviewPanel(); });
       bar.appendChild(b);
     });
+    // 提交反馈 only in 待提交; 执行反馈 only in 已评审
+    var submitBtn = document.getElementById('btnReviewSubmit');
+    var execBtn = document.getElementById('btnReviewExec');
+    if (submitBtn) submitBtn.classList.toggle('hidden', _reviewFilter !== 'pending');
+    if (execBtn) execBtn.classList.toggle('hidden', _reviewFilter !== 'approved');
   }
 
   async function renderReviewPanel() {
