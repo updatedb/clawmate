@@ -115,6 +115,39 @@
 
     .markdown-body { background: transparent !important; }
 
+    /* ── Feedback panel selection tooltip (创建反馈浮窗) ── */
+    .share-sel-tooltip {
+      position: fixed; z-index: 40; display: flex; flex-direction: column;
+      width: 340px; max-width: calc(100vw - 20px);
+      background: var(--bg-primary); color: var(--text-primary);
+      border: 1px solid var(--border-color); border-radius: 10px;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.18); padding: 10px; gap: 8px;
+    }
+    .share-sel-tooltip.hidden { display: none; }
+    .share-sel-tooltip .pst-header {
+      display: flex; align-items: center; gap: 6px; font-size: 12px;
+      font-weight: 600; color: var(--text-primary);
+    }
+    .share-sel-tooltip .pst-header svg { width: 14px; height: 14px; }
+    .share-sel-body { display: flex; flex-direction: column; gap: 6px; }
+    .share-sel-selection {
+      font-size: 11px; font-family: monospace; color: var(--text-secondary);
+      background: var(--bg-code); border-radius: 4px; padding: 6px 8px;
+      white-space: pre-wrap; word-break: break-all; max-height: 90px; overflow-y: auto;
+    }
+    .share-sel-note {
+      width: 100%; box-sizing: border-box; resize: vertical; min-height: 60px;
+      border: 1px solid var(--border-color); border-radius: 6px;
+      background: var(--bg-code); color: var(--text-primary); padding: 8px;
+      font-family: inherit; font-size: 12px;
+    }
+    .share-sel-actions { display: flex; gap: 6px; }
+    .share-sel-actions .agent-panel-btn { height: 28px; padding: 0 9px; font-size: 12px; }
+    .share-sel-actions .agent-panel-btn svg { width: 13px; height: 13px; }
+    .share-sel-status { font-size: 11px; min-height: 12px; padding: 0; }
+    .share-sel-status.ok { color: var(--success, #16a34a); }
+    .share-sel-status.err { color: var(--danger); }
+
     /* ── Feedback panel (3-row layout: title / filter / list) ── */
     .share-right {
       position: absolute; top: 0; bottom: 0; right: 0;
@@ -141,11 +174,21 @@
       flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px;
     }
     .share-right-header .srh-spacer { flex: 1; }
+    .share-right-header { gap: 8px; }
+    .share-right-header .srh-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .share-right-actions {
+      display: flex; align-items: center; gap: 6px;
+      flex-shrink: 0; white-space: nowrap;
+    }
+    .share-right-actions .agent-panel-btn { height: 28px; padding: 0 9px; font-size: 12px; }
+    .share-right-actions .agent-panel-btn svg { width: 13px; height: 13px; }
+    .share-right-actions .agent-panel-btn.hidden { display: none; }
     .share-right-filter {
       display: flex; gap: 4px; padding: 8px 12px;
       border-bottom: 1px solid var(--border-color);
-      flex-shrink: 0; flex-wrap: wrap;
+      flex-shrink: 0; flex-wrap: nowrap; overflow-x: auto;
     }
+    .share-right-filter .share-right-btn { flex-shrink: 0; }
     .share-right-body { flex: 1; overflow-y: auto; padding: 10px 12px; }
     .share-fb-empty {
       color: var(--text-muted); font-size: 12px; text-align: center;
@@ -174,12 +217,17 @@
       flex-shrink: 0;
     }
     .share-fb-del:hover { background: var(--bg-tertiary); color: var(--danger); }
-    .share-fb-toolbar { display: flex; gap: 6px; padding: 8px 12px; border-top: 1px solid var(--border-color); flex-shrink: 0; }
-    .share-fb-note-edit {
+    .share-fb-position {
       width: 100%; box-sizing: border-box; border: 1px solid var(--border-color);
       border-radius: 6px; background: var(--bg-code); color: var(--text-primary);
-      padding: 8px 10px; font-family: inherit; font-size: 12px; resize: vertical;
-      min-height: 70px;
+      padding: 6px 8px; font-family: monospace; font-size: 11px; margin-bottom: 6px;
+    }
+    .share-fb-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+    .share-fb-tags .share-right-btn { padding: 2px 7px; font-size: 11px; font-weight: 400; }
+    .share-fb-actions { display: flex; gap: 6px; margin-top: 8px; }
+    .share-fb-cancelled {
+      margin-top: 8px; font-size: 11px; color: var(--text-muted);
+      border: 1px dashed var(--border-color); border-radius: 4px; padding: 4px 8px; text-align: center;
     }
     .share-fb-status { font-size: 12px; padding: 4px 12px 8px; min-height: 16px; }
     .share-fb-status.ok { color: var(--success, #16a34a); }
@@ -221,9 +269,11 @@
       <span class="brand"><img src="./asset/clawmate-logo.png" alt="" width="28" height="28" style="flex-shrink:0;" />ClawMate</span>
       <span class="share-title" id="shareTitle">📄 加载中...</span>
       <div class="topbar-actions">
-        <button class="topbar-btn" id="btnShareFeedback" title="提交反馈">反馈</button>
         <button class="topbar-btn" id="btnToggleToc" title="切换大纲">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
+        </button>
+        <button class="topbar-btn" id="btnShareFeedback" title="反馈">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         </button>
         <button class="topbar-btn" id="themeToggle" title="切换主题">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
@@ -246,27 +296,40 @@
       </main>
     </div>
 
-    <!-- Feedback panel (3-row layout: title / filter / list) -->
+    <!-- Feedback panel (3-row layout: title+actions / filter / list), mirrors review panel -->
     <aside class="share-right hidden" id="shareRight" aria-label="反馈面板">
       <div class="share-right-header">
         <span class="srh-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> 反馈</span>
         <span class="srh-spacer"></span>
-        <button class="share-right-btn" id="shareFbAdd" type="button" title="添加反馈">添加反馈</button>
-        <button class="share-right-btn" id="shareFbSubmit" type="button" title="提交反馈">提交反馈</button>
-        <button class="share-right-btn" id="shareFbClose" type="button" title="关闭">关闭</button>
+        <div class="share-right-actions">
+          <button class="agent-panel-btn" id="shareFbAdd" type="button" title="添加反馈"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span class="agent-panel-btn-label">添加反馈</span></button>
+          <button class="agent-panel-btn" id="shareFbSubmit" type="button" title="提交评审"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg><span class="agent-panel-btn-label">提交评审</span></button>
+          <button class="agent-panel-btn" id="shareFbClose" type="button" title="关闭面板"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+        </div>
       </div>
       <div class="share-right-filter" id="shareFbFilter">
         <button class="share-right-btn" data-share-filter="pending" title="待提交">待提交</button>
         <button class="share-right-btn" data-share-filter="submitted" title="已提交">已提交</button>
       </div>
       <div class="share-right-body" id="shareFbList">
-        <div class="share-fb-empty">选中文中内容后点击「添加反馈」即可累积</div>
-      </div>
-      <div class="share-fb-toolbar">
-        <textarea class="share-fb-note-edit" id="shareFbNote" maxlength="2000" placeholder="填写修改建议（必填，提交后不可改）"></textarea>
+        <div class="share-fb-empty">选中内容后点击「添加反馈」即可累积</div>
       </div>
       <div class="share-fb-status" id="shareFbStatus"></div>
     </aside>
+
+    <!-- Selection tooltip (创建反馈浮窗) -->
+    <div class="share-sel-tooltip hidden" id="shareSelTooltip">
+      <div class="pst-header"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> 反馈选中内容</div>
+      <div class="share-sel-body">
+        <div class="share-sel-selection" id="shareSelText"></div>
+        <textarea class="share-sel-note" id="shareSelNote" placeholder="简要说明改动需求（必填）" rows="3"></textarea>
+      </div>
+      <div class="share-sel-actions">
+        <button class="agent-panel-btn" id="shareSelAdd"><svg viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><span class="agent-panel-btn-label">加入待办</span></button>
+        <button class="agent-panel-btn" id="shareSelSend"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg><span class="agent-panel-btn-label">提交评审</span></button>
+      </div>
+      <div class="share-sel-status" id="shareSelStatus"></div>
+    </div>
 
     <!-- Bottombar -->
     <div class="share-bottombar">
@@ -546,60 +609,128 @@
 
     // ── Feedback panel (share surface) ───────────────────────────────
     // Public share has feedback only: add a selection, then submit. It
-    // deliberately exposes no review/task/file-tree API or controls.
+    // deliberately exposes no review/task/file-tree API or controls. The
+    // panel mirrors the review panel: 3-row layout, editable cards with
+    // 定位/建议/操作, and a selection tooltip with 加入待办 / 提交评审.
     var shareRight = document.getElementById('shareRight');
     var shareFbBody = document.getElementById('shareFbList');
-    var shareFbNoteEl = document.getElementById('shareFbNote');
     var shareFbStatusEl = document.getElementById('shareFbStatus');
-    var sharePending = [];   // { id, text, note, author }
-    var shareSubmitted = []; // { id, text, note, author }
+    var shareSelTooltip = document.getElementById('shareSelTooltip');
+    var shareSelText = document.getElementById('shareSelText');
+    var shareSelNote = document.getElementById('shareSelNote');
+    var shareSelStatus = document.getElementById('shareSelStatus');
+    var sharePending = [];   // { id, position, text, note, action, scope }
+    var shareSubmitted = []; // same shape, submitted/已提交
     var _shareFbId = 0;
     var shareFbFilter = 'pending';
     var _shareAuthor = '';
+    var _shareSelSavedText = '';
 
-    function _shareFbEsc(s) { var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+    function _shareEsc(s) { var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
     function _shareFbStatus(msg, ok) { shareFbStatusEl.textContent = msg || ''; shareFbStatusEl.className = 'share-fb-status' + (ok ? ' ok' : msg ? ' err' : ''); }
-    function _shareFbGetSelection() {
+    function _shareSelRenderStatus(msg, ok) { shareSelStatus.textContent = msg || ''; shareSelStatus.className = 'share-sel-status' + (ok ? ' ok' : msg ? ' err' : ''); }
+    function _shareGetSelection() {
       var sel = window.getSelection ? window.getSelection().toString() : '';
       return String(sel || '').trim();
     }
-    function _shareFbActiveFilter() {
+    function _shareActiveFilter() {
       var btns = shareRight.querySelectorAll('[data-share-filter]');
       btns.forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-share-filter') === shareFbFilter); });
     }
-    function _shareFbRender() {
+
+    // Editable feedback card (定位/建议/操作), mirrors review-panel pending card.
+    function _shareBuildCard(it) {
+      var card = document.createElement('div');
+      card.className = 'share-fb-card';
+
+      // head: meta + X delete (待提交 removes locally; 已提交 marks deleted)
+      var head = document.createElement('div'); head.className = 'share-fb-card-head';
+      var meta = document.createElement('span'); meta.className = 'share-fb-card-meta';
+      meta.textContent = it.id + (it.position ? ' · Line ' + it.position : '');
+      var del = document.createElement('button'); del.className = 'share-fb-del'; del.textContent = '✕'; del.title = '删除';
+      del.addEventListener('click', function(e) {
+        e.stopPropagation();
+        // share surface is local-only: remove without recording. Real deleted
+        // status/cancelled display lives in the review panel (已执行 list).
+        if (shareFbFilter === 'pending') {
+          sharePending = sharePending.filter(function(i){ return i.id !== it.id; });
+        } else {
+          shareSubmitted = shareSubmitted.filter(function(i){ return i.id !== it.id; });
+        }
+        _shareRender();
+      });
+      head.appendChild(meta); head.appendChild(del);
+      card.appendChild(head);
+
+      // 定位 (editable in 待提交)
+      var pos = document.createElement('input'); pos.type='text'; pos.className='share-fb-position';
+      pos.value = it.position || '';
+      pos.placeholder = 'Line {start}-{end} — 定位';
+      pos.addEventListener('input', function(){ it.position = pos.value; });
+      pos.addEventListener('click', function(e){ e.stopPropagation(); });
+      card.appendChild(pos);
+
+      // 选中内容 preview
+      var text = document.createElement('textarea'); text.className = 'share-fb-card-text';
+      text.value = it.text || ''; text.rows = 2;
+      text.placeholder = '选中内容';
+      text.addEventListener('input', function(){ it.text = text.value; });
+      text.addEventListener('click', function(e){ e.stopPropagation(); });
+      card.appendChild(text);
+
+      // 建议 (editable in 待提交)
+      var note = document.createElement('textarea'); note.className = 'share-fb-card-note';
+      note.value = it.note || ''; note.rows = 3;
+      note.placeholder = '<必填>简要说明改动需求';
+      note.addEventListener('input', function(){ it.note = note.value; });
+      note.addEventListener('click', function(e){ e.stopPropagation(); });
+      card.appendChild(note);
+
+      // 操作 tag group (edit in 待提交)
+      var tagRow = document.createElement('div'); tagRow.className = 'share-fb-tags';
+      [['修改','modify'],['删除','delete'],['扩展','explain'],['简化','simplify']].forEach(function(p){
+        var b = document.createElement('button'); b.className = 'share-right-btn';
+        b.textContent = p[0];
+        if (it.action === p[1]) b.classList.add('active');
+        b.addEventListener('click', function(e){
+          e.stopPropagation();
+          it.action = p[1]; it.scope = 'document';
+          _shareRender();
+        });
+        tagRow.appendChild(b);
+      });
+      card.appendChild(tagRow);
+
+      // 提交评审 button (待提交 only)
+      if (shareFbFilter === 'pending') {
+        var actions = document.createElement('div'); actions.className = 'share-fb-actions';
+        var submit = document.createElement('button'); submit.className = 'share-right-btn';
+        submit.textContent = '提交评审';
+        submit.addEventListener('click', function(e){
+          e.stopPropagation();
+          if (submit.disabled) return;
+          if (!it.note || !it.note.trim()) { _shareFbStatus('请填写建议（必填）', false); return; }
+          if (!it.action) it.action = 'modify';
+          submit.disabled = true;
+          _shareSubmitPending([it]).finally(function(){ submit.disabled = false; });
+        });
+        actions.appendChild(submit);
+        card.appendChild(actions);
+      }
+      return card;
+    }
+
+    function _shareRender() {
       shareFbBody.innerHTML = '';
       var source = shareFbFilter === 'pending' ? sharePending : shareSubmitted;
       if (!source.length) {
         var empty = document.createElement('div');
         empty.className = 'share-fb-empty';
-        empty.textContent = shareFbFilter === 'pending'
-          ? '选中文中内容后点击「添加反馈」即可累积'
-          : '暂无已提交反馈';
+        empty.textContent = shareFbFilter === 'pending' ? '选中内容后点击浮窗「加入待办」即可累积' : '暂无已提交反馈';
         shareFbBody.appendChild(empty);
       }
-      source.forEach(function(it) {
-        var card = document.createElement('div');
-        card.className = 'share-fb-card';
-        var head = document.createElement('div'); head.className = 'share-fb-card-head';
-        var meta = document.createElement('span'); meta.className = 'share-fb-card-meta';
-        meta.textContent = it.id + (it.author ? ' · ' + it.author : '');
-        var del = document.createElement('button'); del.className = 'share-fb-del'; del.textContent = '✕'; del.title = '删除'; del.setAttribute('aria-label', '删除该反馈');
-        del.addEventListener('click', function(e) {
-          e.stopPropagation();
-          var target = shareFbFilter === 'pending' ? sharePending : shareSubmitted;
-          var idx = target.indexOf(it);
-          if (idx >= 0) target.splice(idx, 1);
-          _shareFbRender();
-        });
-        head.appendChild(meta); head.appendChild(del);
-        var text = document.createElement('div'); text.className = 'share-fb-card-text'; text.textContent = it.text || '（空）';
-        var note = document.createElement('div'); note.className = 'share-fb-card-note';
-        if (it.note) { note.innerHTML = '<strong>建议：</strong>' + _shareFbEsc(it.note); } else { note.textContent = '（未填写建议）'; }
-        card.appendChild(head); card.appendChild(text); card.appendChild(note);
-        shareFbBody.appendChild(card);
-      });
-      _shareFbActiveFilter();
+      source.forEach(function(it) { shareFbBody.appendChild(_shareBuildCard(it)); });
+      _shareActiveFilter();
     }
 
     function openShareFeedback() { shareRight.classList.remove('hidden'); shareRight.classList.add('open'); }
@@ -608,50 +739,111 @@
       if (shareRight.classList.contains('hidden')) openShareFeedback();
       else closeShareFeedback();
     }
-
-    // Topbar toggle
     document.getElementById('btnShareFeedback').addEventListener('click', toggleShareFeedback);
     document.getElementById('shareFbClose').addEventListener('click', closeShareFeedback);
 
     // Filter
     shareRight.querySelectorAll('[data-share-filter]').forEach(function(b) {
-      b.addEventListener('click', function() { shareFbFilter = b.getAttribute('data-share-filter'); _shareFbRender(); });
+      b.addEventListener('click', function() { shareFbFilter = b.getAttribute('data-share-filter'); _shareRender(); });
     });
 
-    // Add feedback from current selection
-    function addShareFeedback() {
-      var selected = _shareFbGetSelection();
-      if (!selected) { _shareFbStatus('请先选中文中内容再添加反馈', false); return; }
-      var note = shareFbNoteEl.value.trim();
-      if (!note) { _shareFbStatus('请填写修改建议（必填）后再添加', false); shareFbNoteEl.focus(); return; }
-      sharePending.push({ id: 'FD-' + (++_shareFbId), text: selected.slice(0, 800), note: note, author: _shareAuthor });
-      shareFbNoteEl.value = '';
-      shareFbFilter = 'pending';
-      _shareFbRender();
-      _shareFbStatus('✅ 已添加反馈（待提交）', true);
-    }
-    document.getElementById('shareFbAdd').addEventListener('click', addShareFeedback);
+    // 加入待办 (tooltip) → pending card
+    document.getElementById('shareSelAdd').addEventListener('click', function() {
+      var sel = _shareSelSavedText;
+      var note = shareSelNote.value.trim();
+      if (!sel) { _shareSelRenderStatus('请先选中内容', false); return; }
+      if (!note) { _shareSelRenderStatus('请填写建议', false); shareSelNote.focus(); return; }
+      sharePending.push({ id: 'FD-' + (++_shareFbId), position: '', text: sel.slice(0,800), note: note, action: 'modify', scope: 'document' });
+      shareSelNote.value = ''; _shareSelRenderStatus('');
+      shareSelTooltip.classList.add('hidden');
+      shareFbFilter = 'pending'; openShareFeedback(); _shareRender();
+      _shareFbStatus('✅ 已加入待办', true);
+    });
 
-    // Submit all pending feedback
-    document.getElementById('shareFbSubmit').addEventListener('click', async function() {
+    // 提交评审 (tooltip) → directly submit this selection
+    document.getElementById('shareSelSend').addEventListener('click', function() {
+      var sel = _shareSelSavedText;
+      var note = shareSelNote.value.trim();
+      if (!sel) { _shareSelRenderStatus('请先选中内容', false); return; }
+      if (!note) { _shareSelRenderStatus('请填写建议', false); shareSelNote.focus(); return; }
+      var item = { id: 'FD-' + (++_shareFbId), position: '', text: sel.slice(0,800), note: note, action: 'modify', scope: 'document' };
+      shareSelNote.value = ''; _shareSelRenderStatus('');
+      _shareSubmitPending([item]);
+    });
+
+    // 面板「添加反馈」→ hint user to select text
+    document.getElementById('shareFbAdd').addEventListener('click', function() {
+      shareFbFilter = 'pending'; openShareFeedback(); _shareRender();
+      _shareFbStatus('请先在正文中选中内容，再点浮窗「加入待办」', false);
+    });
+
+    // 面板「提交评审」→ submit all pending
+    document.getElementById('shareFbSubmit').addEventListener('click', function() {
       if (!sharePending.length) { _shareFbStatus('暂无待提交反馈', false); return; }
-      var btn = this; btn.disabled = true; _shareFbStatus('提交中...', false);
+      _shareSubmitPending(sharePending.slice());
+    });
+
+    async function _shareSubmitPending(list) {
+      var btn = document.getElementById('shareFbSubmit'); if (btn) btn.disabled = true;
+      _shareFbStatus('提交中...', false);
       try {
-        var payload = { author: _shareAuthor, selections: sharePending.map(function(it) { return { text: it.text, note: it.note }; }) };
+        var payload = { author: _shareAuthor, selections: list.map(function(it) {
+          return { text: it.text, note: it.note, action: it.action || 'modify', position: it.position || '' };
+        }) };
         var response = await fetch(API_BASE + '/share/' + TOKEN + '/feedback', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
         var data = await response.json();
         if (!response.ok) throw new Error(data.detail || '提交失败');
-        var submitted = sharePending.splice(0);
-        shareSubmitted = shareSubmitted.concat(submitted);
+        var ids = data.ids || [];
+        // Move the successfully submitted items from pending → submitted
+        var pendingIds = new Set(list.map(function(it){ return it.id; }));
+        shareSubmitted = shareSubmitted.concat(sharePending.filter(function(it){ return pendingIds.has(it.id); })
+          .map(function(it){ var c = Object.assign({}, it); c.id = ids[shareSubmitted.length] || it.id; return c; }));
+        sharePending = sharePending.filter(function(it){ return !pendingIds.has(it.id); });
         shareFbFilter = 'submitted';
-        _shareFbRender();
-        _shareFbStatus('✅ 已提交，等待项目成员评审（' + submitted.length + ' 条）', true);
+        _shareRender();
+        _shareFbStatus('✅ 已提交评审（' + list.length + ' 条）', true);
       } catch (err) {
         _shareFbStatus('❌ ' + err.message, false);
       } finally {
-        btn.disabled = false;
+        if (btn) btn.disabled = false;
       }
+    }
+
+    // Selection tooltip logic (mirror review-panel text selection)
+    function _handleShareSelection() {
+      var sel = _shareGetSelection();
+      if (!sel) { shareSelTooltip.classList.add('hidden'); return; }
+      _shareSelSavedText = sel;
+      shareSelText.textContent = sel.length > 600 ? sel.slice(0,600)+'…' : sel;
+      shareSelNote.value = ''; _shareSelRenderStatus('');
+      // position tooltip near selection
+      var rect = null;
+      try { var s = window.getSelection(); if (s.rangeCount) rect = s.getRangeAt(0).getBoundingClientRect(); } catch(e){}
+      if (rect) {
+        var top = rect.bottom + 8;
+        var left = rect.left + rect.width/2;
+        shareSelTooltip.style.maxWidth = Math.min(400, window.innerWidth - 20) + 'px';
+        shareSelTooltip.classList.remove('hidden');
+        requestAnimationFrame(function(){
+          var h = shareSelTooltip.offsetHeight, w = shareSelTooltip.offsetWidth;
+          if (top + h > window.innerHeight - 10) top = rect.top - h - 8;
+          left = Math.max(10 + w/2, Math.min(window.innerWidth - 10 - w/2, left));
+          shareSelTooltip.style.top = top + 'px';
+          shareSelTooltip.style.left = left + 'px';
+          shareSelTooltip.style.transform = 'translateX(-50%)';
+        });
+      } else {
+        shareSelTooltip.classList.remove('hidden');
+        shareSelTooltip.style.top = '80px'; shareSelTooltip.style.left = '50%';
+        shareSelTooltip.style.transform = 'translateX(-50%)';
+      }
+    }
+    document.addEventListener('mouseup', function(e) {
+      var sel = _shareGetSelection();
+      if (sel) { setTimeout(_handleShareSelection, 10); }
+      else if (!shareSelTooltip.contains(e.target)) { shareSelTooltip.classList.add('hidden'); }
     });
+    shareSelTooltip.addEventListener('click', function(e){ e.stopPropagation(); });
 
     // Author field (optional, local session)
     (function() {
@@ -660,7 +852,7 @@
       _shareAuthor = v;
     })();
 
-    _shareFbRender();
+    _shareRender();
 
     async function loadContent() {
       try {

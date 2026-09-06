@@ -6600,7 +6600,7 @@
       if (res.ok && data.ok) {
         // 恢复按钮状态（hideTooltip 不会重置按钮，避免新选中时仍显示 disabled "⏳ ...")
         btn.disabled = false;
-        btn.textContent = '提交反馈';
+        btn.textContent = '提交评审';
         // Immediately close tooltip and auto-open sidebar
         st.textContent = '✅ 已提交，进入待评审';
         st.className = 'pst-status pst-status-ok';
@@ -6620,13 +6620,13 @@
         st.textContent = '❌ ' + (err.detail || '发送失败');
         st.className = 'pst-status pst-status-error';
         btn.disabled = false;
-        btn.textContent = '提交反馈';
+        btn.textContent = '提交评审';
       }
     } catch (e) {
       st.textContent = '❌ 网络错误';
       st.className = 'pst-status pst-status-error';
       btn.disabled = false;
-      btn.textContent = '提交反馈';
+      btn.textContent = '提交评审';
     }
   });
 
@@ -7264,12 +7264,13 @@
     { key: 'pending_review', label: '待评审',           statuses: ['pending_review'] },
     { key: 'approved',       label: '已评审',           statuses: ['approved', 'planned'] },
     { key: 'rejected',       label: '已拒绝',           statuses: ['rejected'] },
-    { key: 'executed',       label: '已执行',           statuses: ['in_progress', 'executed', 'failed'] },
+    { key: 'executed',       label: '已执行',           statuses: ['in_progress', 'executed', 'failed', 'deleted'] },
   ];
 
   function _statusLabel(status) {
     var map = { pending_review: '待评审', approved: '已评审', planned: '已评审', rejected: '已拒绝',
-                in_progress: '执行中', executed: '已执行', failed: '执行失败', pending: '待提交' };
+                in_progress: '执行中', executed: '已执行', failed: '执行失败', pending: '待提交',
+                deleted: '已取消' };
     return map[status] || status;
   }
 
@@ -7345,33 +7346,25 @@
 
     var head = document.createElement('div'); head.className = 'review-card-head';
 
-    // Status badge on the left, editable for pending_review
+    // Status badge on the left
     var status = document.createElement('span'); status.className = 'review-card-status';
     status.textContent = _statusLabel(item.status);
     head.appendChild(status);
 
-    // Top-right: for approved (已评审) a ✕ to reject; for others a checkbox for
-    // multi-select (approved) is placed left; rejected/executed no corner action.
-    if (item.status === 'approved') {
-      var check = document.createElement('input'); check.type = 'checkbox';
-      check.checked = _reviewSelected.has(item.id);
-      check.title = '选择此已评审建议（用于执行反馈）';
-      check.addEventListener('change', function() {
-        if (check.checked) _reviewSelected.add(item.id); else _reviewSelected.delete(item.id);
-      });
-      head.appendChild(check);
-      var reject = document.createElement('button');
-      reject.className = 'preview-bottom-btn danger';
-      reject.textContent = '✕';
-      reject.title = '拒绝（移除已评审）';
-      reject.addEventListener('click', async function(){
-        var reason = prompt('拒绝理由（必填）','');
-        if (reason === null) return;
-        await _reviewRequest('/api/clawmate/review/decision', {root:rootId,project:project,ids:[item.id],decision:'rejected',reason:reason});
+    // Top-right: ✕ delete for any persisted state → marks item deleted (已取消),
+    // shown in the 已执行 list. No multi-select checkboxes (需求7).
+    var del = document.createElement('button');
+    del.className = 'preview-bottom-btn danger';
+    del.textContent = '✕';
+    del.title = '删除（标记为已取消）';
+    del.addEventListener('click', async function(){
+      if (!confirm('确认删除该反馈？将标记为已取消')) return;
+      try {
+        await _reviewRequest('/api/clawmate/feedback/update', {root:rootId,project:project,id:item.id,status:'deleted'});
         renderReviewPanel();
-      });
-      head.appendChild(reject);
-    }
+      } catch (e) { showToastSafe('❌ ' + (e.message || '删除失败')); }
+    });
+    head.appendChild(del);
     card.appendChild(head);
 
     var pos = document.createElement('div'); pos.className = 'review-card-position';
@@ -7481,17 +7474,22 @@
   var btnReviewExec = document.getElementById('btnReviewExec');
   if (btnReviewExec) btnReviewExec.addEventListener('click', async function() {
     var project = _reviewProject();
-    var ids = Array.from(_reviewSelected);
-    if (!ids.length) { showToastSafe('请先勾选至少一条已评审建议'); return; }
+    if (!project) { showToastSafe('当前文件不属于项目'); return; }
+    // Merge-execute ALL approved/planned review cards (需求7: no multi-select).
     try {
+      var listUrl = '/api/clawmate/feedback/list?root=' + encodeURIComponent(rootId) + '&project=' + encodeURIComponent(project);
+      if (filePath) listUrl += '&file=' + encodeURIComponent(filePath);
+      var res = await fetch(listUrl);
+      var data = await res.json();
+      var items = (data.items || []).filter(function(i){ return i.status === 'approved' || i.status === 'planned'; });
+      if (!items.length) { showToastSafe('暂无可执行的已评审反馈'); return; }
+      var ids = items.map(function(i){ return i.id; });
       var d = await _reviewRequest('/api/clawmate/review/plan', {root:rootId,project:project,ids:ids});
-      alert('执行计划已创建：' + d.task.id + '\n影响文件：' + (d.task.files || []).join('\n') + '\n即将确认并执行。');
+      alert('执行计划已创建：' + d.task.id + '\n影响文件：' + (d.task.files || []).join('\n') + '\n即将确认并执行全部 ' + ids.length + ' 条已评审反馈。');
       var c = await _reviewRequest('/api/clawmate/review/confirm', {root:rootId,project:project,task_id:d.task.id});
-      // fire the agent for each affected file
       for (var i = 0; i < (d.task.files || []).length; i++) {
         await _reviewRequest('/api/clawmate/task/run', {root:rootId,project:project,file:d.task.files[i],review_task_id:d.task.id,selections:[{task_id:'review_modify'}]});
       }
-      _reviewSelected.clear();
       renderReviewPanel();
     } catch (err) {
       showToastSafe('❌ ' + err.message);

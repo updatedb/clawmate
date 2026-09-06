@@ -652,8 +652,9 @@ def _cleanup_expired(items: list[dict]) -> list[dict]:
     """
     # Review records are evidence.  Never remove review/execution items from
     # the authoritative file; audit history is append-only and must remain
-    # explainable even after an execution fails.
-    if any(i.get("status") in ("pending_review", "approved", "rejected", "planned", "executed") for i in items):
+    # explainable even after an execution fails. Cancelled (deleted) items are
+    # also kept so they remain visible as 已取消 in the 已执行 list.
+    if any(i.get("status") in ("pending_review", "approved", "rejected", "planned", "executed", "deleted") for i in items):
         return items
     cfg = load_config()
     threshold_days = cfg.feedback.cleanup_done_after_days
