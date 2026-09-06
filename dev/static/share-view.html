@@ -572,13 +572,15 @@
       var card = document.createElement('div');
       card.className = 'fb-card' + (isReadOnly ? ' fb-card-completed' : '');
 
-      // Header row: time + id + fb-btn-delete (top-right). No status badge.
+      // Header matches review cards: lifecycle time + feedback ID + action.
       var head = document.createElement('div'); head.className = 'fb-card-header';
-      head.style.cssText = 'display:flex;align-items:center;gap:6px;';
       var id = document.createElement('span'); id.className = 'fb-card-id';
       id.textContent = it.id || '';
-      var time = document.createElement('span'); time.className = 'fb-card-time';
-      time.textContent = (it.created || '').substring ? (it.created || '').substring(5,16) : '';
+      var time = document.createElement('span'); time.className = 'fb-card-time fb-card-stage-time';
+      time.textContent = (isReadOnly ? '提交 ' : '创建 ') + String(it.updated || it.created || '').substring(5,16);
+      var action = document.createElement('span'); action.className = 'fb-card-action';
+      var actionMatch = _shareSelectionTemplates().find(function(t){ return t.action === it.action; });
+      action.textContent = actionMatch ? actionMatch.label : ({ modify:'🔧 修改', delete:'🗑 删除', explain:'📈 扩展', simplify:'📉 简化', translate:'🌐 翻译', add:'➕ 追加', execute:'⚡ 执行方案' }[it.action] || '—');
       var del = document.createElement('button'); del.className = 'fb-btn-delete'; del.textContent = '✕'; del.title = '删除';
       del.addEventListener('click', function(e) {
         e.stopPropagation();
@@ -586,7 +588,7 @@
         else shareSubmitted = shareSubmitted.filter(function(i){ return i.id !== it.id; });
         _shareRender();
       });
-      head.appendChild(id); head.appendChild(time); head.appendChild(del);
+      head.appendChild(time); head.appendChild(id); head.appendChild(action); head.appendChild(del);
       card.appendChild(head);
 
       // 定位
@@ -710,7 +712,7 @@
       if (!sel) { _shareSelRenderStatus('请先选中内容', false); return; }
       if (!note) { _shareSelRenderStatus('请填写建议', false); shareSelNote.focus(); return; }
       var action = _shareSelAction();
-      sharePending.push({ id: 'FD-' + (++_shareFbId), position: shareSelLocation.value.trim(), text: sel.slice(0,800), note: note, action: action, scope: _shareSelScope() });
+      sharePending.push({ id: 'FD-' + (++_shareFbId), created: new Date().toISOString(), position: shareSelLocation.value.trim(), text: sel.slice(0,800), note: note, action: action, scope: _shareSelScope() });
       _shareSelNoteReset();
       shareSelTooltip.classList.add('hidden');
       shareFbFilter = 'pending'; openShareFeedback(); _shareRender();
@@ -725,8 +727,9 @@
       if (!note) { _shareSelRenderStatus('请填写建议', false); shareSelNote.focus(); return; }
       if (!_shareSelAction()) { _shareSelRenderStatus('请选择操作类型', false); return; }
       var action = _shareSelAction();
-      var item = { id: 'FD-' + (++_shareFbId), position: shareSelLocation.value.trim(), text: sel.slice(0,800), note: note, action: action, scope: _shareSelScope() };
+      var item = { id: 'FD-' + (++_shareFbId), created: new Date().toISOString(), position: shareSelLocation.value.trim(), text: sel.slice(0,800), note: note, action: action, scope: _shareSelScope() };
       _shareSelNoteReset();
+      shareSelTooltip.classList.add('hidden');
       _shareSubmitPending([item]);
     });
 
@@ -768,6 +771,7 @@
         shareFbFilter = 'submitted';
         _shareRender();
         _shareFbStatus('✅ 已提交评审（' + list.length + ' 条）', true);
+        closeShareFeedback();
       } catch (err) {
         _shareFbStatus('❌ ' + err.message, false);
       } finally {

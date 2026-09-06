@@ -138,7 +138,8 @@ def list_items(
     if status and status != "all":
         items = [i for i in items if i.get("status") == status]
     if file:
-        items = [i for i in items if file in i.get("file", "")]
+        query_path = _normalize_feedback_path(file)
+        items = [i for i in items if _feedback_paths_match(query_path, i.get("file", ""))]
     if since:
         if since == "today":
             cutoff = datetime.now(CST).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -159,6 +160,19 @@ def list_items(
 
     pending = sum(1 for i in items if i.get("status") in ("pending_review", "pending"))
     return items, pending
+
+
+def _normalize_feedback_path(value: str) -> str:
+    """Normalize UI and stored paths before comparing feedback targets."""
+    return "/".join(part for part in str(value or "").replace("\\", "/").split("/") if part and part != ".")
+
+
+def _feedback_paths_match(query_path: str, stored_path: str) -> bool:
+    """Match equivalent root-relative paths even when one side has a project prefix."""
+    stored = _normalize_feedback_path(stored_path)
+    if not query_path or not stored:
+        return not query_path
+    return query_path == stored or query_path.endswith("/" + stored) or stored.endswith("/" + query_path)
 
 
 # ── 写 ─────────────────────────────────────────────────────────
@@ -323,6 +337,7 @@ def _create_items_locked(
             "scope": _scope,
             "task_id": str(sel.get("task_id", "")).strip(),
             "updated": ts,
+            "created": ts,
             "result": "",
             "anchor": anchor,
             "source": str(sel.get("source", "internal")),

@@ -60,3 +60,12 @@ def test_stale_anchor_blocks_plan_and_is_audited(review_project):
         store.create_execution_plan("root", "project", [item_id])
     path = review_project.parent / ".clawmate" / "feedback.json"
     assert "anchor_invalid" in path.read_text(encoding="utf-8")
+
+
+def test_list_items_matches_equivalent_relative_paths(review_project):
+    store.create_items("root", "project", "project/note.md", [{"text": "selected text", "note": "x"}])
+
+    # A share link can store a root-relative path while preview carries a
+    # project-prefixed path (or vice versa).
+    assert len(store.list_items("root", "project", file="project/note.md")[0]) == 1
+    assert len(store.list_items("root", "project", file="note.md")[0]) == 1

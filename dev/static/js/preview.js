@@ -5468,9 +5468,9 @@
   // ============ Unified Completed Feedback Card Renderer ============
   function renderCompletedFeedbackCard(item) {
     var statusLabel =
-      item.status === 'done'       ? 'DONE' :
-      item.status === 'in_progress' ? 'IN PROGRESS' :
-      item.status === 'failed'     ? 'FAILED' : 'PENDING';
+      item.status === 'done' || item.status === 'executed' ? '已执行' :
+      item.status === 'in_progress' ? '执行中' :
+      item.status === 'failed' ? '执行失败' : '待处理';
     var statusIcon = '<span class="fb-status-pill ' + (item.status || 'pending') + '">' + statusLabel + '</span>';
 
     // Truncate selection display at 80 chars
@@ -5485,8 +5485,12 @@
     header.className = 'fb-card-header';
     header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;';
     const left = document.createElement('div');
-    left.style.cssText = 'display:flex;align-items:center;gap:6px;';
-    left.innerHTML = `<span class="fb-card-status">${statusIcon}</span><span class="fb-card-id">${escHtml(item.id || '')}</span><span class="fb-card-time">${(item.updated || '').substring(5, 16)}</span>`;
+    left.style.cssText = 'display:flex;align-items:center;gap:var(--space-1);min-width:0;flex:1;';
+    const time = document.createElement('span'); time.className = 'fb-card-time fb-card-stage-time'; time.textContent = _feedbackStage(item);
+    const id = document.createElement('span'); id.className = 'fb-card-id'; id.textContent = item.id || '';
+    const action = document.createElement('span'); action.className = 'fb-card-action'; action.textContent = _actionLabel(item.action) || '—';
+    const status = document.createElement('span'); status.className = 'fb-card-status'; status.innerHTML = statusIcon;
+    left.appendChild(time); left.appendChild(id); left.appendChild(action); left.appendChild(status);
     const delBtn = document.createElement('button');
     delBtn.className = 'fb-btn-delete';
     delBtn.textContent = '✕';
@@ -7291,6 +7295,20 @@
     return map[status] || status;
   }
 
+  function _feedbackStage(item) {
+    var status = item.status || '';
+    var label = (status === 'approved' || status === 'planned' || status === 'rejected') ? '评审' :
+      (status === 'in_progress' || status === 'executed' || status === 'failed' || status === 'deleted') ? '执行' :
+      item.source === 'share' ? '提交' : '创建';
+    return label + ' ' + String(item.updated || item.created || '').substring(5, 16);
+  }
+
+  function _feedbackPathsMatch(left, right) {
+    function normalize(path) { return String(path || '').replace(/\\/g, '/').split('/').filter(function(part) { return part && part !== '.'; }).join('/'); }
+    left = normalize(left); right = normalize(right);
+    return !!left && !!right && (left === right || left.endsWith('/' + right) || right.endsWith('/' + left));
+  }
+
   // Map an action code to its template label (used for the fb-card-status badge
   // on 已评审/已拒绝/已执行 cards).
   function _actionLabel(action) {
@@ -7342,13 +7360,11 @@
       var res = await fetch(listUrl);
       var data = await res.json();
       var items = (data.items || []);
-      // Only current file (belt-and-suspenders, since the URL already filters)
+      // Shared feedback paths are root-relative while preview paths may include
+      // a project prefix; normalize both forms before the client safety filter.
       if (filePath) {
-        var want = String(filePath);
-        var wantBase = want.split('/').pop();
         items = items.filter(function(i) {
-          var f = String(i.file || '');
-          return f === want || f === wantBase || f.endsWith('/' + wantBase) || f.includes(want);
+          return _feedbackPathsMatch(filePath, i.file);
         });
       }
       // status must match the active filter
@@ -7410,21 +7426,21 @@
     card.className = 'fb-card';
 
     var head = document.createElement('div'); head.className = 'fb-card-header';
-    head.style.cssText = 'display:flex;align-items:center;gap:6px;';
 
-    // 待评审：no fb-card-status (需求2). 已评审/已拒绝/已执行：fb-card-status shows
-    // the final selected action label instead of the review status (需求1).
-    if (item.status !== 'pending_review') {
-      var status = document.createElement('span'); status.className = 'fb-card-status';
-      status.textContent = _actionLabel(item.action) || _statusLabel(item.status);
-      head.appendChild(status);
-    }
-    var time = document.createElement('span'); time.className = 'fb-card-time';
-    time.textContent = (item.updated || '').substring(5,16);
+    var time = document.createElement('span'); time.className = 'fb-card-time fb-card-stage-time';
+    time.textContent = _feedbackStage(item);
     head.appendChild(time);
     var id = document.createElement('span'); id.className = 'fb-card-id';
     id.textContent = item.id || '';
     head.appendChild(id);
+    var action = document.createElement('span'); action.className = 'fb-card-action';
+    action.textContent = _actionLabel(item.action) || '—';
+    head.appendChild(action);
+    if (['in_progress', 'executed', 'failed', 'deleted'].indexOf(item.status) >= 0) {
+      var status = document.createElement('span'); status.className = 'fb-status-pill ' + item.status;
+      status.textContent = _statusLabel(item.status);
+      head.appendChild(status);
+    }
 
     // ✕ delete (fb-btn-delete) → marks item deleted (已取消), shown in 已执行.
     var del = document.createElement('button');
