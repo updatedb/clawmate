@@ -437,6 +437,45 @@
     .preview-bottom-btn:hover { background: var(--bg-secondary); border-color: var(--text-muted); }
     .preview-bottom-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
     .preview-bottom-btn.danger:hover { background: rgba(220,38,38,0.3); border-color: rgba(220,38,38,0.5); }
+
+    /* ── Review panel: 3-row layout (title / actions / filter / list) ── */
+    .preview-right-header {
+      flex-shrink: 0;
+    }
+    .preview-right-actions {
+      display: flex; gap: 6px; padding: 0 12px 8px;
+      border-bottom: 1px solid var(--border-color);
+      flex-shrink: 0; flex-wrap: wrap;
+    }
+    .preview-right-actions .preview-bottom-btn { height: 30px; padding: 0 10px; font-size: 12px; }
+    .preview-right-filter {
+      display: flex; gap: 4px; padding: 8px 12px;
+      border-bottom: 1px solid var(--border-color);
+      flex-shrink: 0; flex-wrap: wrap;
+    }
+    .preview-right-filter .preview-bottom-btn { height: 28px; padding: 0 9px; font-size: 11px; }
+    .review-card {
+      border: 1px solid var(--border-color); border-radius: 8px;
+      margin-bottom: 10px; padding: 10px;
+      background: var(--bg-secondary);
+    }
+    .review-card-position { font-size: 11px; color: var(--text-muted); font-family: monospace; }
+    .review-card-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+    .review-card-content { font-size: 12px; white-space: pre-wrap; word-break: break-word; background: var(--bg-code); border-radius: 4px; padding: 6px 8px; line-height: 1.5; }
+    .review-card-note { font-size: 12px; color: var(--text-secondary); margin: 6px 0 2px; }
+    .review-card-note strong { color: var(--text-primary); }
+    .review-card-status { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
+    .review-card-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .review-card-actions .preview-bottom-btn { height: 26px; padding: 0 9px; font-size: 11px; }
+    .review-refine-row { margin-top: 8px; }
+    .review-refine-row textarea {
+      width: 100%; box-sizing: border-box; border: 1px solid var(--border-color);
+      border-radius: 6px; background: var(--bg-code); color: var(--text-primary);
+      padding: 6px 8px; font-family: inherit; font-size: 12px; resize: vertical; min-height: 48px;
+    }
+    .review-refine-row .refine-actions { display: flex; gap: 6px; margin-top: 6px; }
+    .review-refine-hint { font-size: 11px; color: var(--text-muted); margin-top: 4px; line-height: 1.5; }
+
     .preview-bottom-divider { width: 1px; height: 20px; background: transparent; margin: 0 4px; flex-shrink: 0; }
     .preview-btn-group { display: flex; align-items: center; gap: 4px; }
   /* preview-btn-group stays visible on all sizes (file-action buttons hidden on mobile via #btnPdf etc.) */

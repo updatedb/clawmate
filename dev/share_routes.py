@@ -13,6 +13,7 @@ import json
 import os
 import secrets
 import time
+import hashlib
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 def _fmt_expiry(ts: int) -> str:
@@ -22,13 +23,16 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, FileResponse
 
 from constants import CONFIG_PATH_ENV
-from service import safe_path, guess_category, file_info, preview_text
+from service import safe_path, guess_category, file_info, preview_text, find_project_marker
 
 router = APIRouter()
 
 SHARE_LINKS_FILE = "share_links.json"
 SHARE_EXPIRY_DAYS = (1, 3, 7, 30)
 SHARE_TTL = 86400  # 兼容旧代码：默认 1 天
+_share_feedback_rate: dict[str, list[float]] = {}
+_SHARE_FEEDBACK_LIMIT = 12
+_SHARE_FEEDBACK_WINDOW = 3600
 
 
 def _get_share_file_path() -> Path:
@@ -72,6 +76,19 @@ def _find_link(token: str) -> dict | None:
                 return None  # expired
             return l
     return None
+
+
+def _allow_share_feedback(token: str, request: Request) -> bool:
+    now = time.time()
+    actor = request.client.host if request.client else "unknown"
+    key = hashlib.sha256(f"{token}:{actor}".encode()).hexdigest()[:24]
+    values = [v for v in _share_feedback_rate.get(key, []) if now - v < _SHARE_FEEDBACK_WINDOW]
+    if len(values) >= _SHARE_FEEDBACK_LIMIT:
+        _share_feedback_rate[key] = values
+        return False
+    values.append(now)
+    _share_feedback_rate[key] = values
+    return True
 
 
 @router.post("/api/clawmate/share/create")
@@ -260,6 +277,51 @@ async def share_data(token: str):
     return JSONResponse(content=result)
 
 
+@router.post("/api/clawmate/share/{token}/feedback")
+async def share_feedback_create(token: str, request: Request):
+    """Public capability: submit a suggestion for exactly the shared file."""
+    link = _find_link(token)
+    if not link:
+        raise HTTPException(status_code=410, detail="链接已过期或不存在")
+    if not _allow_share_feedback(token, request):
+        raise HTTPException(status_code=429, detail="反馈过于频繁，请稍后再试")
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    selections = body.get("selections") or []
+    if not isinstance(selections, list) or not selections or len(selections) > 10:
+        raise HTTPException(status_code=422, detail="Invalid selections")
+    try:
+        root_path, _, safe_rel = safe_path(link["root"], link["file"])
+        project = find_project_marker(root_path, safe_rel)
+    except Exception:
+        project = ""
+    if not project:
+        raise HTTPException(status_code=422, detail="共享文件不属于已初始化项目")
+    nickname = str(body.get("author") or body.get("nickname") or "匿名评审人").strip()[:80]
+    normalized = []
+    for selection in selections:
+        if not isinstance(selection, dict):
+            continue
+        normalized.append({"text": str(selection.get("text") or selection.get("content") or "").strip(),
+            "note": str(selection.get("note", "")).strip()[:4000],
+            "position": str(selection.get("position", "")).strip()[:240],
+            "start_line": selection.get("start_line") or selection.get("startLine") or 0,
+            "end_line": selection.get("end_line") or selection.get("endLine") or 0,
+            "context_before": str(selection.get("context_before", ""))[-240:],
+            "context_after": str(selection.get("context_after", ""))[:240],
+            "action": str(selection.get("action", "other")), "source": "share", "author": nickname,
+            "share_token_id": hashlib.sha256(token.encode()).hexdigest()[:16]})
+    if not normalized or not all(s["text"] for s in normalized):
+        raise HTTPException(status_code=422, detail="反馈必须包含选中内容")
+    from store import create_items
+    items = create_items(link["root"], project, safe_rel, normalized)
+    if not items:
+        raise HTTPException(status_code=409, detail="重复反馈")
+    return {"ok": True, "ids": [i["id"] for i in items]}
+
+
 @router.get("/api/clawmate/share/{token}/raw")
 async def share_raw(token: str):
     """返回原始文件内容（用于图片/音频/视频播放）"""
@@ -297,6 +359,19 @@ async def share_asset(token: str, root: str = "", path: str = ""):
     # Security: only allow assets under the same root as the shared file
     if root != link["root"]:
         raise HTTPException(status_code=403, detail="Asset root mismatch")
+
+    # A share token authorizes one document, never arbitrary files under its
+    # root.  Permit only assets explicitly referenced by that document.
+    try:
+        _, shared_file, _ = safe_path(link["root"], link["file"])
+        source = shared_file.read_text(encoding="utf-8", errors="replace")
+        requested = path.replace("\\", "/")
+        if requested not in source and Path(requested).name not in source:
+            raise HTTPException(status_code=403, detail="Asset is not referenced by the shared file")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=403, detail="Cannot validate shared asset")
 
     try:
         _, target, _ = safe_path(root, path)

@@ -3224,7 +3224,7 @@
     if (btn) { btn.disabled = true; btn.textContent = '🤖 纠错中...'; }
     try {
       const srtContent = serializeSrt(currentSrt);
-      const res = await fetch('/api/clawmate/task/run', {
+      const res = await fetch('/api/clawmate/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ root: rootId, file: filePath, selections: [{ task_id: 'subtitle_correct', content: srtContent, srt_path: currentSrtPath }] }),
@@ -5234,93 +5234,30 @@
   }
 
   function renderFeedbackPanel() {
+    // Renders the client-side pending cards (待提交). The toolbar (添加反馈 /
+    // 提交反馈 / 执行反馈 / 关闭) and filter row are rendered separately by
+    // renderReviewPanel, so this only produces the scrollable card list.
     var body = document.getElementById('feedbackBody');
     var savedScrollTop = body.scrollTop;
     body.innerHTML = '';
 
-    // Fixed top row: buttons stay at top
-    var topBar = document.createElement('div');
-    topBar.className = 'fb-topbar';
-    body.appendChild(topBar);
-
-    // Scrollable card list
     var cardList = document.createElement('div');
     cardList.className = 'fb-card-list';
     body.appendChild(cardList);
 
-    // === Unified top row: always show "+ 添加反馈" + "✅ 全部提交" ===
-
-
-    const addBtn = document.createElement('button');
-    addBtn.className = 'fb-btn-submit';
-    addBtn.textContent = '+ 添加反馈';
-    addBtn.addEventListener('click', () => {
-      // Create a pending item and render it as a card in the pending section
-      const item = { id: ++idCounter, text: '', startLine: 0, endLine: 0, note: '', type: 'text', _isNew: true };
-      pendingItems.push(item);
-      renderFeedbackPanel();
-    });
-    topBar.appendChild(addBtn);
-
-    const submitAllBtn = document.createElement('button');
-    submitAllBtn.className = 'fb-btn-submit-all';
-    const hasPending = pendingItems.length > 0;
-    submitAllBtn.style.cssText = `flex:1;padding:4px 8px;border-radius:6px;border:1px solid var(--border-color);background:var(--btn-bg);color:var(--btn-text);cursor:${hasPending ? 'pointer' : 'not-allowed'};font-size:13px;font-weight:600;opacity:${hasPending ? '1' : '0.5'};`;
-    if (hasPending) {
-      submitAllBtn.className = 'fb-btn-submit';
-      submitAllBtn.textContent = '全部提交（' + pendingItems.length + '）';
-      submitAllBtn.disabled = false;
-      submitAllBtn.addEventListener('click', function () {
-        var missing = pendingItems.filter(function (i) { return !i.action; });
-        if (missing.length > 0) {
-          missing.forEach(function (m) {
-            var card = document.querySelector('.fb-card[data-id="' + (m.id || '') + '"]');
-            if (card) {
-              var existing = card.querySelector('.fb-card-error');
-              if (existing) existing.remove();
-              var err = document.createElement('div');
-              err.className = 'fb-card-error';
-              err.textContent = '请选择操作类型';
-              card.appendChild(err);
-              setTimeout(function () { if (err.parentNode) err.remove(); }, 5000);
-            }
-          });
-          showToast('有 ' + missing.length + ' 条未选择操作类型', 3000);
-          return;
-        }
-        submitAllItems(submitAllBtn, { itemType: 'text' });
-      });
-    } else {
-      submitAllBtn.className = 'fb-btn-submit-all';
-      submitAllBtn.textContent = '全部提交';
-      submitAllBtn.disabled = true;
-    }
-    topBar.appendChild(submitAllBtn);
-
-    // Empty state: only top row + hint
-    if (pendingItems.length === 0 && completedItems.length === 0) {
+    if (pendingItems.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'fb-empty';
       empty.style.marginTop = '12px';
-      empty.textContent = '选中文本后点击「📋 加入待办」即可累积';
+      empty.textContent = '选中文本后点击「📋 加入待办」即可累积，再点「提交反馈」发送';
       cardList.appendChild(empty);
       body.scrollTop = savedScrollTop;
       return;
     }
 
-    // Pending section
-    if (pendingItems.length > 0) {
-      [...pendingItems].reverse().forEach(function (item) {
-        cardList.appendChild(createFeedbackCard(item));
-      });
-    }
-
-    // Completed section
-    if (completedItems.length > 0) {
-      completedItems.forEach(function (item) {
-        cardList.appendChild(renderCompletedFeedbackCard(item));
-      });
-    }
+    [...pendingItems].reverse().forEach(function (item) {
+      cardList.appendChild(createFeedbackCard(item));
+    });
     body.scrollTop = savedScrollTop;
   }
 
@@ -5382,7 +5319,7 @@
       statusEl.className = 'fb-input-status loading';
 
       try {
-        const res = await fetch('/api/clawmate/task/run', {
+        const res = await fetch('/api/clawmate/feedback', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -5424,6 +5361,10 @@
     else if (isMediaMode) await loadMediaCompletedFeedback();
     else if (isOfficePdfMode) await loadOfficePdfCompletedFeedback();
     else await loadCompletedFeedback();
+    // Re-render the unified review panel so filter/list stay in sync.
+    if (!isImageMode && !isMediaMode && !isOfficePdfMode && typeof renderReviewPanel === 'function') {
+      try { renderReviewPanel(); } catch (e) {}
+    }
     // Auto-start sidebar refresh timer if sidebar is visible
     if (!rightSidebar.classList.contains('hidden')) {
       _startSidebarRefresh();
@@ -5821,7 +5762,7 @@
       } else {
         selPayload.position = item.position || '';
       }
-      const res = await fetch('/api/clawmate/task/run', {
+      const res = await fetch('/api/clawmate/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -5889,7 +5830,7 @@
     btn.disabled = true;
     btn.textContent = '提交中...';
     try {
-      const res = await fetch('/api/clawmate/task/run', {
+      const res = await fetch('/api/clawmate/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -6553,7 +6494,7 @@
     selPayload.position = rawPosition;
 
     try {
-      const res = await fetch('/api/clawmate/task/run', {
+      const res = await fetch('/api/clawmate/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -7062,7 +7003,7 @@
             if (heading) pos = 'Section ' + heading;
           }
           if (!pos && pendingStart) pos = getPosValue(ext, pendingStart, pendingEnd);
-          var res = await fetch('/api/clawmate/task/run', {
+          var res = await fetch('/api/clawmate/feedback', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -7197,6 +7138,236 @@
       }
     });
   }
+
+  // ── Internal review queue ─────────────────────────────────────────
+  // Logged-in preview exposes the complete review flow.  Suggestions are
+  // ── Unified review panel (评审面板): 3-row layout ─────────────────
+  // Row 1: title (评审) + toolbar (添加反馈 / 提交反馈 / 执行反馈 / 关闭)
+  // Row 2: filter bar (待提交 / 已提交 / 待评审 / 已评审 / 已拒绝 / 已执行)
+  // Row 3: feedback card list, per-card 评审通过 / 评审拒绝, and during
+  //        review the reviewer can request content refinement (only the
+  //        requested items may be completed; the selected content/scope
+  //        cannot be modified).
+  var _reviewFilter = 'pending_review';
+  var _reviewSelected = new Set();
+  var _reviewRefine = {};  // item.id -> refinement request text (client-side annotation)
+  function _reviewEscape(value) { var d=document.createElement('div'); d.textContent=String(value || ''); return d.innerHTML; }
+  function _reviewProject() { return (filePath || '').split('/')[0] || ''; }
+  async function _reviewRequest(url, body) {
+    var response = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    var data = await response.json();
+    if (!response.ok) throw new Error(data.detail || '请求失败');
+    return data;
+  }
+
+  // Filter categories → status lists (''/client means local pending cards)
+  var _reviewFilterDefs = [
+    { key: 'pending',        label: '待提交',           client: true  },
+    { key: 'submitted',      label: '已提交',           statuses: []   },
+    { key: 'pending_review', label: '待评审',           statuses: ['pending_review'] },
+    { key: 'approved',       label: '已评审',           statuses: ['approved', 'planned'] },
+    { key: 'rejected',       label: '已拒绝',           statuses: ['rejected'] },
+    { key: 'executed',       label: '已执行',           statuses: ['in_progress', 'executed', 'failed'] },
+  ];
+
+  function _statusLabel(status) {
+    var map = { pending_review: '待评审', approved: '已评审', planned: '已评审', rejected: '已拒绝',
+                in_progress: '执行中', executed: '已执行', failed: '执行失败', pending: '待提交' };
+    return map[status] || status;
+  }
+
+  function _renderFilterBar() {
+    var bar = document.getElementById('previewFilterBar');
+    if (!bar) return;
+    bar.innerHTML = '';
+    _reviewFilterDefs.forEach(function(def) {
+      var b = document.createElement('button');
+      b.className = 'preview-bottom-btn' + (_reviewFilter === def.key ? ' active' : '');
+      b.textContent = def.label;
+      b.addEventListener('click', function() { _reviewFilter = def.key; renderReviewPanel(); });
+      bar.appendChild(b);
+    });
+  }
+
+  async function renderReviewPanel() {
+    _renderFilterBar();
+    var panel = document.getElementById('feedbackBody');
+    var project = _reviewProject();
+    if (!project) { panel.innerHTML = '<div class="fb-empty">当前文件不属于项目，无法评审。</div>'; return; }
+    var def = _reviewFilterDefs.find(function(d){ return d.key === _reviewFilter; }) || _reviewFilterDefs[2];
+
+    // Local pending (待提交) — client-side cards, not yet submitted to server
+    if (def.client) {
+      renderFeedbackPanel();
+      return;
+    }
+
+    panel.innerHTML = '<div class="review-loading">加载评审项…</div>';
+    try {
+      var res = await fetch('/api/clawmate/feedback/list?root=' + encodeURIComponent(rootId) + '&project=' + encodeURIComponent(project));
+      var data = await res.json();
+      var items = (data.items || []);
+      // 已提交 = everything already persisted to the project feedback file
+      if (_reviewFilter !== 'submitted') {
+        items = items.filter(function(i) { return (def.statuses || []).indexOf(i.status) >= 0; });
+      }
+      panel.innerHTML = '';
+      if (!items.length) {
+        var empty = document.createElement('div'); empty.className = 'fb-empty';
+        empty.textContent = '暂无' + def.label;
+        panel.appendChild(empty); return;
+      }
+      items.forEach(function(item) { panel.appendChild(buildReviewCard(item, project)); });
+    } catch (err) {
+      panel.innerHTML = '<div class="fb-empty">❌ ' + _reviewEscape(err.message) + '</div>';
+    }
+  }
+
+  function buildReviewCard(item, project) {
+    var card = document.createElement('article');
+    card.className = 'review-card';
+
+    // Header: selection checkbox (approved) + status
+    var head = document.createElement('div'); head.className = 'review-card-head';
+    if (item.status === 'approved') {
+      var check = document.createElement('input'); check.type = 'checkbox';
+      check.checked = _reviewSelected.has(item.id);
+      check.title = '选择此已评审建议';
+      check.addEventListener('change', function() {
+        if (check.checked) _reviewSelected.add(item.id); else _reviewSelected.delete(item.id);
+      });
+      head.appendChild(check);
+    }
+    var status = document.createElement('span'); status.className = 'review-card-status';
+    status.textContent = _statusLabel(item.status);
+    head.appendChild(status);
+    card.appendChild(head);
+
+    var pos = document.createElement('div'); pos.className = 'review-card-position';
+    pos.textContent = (item.file || '') + (item.position ? ' · ' + item.position : '');
+    card.appendChild(pos);
+
+    var content = document.createElement('div'); content.className = 'review-card-content';
+    content.textContent = item.content || '';
+    card.appendChild(content);
+
+    var note = document.createElement('div'); note.className = 'review-card-note';
+    note.innerHTML = '<strong>建议：</strong>' + _reviewEscape(item.note || '') + (item.review_reason ? '<div><strong>评审意见：</strong>' + _reviewEscape(item.review_reason) + '</div>' : '');
+    card.appendChild(note);
+
+    var actions = document.createElement('div'); actions.className = 'review-card-actions';
+    var act = function(label, fn, danger) {
+      var b = document.createElement('button');
+      b.className = 'preview-bottom-btn' + (danger ? ' danger' : '');
+      b.textContent = label; b.addEventListener('click', fn); actions.appendChild(b);
+    };
+
+    var retryRefine = function() { renderReviewPanel(); };
+
+    if (item.status === 'pending_review') {
+      act('评审通过', async function() {
+        await _reviewRequest('/api/clawmate/review/decision', {root:rootId,project:project,ids:[item.id],decision:'approved'});
+        retryRefine();
+      });
+      act('评审拒绝', async function() {
+        var reason = prompt('拒绝理由（必填）','');
+        if (reason === null) return;
+        await _reviewRequest('/api/clawmate/review/decision', {root:rootId,project:project,ids:[item.id],decision:'rejected',reason:reason});
+        retryRefine();
+      });
+    }
+    if (item.status === 'approved') {
+      act('创建执行计划', async function() {
+        var d = await _reviewRequest('/api/clawmate/review/plan', {root:rootId,project:project,ids:[item.id]});
+        alert('执行计划：\n影响文件：' + (d.task.files || []).join('\n') + '\n预计操作：' + JSON.stringify(d.task.operations));
+        retryRefine();
+      });
+    }
+    if (item.status === 'planned') {
+      act('确认并执行', async function() {
+        if (!confirm('确认执行计划并唤醒 Agent？')) return;
+        var d = await _reviewRequest('/api/clawmate/review/confirm', {root:rootId,project:project,task_id:item.execution_task_id});
+        await _reviewRequest('/api/clawmate/task/run', {root:rootId,project:project,file:item.file,review_task_id:d.task.id,selections:[{task_id:item.task_id||'review_modify'}]});
+        retryRefine();
+      });
+    }
+    card.appendChild(actions);
+
+    // Reviewer refine request: may only complete requested items; the selected
+    // content/scope stays read-only (immutable for the executor).
+    if (item.status === 'pending_review') {
+      var refineRow = document.createElement('div'); refineRow.className = 'review-refine-row';
+      refineRow.innerHTML = '<textarea placeholder="请求完善内容（仅补充请求事项，不改动选中内容/范围）"></textarea>'
+        + '<div class="refine-actions"><button class="preview-bottom-btn">请求完善</button></div>'
+        + '<div class="review-refine-hint"></div>';
+      var ta = refineRow.querySelector('textarea');
+      var applyBtn = refineRow.querySelector('button');
+      var hint = refineRow.querySelector('.review-refine-hint');
+      if (_reviewRefine[item.id]) {
+        ta.value = _reviewRefine[item.id];
+        hint.textContent = '已记录完善请求（待评审人补充）';
+      }
+      applyBtn.addEventListener('click', function() {
+        var t = ta.value.trim();
+        if (!t) { hint.textContent = '请填写完善请求'; hint.style.color = 'var(--danger)'; return; }
+        _reviewRefine[item.id] = t;
+        hint.textContent = '✅ 已请求完善：仅完善请求事项，不改动选中内容/范围';
+        hint.style.color = 'var(--success, #16a34a)';
+      });
+      card.appendChild(refineRow);
+    }
+    return card;
+  }
+
+  // Wire the 3-row toolbar buttons.
+  var btnReviewAdd = document.getElementById('btnReviewAdd');
+  if (btnReviewAdd) btnReviewAdd.addEventListener('click', function() {
+    // Add a local pending draft card (待提交) — not submitted until 提交反馈.
+    if (rightSidebar.classList.contains('hidden')) openRightSidebar();
+    var item = { id: ++idCounter, text: '', startLine: 0, endLine: 0, note: '', type: 'text', _isNew: true };
+    pendingItems.push(item);
+    _reviewFilter = 'pending';
+    renderReviewPanel();
+    // Focus the card's note field after a tick so typing starts immediately
+    setTimeout(function() {
+      var card = document.querySelector('.fb-card[data-id="' + item.id + '"] .fb-note-input');
+      if (card) card.focus();
+    }, 50);
+  });
+  var btnReviewSubmit = document.getElementById('btnReviewSubmit');
+  if (btnReviewSubmit) btnReviewSubmit.addEventListener('click', async function() {
+    if (!pendingItems.length) { showToastSafe('暂无待提交反馈'); return; }
+    var missing = pendingItems.filter(function(i) { return !i.action; });
+    if (missing.length) { showToastSafe('有 ' + missing.length + ' 条未选择操作类型'); return; }
+    var btn = btnReviewSubmit; if (btn) btn.disabled = true;
+    try {
+      await submitAllItems(btn, { itemType: 'text' });
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  });
+  var btnReviewExec = document.getElementById('btnReviewExec');
+  if (btnReviewExec) btnReviewExec.addEventListener('click', async function() {
+    var project = _reviewProject();
+    if (!pendingItems.length && !_reviewSelected.size) { showToastSafe('请先添加并提交反馈，或勾选已评审建议'); return; }
+    var ids = Array.from(_reviewSelected);
+    if (!ids.length) { showToastSafe('请先选择至少一条已评审建议'); return; }
+    try {
+      var d = await _reviewRequest('/api/clawmate/review/plan', {root:rootId,project:project,ids:ids});
+      alert('执行计划已创建：' + d.task.id + '\n影响文件：' + (d.task.files || []).join('\n') + '\n即将确认并执行。');
+      var c = await _reviewRequest('/api/clawmate/review/confirm', {root:rootId,project:project,task_id:d.task.id});
+      _reviewSelected.clear();
+      renderReviewPanel();
+    } catch (err) {
+      showToastSafe('❌ ' + err.message);
+    }
+  });
+
+  // Helper: toast fallback if showToast is unavailable in this scope
+  function showToastSafe(msg) { if (typeof showToast === 'function') showToast(msg, 2500); else window.alert(msg); }
+
+  // Initial render of the unified panel once (idempotent).
+  if (document.getElementById('previewFilterBar')) renderReviewPanel();
 
   // Close button inside agent panel
   var btnClosePreviewAgent = document.getElementById('previewBtnCloseAgent');

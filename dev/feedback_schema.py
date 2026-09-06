@@ -22,12 +22,12 @@ from typing import TypedDict
 # ── 标准字段名（.feedback.json 唯一权威）────────────────────────────
 
 # 顶层字段
-FEEDBACK_TOP_FIELDS = ("root", "project", "updated", "last_id", "items")
+FEEDBACK_TOP_FIELDS = ("root", "project", "updated", "last_id", "items", "tasks", "audit")
 
 # item 级字段（API 响应、cron 模板、.feedback.json 全部统一）
 FEEDBACK_ITEM_FIELDS = (
     "id",       # FD-{abbr}-{NNNN}
-    "status",   # pending | in_progress | done | failed
+    "status",   # pending_review | approved | rejected | planned | in_progress | executed | failed
     "file",     # 相对路径
     "note",     # 用户备注/指令
     "content",  # 选中原文
@@ -37,10 +37,17 @@ FEEDBACK_ITEM_FIELDS = (
     "task_id",  # 任务模板标识（如 subtitle_correct, review_delete）
     "updated",  # 更新时间 YYYY-MM-DD HH:MM:SS
     "result",   # 处理结果摘要
+    "anchor",   # line + selected text hash + surrounding context
+    "audit",    # append-only item event ids (the full log is top-level)
 )
 
 # 合法状态值
-FEEDBACK_STATUSES = ("pending", "in_progress", "done", "failed")
+FEEDBACK_STATUSES = (
+    "pending_review", "approved", "rejected", "planned",
+    "in_progress", "executed", "failed",
+    # Legacy values remain readable and are normalized on read.
+    "pending", "done",
+)
 
 # 创建请求字段
 FEEDBACK_CREATE_FIELDS = ("root", "project", "path", "selections", "previewUrl")
@@ -63,3 +70,7 @@ class FeedbackItem(TypedDict, total=False):
     task_id: str
     updated: str
     result: str
+    anchor: dict
+    source: str
+    author: str
+    share_token_id: str

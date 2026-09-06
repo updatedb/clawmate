@@ -25,6 +25,7 @@
     .share-app {
       display: flex; flex-direction: column;
       height: 100%; overflow: hidden;
+      position: relative;
     }
     .topbar {
       display: flex; align-items: center;
@@ -114,6 +115,85 @@
 
     .markdown-body { background: transparent !important; }
 
+    /* ── Feedback panel (3-row layout: title / filter / list) ── */
+    .share-right {
+      position: absolute; top: 0; bottom: 0; right: 0;
+      width: 380px; max-width: 92vw;
+      background: var(--bg-primary); color: var(--text-primary);
+      border-left: 1px solid var(--border-color);
+      display: flex; flex-direction: column;
+      z-index: 8; overflow: hidden;
+      translate: 100%;
+      transition: translate var(--duration-slow, 0.3s) ease;
+    }
+    .share-right.open {
+      translate: 0 !important;
+      box-shadow: -4px 0 24px rgba(0,0,0,0.18);
+    }
+    .share-right.hidden { translate: 100%; pointer-events: none; }
+    .share-right-header {
+      display: flex; align-items: center; gap: 6px;
+      padding: 10px 12px; border-bottom: 1px solid var(--border-color);
+      flex-shrink: 0;
+    }
+    .share-right-header .srh-title {
+      font-size: 14px; font-weight: 700; color: var(--text-primary);
+      flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .share-right-header .srh-spacer { flex: 1; }
+    .share-right-filter {
+      display: flex; gap: 4px; padding: 8px 12px;
+      border-bottom: 1px solid var(--border-color);
+      flex-shrink: 0; flex-wrap: wrap;
+    }
+    .share-right-body { flex: 1; overflow-y: auto; padding: 10px 12px; }
+    .share-fb-empty {
+      color: var(--text-muted); font-size: 12px; text-align: center;
+      padding: 24px 10px; line-height: 1.6;
+    }
+    .share-fb-card {
+      border: 1px solid var(--border-color); border-radius: 8px;
+      padding: 10px; margin-bottom: 10px; background: var(--bg-secondary);
+      font-size: 12px;
+    }
+    .share-fb-card-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+    .share-fb-card-meta {
+      font-size: 11px; color: var(--text-muted); font-family: monospace; flex: 1;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .share-fb-card-text {
+      white-space: pre-wrap; word-break: break-word; line-height: 1.5;
+      background: var(--bg-code); border-radius: 4px; padding: 6px 8px;
+      max-height: 120px; overflow-y: auto; font-family: monospace;
+    }
+    .share-fb-card-note { margin-top: 6px; color: var(--text-secondary); }
+    .share-fb-card-note strong { color: var(--text-primary); }
+    .share-fb-del {
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      font-size: 13px; padding: 2px 5px; border-radius: 4px; line-height: 1;
+      flex-shrink: 0;
+    }
+    .share-fb-del:hover { background: var(--bg-tertiary); color: var(--danger); }
+    .share-fb-toolbar { display: flex; gap: 6px; padding: 8px 12px; border-top: 1px solid var(--border-color); flex-shrink: 0; }
+    .share-fb-note-edit {
+      width: 100%; box-sizing: border-box; border: 1px solid var(--border-color);
+      border-radius: 6px; background: var(--bg-code); color: var(--text-primary);
+      padding: 8px 10px; font-family: inherit; font-size: 12px; resize: vertical;
+      min-height: 70px;
+    }
+    .share-fb-status { font-size: 12px; padding: 4px 12px 8px; min-height: 16px; }
+    .share-fb-status.ok { color: var(--success, #16a34a); }
+    .share-fb-status.err { color: var(--danger); }
+    .share-right-btn {
+      padding: 4px 9px; border-radius: 6px; border: 1px solid var(--border-color);
+      background: var(--btn-bg); color: var(--btn-text); cursor: pointer;
+      font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    .share-right-btn:hover { background: var(--bg-secondary); border-color: var(--text-muted); }
+    .share-right-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .share-right-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
     /* ── Mobile (≤768px) ── */
     @media (max-width: 768px) {
       .topbar { padding: 0 8px; gap: 6px; }
@@ -141,6 +221,7 @@
       <span class="brand"><img src="./asset/clawmate-logo.png" alt="" width="28" height="28" style="flex-shrink:0;" />ClawMate</span>
       <span class="share-title" id="shareTitle">📄 加载中...</span>
       <div class="topbar-actions">
+        <button class="topbar-btn" id="btnShareFeedback" title="提交反馈">反馈</button>
         <button class="topbar-btn" id="btnToggleToc" title="切换大纲">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
         </button>
@@ -164,6 +245,28 @@
         </div>
       </main>
     </div>
+
+    <!-- Feedback panel (3-row layout: title / filter / list) -->
+    <aside class="share-right hidden" id="shareRight" aria-label="反馈面板">
+      <div class="share-right-header">
+        <span class="srh-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> 反馈</span>
+        <span class="srh-spacer"></span>
+        <button class="share-right-btn" id="shareFbAdd" type="button" title="添加反馈">添加反馈</button>
+        <button class="share-right-btn" id="shareFbSubmit" type="button" title="提交反馈">提交反馈</button>
+        <button class="share-right-btn" id="shareFbClose" type="button" title="关闭">关闭</button>
+      </div>
+      <div class="share-right-filter" id="shareFbFilter">
+        <button class="share-right-btn" data-share-filter="pending" title="待提交">待提交</button>
+        <button class="share-right-btn" data-share-filter="submitted" title="已提交">已提交</button>
+      </div>
+      <div class="share-right-body" id="shareFbList">
+        <div class="share-fb-empty">选中文中内容后点击「添加反馈」即可累积</div>
+      </div>
+      <div class="share-fb-toolbar">
+        <textarea class="share-fb-note-edit" id="shareFbNote" maxlength="2000" placeholder="填写修改建议（必填，提交后不可改）"></textarea>
+      </div>
+      <div class="share-fb-status" id="shareFbStatus"></div>
+    </aside>
 
     <!-- Bottombar -->
     <div class="share-bottombar">
@@ -440,6 +543,124 @@
       pre.textContent = content;
       body.innerHTML = ''; body.appendChild(pre);
     }
+
+    // ── Feedback panel (share surface) ───────────────────────────────
+    // Public share has feedback only: add a selection, then submit. It
+    // deliberately exposes no review/task/file-tree API or controls.
+    var shareRight = document.getElementById('shareRight');
+    var shareFbBody = document.getElementById('shareFbList');
+    var shareFbNoteEl = document.getElementById('shareFbNote');
+    var shareFbStatusEl = document.getElementById('shareFbStatus');
+    var sharePending = [];   // { id, text, note, author }
+    var shareSubmitted = []; // { id, text, note, author }
+    var _shareFbId = 0;
+    var shareFbFilter = 'pending';
+    var _shareAuthor = '';
+
+    function _shareFbEsc(s) { var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+    function _shareFbStatus(msg, ok) { shareFbStatusEl.textContent = msg || ''; shareFbStatusEl.className = 'share-fb-status' + (ok ? ' ok' : msg ? ' err' : ''); }
+    function _shareFbGetSelection() {
+      var sel = window.getSelection ? window.getSelection().toString() : '';
+      return String(sel || '').trim();
+    }
+    function _shareFbActiveFilter() {
+      var btns = shareRight.querySelectorAll('[data-share-filter]');
+      btns.forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-share-filter') === shareFbFilter); });
+    }
+    function _shareFbRender() {
+      shareFbBody.innerHTML = '';
+      var source = shareFbFilter === 'pending' ? sharePending : shareSubmitted;
+      if (!source.length) {
+        var empty = document.createElement('div');
+        empty.className = 'share-fb-empty';
+        empty.textContent = shareFbFilter === 'pending'
+          ? '选中文中内容后点击「添加反馈」即可累积'
+          : '暂无已提交反馈';
+        shareFbBody.appendChild(empty);
+      }
+      source.forEach(function(it) {
+        var card = document.createElement('div');
+        card.className = 'share-fb-card';
+        var head = document.createElement('div'); head.className = 'share-fb-card-head';
+        var meta = document.createElement('span'); meta.className = 'share-fb-card-meta';
+        meta.textContent = it.id + (it.author ? ' · ' + it.author : '');
+        var del = document.createElement('button'); del.className = 'share-fb-del'; del.textContent = '✕'; del.title = '删除'; del.setAttribute('aria-label', '删除该反馈');
+        del.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var target = shareFbFilter === 'pending' ? sharePending : shareSubmitted;
+          var idx = target.indexOf(it);
+          if (idx >= 0) target.splice(idx, 1);
+          _shareFbRender();
+        });
+        head.appendChild(meta); head.appendChild(del);
+        var text = document.createElement('div'); text.className = 'share-fb-card-text'; text.textContent = it.text || '（空）';
+        var note = document.createElement('div'); note.className = 'share-fb-card-note';
+        if (it.note) { note.innerHTML = '<strong>建议：</strong>' + _shareFbEsc(it.note); } else { note.textContent = '（未填写建议）'; }
+        card.appendChild(head); card.appendChild(text); card.appendChild(note);
+        shareFbBody.appendChild(card);
+      });
+      _shareFbActiveFilter();
+    }
+
+    function openShareFeedback() { shareRight.classList.remove('hidden'); shareRight.classList.add('open'); }
+    function closeShareFeedback() { shareRight.classList.add('hidden'); shareRight.classList.remove('open'); }
+    function toggleShareFeedback() {
+      if (shareRight.classList.contains('hidden')) openShareFeedback();
+      else closeShareFeedback();
+    }
+
+    // Topbar toggle
+    document.getElementById('btnShareFeedback').addEventListener('click', toggleShareFeedback);
+    document.getElementById('shareFbClose').addEventListener('click', closeShareFeedback);
+
+    // Filter
+    shareRight.querySelectorAll('[data-share-filter]').forEach(function(b) {
+      b.addEventListener('click', function() { shareFbFilter = b.getAttribute('data-share-filter'); _shareFbRender(); });
+    });
+
+    // Add feedback from current selection
+    function addShareFeedback() {
+      var selected = _shareFbGetSelection();
+      if (!selected) { _shareFbStatus('请先选中文中内容再添加反馈', false); return; }
+      var note = shareFbNoteEl.value.trim();
+      if (!note) { _shareFbStatus('请填写修改建议（必填）后再添加', false); shareFbNoteEl.focus(); return; }
+      sharePending.push({ id: 'FD-' + (++_shareFbId), text: selected.slice(0, 800), note: note, author: _shareAuthor });
+      shareFbNoteEl.value = '';
+      shareFbFilter = 'pending';
+      _shareFbRender();
+      _shareFbStatus('✅ 已添加反馈（待提交）', true);
+    }
+    document.getElementById('shareFbAdd').addEventListener('click', addShareFeedback);
+
+    // Submit all pending feedback
+    document.getElementById('shareFbSubmit').addEventListener('click', async function() {
+      if (!sharePending.length) { _shareFbStatus('暂无待提交反馈', false); return; }
+      var btn = this; btn.disabled = true; _shareFbStatus('提交中...', false);
+      try {
+        var payload = { author: _shareAuthor, selections: sharePending.map(function(it) { return { text: it.text, note: it.note }; }) };
+        var response = await fetch(API_BASE + '/share/' + TOKEN + '/feedback', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+        var data = await response.json();
+        if (!response.ok) throw new Error(data.detail || '提交失败');
+        var submitted = sharePending.splice(0);
+        shareSubmitted = shareSubmitted.concat(submitted);
+        shareFbFilter = 'submitted';
+        _shareFbRender();
+        _shareFbStatus('✅ 已提交，等待项目成员评审（' + submitted.length + ' 条）', true);
+      } catch (err) {
+        _shareFbStatus('❌ ' + err.message, false);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // Author field (optional, local session)
+    (function() {
+      var v = '';
+      try { v = (localStorage.getItem('clawmate-share-author') || '').trim(); } catch (e) {}
+      _shareAuthor = v;
+    })();
+
+    _shareFbRender();
 
     async function loadContent() {
       try {

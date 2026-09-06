@@ -12,6 +12,8 @@ import logging
 import os
 import re
 import threading
+import hashlib
+import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -92,6 +94,15 @@ def _read_feedback(path: Path) -> dict:
             del _feedback_read_cache[oldest_key]
         _feedback_read_cache[cache_key] = (_now_ns, data)
 
+    # Read compatibility: old files used pending/done. Do not mutate the file
+    # merely by reading it; every writer persists the normalized vocabulary.
+    for item in data.get("items", []):
+        if item.get("status") == "pending":
+            item["status"] = "pending_review"
+        elif item.get("status") == "done":
+            item["status"] = "executed"
+    data.setdefault("tasks", [])
+    data.setdefault("audit", [])
     return data
 
 
@@ -146,7 +157,7 @@ def list_items(
 
             items = [i for i in items if _parse_ts(i.get("updated", "")) >= cutoff]
 
-    pending = sum(1 for i in items if i.get("status") == "pending")
+    pending = sum(1 for i in items if i.get("status") in ("pending_review", "pending"))
     return items, pending
 
 
@@ -185,7 +196,8 @@ def _batch_update_items_locked(root_id: str, project: str, updates: list[dict]) 
         updated.append(item)
     _ts = datetime.now(CST).isoformat(timespec="seconds")
     if updated:
-        _atomic_write(path, root_id, project, items, data.get("last_id", 0))
+        _append_audit(data, "batch_status_update", item_ids=[i["id"] for i in updated])
+        _atomic_write(path, root_id, project, items, data.get("last_id", 0), data)
     logger.info("[batch_update] %s root=%s proj=%s count=%d", _ts, root_id, project, len(updated))
     return updated
 
@@ -257,7 +269,7 @@ def _create_items_locked(
 
     new_items = []
     for idx, sel in enumerate(selections):
-        text = str(sel.get("text", "")).strip()
+        text = str(sel.get("text") or sel.get("content") or "").strip()
         note = str(sel.get("note", "")).strip()
         _action_from_sel = str(sel.get("action", "")).strip()
         _scope_from_sel = str(sel.get("scope", "")).strip()
@@ -289,9 +301,20 @@ def _create_items_locked(
         new_id_num = last_id + idx + 1
         item_id = f"FD-{abbr}-{new_id_num:04d}"
 
+        selected_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        before = str(sel.get("context_before", ""))[-240:]
+        after = str(sel.get("context_after", ""))[:240]
+        anchor = {
+            "start_line": int(sel.get("start_line") or sel.get("startLine") or 0),
+            "end_line": int(sel.get("end_line") or sel.get("endLine") or 0),
+            "selected_text": text,
+            "content_hash": f"sha256:{selected_hash}",
+            "context_before": before,
+            "context_after": after,
+        }
         new_items.append({
             "id": item_id,
-            "status": "pending",
+            "status": "pending_review",
             "file": file_path,
             "note": note,
             "content": text,
@@ -301,6 +324,10 @@ def _create_items_locked(
             "task_id": str(sel.get("task_id", "")).strip(),
             "updated": ts,
             "result": "",
+            "anchor": anchor,
+            "source": str(sel.get("source", "internal")),
+            "author": str(sel.get("author", "")),
+            "share_token_id": str(sel.get("share_token_id", "")),
         })
         existing_keys.add(dedup_key)
 
@@ -308,7 +335,8 @@ def _create_items_locked(
         return []
 
     items.extend(new_items)
-    _atomic_write(path, root_id, project, items, max(last_id, new_id_num))
+    _append_audit(data, "feedback_created", item_ids=[i["id"] for i in new_items])
+    _atomic_write(path, root_id, project, items, max(last_id, new_id_num), data)
 
     _ts = datetime.now(CST).isoformat(timespec="seconds")
     logger.info(
@@ -343,6 +371,10 @@ def _update_item_locked(
     new_status: str,
     result: str = "",
 ) -> dict:
+    if new_status == "pending":
+        new_status = "pending_review"
+    elif new_status == "done":
+        new_status = "executed"
     if new_status not in FEEDBACK_STATUSES and new_status != "deleted":
         raise ValueError(f"status must be one of {FEEDBACK_STATUSES} or deleted")
 
@@ -367,7 +399,8 @@ def _update_item_locked(
     if updated_item is None:
         raise LookupError(f"Item {item_id} not found")
 
-    _atomic_write(path, root_id, project, items, data.get("last_id", 0))
+    _append_audit(data, f"status_{new_status}", item_ids=[item_id], detail={"result": result} if result else None)
+    _atomic_write(path, root_id, project, items, data.get("last_id", 0), data)
 
     _ts = datetime.now(CST).isoformat(timespec="seconds")
     logger.info(
@@ -375,6 +408,191 @@ def _update_item_locked(
         _ts, root_id, project, item_id, new_status,
     )
     return updated_item
+
+
+# ── Review workflow ──────────────────────────────────────────────
+
+def review_items(root_id: str, project: str, item_ids: list[str], decision: str,
+                 reason: str = "") -> list[dict]:
+    """Approve or reject pending review items; no execution happens here."""
+    if decision not in ("approved", "rejected"):
+        raise ValueError("decision must be approved or rejected")
+    with _feedback_write_lock:
+        path = _get_feedback_path(root_id, project)
+        data = _read_feedback(path)
+        wanted = set(item_ids)
+        changed = []
+        for item in data["items"]:
+            if item.get("id") not in wanted:
+                continue
+            if item.get("status") != "pending_review":
+                raise ValueError(f"{item.get('id')} is not pending review")
+            item["status"] = decision
+            item["updated"] = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
+            if reason:
+                item["review_reason"] = reason
+            changed.append(dict(item))
+        if len(changed) != len(wanted):
+            raise LookupError("one or more review items were not found")
+        _append_audit(data, "review_approved" if decision == "approved" else "review_rejected",
+                      item_ids=item_ids, detail={"reason": reason} if reason else None)
+        _atomic_write(path, root_id, project, data["items"], data.get("last_id", 0), data)
+        return changed
+
+
+def _anchor_valid(root_id: str, item: dict) -> tuple[bool, str]:
+    """Require selected content hash to still occur exactly once before execution."""
+    anchor = item.get("anchor") or {}
+    selected = str(anchor.get("selected_text") or item.get("content") or "")
+    if not selected:
+        return False, "missing selected text anchor"
+    expected = str(anchor.get("content_hash", ""))
+    actual = "sha256:" + hashlib.sha256(selected.encode("utf-8")).hexdigest()
+    if expected and expected != actual:
+        return False, "stored anchor hash is invalid"
+    try:
+        root = load_config().root_dir(root_id).resolve()
+        candidate = (root / str(item.get("file", ""))).resolve()
+        if root not in candidate.parents or not candidate.is_file():
+            return False, "target file is unavailable"
+        content = candidate.read_text(encoding="utf-8", errors="replace")
+    except Exception as exc:
+        return False, f"cannot read target file: {exc}"
+    count = content.count(selected)
+    if count == 1:
+        return True, ""
+    return False, "anchor stale: selected content no longer has one unambiguous match"
+
+
+def create_execution_plan(root_id: str, project: str, item_ids: list[str]) -> dict:
+    """Persist a review-approved execution plan. Confirmation is separate."""
+    if not item_ids:
+        raise ValueError("missing approved review ids")
+    with _feedback_write_lock:
+        path = _get_feedback_path(root_id, project)
+        data = _read_feedback(path)
+        by_id = {i.get("id"): i for i in data["items"]}
+        selected = []
+        for item_id in item_ids:
+            item = by_id.get(item_id)
+            if not item:
+                raise LookupError(f"Item {item_id} not found")
+            if item.get("status") != "approved":
+                raise ValueError(f"{item_id} is not approved")
+            valid, reason = _anchor_valid(root_id, item)
+            if not valid:
+                item["anchor_state"] = "stale"
+                item["anchor_error"] = reason
+                _append_audit(data, "anchor_invalid", item_ids=[item_id], detail={"reason": reason})
+                _atomic_write(path, root_id, project, data["items"], data.get("last_id", 0), data)
+                raise ValueError(f"{item_id}: {reason}")
+            selected.append(item)
+        task_id = f"RV-{uuid.uuid4().hex[:10]}"
+        files = sorted({str(i.get("file", "")) for i in selected})
+        operations = [{"item_id": i["id"], "task_id": i.get("task_id", ""),
+                       "action": i.get("action", "modify"), "file": i.get("file", ""),
+                       "content": i.get("content", ""), "position": i.get("position", ""),
+                       "note": i.get("note", "")} for i in selected]
+        task = {"id": task_id, "status": "planned", "item_ids": item_ids,
+                "files": files, "operations": operations,
+                "plan": "Apply the approved review suggestions only to the listed files.",
+                "created": datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S"),
+                "confirmed": False, "result": {"diff": "", "artifacts": [], "checks": [], "summary": ""}}
+        data.setdefault("tasks", []).append(task)
+        for item in selected:
+            item["status"] = "planned"
+            item["execution_task_id"] = task_id
+            item["updated"] = task["created"]
+        _append_audit(data, "execution_plan_created", item_ids=item_ids, task_id=task_id,
+                      detail={"files": files, "operations": operations})
+        _atomic_write(path, root_id, project, data["items"], data.get("last_id", 0), data)
+        return task
+
+
+def confirm_execution_plan(root_id: str, project: str, task_id: str) -> dict:
+    """Internal confirmation gate. Rechecks anchors immediately before run."""
+    with _feedback_write_lock:
+        path = _get_feedback_path(root_id, project)
+        data = _read_feedback(path)
+        task = next((t for t in data.get("tasks", []) if t.get("id") == task_id), None)
+        if not task:
+            raise LookupError(f"Task {task_id} not found")
+        if task.get("status") != "planned":
+            raise ValueError("task is not awaiting confirmation")
+        selected = [i for i in data["items"] if i.get("id") in set(task.get("item_ids", []))]
+        for item in selected:
+            valid, reason = _anchor_valid(root_id, item)
+            if not valid:
+                item["anchor_state"] = "stale"
+                item["anchor_error"] = reason
+                _append_audit(data, "anchor_invalid", item_ids=[item["id"]], task_id=task_id,
+                              detail={"reason": reason})
+                _atomic_write(path, root_id, project, data["items"], data.get("last_id", 0), data)
+                raise ValueError(f"{item['id']}: {reason}")
+        now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
+        task["confirmed"] = True
+        task["confirmed_at"] = now
+        task["status"] = "confirmed"
+        _append_audit(data, "execution_confirmed", item_ids=task["item_ids"], task_id=task_id)
+        _atomic_write(path, root_id, project, data["items"], data.get("last_id", 0), data)
+        return dict(task)
+
+
+def execution_task(root_id: str, project: str, task_id: str) -> dict:
+    path = _get_feedback_path(root_id, project)
+    data = _read_feedback(path)
+    task = next((t for t in data.get("tasks", []) if t.get("id") == task_id), None)
+    if not task:
+        raise LookupError(f"Task {task_id} not found")
+    return dict(task)
+
+
+def mark_execution_started(root_id: str, project: str, task_id: str) -> dict:
+    with _feedback_write_lock:
+        path = _get_feedback_path(root_id, project)
+        data = _read_feedback(path)
+        task = next((t for t in data.get("tasks", []) if t.get("id") == task_id), None)
+        if not task:
+            raise LookupError(f"Task {task_id} not found")
+        if task.get("status") != "confirmed":
+            raise ValueError("task is not confirmed")
+        task["status"] = "in_progress"
+        task["started_at"] = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
+        for item in data["items"]:
+            if item.get("id") in set(task.get("item_ids", [])):
+                item["status"] = "in_progress"
+                item["updated"] = task["started_at"]
+        _append_audit(data, "execution_started", item_ids=task["item_ids"], task_id=task_id)
+        _atomic_write(path, root_id, project, data["items"], data.get("last_id", 0), data)
+        return dict(task)
+
+
+def record_execution_result(root_id: str, project: str, task_id: str, *, success: bool,
+                            summary: str, diff: str = "", artifacts: list | None = None,
+                            checks: list | None = None) -> dict:
+    """Persist real execution evidence supplied by the executor; never invent it."""
+    with _feedback_write_lock:
+        path = _get_feedback_path(root_id, project)
+        data = _read_feedback(path)
+        task = next((t for t in data.get("tasks", []) if t.get("id") == task_id), None)
+        if not task:
+            raise LookupError(f"Task {task_id} not found")
+        if task.get("status") != "in_progress":
+            raise ValueError("task is not executing")
+        task["status"] = "executed" if success else "failed"
+        task["completed_at"] = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
+        task["result"] = {"diff": diff or "", "artifacts": artifacts or [], "checks": checks or [],
+                          "summary": summary or ""}
+        for item in data["items"]:
+            if item.get("id") in set(task.get("item_ids", [])):
+                item["status"] = task["status"]
+                item["result"] = summary or ""
+                item["updated"] = task["completed_at"]
+        _append_audit(data, "execution_completed" if success else "execution_failed",
+                      item_ids=task["item_ids"], task_id=task_id,
+                      detail={"has_diff": bool(diff), "artifact_count": len(artifacts or []), "checks": checks or []})
+        _atomic_write(path, root_id, project, data["items"], data.get("last_id", 0), data)
+        return dict(task)
 
 
 # ── 扫描 ──────────────────────────────────────────────────────────
@@ -432,6 +650,11 @@ def _cleanup_expired(items: list[dict]) -> list[dict]:
 
     Returns: 保留的 items 列表
     """
+    # Review records are evidence.  Never remove review/execution items from
+    # the authoritative file; audit history is append-only and must remain
+    # explainable even after an execution fails.
+    if any(i.get("status") in ("pending_review", "approved", "rejected", "planned", "executed") for i in items):
+        return items
     cfg = load_config()
     threshold_days = cfg.feedback.cleanup_done_after_days
     if threshold_days <= 0:
@@ -468,7 +691,24 @@ def _cleanup_expired(items: list[dict]) -> list[dict]:
 
 # ── 内部工具 ───────────────────────────────────────────────────────
 
-def _atomic_write(path: Path, root_id: str, project: str, items: list, last_id: int) -> None:
+def _append_audit(data: dict, event: str, item_ids: list[str] | None = None,
+                  task_id: str = "", detail: dict | None = None) -> dict:
+    """Append-only audit. Events are never edited or removed by normal writes."""
+    record = {
+        "id": f"AU-{uuid.uuid4().hex[:12]}",
+        "event": event,
+        "at": datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S"),
+        "item_ids": item_ids or [],
+        "task_id": task_id,
+    }
+    if detail:
+        record["detail"] = detail
+    data.setdefault("audit", []).append(record)
+    return record
+
+
+def _atomic_write(path: Path, root_id: str, project: str, items: list, last_id: int,
+                  existing: dict | None = None) -> None:
     """原子写 feedback.json（tmp + os.replace），写入前清理过期条目。"""
     # Ensure parent .clawmate/ directory exists
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -483,6 +723,11 @@ def _atomic_write(path: Path, root_id: str, project: str, items: list, last_id: 
         "last_id": last_id,
         "items": items,
     }
+    if existing:
+        # Preserve review tasks and append-only audit history.  Only the
+        # canonical envelope fields above are recomputed by this writer.
+        data["tasks"] = existing.get("tasks", [])
+        data["audit"] = existing.get("audit", [])
     tmp_path = path.with_name(path.name + ".tmp")
     with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)

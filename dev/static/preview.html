@@ -84,7 +84,14 @@
       <div id="previewResizeHandle" class="preview-resize-handle hidden"></div>
       <!-- Right: Feedback Panel -->
       <aside class="preview-right" id="rightSidebar">
-        <div class="preview-right-header"><span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> 反馈</span><button class="panel-close-btn" id="btnCloseRight" title="关闭面板"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></div>
+        <div class="preview-right-header"><span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> 评审</span></div>
+        <div class="preview-right-actions" id="previewActionsBar">
+          <button class="preview-bottom-btn" id="btnReviewAdd" type="button" title="添加反馈">添加反馈</button>
+          <button class="preview-bottom-btn" id="btnReviewSubmit" type="button" title="提交反馈">提交反馈</button>
+          <button class="preview-bottom-btn" id="btnReviewExec" type="button" title="执行反馈">执行反馈</button>
+          <button class="preview-bottom-btn" id="btnCloseRight" type="button" title="关闭面板">关闭</button>
+        </div>
+        <div class="preview-right-filter" id="previewFilterBar"></div>
         <div class="preview-right-body" id="feedbackBody">
           <div class="fb-empty">选中文本后点击「<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg> 加入面板」即可累积</div>
         </div>

@@ -31,7 +31,11 @@ from fastapi.responses import JSONResponse
 
 from feedback_schema import FEEDBACK_STATUSES
 from config import load as config
-from store import update_item, list_items, batch_update_items
+from store import (
+    update_item, list_items, batch_update_items, create_items, review_items,
+    create_execution_plan, confirm_execution_plan, execution_task,
+    record_execution_result,
+)
 from service import resolve_root
 
 # ── 常量 ────────────────────────────────────────────────────────────
@@ -39,6 +43,105 @@ from service import resolve_root
 CST = timezone(timedelta(hours=8))
 
 router = APIRouter()
+
+
+@router.post("/api/clawmate/feedback", response_class=JSONResponse)
+async def feedback_create(request: Request):
+    """Create review suggestions only. Creation never wakes an agent."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    root_id = str(body.get("root", "")).strip()
+    project = str(body.get("project", "")).strip()
+    path = str(body.get("path") or body.get("file") or "").strip()
+    selections = body.get("selections", [])
+    if not project and "/" in path:
+        project = path.split("/", 1)[0]
+    if not root_id or not project or not path or not isinstance(selections, list) or not selections:
+        raise HTTPException(status_code=422, detail="Missing root/project/path/selections")
+    try:
+        items = create_items(root_id, project, path, selections)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Project is not initialized")
+    if not items:
+        raise HTTPException(status_code=409, detail="Feedback already exists")
+    return {"ok": True, "ids": [i["id"] for i in items], "items": items}
+
+
+@router.post("/api/clawmate/review/decision", response_class=JSONResponse)
+async def review_decision(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    root_id, project = str(body.get("root", "")).strip(), str(body.get("project", "")).strip()
+    ids, decision = body.get("ids", []), str(body.get("decision", "")).strip()
+    if not root_id or not project or not isinstance(ids, list) or not ids:
+        raise HTTPException(status_code=422, detail="Missing root/project/ids")
+    try:
+        items = review_items(root_id, project, [str(i) for i in ids], decision, str(body.get("reason", "")).strip())
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"ok": True, "items": items}
+
+
+@router.post("/api/clawmate/review/plan", response_class=JSONResponse)
+async def review_plan(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    try:
+        task = create_execution_plan(str(body.get("root", "")).strip(), str(body.get("project", "")).strip(),
+                                     [str(i) for i in body.get("ids", [])])
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"ok": True, "task": task}
+
+
+@router.post("/api/clawmate/review/confirm", response_class=JSONResponse)
+async def review_confirm(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    try:
+        task = confirm_execution_plan(str(body.get("root", "")).strip(), str(body.get("project", "")).strip(),
+                                      str(body.get("task_id", "")).strip())
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"ok": True, "task": task}
+
+
+@router.post("/api/clawmate/review/result", response_class=JSONResponse)
+async def review_result(request: Request):
+    """Internal executor callback with actual diff/artifact/check evidence."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    artifacts = body.get("artifacts", [])
+    checks = body.get("checks", [])
+    if not isinstance(artifacts, list) or not isinstance(checks, list):
+        raise HTTPException(status_code=422, detail="artifacts and checks must be arrays")
+    try:
+        task = record_execution_result(
+            str(body.get("root", "")).strip(), str(body.get("project", "")).strip(),
+            str(body.get("task_id", "")).strip(), success=bool(body.get("success")),
+            summary=str(body.get("summary", "")).strip(), diff=str(body.get("diff", "")),
+            artifacts=artifacts, checks=checks)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"ok": True, "task": task}
 
 
 
@@ -169,6 +272,8 @@ async def feedback_update(request: Request):
         )
     if new_status in ("done", "failed") and not result_text:
         raise HTTPException(status_code=422, detail="Missing result summary (required for done/failed)")
+    if new_status in ("pending_review", "approved", "rejected", "planned"):
+        raise HTTPException(status_code=409, detail="Use the review decision/plan endpoints for review state transitions")
 
     try:
         item = update_item(root_id, project, feedback_id, new_status, result=result_text)
@@ -208,6 +313,9 @@ async def feedback_batch_update(request: Request):
         raise HTTPException(status_code=422, detail="Missing root/project")
     if not updates or not isinstance(updates, list):
         raise HTTPException(status_code=422, detail="Missing items")
+    forbidden = {"pending_review", "approved", "rejected", "planned"}
+    if any(str(update.get("status", "")) in forbidden for update in updates if isinstance(update, dict)):
+        raise HTTPException(status_code=409, detail="Use review endpoints for review state transitions")
 
     try:
         result = batch_update_items(root_id, project, updates)
@@ -217,5 +325,3 @@ async def feedback_batch_update(request: Request):
         logger.exception("[batch-update] unhandled error root=%s project=%s", root_id, project)
         raise HTTPException(status_code=500, detail="Internal server error — check server logs")
     return {"ok": True, "updated": len(result), "items": [{"id": it["id"], "status": it["status"]} for it in result]}
-
-

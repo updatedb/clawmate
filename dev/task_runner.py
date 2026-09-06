@@ -73,11 +73,28 @@ async def task_run(request: Request):
     file_path = str(body.get("file", "")).strip()
     project = str(body.get("project", "")).strip()
     raw_selections = body.get("selections", [])
+    review_task_id = str(body.get("review_task_id", "")).strip()
 
     if not root_id or not file_path:
         raise HTTPException(status_code=422, detail="Missing root/file")
+    if review_task_id:
+        # The only path from an approved review to execution.  It is checked
+        # server-side, so a browser cannot bypass the plan/confirm UI.
+        from store import execution_task
+        try:
+            review_task = execution_task(root_id, project or file_path.split("/")[0], review_task_id)
+        except (LookupError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        if review_task.get("status") != "confirmed" or not review_task.get("confirmed"):
+            raise HTTPException(status_code=409, detail="Execution plan must be confirmed before agent execution")
+        raw_selections = [{"task_id": op.get("task_id") or "review_" + str(op.get("action", "modify")),
+                           "content": op.get("content", ""),
+                           "note": op.get("note", ""), "position": op.get("position", "")}
+                          for op in review_task.get("operations", [])]
     if not raw_selections or not isinstance(raw_selections, list):
         raise HTTPException(status_code=422, detail="Missing selections")
+    if not review_task_id:
+        raise HTTPException(status_code=409, detail="Direct execution is disabled: submit feedback, approve it, create a plan, then confirm execution")
 
     # 校验 root_id 合法性（是否在 config.json 中注册）
     from config import load as _cfg
@@ -112,7 +129,7 @@ async def task_run(request: Request):
         if k not in ("root", "project", "file", "path", "selections", "sessionKey"):
             global_vars[k] = str(v)
 
-    from store import create_items
+    from store import create_items, mark_execution_started
 
     parsed = []
     for sel in raw_selections:
@@ -160,14 +177,21 @@ async def task_run(request: Request):
             "position": position,
         })
 
-    new_items = create_items(root_id, project, file_path, parsed)
-    if not new_items:
-        raise HTTPException(status_code=409, detail="Task already exists (dedup)")
-
-    ids = [i["id"] for i in new_items]
+    if review_task_id:
+        # Do not create duplicate feedback items for a reviewed task.
+        try:
+            started = mark_execution_started(root_id, project, review_task_id)
+        except (LookupError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        ids = list(started.get("item_ids", []))
+    else:
+        new_items = create_items(root_id, project, file_path, parsed)
+        if not new_items:
+            raise HTTPException(status_code=409, detail="Task already exists (dedup)")
+        ids = [i["id"] for i in new_items]
 
     # 唤醒 agent
-    _wake_agent_for_root(root_id, project=project, file=file_path)
+    _wake_agent_for_root(root_id, project=project, file=file_path, include_in_progress=bool(review_task_id), review_task_id=review_task_id)
 
     _ts = datetime.now(CST).isoformat(timespec="seconds")
     logger.info("[task.run] %s root=%s file=%s items=%s", _ts, root_id, file_path, ids)
@@ -203,7 +227,8 @@ _last_wake: dict[str, float] = {}
 _DEBOUNCE_SECONDS = 60
 
 
-def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> None:
+def _wake_agent_for_root(root_id: str, project: str = "", file: str = "", include_in_progress: bool = False,
+                         review_task_id: str = "") -> None:
     """读取 config，直接 POST OpenClaw /hooks/agent（后台线程 fire-and-forget）。
 
     内联 message（不加载模板），防抖 60s 同 root 跳过。
@@ -241,7 +266,10 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
         scope += f"&file={file}"
 
     # 读取所有 pending items
-    items, _ = list_items(root_id, project, status="pending", file=file)
+    items, _ = list_items(root_id, project, status="pending_review", file=file)
+    if include_in_progress:
+        active, _ = list_items(root_id, project, status="in_progress", file=file)
+        items = active
 
     # ── 前置验证：按 scope 逐条检查 root/project/file 存在性，失败项直接标记 failed ──
     if items:
@@ -311,6 +339,8 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "") -> Non
         lines.append(f"- 所有操作基于 {root_id} 指向的目录；file 已给出绝对路径（已验证存在），scope=project 时 project 必须存在，不存在直接标记 status=failed")
         lines.append(f"- 禁止创建或删除任何文件/目录（包括临时文件）")
         lines.append(f"- 禁止修改配置文件和项目配置（config.json, config.example.json, .gitignore 等）")
+        if review_task_id:
+            lines.append(f"- 此为已确认评审任务 task_id={review_task_id}；完成后必须 POST {base_url}/api/clawmate/review/result，写入真实 success、summary、diff、artifacts（ClawMate 链接）和 checks；未知字段留空/[]，不得伪造。")
         message = "\n".join(lines)
     else:
         message = f"ClawMate 反馈通知：{scope} 目前无待处理 feedback。"
