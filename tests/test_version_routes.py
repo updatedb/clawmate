@@ -58,3 +58,14 @@ def test_commit_route_generates_summary_and_leaves_other_changes_untouched(tmp_p
     assert subject == "更新文档：notes.md（新增 1 行，删除 0 行）"
     status = subprocess.run(["git", "status", "--porcelain"], cwd=tmp_path, check=True, capture_output=True, text=True)
     assert status.stdout == "?? other.md\n"
+
+
+def test_commit_updates_nearest_project_metadata(tmp_path):
+    project = tmp_path / "project"
+    (project / ".clawmate").mkdir(parents=True)
+    (project / "CLAWLIST.md").write_text("- [ ] 待办\n", encoding="utf-8")
+    target = project / "notes.md"
+    target.write_text("x", encoding="utf-8")
+    data = version_routes._update_project_metadata(project, target, "更新文档：notes.md")
+    assert 30 <= len(data["status_summary"]) <= 50
+    assert (project / ".clawmate" / "project.json").exists()

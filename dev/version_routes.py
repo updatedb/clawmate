@@ -166,6 +166,21 @@ def _git_diff(file_path: Path, from_hash: str, to_hash: str | None = None) -> st
     return diff_text
 
 
+def _update_project_metadata(git_root: Path, target: Path, subject: str) -> dict:
+    """Best-effort metadata update for the nearest ClawMate project boundary."""
+    for candidate in [target.parent, *target.parents]:
+        if (candidate / ".clawmate").is_dir():
+            try:
+                from project_routes import update_project_after_commit
+                return update_project_after_commit(candidate, subject, str(target.relative_to(candidate)))
+            except Exception as exc:
+                logger.warning("[version.commit] project metadata update failed: %s", exc)
+            break
+        if candidate == git_root:
+            break
+    return {}
+
+
 def _build_commit_message(file_path: Path, numstat: str | None) -> str:
     """Build a concise Chinese commit subject from one file's diff stat."""
     if not numstat:
@@ -294,10 +309,12 @@ async def clawmate_version_commit(request: Request):
         )
         full_hash = head_result.stdout.decode("utf-8", errors="replace").strip() if head_result.returncode == 0 else ""
 
+        metadata = _update_project_metadata(git_root, target, commit_msg)
         return JSONResponse(content={
             "ok": True,
             "hash": full_hash or short_hash,
             "short_hash": short_hash or (full_hash[:7] if full_hash else ""),
+            "project": metadata,
         })
 
     except subprocess.TimeoutExpired:

@@ -2413,6 +2413,7 @@ els.themeToggle && els.themeToggle.addEventListener("click", cycleTheme);
 // Agent panel toggle
 const btnToggleAgent = document.getElementById("btnToggleAgent");
 btnToggleAgent && btnToggleAgent.addEventListener("click", function () {
+  if (_isProjectPanelOpen()) _setProjectPanelOpen(false);
   if (window.Agent) {
     // If opening agent, close sidebar first (mutual exclusion)
     if (!window.Agent.isOpen()) {
@@ -2444,75 +2445,107 @@ btnToggleAgent && btnToggleAgent.addEventListener("click", function () {
 
 // Logout
 
-// ── Project panel (需求 4) ──────────────────────────────────────────
+// ── Switchable project panel ────────────────────────────────────────
 const btnProjectPanel = document.getElementById("btnProjectPanel");
-let _projectPanelEl = null;
+const projectPanel = document.getElementById("projectPanel");
+const projectPanelBody = document.getElementById("projectPanelBody");
+const projectPanelSummary = document.getElementById("projectPanelSummary");
+const btnCloseProjectPanel = document.getElementById("btnCloseProjectPanel");
+let _projectOverview = null;
+let _projectPanelContext = null;
 
-function _esc(v) { var d = document.createElement('div'); d.textContent = String(v || ''); return d.innerHTML; }
-
+function _esc(v) { return escHtml(String(v || '')); }
+function _projectPanelSessionKey() {
+  return 'clawmate.projectPanel.seen:' + encodeURIComponent(state.rootId) + ':' + encodeURIComponent(state.project);
+}
+function _isProjectPanelOpen() {
+  return Boolean(projectPanel && !projectPanel.classList.contains('hidden'));
+}
+function _setProjectPanelOpen(open) {
+  if (!projectPanel) return;
+  if (open && window.Agent && typeof window.Agent.isOpen === 'function' && window.Agent.isOpen()) {
+    window.Agent.close();
+  }
+  projectPanel.classList.toggle('hidden', !open);
+  projectPanel.setAttribute('aria-hidden', String(!open));
+  if (btnProjectPanel) {
+    btnProjectPanel.classList.toggle('active', open);
+    btnProjectPanel.setAttribute('aria-expanded', String(open));
+  }
+  if (open) refreshProjectPanel();
+}
 function _updateProjectPanelBtn() {
-  if (!btnProjectPanel) return;
-  if (state.project && state.rootId) {
-    btnProjectPanel.style.display = '';
-  } else {
-    btnProjectPanel.style.display = 'none';
-    _closeProjectPanel();
-  }
-}
-
-function _closeProjectPanel() {
-  if (_projectPanelEl) { _projectPanelEl.remove(); _projectPanelEl = null; }
-}
-
-async function toggleProjectPanel() {
-  if (_projectPanelEl) { _closeProjectPanel(); return; }
-  if (!state.project || !state.rootId) { setStatus('当前不在项目目录'); return; }
-  var overlay = document.createElement('div');
-  overlay.className = 'project-panel-overlay';
-  overlay.style.position = 'fixed'; overlay.style.top = '64px'; overlay.style.right = '16px';
-  overlay.style.width = '360px'; overlay.style.maxHeight = '70vh'; overlay.style.overflow = 'auto';
-  overlay.style.background = 'var(--bg,#fff)'; overlay.style.border = '1px solid var(--border-color,#ddd)';
-  overlay.style.borderRadius = '10px'; overlay.style.padding = '16px'; overlay.style.zIndex = '1200';
-  overlay.style.boxShadow = '0 8px 30px rgba(0,0,0,.18)';
-  overlay.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><strong>项目面板</strong><button class="project-panel-close" style="border:none;background:none;font-size:16px;cursor:pointer">✕</button></div>'
-    + '<div class="project-panel-body"><div class="project-panel-loading">加载项目概况…</div></div>';
-  overlay.querySelector('.project-panel-close').addEventListener('click', _closeProjectPanel);
-  document.body.appendChild(overlay);
-  _projectPanelEl = overlay;
+  const active = Boolean(state.project && state.rootId);
+  if (btnProjectPanel) btnProjectPanel.style.display = active ? '' : 'none';
+  if (!active) { _projectPanelContext = null; _setProjectPanelOpen(false); return; }
+  // sessionStorage is reset at login/page-session boundaries. A project opens
+  // once per root/project pair, after which explicit user toggles take priority.
+  const key = _projectPanelSessionKey();
+  // Directory refreshes within one project must not override an explicit toggle.
+  if (_projectPanelContext === key) return;
+  _projectPanelContext = key;
+  let firstVisit = false;
   try {
-    var res = await authFetch('/api/clawmate/project/' + encodeURIComponent(state.rootId) + '/' + encodeURIComponent(state.project) + '/overview');
-    var data = await res.json();
-    _renderProjectPanel(overlay.querySelector('.project-panel-body'), data);
-  } catch (e) {
-    overlay.querySelector('.project-panel-body').textContent = '加载项目概况失败';
+    firstVisit = !sessionStorage.getItem(key);
+    if (firstVisit) sessionStorage.setItem(key, '1');
+  } catch (_) { firstVisit = !_isProjectPanelOpen(); }
+  // Only a newly visited project opens automatically. Switching to a project
+  // already visited in this login session always starts closed.
+  _setProjectPanelOpen(firstVisit);
+}
+async function refreshProjectPanel() {
+  if (!state.project || !state.rootId || !projectPanelBody) return;
+  try {
+    const res = await authFetch('/api/clawmate/project/' + encodeURIComponent(state.rootId) + '/' + encodeURIComponent(state.project) + '/overview');
+    _projectOverview = await res.json();
+    renderProjectPanel();
+  } catch (_) { projectPanelBody.textContent = '加载项目概况失败'; }
+}
+function renderProjectPanel(reviewMode) {
+  const data = _projectOverview;
+  if (!data || !data.ok || !projectPanelBody) return;
+  const todo = data.todo || {}, rv = data.review || {}, recs = data.recommendations || [];
+  if (projectPanelSummary) projectPanelSummary.textContent = data.status_summary || data.project || '';
+  if (reviewMode) {
+    projectPanelBody.innerHTML = '<div class="project-panel-review-view"><button class="project-panel-review" data-project-back>← 项目概况</button><h4>评审面板</h4><p>待评审 (' + (rv.pending_review || 0) + ')</p><p>请在文件预览的评审面板中完成已有的审批、计划和确认流程。</p></div>';
+    projectPanelBody.querySelector('[data-project-back]').onclick = () => renderProjectPanel(false);
+    return;
   }
+  let html = '<div class="project-panel-section"><b>待办 (' + (todo.total || 0) + ')</b><ul>';
+  html += (todo.items || []).slice(0, 5).map(i => '<li><button class="project-panel-action" data-clawlist-task="' + _esc(i) + '">✓</button><span>' + _esc(i) + '</span></li>').join('') || '<li>无未完成待办</li>';
+  html += '</ul></div>';
+  html += '<div class="project-panel-section"><button class="project-panel-review" data-project-review>待评审 (' + (rv.pending_review || 0) + ')</button></div>';
+  html += '<div class="project-panel-section"><b>推荐任务</b><ul>';
+  html += recs.map(r => '<li><span>' + _esc(r.label) + '</span><button class="project-panel-action" data-project-task="' + _esc(r.id) + '">执行</button></li>').join('') || '<li>暂无推荐</li>';
+  html += '</ul></div>';
+  projectPanelBody.innerHTML = html;
+  projectPanelBody.querySelector('[data-project-review]').onclick = () => renderProjectPanel(true);
+  projectPanelBody.querySelectorAll('[data-clawlist-task]').forEach(btn => btn.onclick = async () => {
+    const task = btn.getAttribute('data-clawlist-task'); btn.disabled = true;
+    const res = await authFetch('/api/clawmate/project/' + encodeURIComponent(state.rootId) + '/' + encodeURIComponent(state.project) + '/clawlist/complete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({task})});
+    if (res.ok) refreshProjectPanel(); else { btn.disabled = false; setStatus('无法完成该 CLAWLIST 任务'); }
+  });
+  projectPanelBody.querySelectorAll('[data-project-task]').forEach(btn => btn.onclick = async () => {
+    btn.disabled = true;
+    const id = btn.getAttribute('data-project-task');
+    const res = await authFetch('/api/clawmate/project/' + encodeURIComponent(state.rootId) + '/' + encodeURIComponent(state.project) + '/tasks/' + encodeURIComponent(id) + '/run', {method:'POST'});
+    setStatus(res.ok ? '已启动项目 Agent 任务' : '项目 Agent 任务未启动'); btn.disabled = false;
+  });
 }
-
-function _renderProjectPanel(body, data) {
-  if (!data || !data.ok) { body.textContent = '加载失败'; return; }
-  var todo = data.todo || {}, rv = data.review || {}, recs = data.recommendations || [];
-  var html = '<div style="margin-bottom:10px;color:var(--muted,#888)">' + _esc(data.project) + ' · ' + _esc(data.type_label || data.type || '') + '</div>';
-  html += '<div class="project-panel-section" style="margin-bottom:10px"><div style="font-weight:600;margin-bottom:4px">待办 (' + (todo.total || 0) + ')</div>';
-  if (todo.items && todo.items.length) {
-    html += '<ul style="margin:0;padding-left:18px">' + todo.items.slice(0, 10).map(function (i) { return '<li>' + _esc(i) + '</li>'; }).join('') + '</ul>';
-  } else { html += '<div style="color:var(--muted,#888)">无未完成待办</div>'; }
-  html += '</div>';
-  html += '<div class="project-panel-section" style="margin-bottom:10px"><div style="font-weight:600;margin-bottom:4px">评审</div>'
-    + '<div>待评审 <b>' + (rv.pending_review || 0) + '</b> · 已评审(通过) <b>' + (rv.approved || 0) + '</b> · 已拒绝 <b>' + (rv.rejected || 0) + '</b> · 执行中 <b>' + (rv.in_progress || 0) + '</b> · 已执行 <b>' + (rv.executed || 0) + '</b></div></div>';
-  html += '<div class="project-panel-section"><div style="font-weight:600;margin-bottom:4px">推荐任务</div>';
-  if (recs.length) {
-    html += '<ul style="margin:0;padding-left:18px">' + recs.map(function (r) { return '<li>' + _esc(r.label) + (r.detail ? ' <span style="color:var(--muted,#888)">· ' + _esc(r.detail) + '</span>' : '') + '</li>'; }).join('') + '</ul>';
-  } else { html += '<div style="color:var(--muted,#888)">暂无推荐</div>'; }
-  html += '</div>';
-  body.innerHTML = html;
-}
-
-if (btnProjectPanel) btnProjectPanel.addEventListener('click', toggleProjectPanel);
+if (btnProjectPanel) btnProjectPanel.addEventListener('click', () => {
+  if (!state.project || !state.rootId) return;
+  _setProjectPanelOpen(!_isProjectPanelOpen());
+});
+if (btnCloseProjectPanel) btnCloseProjectPanel.addEventListener('click', () => _setProjectPanelOpen(false));
 _updateProjectPanelBtn();
 const btnLogoutMain = document.getElementById("btnLogout");
 btnLogoutMain && btnLogoutMain.addEventListener("click", async function() {
   if (!confirm("确定要退出登录吗？")) return;
   try { await fetch("/api/clawmate/auth/logout", { method: "POST" }); } catch (_) {}
+  try {
+    Object.keys(sessionStorage).filter(key => key.startsWith('clawmate.projectPanel.seen:'))
+      .forEach(key => sessionStorage.removeItem(key));
+  } catch (_) {}
   window.location.href = "/clawmate/login.html";
 });
 

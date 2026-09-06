@@ -18,6 +18,8 @@ import logging
 import os
 import re
 import subprocess
+import tempfile
+import threading
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -292,6 +294,8 @@ async def project_convert(request: Request):
 
 # ── Project overview + recommendations (需求 4) ────────────────────────
 
+_clawlist_write_lock = threading.Lock()
+
 _PROJECT_TYPE_LABELS = {"meeting": "会议/协作", "product": "产品/研发", "research": "研究/调研", "generic": "通用"}
 
 
@@ -304,6 +308,74 @@ def _read_project_json(target: Path) -> dict:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
+
+
+def _write_project_json(target: Path, data: dict) -> None:
+    """Atomically update optional project metadata without dropping old keys."""
+    path = target / ".clawmate" / "project.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix="project.", suffix=".json", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+        os.replace(tmp_name, path)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _project_task_catalog(target: Path) -> list[dict]:
+    """Return compatible recommended tasks, preferring persisted task records."""
+    cfg = _read_project_json(target)
+    raw = cfg.get("recommended_tasks") or cfg.get("recommendations") or []
+    tasks: list[dict] = []
+    for item in raw:
+        if not isinstance(item, dict) or not str(item.get("label", "")).strip():
+            continue
+        task = dict(item)
+        task["id"] = str(task.get("id") or task["label"])
+        task["label"] = str(task["label"]).strip()
+        task["frequency"] = int(task.get("frequency") or 0)
+        tasks.append(task)
+    known = {task["id"] for task in tasks}
+    defaults = [
+        {"id": "commit_version", "label": "提交版本", "kind": "commit", "prompt": "检查项目当前改动；仅提交与本次项目工作直接相关、且已完成自检的文件。", "frequency": 0},
+        {"id": "maintain_project_docs", "label": "维护项目文档", "kind": "documentation", "prompt": "阅读 PROJECT_NOTE.md 和 CLAWLIST.md，依据当前项目实际进展更新必要文档，不要编造事实。", "frequency": 0},
+    ]
+    if str(cfg.get("type", "")).lower() == "meeting":
+        defaults.append({"id": "update_meeting_info", "label": "更新会议信息", "kind": "meeting", "prompt": "更新项目中的会议纪要、日程或行动项；只写入已知会议事实。", "frequency": 0})
+    tasks.extend(task for task in defaults if task["id"] not in known)
+    return tasks
+
+
+def update_project_after_commit(target: Path, commit_subject: str, changed_file: str) -> dict:
+    """Persist deterministic status and bounded frequency-ranked task metadata."""
+    cfg = _read_project_json(target)
+    pending, _ = _count_clawlist_todo(target)
+    summary = f"本次已提交《{changed_file}》更新：{commit_subject}；当前仍有 {pending} 项 CLAWLIST 待办，请继续推进并维护项目文档。"[:50]
+    if len(summary) < 30:
+        summary = (summary + "项目状态已同步，后续请持续跟进待办与文档记录。")[:30]
+    existing = {task["id"]: task for task in _project_task_catalog(target)}
+    defaults = [
+        {"id": "commit_version", "label": "提交版本", "kind": "commit", "prompt": "检查项目当前改动；仅提交与本次项目工作直接相关、且已完成自检的文件。", "frequency": 0},
+        {"id": "maintain_project_docs", "label": "维护项目文档", "kind": "documentation", "prompt": "阅读 PROJECT_NOTE.md 和 CLAWLIST.md，依据当前项目实际进展更新必要文档，不要编造事实。", "frequency": 0},
+    ]
+    if str(cfg.get("type", "")).lower() == "meeting":
+        defaults.append({"id": "update_meeting_info", "label": "更新会议信息", "kind": "meeting", "prompt": "更新项目中的会议纪要、日程或行动项；只写入已知会议事实。", "frequency": 0})
+    for task in defaults:
+        current = existing.get(task["id"], {})
+        task.update({key: value for key, value in current.items() if key != "frequency"})
+        task["frequency"] = int(current.get("frequency") or 0) + 1
+        existing[task["id"]] = task
+    tasks = sorted(existing.values(), key=lambda item: (-int(item.get("frequency") or 0), item["label"]))[:5]
+    cfg["status_summary"] = summary
+    cfg["recommended_tasks"] = tasks
+    _write_project_json(target, cfg)
+    return {"status_summary": summary, "recommended_tasks": tasks}
 
 
 def _count_clawlist_todo(target: Path) -> tuple[int, list[str]]:
@@ -359,10 +431,8 @@ def _recommendations_for(target: Path) -> list[dict]:
     name = target.name
     recs: list[dict] = []
 
-    # Custom recommendations from project.json take precedence.
-    for r in cfg.get("recommendations") or []:
-        if isinstance(r, dict) and r.get("label"):
-            recs.append({"source": "custom", **r})
+    for r in _project_task_catalog(target):
+        recs.append({"source": "project_json", **r})
 
     names = {p.name.lower() for p in target.iterdir() if p.is_file()}
     dirs = {p.name.lower() for p in target.iterdir() if p.is_dir()}
@@ -380,8 +450,97 @@ def _recommendations_for(target: Path) -> list[dict]:
         _add("整理调研结论", "research", "归档到 archive/research")
     _add("完善项目说明", "doc", "更新 PROJECT_NOTE.md")
     _add("规划待办", "plan", "推进 CLAWLIST 未完成项")
-    return recs[:8]
+    unique: list[dict] = []
+    labels: set[str] = set()
+    for rec in recs:
+        if rec["label"] not in labels:
+            labels.add(rec["label"])
+            unique.append(rec)
+    return unique[:5]
 
+
+
+def _mark_clawlist_task_done(target: Path, task: str) -> bool:
+    """Check exactly one unchecked CLAWLIST item, never fuzzy-match user input."""
+    if not task or "\n" in task or "\r" in task or len(task) > 500:
+        raise ValueError("Invalid task")
+    path = target / "CLAWLIST.md"
+    if not path.exists():
+        raise FileNotFoundError("CLAWLIST.md not found")
+    with _clawlist_write_lock:
+        lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+        matches = [i for i, line in enumerate(lines) if re.match(r"^(\s*-\s*)\[ \](\s*" + re.escape(task) + r")\s*$", line.rstrip("\r\n"))]
+        if len(matches) != 1:
+            raise LookupError("Task must match exactly one unchecked CLAWLIST item")
+        lines[matches[0]] = re.sub(r"^(\s*-\s*)\[ \]", r"\1[x]", lines[matches[0]], count=1)
+        fd, tmp_name = tempfile.mkstemp(prefix="clawlist.", suffix=".md", dir=path.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.writelines(lines)
+            os.replace(tmp_name, path)
+        except Exception:
+            try:
+                os.unlink(tmp_name)
+            except FileNotFoundError:
+                pass
+            raise
+    return True
+
+
+def _project_target(root: str, project: str) -> Path:
+    _, target, _ = safe_path(root, project)
+    if not target.is_dir() or not (target / ".clawmate").is_dir():
+        raise FileNotFoundError("Not a ClawMate project")
+    return target
+
+
+@router.post("/api/clawmate/project/{root}/{project}/tasks/{task_id}/run")
+async def project_task_run(root: str, project: str, task_id: str):
+    """Run a stored recommendation through the configured Agent backend only."""
+    try:
+        target = _project_target(root, project)
+    except (ValueError, PermissionError):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Project not found")
+    task = next((item for item in _project_task_catalog(target) if item["id"] == task_id), None)
+    if not task:
+        raise HTTPException(status_code=404, detail="Recommended task not found")
+    prompt = str(task.get("prompt") or f"在项目内完成推荐任务：{task['label']}。")
+    try:
+        cfg = load_cfg()
+        from agent_routes import spawn_background_agent
+        backend = cfg.agent.backend
+        if backend not in ("claude", "codex"):
+            raise HTTPException(status_code=409, detail="Configured Agent backend does not support background project tasks")
+        message = ("ClawMate 项目推荐任务（仅限当前项目目录）：\n" + prompt
+                   + "\n遵循项目 AGENTS.md；不要访问项目外路径；完成后如有事实变更，更新相关项目文档。")
+        if not spawn_background_agent(message, str(target), backend=backend, extra_env=cfg.agent.env):
+            raise HTTPException(status_code=503, detail="Agent backend unavailable")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("[project.task] spawn failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Unable to start Agent task")
+    return JSONResponse(content={"ok": True, "task": {"id": task["id"], "label": task["label"]}, "status": "started"})
+
+
+@router.post("/api/clawmate/project/{root}/{project}/clawlist/complete")
+async def project_clawlist_complete(root: str, project: str, request: Request):
+    try:
+        body = await request.json()
+        task = str(body.get("task", "")).strip()
+        target = _project_target(root, project)
+        _mark_clawlist_task_done(target, task)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except LookupError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Project or CLAWLIST not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return JSONResponse(content={"ok": True, "task": task, "status": "completed"})
 
 @router.get("/api/clawmate/project/{root}/{project}/overview")
 async def project_overview(root: str, project: str):
@@ -414,6 +573,7 @@ async def project_overview(root: str, project: str):
         "name": target.name,
         "type": pj.get("type", "generic"),
         "type_label": _PROJECT_TYPE_LABELS.get(str(pj.get("type", "generic")).lower(), "通用"),
+        "status_summary": pj.get("status_summary", ""),
         "todo": {"total": todo_total, "items": todo_items[:30]},
         "review": review,
         "recommendations": recs,

@@ -80,3 +80,45 @@ def test_meeting_archetype_recommends_meeting_actions(tmp_path):
     recs = _recommendations_for(p)
     labels = [r["label"] for r in recs]
     assert any("会议" in lab for lab in labels)
+
+
+def test_commit_metadata_is_compatible_and_bounded(tmp_path):
+    from project_routes import update_project_after_commit
+    p = _mk_project(tmp_path, clawlist="- [ ] 跟进需求\n", project_json={"type": "meeting", "legacy": True})
+    result = update_project_after_commit(p, "更新会议纪要", "notes.md")
+    saved = _read_project_json(p)
+    assert 30 <= len(result["status_summary"]) <= 50
+    assert saved["legacy"] is True
+    assert saved["status_summary"] == result["status_summary"]
+    assert len(saved["recommended_tasks"]) <= 5
+    assert {item["id"] for item in saved["recommended_tasks"]} >= {"commit_version", "maintain_project_docs", "update_meeting_info"}
+
+
+def test_clawlist_completion_requires_one_exact_unchecked_match(tmp_path):
+    from project_routes import _mark_clawlist_task_done
+    p = _mk_project(tmp_path, clawlist="- [ ] 唯一任务\n- [ ] 重复任务\n- [ ] 重复任务\n")
+    assert _mark_clawlist_task_done(p, "唯一任务") is True
+    assert "- [x] 唯一任务" in (p / "CLAWLIST.md").read_text(encoding="utf-8")
+    with pytest.raises(LookupError):
+        _mark_clawlist_task_done(p, "重复任务")
+
+
+def test_main_project_panel_is_switchable_and_auto_opens_once_per_session_project():
+    root = Path(__file__).resolve().parents[1]
+    html = (root / "dev" / "static" / "index.html").read_text(encoding="utf-8")
+    js = (root / "dev" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    css = (root / "dev" / "static" / "css" / "style.css").read_text(encoding="utf-8")
+    assert 'id="projectPanel" class="project-panel hidden"' in html
+    assert '<aside id="projectPanel"' in html
+    assert 'id="btnCloseProjectPanel"' in html
+    assert "project-panel-overlay" not in js
+    assert "clawmate.projectPanel.seen:" in js
+    assert "sessionStorage.getItem(key)" in js
+    assert "if (_projectPanelContext === key) return;" in js
+    assert "_setProjectPanelOpen(firstVisit);" in js
+    assert 'if (_isProjectPanelOpen()) _setProjectPanelOpen(false);' in js
+    assert ".project-panel { display: flex; flex-direction: column; overflow: hidden; position: fixed;" in css
+    assert "_setProjectPanelOpen(!_isProjectPanelOpen())" in js
+    assert "待评审 (" in js
+    assert "/clawlist/complete" in js
+    assert "/tasks/" in js

@@ -3255,3 +3255,19 @@ pre:hover .code-copy-btn,
 .agent-history-overlay-header .agent-history-header-label { font-family: Arial, sans-serif; font-size: 12px; }
 .agent-history-date-axis,
 .agent-history-date-axis * { font-family: Arial, sans-serif; font-size: 11px; }
+
+/* Switchable project panel: right-side drawer, matching Agent/Feedback panels. */
+.project-panel { display: flex; flex-direction: column; overflow: hidden; position: fixed; top: 48px; right: 0; bottom: 0; z-index: 8; width: min(420px, 100vw); border-left: 1px solid var(--border-color); background: var(--bg-secondary); translate: 0; transition: translate var(--duration-slow) var(--ease-out); }
+.project-panel.hidden { display: none; }
+.project-panel-header { display: flex; align-items: center; gap: 10px; padding: 9px 12px; flex-shrink: 0; border-bottom: 1px solid var(--border-color); font-size: 13px; }
+.project-panel-header #projectPanelSummary { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; color: var(--text-secondary); }
+.project-panel-close { border: 0; background: none; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 16px; line-height: 1; padding: 2px 4px; }
+.project-panel-close:hover, .project-panel-close:focus-visible { color: var(--text-primary); background: var(--bg-tertiary); outline: none; }
+.project-panel-body { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; padding: 10px 12px; overflow-y: auto; font-size: 12px; }
+.project-panel-section { min-width: 0; }
+.project-panel-section ul { margin: 5px 0 0; padding: 0; list-style: none; }
+.project-panel-section li { display: flex; gap: 6px; align-items: center; padding: 3px 0; }
+.project-panel-action, .project-panel-review { border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); border-radius: 4px; cursor: pointer; padding: 3px 7px; font: inherit; }
+.project-panel-action:hover, .project-panel-review:hover { border-color: var(--accent); color: var(--accent); }
+.project-panel-review-view { grid-column: 1 / -1; }
+@media (max-width: 768px) { .project-panel { top: 0; width: 100vw; } }
