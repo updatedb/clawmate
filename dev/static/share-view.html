@@ -724,7 +724,8 @@
       // 提交评审 button (待提交 only)
       if (shareFbFilter === 'pending') {
         var actions = document.createElement('div'); actions.className = 'fb-card-actions';
-        var submit = document.createElement('button'); submit.className = 'fb-btn-submit';
+        // Match the review card's per-card decision button style.
+        var submit = document.createElement('button'); submit.className = 'preview-bottom-btn';
         submit.textContent = '提交评审';
         submit.addEventListener('click', function(e){
           e.stopPropagation();

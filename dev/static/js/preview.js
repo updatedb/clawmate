@@ -5385,7 +5385,9 @@
     actions.className = 'fb-card-actions';
     actions.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
     var submit = document.createElement('button');
-    submit.className = 'fb-btn-submit';
+    // Keep the pending-card submit control visually identical to the
+    // per-card review decisions (for example, 「评审通过」).
+    submit.className = 'preview-bottom-btn';
     submit.textContent = '提交评审';
     submit.addEventListener('click', function(e){
       e.stopPropagation();

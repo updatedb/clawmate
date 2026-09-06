@@ -82,6 +82,17 @@ def test_share_and_review_share_dynamic_action_templates_and_readonly_views():
     assert "match_ext" in js
 
 
+def test_card_submit_review_uses_the_same_button_style_as_review_approval():
+    """待提交卡片的“提交评审”与待评审“评审通过”共用 preview-bottom-btn。"""
+    js = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
+    share = (ROOT / "dev/static/share-view.html").read_text(encoding="utf-8")
+    assert "submit.className = 'preview-bottom-btn';" in js
+    assert "submit.textContent = '提交评审';" in js
+    assert "b.className = 'preview-bottom-btn'" in js
+    assert "submit.className = 'preview-bottom-btn';" in share
+    assert "submit.textContent = '提交评审';" in share
+
+
 def test_feedback_cards_follow_status_visibility_order_sorting_and_manual_refresh():
     """Pending cards expose tags; completed cards expose their selected action.
     Lists are newest-first and no feedback list is background-polled."""
