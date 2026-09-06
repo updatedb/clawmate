@@ -5058,6 +5058,14 @@
     return '定位：' + (_feedbackPosition(item) || '—');
   }
 
+  // Use one stable, human-readable timestamp in every feedback-card state.
+  // ISO timestamps previously leaked their "T" separator into read-only cards.
+  function _feedbackCardTime(item) {
+    var value = String(item && (item.updated || item.created) || '');
+    var match = value.match(/(?:^\d{4}-)?(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/);
+    return match ? match[1] + '-' + match[2] + ' ' + match[3] + ':' + match[4] : value;
+  }
+
   function _appendEditablePosition(card, item, placeholder) {
     var label = document.createElement('div');
     label.className = 'fb-card-position';
@@ -5316,7 +5324,7 @@
     var meta = document.createElement('span');
     meta.className = 'fb-card-time fb-card-stage-time';
     if (!item.created) item.created = new Date().toISOString();
-    meta.textContent = String(item.updated || item.created || '').substring(5, 16);
+    meta.textContent = _feedbackCardTime(item);
     var del = document.createElement('button');
     del.className = 'fb-btn-delete'; del.textContent = '✕';
     del.addEventListener('click', function(e){
@@ -5551,7 +5559,7 @@
     // Build header with delete button
     const header = document.createElement('div');
     header.className = 'fb-card-header';
-    const time = document.createElement('span'); time.className = 'fb-card-time fb-card-stage-time'; time.textContent = String(item.updated || item.created || '').substring(5, 16);
+    const time = document.createElement('span'); time.className = 'fb-card-time fb-card-stage-time'; time.textContent = _feedbackCardTime(item);
     const id = document.createElement('span'); id.className = 'fb-card-id'; id.textContent = item.id || '';
     const status = document.createElement('span'); status.className = 'fb-card-status'; status.innerHTML = statusIcon;
     header.appendChild(id); header.appendChild(time); header.appendChild(status);
@@ -5590,7 +5598,7 @@
 
     if (selDisplay) {
       const sel = document.createElement('div');
-      sel.className = 'fb-card-selection';
+      sel.className = 'review-card-content';
       sel.textContent = selDisplay;
       card.appendChild(sel);
     }
@@ -7287,7 +7295,7 @@
     var status = document.createElement('span'); status.className = 'fb-status-pill ' + (item.status || 'pending');
     status.textContent = _statusLabel(item.status);
     var time = document.createElement('span'); time.className = 'fb-card-time fb-card-stage-time';
-    time.textContent = String(item.updated || item.created || '').substring(5, 16);
+    time.textContent = _feedbackCardTime(item);
     head.appendChild(time);
     head.appendChild(status);
 
@@ -7340,7 +7348,7 @@
       // Editable action tag group (same source as 待提交/浮窗)
       card.appendChild(_buildActionTags(item, function(){ renderReviewPanel(); }, false));
     } else {
-      _appendFeedbackMeta(card, item, 'review-card-position', (item.file || '') + ' · ' + _feedbackPositionLabel(item), true);
+      _appendFeedbackMeta(card, item, 'fb-card-position', _feedbackPositionLabel(item), true);
       var content = document.createElement('div'); content.className = 'review-card-content';
       content.textContent = item.content || '';
       card.appendChild(content);

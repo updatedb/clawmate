@@ -536,6 +536,12 @@
       if (!item) return '';
       return String(item.position || item.location || '').trim();
     }
+    // Keep share history timestamps identical to the review panel.
+    function _shareFeedbackCardTime(item) {
+      var value = String(item && (item.updated || item.created) || '');
+      var match = value.match(/(?:^\d{4}-)?(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/);
+      return match ? match[1] + '-' + match[2] + ' ' + match[3] + ':' + match[4] : value;
+    }
     // Drafts are strictly local. Include both capability token and shared
     // file so another share surface cannot restore them.
     function _sharePendingStorageKey() {
@@ -618,7 +624,7 @@
       var status = document.createElement('span'); status.className = 'fb-status-pill ' + (isReadOnly ? 'pending_review' : 'pending');
       status.textContent = isReadOnly ? _shareStatusLabel(it.status) : '待提交';
       var time = document.createElement('span'); time.className = 'fb-card-time fb-card-stage-time';
-      time.textContent = String(it.updated || it.created || '').substring(5,16);
+      time.textContent = _shareFeedbackCardTime(it);
       var del = document.createElement('button'); del.className = 'fb-btn-delete'; del.textContent = '✕'; del.title = '删除';
       del.addEventListener('click', function(e) {
         e.stopPropagation();
@@ -658,7 +664,7 @@
 
       // 选中内容
       if (isReadOnly) {
-        var roText = document.createElement('div'); roText.className = 'fb-card-selection';
+        var roText = document.createElement('div'); roText.className = 'review-card-content';
         roText.textContent = it.text || '（未填写选中内容）';
         card.appendChild(roText);
       } else {

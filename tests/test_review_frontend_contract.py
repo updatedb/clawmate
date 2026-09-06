@@ -134,18 +134,27 @@ def test_share_history_and_panel_state_contracts():
     assert "syncShareFeedbackButton" in share
     assert "aria-pressed=\"false\"" in share
     assert "_shareStatusLabel(it.status)" in share
-    assert "time.textContent = String(it.updated || it.created || '').substring(5,16);" in share
+    assert "time.textContent = _shareFeedbackCardTime(it);" in share
     assert "创建 ' + String(it.created" not in share
     assert "item.get(\"share_token_id\") == token_id" in routes
     assert "_feedback_paths_match(safe_rel, item.get(\"file\", \"\"))" in routes
 
 
-def test_feedback_card_times_show_only_last_updated_time():
-    """Review, completed, and share feedback cards show updated time before created time."""
+def test_readonly_feedback_cards_share_locator_time_and_content_contracts():
+    """Every read-only state omits file-prefix locators, uses a space-separated
+    timestamp, and presents selected text through the shared content class."""
     js = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
     share = (ROOT / "dev/static/share-view.html").read_text(encoding="utf-8")
+    css = (ROOT / "dev/static/css/preview.css").read_text(encoding="utf-8")
 
-    assert js.count("String(item.updated || item.created || '').substring(5, 16)") >= 3
-    assert "function _feedbackStage(item)" not in js
-    assert "time.textContent = String(it.updated || it.created || '').substring(5,16);" in share
-    assert "创建 ' + String(it.created" not in share
+    assert "function _feedbackCardTime(item)" in js
+    assert "time.textContent = _feedbackCardTime(item);" in js
+    assert "function _shareFeedbackCardTime(item)" in share
+    assert "time.textContent = _shareFeedbackCardTime(it);" in share
+    assert "match[1] + '-' + match[2] + ' ' + match[3] + ':' + match[4]" in js
+    assert "match[1] + '-' + match[2] + ' ' + match[3] + ':' + match[4]" in share
+    assert "(item.file || '') + ' · ' + _feedbackPositionLabel(item)" not in js
+    assert "review-card-position" not in js
+    assert "fb-card-selection" not in js
+    assert "fb-card-selection" not in share
+    assert "fb-card-selection" not in css
