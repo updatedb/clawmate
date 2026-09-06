@@ -137,7 +137,11 @@
     .share-right .preview-right-header { padding: 10px 12px; }
     .share-right .preview-right-filter { padding: 8px 12px; }
     .share-right .preview-right-body { padding: 10px 12px; }
-    .preview-selection-tooltip.hidden { display: none; }
+    /* 分享页浮窗需在所有视口可用。preview.css 的移动端规则用 !important 隐藏
+       .preview-selection-tooltip，这里以更高优先级 + !important 覆盖，只认 .hidden。 */
+    .preview-selection-tooltip { display: none !important; }
+    .preview-selection-tooltip.hidden { display: none !important; }
+    .preview-selection-tooltip:not(.hidden) { display: flex !important; }
     .share-fb-status { font-size: 12px; padding: 4px 12px 8px; min-height: 16px; }
     .share-fb-status.ok { color: var(--success, #16a34a); }
     .share-fb-status.err { color: var(--danger); }
@@ -659,7 +663,7 @@
       var action = _shareSelAction();
       sharePending.push({ id: 'FD-' + (++_shareFbId), position: shareSelLocation.value.trim(), text: sel.slice(0,800), note: note, action: action, scope: (action === 'execute' ? 'project' : 'document') });
       _shareSelNoteReset();
-      shareSelTooltip.style.display = 'none';
+      shareSelTooltip.classList.add('hidden');
       shareFbFilter = 'pending'; openShareFeedback(); _shareRender();
       _shareFbStatus('✅ 已加入待办', true);
     });
@@ -734,7 +738,7 @@
     function _shareSelNoteReset() { shareSelNote.value = ''; if (shareSelLocation) shareSelLocation.value = ''; _shareSelRenderStatus(''); }
     function _handleShareSelection() {
       var sel = _shareGetSelection();
-      if (!sel) { shareSelTooltip.style.display = 'none'; return; }
+      if (!sel) { shareSelTooltip.classList.add('hidden'); return; }
       _shareSelSavedText = sel;
       _shareSelNoteReset();
       _shareInitTags();
@@ -744,7 +748,7 @@
         var top = rect.bottom + 8;
         var left = rect.left + rect.width/2;
         shareSelTooltip.style.maxWidth = Math.min(400, window.innerWidth - 20) + 'px';
-        shareSelTooltip.style.display = 'flex';
+        shareSelTooltip.classList.remove('hidden');
         requestAnimationFrame(function(){
           var h = shareSelTooltip.offsetHeight, w = shareSelTooltip.offsetWidth;
           if (top + h > window.innerHeight - 10) top = rect.top - h - 8;
@@ -754,7 +758,7 @@
           shareSelTooltip.style.transform = 'translateX(-50%)';
         });
       } else {
-        shareSelTooltip.style.display = 'flex';
+        shareSelTooltip.classList.remove('hidden');
         shareSelTooltip.style.top = '80px'; shareSelTooltip.style.left = '50%';
         shareSelTooltip.style.transform = 'translateX(-50%)';
       }
@@ -764,7 +768,7 @@
       if (sel) setTimeout(_handleShareSelection, 10);
       else hideShareTooltip();
     }
-    function hideShareTooltip() { shareSelTooltip.style.display = 'none'; }
+    function hideShareTooltip() { shareSelTooltip.classList.add('hidden'); }
     // Show floating card on mouseup if there is a real selection. We read the
     // selection synchronously in the same handler so it is still alive.
     document.addEventListener('mouseup', function(e) {
