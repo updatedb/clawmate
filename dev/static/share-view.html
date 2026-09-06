@@ -15,6 +15,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./css/style.css" />
+  <link rel="stylesheet" href="./css/preview.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="highlight-theme-css" />
   <link rel="stylesheet" href="./vendor/github-markdown-dark.min.css" id="github-markdown-css" />
   <link rel="stylesheet" href="./vendor/katex.min.css" />
@@ -115,40 +116,9 @@
 
     .markdown-body { background: transparent !important; }
 
-    /* ── Feedback panel selection tooltip (创建反馈浮窗) ── */
-    .share-sel-tooltip {
-      position: fixed; z-index: 40; display: flex; flex-direction: column;
-      width: 340px; max-width: calc(100vw - 20px);
-      background: var(--bg-primary); color: var(--text-primary);
-      border: 1px solid var(--border-color); border-radius: 10px;
-      box-shadow: 0 8px 28px rgba(0,0,0,0.18); padding: 10px; gap: 8px;
-    }
-    .share-sel-tooltip.hidden { display: none; }
-    .share-sel-tooltip .pst-header {
-      display: flex; align-items: center; gap: 6px; font-size: 12px;
-      font-weight: 600; color: var(--text-primary);
-    }
-    .share-sel-tooltip .pst-header svg { width: 14px; height: 14px; }
-    .share-sel-body { display: flex; flex-direction: column; gap: 6px; }
-    .share-sel-selection {
-      font-size: 11px; font-family: monospace; color: var(--text-secondary);
-      background: var(--bg-code); border-radius: 4px; padding: 6px 8px;
-      white-space: pre-wrap; word-break: break-all; max-height: 90px; overflow-y: auto;
-    }
-    .share-sel-note {
-      width: 100%; box-sizing: border-box; resize: vertical; min-height: 60px;
-      border: 1px solid var(--border-color); border-radius: 6px;
-      background: var(--bg-code); color: var(--text-primary); padding: 8px;
-      font-family: inherit; font-size: 12px;
-    }
-    .share-sel-actions { display: flex; gap: 6px; }
-    .share-sel-actions .agent-panel-btn { height: 28px; padding: 0 9px; font-size: 12px; }
-    .share-sel-actions .agent-panel-btn svg { width: 13px; height: 13px; }
-    .share-sel-status { font-size: 11px; min-height: 12px; padding: 0; }
-    .share-sel-status.ok { color: var(--success, #16a34a); }
-    .share-sel-status.err { color: var(--danger); }
-
-    /* ── Feedback panel (3-row layout: title / filter / list) ── */
+    /* ── Feedback panel: reuses preview-right + fb-card styles from preview.css ──
+     * Only local layout (slide-in position) and the small status line are
+     * defined here; everything else is shared with the review panel. */
     .share-right {
       position: absolute; top: 0; bottom: 0; right: 0;
       width: 380px; max-width: 92vw;
@@ -164,83 +134,13 @@
       box-shadow: -4px 0 24px rgba(0,0,0,0.18);
     }
     .share-right.hidden { translate: 100%; pointer-events: none; }
-    .share-right-header {
-      display: flex; align-items: center; gap: 6px;
-      padding: 10px 12px; border-bottom: 1px solid var(--border-color);
-      flex-shrink: 0;
-    }
-    .share-right-header .srh-title {
-      font-size: 14px; font-weight: 700; color: var(--text-primary);
-      flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px;
-    }
-    .share-right-header .srh-spacer { flex: 1; }
-    .share-right-header { gap: 8px; }
-    .share-right-header .srh-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .share-right-actions {
-      display: flex; align-items: center; gap: 6px;
-      flex-shrink: 0; white-space: nowrap;
-    }
-    .share-right-actions .agent-panel-btn { height: 28px; padding: 0 9px; font-size: 12px; }
-    .share-right-actions .agent-panel-btn svg { width: 13px; height: 13px; }
-    .share-right-actions .agent-panel-btn.hidden { display: none; }
-    .share-right-filter {
-      display: flex; gap: 4px; padding: 8px 12px;
-      border-bottom: 1px solid var(--border-color);
-      flex-shrink: 0; flex-wrap: nowrap; overflow-x: auto;
-    }
-    .share-right-filter .share-right-btn { flex-shrink: 0; }
-    .share-right-body { flex: 1; overflow-y: auto; padding: 10px 12px; }
-    .share-fb-empty {
-      color: var(--text-muted); font-size: 12px; text-align: center;
-      padding: 24px 10px; line-height: 1.6;
-    }
-    .share-fb-card {
-      border: 1px solid var(--border-color); border-radius: 8px;
-      padding: 10px; margin-bottom: 10px; background: var(--bg-secondary);
-      font-size: 12px;
-    }
-    .share-fb-card-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
-    .share-fb-card-meta {
-      font-size: 11px; color: var(--text-muted); font-family: monospace; flex: 1;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .share-fb-card-text {
-      white-space: pre-wrap; word-break: break-word; line-height: 1.5;
-      background: var(--bg-code); border-radius: 4px; padding: 6px 8px;
-      max-height: 120px; overflow-y: auto; font-family: monospace;
-    }
-    .share-fb-card-note { margin-top: 6px; color: var(--text-secondary); }
-    .share-fb-card-note strong { color: var(--text-primary); }
-    .share-fb-del {
-      background: none; border: none; color: var(--text-muted); cursor: pointer;
-      font-size: 13px; padding: 2px 5px; border-radius: 4px; line-height: 1;
-      flex-shrink: 0;
-    }
-    .share-fb-del:hover { background: var(--bg-tertiary); color: var(--danger); }
-    .share-fb-position {
-      width: 100%; box-sizing: border-box; border: 1px solid var(--border-color);
-      border-radius: 6px; background: var(--bg-code); color: var(--text-primary);
-      padding: 6px 8px; font-family: monospace; font-size: 11px; margin-bottom: 6px;
-    }
-    .share-fb-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
-    .share-fb-tags .share-right-btn { padding: 2px 7px; font-size: 11px; font-weight: 400; }
-    .share-fb-actions { display: flex; gap: 6px; margin-top: 8px; }
-    .share-fb-cancelled {
-      margin-top: 8px; font-size: 11px; color: var(--text-muted);
-      border: 1px dashed var(--border-color); border-radius: 4px; padding: 4px 8px; text-align: center;
-    }
+    .share-right .preview-right-header { padding: 10px 12px; }
+    .share-right .preview-right-filter { padding: 8px 12px; }
+    .share-right .preview-right-body { padding: 10px 12px; }
+    .preview-selection-tooltip.hidden { display: none; }
     .share-fb-status { font-size: 12px; padding: 4px 12px 8px; min-height: 16px; }
     .share-fb-status.ok { color: var(--success, #16a34a); }
     .share-fb-status.err { color: var(--danger); }
-    .share-right-btn {
-      padding: 4px 9px; border-radius: 6px; border: 1px solid var(--border-color);
-      background: var(--btn-bg); color: var(--btn-text); cursor: pointer;
-      font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap;
-      transition: background 0.12s, border-color 0.12s;
-    }
-    .share-right-btn:hover { background: var(--bg-secondary); border-color: var(--text-muted); }
-    .share-right-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .share-right-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
     /* ── Mobile (≤768px) ── */
     @media (max-width: 768px) {
@@ -296,39 +196,39 @@
       </main>
     </div>
 
-    <!-- Feedback panel (3-row layout: title+actions / filter / list), mirrors review panel -->
-    <aside class="share-right hidden" id="shareRight" aria-label="反馈面板">
-      <div class="share-right-header">
-        <span class="srh-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> 反馈</span>
-        <span class="srh-spacer"></span>
-        <div class="share-right-actions">
+    <!-- Feedback panel: reuses preview-right layout + fb-card components -->
+    <aside class="share-right preview-right-col hidden" id="shareRight" aria-label="反馈面板">
+      <div class="preview-right-header">
+        <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> 反馈</span>
+        <div class="preview-right-actions">
           <button class="agent-panel-btn" id="shareFbAdd" type="button" title="添加反馈"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span class="agent-panel-btn-label">添加反馈</span></button>
           <button class="agent-panel-btn" id="shareFbSubmit" type="button" title="提交评审"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg><span class="agent-panel-btn-label">提交评审</span></button>
           <button class="agent-panel-btn" id="shareFbClose" type="button" title="关闭面板"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
         </div>
       </div>
-      <div class="share-right-filter" id="shareFbFilter">
-        <button class="share-right-btn" data-share-filter="pending" title="待提交">待提交</button>
-        <button class="share-right-btn" data-share-filter="submitted" title="已提交">已提交</button>
+      <div class="preview-right-filter" id="shareFbFilter">
+        <button class="preview-bottom-btn" data-share-filter="pending" title="待提交">待提交</button>
+        <button class="preview-bottom-btn" data-share-filter="submitted" title="已提交">已提交</button>
       </div>
-      <div class="share-right-body" id="shareFbList">
-        <div class="share-fb-empty">选中内容后点击「添加反馈」即可累积</div>
+      <div class="preview-right-body" id="shareFbList">
+        <div class="fb-card-list" id="shareFbCardList"></div>
       </div>
       <div class="share-fb-status" id="shareFbStatus"></div>
     </aside>
 
-    <!-- Selection tooltip (创建反馈浮窗) -->
-    <div class="share-sel-tooltip hidden" id="shareSelTooltip">
+    <!-- Selection tooltip (创建反馈浮窗): reuses preview-selection-tooltip structure -->
+    <div class="preview-selection-tooltip hidden" id="shareSelTooltip">
       <div class="pst-header"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> 反馈选中内容</div>
-      <div class="share-sel-body">
-        <div class="share-sel-selection" id="shareSelText"></div>
-        <textarea class="share-sel-note" id="shareSelNote" placeholder="简要说明改动需求（必填）" rows="3"></textarea>
+      <div class="pst-location-row">
+        <input type="text" id="shareSelLocation" class="pst-location" placeholder="位置：Line 或选择后识别" style="flex:1;" />
       </div>
-      <div class="share-sel-actions">
-        <button class="agent-panel-btn" id="shareSelAdd"><svg viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><span class="agent-panel-btn-label">加入待办</span></button>
-        <button class="agent-panel-btn" id="shareSelSend"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg><span class="agent-panel-btn-label">提交评审</span></button>
+      <textarea class="pst-note" id="shareSelNote" placeholder="必填 · 简要说明需要的改动" rows="3"></textarea>
+      <div class="pst-tags" id="shareSelTags"></div>
+      <div class="pst-actions">
+        <button class="pst-btn-add" id="shareSelAdd"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg> 加入待办</button>
+        <button class="pst-btn-send" id="shareSelSend"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg> 提交评审</button>
       </div>
-      <div class="share-sel-status" id="shareSelStatus"></div>
+      <div class="pst-status" id="shareSelStatus"></div>
     </div>
 
     <!-- Bottombar -->
@@ -613,10 +513,11 @@
     // panel mirrors the review panel: 3-row layout, editable cards with
     // 定位/建议/操作, and a selection tooltip with 加入待办 / 提交评审.
     var shareRight = document.getElementById('shareRight');
-    var shareFbBody = document.getElementById('shareFbList');
+    var shareFbCardList = document.getElementById('shareFbCardList');
     var shareFbStatusEl = document.getElementById('shareFbStatus');
     var shareSelTooltip = document.getElementById('shareSelTooltip');
-    var shareSelText = document.getElementById('shareSelText');
+    var shareSelLocation = document.getElementById('shareSelLocation');
+    var shareSelTags = document.getElementById('shareSelTags');
     var shareSelNote = document.getElementById('shareSelNote');
     var shareSelStatus = document.getElementById('shareSelStatus');
     var sharePending = [];   // { id, position, text, note, action, scope }
@@ -628,7 +529,7 @@
 
     function _shareEsc(s) { var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
     function _shareFbStatus(msg, ok) { shareFbStatusEl.textContent = msg || ''; shareFbStatusEl.className = 'share-fb-status' + (ok ? ' ok' : msg ? ' err' : ''); }
-    function _shareSelRenderStatus(msg, ok) { shareSelStatus.textContent = msg || ''; shareSelStatus.className = 'share-sel-status' + (ok ? ' ok' : msg ? ' err' : ''); }
+    function _shareSelRenderStatus(msg, ok) { shareSelStatus.textContent = msg || ''; shareSelStatus.className = 'pst-status' + (ok ? ' pst-status-ok' : msg ? ' pst-status-error' : ''); }
     function _shareGetSelection() {
       var sel = window.getSelection ? window.getSelection().toString() : '';
       return String(sel || '').trim();
@@ -638,48 +539,51 @@
       btns.forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-share-filter') === shareFbFilter); });
     }
 
-    // Editable feedback card (定位/建议/操作), mirrors review-panel pending card.
+    // Feedback card: reuses the shared fb-card components so it matches the
+    // review panel exactly (时间/定位/选中内容/建议/动作). Delete uses fb-btn-delete.
     function _shareBuildCard(it) {
       var card = document.createElement('div');
-      card.className = 'share-fb-card';
+      card.className = 'fb-card';
 
-      // head: meta + X delete (待提交 removes locally; 已提交 marks deleted)
-      var head = document.createElement('div'); head.className = 'share-fb-card-head';
-      var meta = document.createElement('span'); meta.className = 'share-fb-card-meta';
-      meta.textContent = it.id + (it.position ? ' · Line ' + it.position : '');
-      var del = document.createElement('button'); del.className = 'share-fb-del'; del.textContent = '✕'; del.title = '删除';
+      // Header row: time + id + fb-btn-delete (top-right)
+      var head = document.createElement('div'); head.className = 'fb-card-header';
+      head.style.cssText = 'display:flex;align-items:center;gap:6px;';
+      var status = document.createElement('span'); status.className = 'fb-card-status';
+      status.textContent = '📝';
+      if (shareFbFilter === 'submitted') status.textContent = ' ✅ ';
+      var id = document.createElement('span'); id.className = 'fb-card-id';
+      id.textContent = it.id || '';
+      var time = document.createElement('span'); time.className = 'fb-card-time';
+      time.textContent = (it.created || '').substring ? (it.created || '').substring(5,16) : '';
+      var del = document.createElement('button'); del.className = 'fb-btn-delete'; del.textContent = '✕'; del.title = '删除';
       del.addEventListener('click', function(e) {
         e.stopPropagation();
-        // share surface is local-only: remove without recording. Real deleted
-        // status/cancelled display lives in the review panel (已执行 list).
-        if (shareFbFilter === 'pending') {
-          sharePending = sharePending.filter(function(i){ return i.id !== it.id; });
-        } else {
-          shareSubmitted = shareSubmitted.filter(function(i){ return i.id !== it.id; });
-        }
+        if (shareFbFilter === 'pending') sharePending = sharePending.filter(function(i){ return i.id !== it.id; });
+        else shareSubmitted = shareSubmitted.filter(function(i){ return i.id !== it.id; });
         _shareRender();
       });
-      head.appendChild(meta); head.appendChild(del);
+      head.appendChild(status); head.appendChild(id); head.appendChild(time); head.appendChild(del);
       card.appendChild(head);
 
       // 定位 (editable in 待提交)
-      var pos = document.createElement('input'); pos.type='text'; pos.className='share-fb-position';
+      var pos = document.createElement('input'); pos.type='text'; pos.className='fb-card-position-edit';
       pos.value = it.position || '';
       pos.placeholder = 'Line {start}-{end} — 定位';
       pos.addEventListener('input', function(){ it.position = pos.value; });
       pos.addEventListener('click', function(e){ e.stopPropagation(); });
       card.appendChild(pos);
 
-      // 选中内容 preview
-      var text = document.createElement('textarea'); text.className = 'share-fb-card-text';
+      // 选中内容 (editable in 待提交)
+      var text = document.createElement('textarea'); text.className = 'fb-note-input';
       text.value = it.text || ''; text.rows = 2;
       text.placeholder = '选中内容';
+      text.style.cssText = 'font-size:11px;font-family:monospace;color:var(--text-secondary);';
       text.addEventListener('input', function(){ it.text = text.value; });
       text.addEventListener('click', function(e){ e.stopPropagation(); });
       card.appendChild(text);
 
       // 建议 (editable in 待提交)
-      var note = document.createElement('textarea'); note.className = 'share-fb-card-note';
+      var note = document.createElement('textarea'); note.className = 'fb-note-input';
       note.value = it.note || ''; note.rows = 3;
       note.placeholder = '<必填>简要说明改动需求';
       note.addEventListener('input', function(){ it.note = note.value; });
@@ -687,9 +591,10 @@
       card.appendChild(note);
 
       // 操作 tag group (edit in 待提交)
-      var tagRow = document.createElement('div'); tagRow.className = 'share-fb-tags';
+      var tagRow = document.createElement('div'); tagRow.className = 'pst-tags';
+      tagRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;';
       [['修改','modify'],['删除','delete'],['扩展','explain'],['简化','simplify']].forEach(function(p){
-        var b = document.createElement('button'); b.className = 'share-right-btn';
+        var b = document.createElement('button'); b.className = 'pst-tag';
         b.textContent = p[0];
         if (it.action === p[1]) b.classList.add('active');
         b.addEventListener('click', function(e){
@@ -703,8 +608,8 @@
 
       // 提交评审 button (待提交 only)
       if (shareFbFilter === 'pending') {
-        var actions = document.createElement('div'); actions.className = 'share-fb-actions';
-        var submit = document.createElement('button'); submit.className = 'share-right-btn';
+        var actions = document.createElement('div'); actions.className = 'fb-card-actions';
+        var submit = document.createElement('button'); submit.className = 'fb-btn-submit';
         submit.textContent = '提交评审';
         submit.addEventListener('click', function(e){
           e.stopPropagation();
@@ -721,15 +626,15 @@
     }
 
     function _shareRender() {
-      shareFbBody.innerHTML = '';
+      shareFbCardList.innerHTML = '';
       var source = shareFbFilter === 'pending' ? sharePending : shareSubmitted;
       if (!source.length) {
         var empty = document.createElement('div');
-        empty.className = 'share-fb-empty';
+        empty.className = 'fb-empty';
         empty.textContent = shareFbFilter === 'pending' ? '选中内容后点击浮窗「加入待办」即可累积' : '暂无已提交反馈';
-        shareFbBody.appendChild(empty);
+        shareFbCardList.appendChild(empty);
       }
-      source.forEach(function(it) { shareFbBody.appendChild(_shareBuildCard(it)); });
+      source.forEach(function(it) { shareFbCardList.appendChild(_shareBuildCard(it)); });
       _shareActiveFilter();
     }
 
@@ -753,9 +658,10 @@
       var note = shareSelNote.value.trim();
       if (!sel) { _shareSelRenderStatus('请先选中内容', false); return; }
       if (!note) { _shareSelRenderStatus('请填写建议', false); shareSelNote.focus(); return; }
-      sharePending.push({ id: 'FD-' + (++_shareFbId), position: '', text: sel.slice(0,800), note: note, action: 'modify', scope: 'document' });
-      shareSelNote.value = ''; _shareSelRenderStatus('');
-      shareSelTooltip.classList.add('hidden');
+      var action = _shareSelAction();
+      sharePending.push({ id: 'FD-' + (++_shareFbId), position: shareSelLocation.value.trim(), text: sel.slice(0,800), note: note, action: action, scope: (action === 'execute' ? 'project' : 'document') });
+      _shareSelNoteReset();
+      shareSelTooltip.style.display = 'none';
       shareFbFilter = 'pending'; openShareFeedback(); _shareRender();
       _shareFbStatus('✅ 已加入待办', true);
     });
@@ -766,8 +672,9 @@
       var note = shareSelNote.value.trim();
       if (!sel) { _shareSelRenderStatus('请先选中内容', false); return; }
       if (!note) { _shareSelRenderStatus('请填写建议', false); shareSelNote.focus(); return; }
-      var item = { id: 'FD-' + (++_shareFbId), position: '', text: sel.slice(0,800), note: note, action: 'modify', scope: 'document' };
-      shareSelNote.value = ''; _shareSelRenderStatus('');
+      var action = _shareSelAction();
+      var item = { id: 'FD-' + (++_shareFbId), position: shareSelLocation.value.trim(), text: sel.slice(0,800), note: note, action: action, scope: (action === 'execute' ? 'project' : 'document') };
+      _shareSelNoteReset();
       _shareSubmitPending([item]);
     });
 
@@ -810,20 +717,36 @@
     }
 
     // Selection tooltip logic (mirror review-panel text selection)
+    function _shareInitTags() {
+      shareSelTags.innerHTML = '';
+      [['🗑 删除','delete'],['🔧 修改','modify'],['📈 扩展','explain'],['📉 简化','simplify'],['⚡ 执行','execute']].forEach(function(p){
+        var b = document.createElement('button'); b.className = 'pst-tag'; b.textContent = p[0]; b.setAttribute('data-action', p[1]);
+        b.addEventListener('click', function(){
+          shareSelTags.querySelectorAll('.pst-tag').forEach(function(x){ x.classList.remove('active'); });
+          b.classList.add('active');
+          shareSelNote.focus();
+        });
+        shareSelTags.appendChild(b);
+      });
+    }
+    function _shareSelAction() {
+      var a = shareSelTags.querySelector('.pst-tag.active');
+      return a ? a.getAttribute('data-action') : 'modify';
+    }
+    function _shareSelNoteReset() { shareSelNote.value = ''; if (shareSelLocation) shareSelLocation.value = ''; _shareSelRenderStatus(''); }
     function _handleShareSelection() {
       var sel = _shareGetSelection();
-      if (!sel) { shareSelTooltip.classList.add('hidden'); return; }
+      if (!sel) { shareSelTooltip.style.display = 'none'; return; }
       _shareSelSavedText = sel;
-      shareSelText.textContent = sel.length > 600 ? sel.slice(0,600)+'…' : sel;
-      shareSelNote.value = ''; _shareSelRenderStatus('');
-      // position tooltip near selection
+      _shareSelNoteReset();
+      _shareInitTags();
       var rect = null;
       try { var s = window.getSelection(); if (s.rangeCount) rect = s.getRangeAt(0).getBoundingClientRect(); } catch(e){}
       if (rect) {
         var top = rect.bottom + 8;
         var left = rect.left + rect.width/2;
         shareSelTooltip.style.maxWidth = Math.min(400, window.innerWidth - 20) + 'px';
-        shareSelTooltip.classList.remove('hidden');
+        shareSelTooltip.style.display = 'flex';
         requestAnimationFrame(function(){
           var h = shareSelTooltip.offsetHeight, w = shareSelTooltip.offsetWidth;
           if (top + h > window.innerHeight - 10) top = rect.top - h - 8;
@@ -833,7 +756,7 @@
           shareSelTooltip.style.transform = 'translateX(-50%)';
         });
       } else {
-        shareSelTooltip.classList.remove('hidden');
+        shareSelTooltip.style.display = 'flex';
         shareSelTooltip.style.top = '80px'; shareSelTooltip.style.left = '50%';
         shareSelTooltip.style.transform = 'translateX(-50%)';
       }
@@ -841,7 +764,7 @@
     document.addEventListener('mouseup', function(e) {
       var sel = _shareGetSelection();
       if (sel) { setTimeout(_handleShareSelection, 10); }
-      else if (!shareSelTooltip.contains(e.target)) { shareSelTooltip.classList.add('hidden'); }
+      else if (!shareSelTooltip.contains(e.target)) { shareSelTooltip.style.display = 'none'; }
     });
     shareSelTooltip.addEventListener('click', function(e){ e.stopPropagation(); });
 

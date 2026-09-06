@@ -7342,19 +7342,25 @@
   //  已拒绝 rejected / 已执行 executed — read-only.
   function buildReviewCard(item, project) {
     var card = document.createElement('article');
-    card.className = 'review-card';
+    card.className = 'fb-card';
 
-    var head = document.createElement('div'); head.className = 'review-card-head';
+    var head = document.createElement('div'); head.className = 'fb-card-header';
+    head.style.cssText = 'display:flex;align-items:center;gap:6px;';
 
-    // Status badge on the left
-    var status = document.createElement('span'); status.className = 'review-card-status';
+    // Status badge + time + id + fb-btn-delete (统一 fb-card 字段: 状态/时间/id/删除)
+    var status = document.createElement('span'); status.className = 'fb-card-status';
     status.textContent = _statusLabel(item.status);
     head.appendChild(status);
+    var time = document.createElement('span'); time.className = 'fb-card-time';
+    time.textContent = (item.updated || '').substring(5,16);
+    head.appendChild(time);
+    var id = document.createElement('span'); id.className = 'fb-card-id';
+    id.textContent = item.id || '';
+    head.appendChild(id);
 
-    // Top-right: ✕ delete for any persisted state → marks item deleted (已取消),
-    // shown in the 已执行 list. No multi-select checkboxes (需求7).
+    // ✕ delete (fb-btn-delete) → marks item deleted (已取消), shown in 已执行.
     var del = document.createElement('button');
-    del.className = 'preview-bottom-btn danger';
+    del.className = 'fb-btn-delete';
     del.textContent = '✕';
     del.title = '删除（标记为已取消）';
     del.addEventListener('click', async function(){
