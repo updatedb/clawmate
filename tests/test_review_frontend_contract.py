@@ -156,8 +156,8 @@ def test_feedback_position_contract_uses_canonical_position_and_visible_fallback
     assert "function _sharePosition(item)" in share
     assert "'定位：' + (_sharePosition(it) || '—')" in share
     assert "position: _sharePosition(it)" in share
-    assert "start_line: it.start_line || it.startLine || 0" in share
-    assert "end_line: it.end_line || it.endLine || 0" in share
+    assert "start_line: it.start_line || it.startLine || 0" not in share
+    assert "end_line: it.end_line || it.endLine || 0" not in share
     assert "scope: it.scope || 'document'" in share
     assert "task_id: it.task_id || ''" in share
     assert 'sel.get("position") or sel.get("location")' in store

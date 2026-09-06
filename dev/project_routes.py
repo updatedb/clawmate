@@ -121,7 +121,7 @@ _AGENTS_TEMPLATE = """# AGENTS.md — {name} 项目操作规范
 - 本文件描述{name}项目的工作约定，帮助 openclaw / codex / claude 在项目内正确工作。
 
 ## 目录约定
-- `.clawmate/`：项目标识与运行态（feedback.json / sessions / cache）。
+- `.clawmate/`：项目标识与运行态（feedback.json、feedback.audit.jsonl / sessions / cache）。
 - `dev/`：源码目录（如研发需求项目）。
 - `test/`：测试目录，与源码严格分离。
 - `archive/`：统一归档（严禁在子目录内建 archive/）。
@@ -264,7 +264,7 @@ async def project_convert(request: Request):
     clawmate_dir.mkdir(parents=True, exist_ok=True)
     if not (clawmate_dir / "feedback.json").exists():
         (clawmate_dir / "feedback.json").write_text(
-            json.dumps({"items": [], "audit": [], "tasks": []}, ensure_ascii=False, indent=2),
+            json.dumps({"items": [], "tasks": []}, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
 

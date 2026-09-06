@@ -5882,19 +5882,11 @@
       return;
     }
     try {
-      const selPayload = { text: item.text, note: item.note || '' };
+      const selPayload = { text: item.text || item.content || '', note: item.note || '' };
       if (item.action) selPayload.action = item.action;
       if (item.scope) selPayload.scope = item.scope;
       if (item.task_id) selPayload.task_id = item.task_id;
-      if (item.type === 'text' || item.type === 'markdown') {
-        if (item.startLine > 0) {
-          selPayload.startLine = item.startLine;
-          selPayload.endLine = item.endLine || item.startLine;
-        }
-        selPayload.position = _feedbackPosition(item);
-      } else {
-        selPayload.position = _feedbackPosition(item);
-      }
+      selPayload.position = _feedbackPosition(item);
       const res = await fetch('/api/clawmate/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -5978,10 +5970,6 @@
               note: it.note || '',
               position: _feedbackPosition(it),
             };
-            if ((itemType === 'text' || itemType === 'markdown') && it.startLine > 0) {
-              p.startLine = it.startLine;
-              p.endLine = it.endLine || it.startLine;
-            }
             return p;
           }),
         }),

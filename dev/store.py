@@ -62,6 +62,11 @@ def _get_feedback_path(root_id: str, project: str) -> Path:
     return marker / "feedback.json"
 
 
+def _get_audit_path(feedback_path: Path) -> Path:
+    """The append-only audit is deliberately independent of feedback.json."""
+    return feedback_path.with_name("feedback.audit.jsonl")
+
+
 def _read_feedback(path: Path) -> dict:
     """读取 .feedback.json，优先命中内存缓存（基于 mtime_ns 校验）。"""
     cache_key = str(path)
@@ -102,6 +107,8 @@ def _read_feedback(path: Path) -> dict:
         elif item.get("status") == "done":
             item["status"] = "executed"
     data.setdefault("tasks", [])
+    # Read compatibility only: older callers may inspect an empty audit list.
+    # Writers never persist this key unless journal I/O is degraded.
     data.setdefault("audit", [])
     return data
 
@@ -322,28 +329,13 @@ def _create_items_locked(
         new_id_num = last_id + idx + 1
         item_id = f"FD-{abbr}-{new_id_num:04d}"
 
-        selected_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
-        before = str(sel.get("context_before", ""))[-240:]
-        after = str(sel.get("context_after", ""))[:240]
-        anchor = {
-            "start_line": int(sel.get("start_line") or sel.get("startLine") or 0),
-            "end_line": int(sel.get("end_line") or sel.get("endLine") or 0),
-            "selected_text": text,
-            "content_hash": f"sha256:{selected_hash}",
-            "context_before": before,
-            "context_after": after,
-        }
-        try:
-            target = (load_config().root_dir(root_id) / file_path).resolve()
-            anchor["file_version"] = str(target.stat().st_mtime_ns) if target.is_file() else ""
-        except Exception:
-            anchor["file_version"] = ""
         new_items.append({
             "id": item_id,
             "status": "pending_review",
             "file": file_path,
             "note": note,
             "content": text,
+            "content_hash": "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest(),
             "position": position,
             "action": _action,
             "scope": _scope,
@@ -351,7 +343,6 @@ def _create_items_locked(
             "updated": ts,
             "created": ts,
             "result": "",
-            "anchor": anchor,
             "source": str(sel.get("source", "internal")),
             "author": str(sel.get("author", "")),
             "share_token_id": str(sel.get("share_token_id", "")),
@@ -504,7 +495,8 @@ def create_execution_plan(root_id: str, project: str, item_ids: list[str]) -> di
         files = sorted({str(i.get("file", "")) for i in selected})
         operations = [{"item_id": i["id"], "task_id": i.get("task_id", ""),
                        "action": i.get("action", "modify"), "file": i.get("file", ""),
-                       "content": i.get("content", ""), "position": i.get("position") or i.get("location", ""),
+                       "content": i.get("content", ""), "content_hash": i.get("content_hash", ""),
+                       "position": i.get("position") or i.get("location", ""),
                        "note": i.get("note", "")} for i in selected]
         task = {"id": task_id, "status": "planned", "item_ids": item_ids,
                 "files": files, "operations": operations,
@@ -564,8 +556,9 @@ def create_execution_task(root_id: str, project: str, item_ids: list[str]) -> di
         files = sorted({str(i.get("file", "")) for i in selected})
         operations = [{"item_id": i["id"], "feedback_id": i["id"], "task_id": i.get("task_id", ""),
                        "action": i.get("action", "modify"), "file": i.get("file", ""),
-                       "content": i.get("content", ""), "position": i.get("position") or i.get("location", ""),
-                       "note": i.get("note", ""), "anchor": i.get("anchor", {})} for i in selected]
+                       "content": i.get("content", ""), "content_hash": i.get("content_hash", ""),
+                       "position": i.get("position") or i.get("location", ""),
+                       "note": i.get("note", "")} for i in selected]
         task = {"id": task_id, "status": "in_progress", "item_ids": list(item_ids), "files": files,
                 "operations": operations, "plan": "Internal audit plan; executor relocates and merges feedback.",
                 "created": now, "started_at": now, "confirmed": True,
@@ -758,8 +751,45 @@ def _append_audit(data: dict, event: str, item_ids: list[str] | None = None,
     }
     if detail:
         record["detail"] = detail
-    data.setdefault("audit", []).append(record)
+    # Queue under the existing writer lock; _atomic_write flushes this to the
+    # independent JSONL journal without making it a feedback availability
+    # dependency.
+    data.setdefault("_audit_events", []).append(record)
     return record
+
+
+def _append_audit_records(path: Path, records: list[dict]) -> bool:
+    """Best-effort O_APPEND JSONL; bad historic rows are logged and ignored."""
+    if not records:
+        return True
+    try:
+        seen: set[str] = set()
+        if path.exists():
+            with open(path, "r", encoding="utf-8") as f:
+                for number, line in enumerate(f, 1):
+                    if not line.strip():
+                        continue
+                    try:
+                        value = json.loads(line)
+                        if isinstance(value, dict) and value.get("id"):
+                            seen.add(str(value["id"]))
+                    except json.JSONDecodeError:
+                        logger.warning("[audit.read] bad JSONL line path=%s line=%d", path, number)
+        payload = b"".join(
+            (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+            for record in records if str(record.get("id", "")) not in seen
+        )
+        if payload:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+            try:
+                os.write(fd, payload)
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+        return True
+    except Exception:
+        logger.exception("[audit.write] failed path=%s; feedback write continues", path)
+        return False
 
 
 def _atomic_write(path: Path, root_id: str, project: str, items: list, last_id: int,
@@ -778,11 +808,19 @@ def _atomic_write(path: Path, root_id: str, project: str, items: list, last_id: 
         "last_id": last_id,
         "items": items,
     }
+    audit_records = []
     if existing:
-        # Preserve review tasks and append-only audit history.  Only the
-        # canonical envelope fields above are recomputed by this writer.
+        # Preserve tasks. Legacy top-level audit is migrated below and omitted
+        # from the newly written canonical feedback.json.
         data["tasks"] = existing.get("tasks", [])
-        data["audit"] = existing.get("audit", [])
+        audit_records.extend(existing.get("audit", []) if isinstance(existing.get("audit", []), list) else [])
+        audit_records.extend(existing.get("_audit_events", []))
+    # Migrate legacy records before dropping their old envelope. If the journal
+    # cannot be written, retain them as a degraded compatibility fallback so
+    # a transient audit failure never discards history or blocks feedback.
+    if not _append_audit_records(_get_audit_path(path), audit_records):
+        data["audit"] = audit_records
+        logger.warning("[audit.write] retaining compatibility audit in %s", path)
     tmp_path = path.with_name(path.name + ".tmp")
     with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)

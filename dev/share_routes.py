@@ -308,10 +308,6 @@ async def share_feedback_create(token: str, request: Request):
         normalized.append({"text": str(selection.get("text") or selection.get("content") or "").strip(),
             "note": str(selection.get("note", "")).strip()[:4000],
             "position": str(selection.get("position") or selection.get("location") or "").strip()[:240],
-            "start_line": selection.get("start_line") or selection.get("startLine") or 0,
-            "end_line": selection.get("end_line") or selection.get("endLine") or 0,
-            "context_before": str(selection.get("context_before", ""))[-240:],
-            "context_after": str(selection.get("context_after", ""))[:240],
             "action": str(selection.get("action") or "other").strip(),
             "scope": str(selection.get("scope") or "document").strip(),
             "task_id": str(selection.get("task_id") or "").strip(),
@@ -361,9 +357,6 @@ async def share_feedback_list(token: str):
         position = item.get("position") or item.get("location") or ""
         response_item = {field: item.get(field, "") for field in fields}
         response_item["position"] = position
-        anchor = item.get("anchor") or {}
-        response_item["start_line"] = anchor.get("start_line") or item.get("start_line") or item.get("startLine") or 0
-        response_item["end_line"] = anchor.get("end_line") or item.get("end_line") or item.get("endLine") or 0
         if item.get("location"):
             response_item["location"] = item["location"]
         visible.append(response_item)

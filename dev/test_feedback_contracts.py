@@ -11,13 +11,13 @@ CSS = (ROOT / "static/css/preview.css").read_text(encoding="utf-8")
 ROUTES = (ROOT / "share_routes.py").read_text(encoding="utf-8")
 
 
-def test_share_pst_payload_keeps_position_and_line_contract():
+def test_share_pst_payload_keeps_canonical_position_contract():
     assert '<script src="./js/preview-common.js"></script>' in SHARE
     assert "function _shareSelectionLocation(text, range)" in SHARE
     assert "getFeedbackSelectionPosition({" in SHARE
     assert "getFeedbackPositionPlaceholder" in SHARE
-    assert "position: _sharePosition(it), start_line: it.start_line || it.startLine || 0" in SHARE
-    assert "end_line: it.end_line || it.endLine || 0" in SHARE
+    assert "position: _sharePosition(it)" in SHARE
+    assert "start_line: it.start_line" not in SHARE
     assert "return String(item.position || item.location || '').trim();" in SHARE
 
 
@@ -31,7 +31,7 @@ vm.createContext(ctx); vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'),
 const p = ctx.window.getFeedbackSelectionPosition;
 function eq(a, b) { if (a !== b) throw new Error(a + ' !== ' + b); }
 let line = p({ext:'js', text:'two\\nthree', rawContent:'one\\ntwo\\nthree'});
-eq(line.position, 'Line 2-3'); eq(line.start_line, 2); eq(line.end_line, 3);
+eq(line.position, 'Line 2-3');
 eq(ctx.window.getPosValue('pdf', 2, 3), 'Page 2-3');
 eq(ctx.window.getPosValue('xlsx', 2, 3), 'Range A2');
 eq(ctx.window.getFeedbackPositionPlaceholder('mp4'), 'Time {HH:MM:SS}');

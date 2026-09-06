@@ -99,6 +99,7 @@ async def task_run(request: Request):
             raise HTTPException(status_code=409, detail="Execution plan must be confirmed before agent execution")
         raw_selections = [{"task_id": op.get("task_id") or "review_" + str(op.get("action", "modify")),
                            "content": op.get("content", ""),
+                           "content_hash": op.get("content_hash", ""),
                            "note": op.get("note", ""), "position": op.get("position", "")}
                           for op in review_task.get("operations", [])]
     if not raw_selections or not isinstance(raw_selections, list):
@@ -163,13 +164,15 @@ async def task_run(request: Request):
         content = str(sel.get("content", ""))
         note = str(sel.get("note", ""))
         position = str(sel.get("position", ""))
+        content_hash = str(sel.get("content_hash", ""))
 
         # 构建模板变量：全局变量 + 本 selection 的所有非标准字段
         sel_vars = dict(global_vars)
         sel_vars["content"] = content
         sel_vars["position"] = position
+        sel_vars["content_hash"] = content_hash
         for k, v in sel.items():
-            if k not in ("task_id", "content", "note", "position"):
+            if k not in ("task_id", "content", "content_hash", "note", "position"):
                 sel_vars[k] = str(v)
 
         # note：用户提供则渲染用户输入，否则渲染模板 agent_prompt
@@ -185,6 +188,7 @@ async def task_run(request: Request):
             "scope": template.scope,
             "task_id": tid,
             "position": position,
+            "content_hash": content_hash,
         })
 
     if review_task_id:
@@ -330,6 +334,7 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "", includ
             scope_val = item.get("scope", "document")
             item_file = item.get("file", file or "?")
             content_val = (item.get("content", "") or "")
+            content_hash = (item.get("content_hash", "") or "")
             note_val = (item.get("note", "") or "")
             position_val = item.get("position", "") or "无"
 
@@ -338,6 +343,8 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "", includ
             lines.append(f"   file: {_display_file}")
             lines.append(f"   position: {position_val}")
             lines.append(f"   content: {content_val}")
+            if content_hash:
+                lines.append(f"   content_hash: {content_hash}")
             lines.append(f"   note: {note_val}")
             _desc = _action_desc(task_id, item.get("action", "other"))
             lines.append(f"   操作：{_desc}")

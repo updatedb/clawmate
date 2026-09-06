@@ -789,7 +789,7 @@
       var action = _shareSelAction();
       if (!action) { _shareSelRenderStatus('请选择操作类型', false); return; }
       var location = _shareSelectionLocation(sel, _shareSelRange);
-      sharePending.push({ id: 'FD-' + (++_shareFbId), created: new Date().toISOString(), position: shareSelLocation.value.trim() || location.position, start_line: location.start_line, end_line: location.end_line, text: sel.slice(0,800), note: note, action: action, scope: _shareSelScope(), task_id: _shareSelTaskId() });
+      sharePending.push({ id: 'FD-' + (++_shareFbId), created: new Date().toISOString(), position: shareSelLocation.value.trim() || location.position, text: sel, note: note, action: action, scope: _shareSelScope(), task_id: _shareSelTaskId() });
       _sharePersistPending();
       _shareSelNoteReset();
       shareSelTooltip.classList.add('hidden');
@@ -806,7 +806,7 @@
       if (!_shareSelAction()) { _shareSelRenderStatus('请选择操作类型', false); return; }
       var action = _shareSelAction();
       var location = _shareSelectionLocation(sel, _shareSelRange);
-      var item = { id: 'FD-' + (++_shareFbId), created: new Date().toISOString(), position: shareSelLocation.value.trim() || location.position, start_line: location.start_line, end_line: location.end_line, text: sel.slice(0,800), note: note, action: action, scope: _shareSelScope(), task_id: _shareSelTaskId() };
+      var item = { id: 'FD-' + (++_shareFbId), created: new Date().toISOString(), position: shareSelLocation.value.trim() || location.position, text: sel, note: note, action: action, scope: _shareSelScope(), task_id: _shareSelTaskId() };
       _shareSelNoteReset();
       shareSelTooltip.classList.add('hidden');
       _shareSubmitPending([item]);
@@ -820,8 +820,7 @@
       location = location || {};
       sharePending.push({
         id: 'FD-' + (++_shareFbId), created: new Date().toISOString(),
-        position: location.position || '', start_line: location.start_line || 0,
-        end_line: location.end_line || 0, text: String(text || '').slice(0, 800),
+        position: location.position || '', text: String(text || ''),
         note: '', action: '', scope: 'document', task_id: ''
       });
       _sharePersistPending();
@@ -872,7 +871,7 @@
       _shareFbStatus('提交中...', false);
       try {
         var payload = { author: _shareAuthor, selections: list.map(function(it) {
-          return { text: it.text, note: it.note, action: it.action, scope: it.scope || 'document', task_id: it.task_id || '', position: _sharePosition(it), start_line: it.start_line || it.startLine || 0, end_line: it.end_line || it.endLine || 0 };
+          return { text: it.text, note: it.note, action: it.action, scope: it.scope || 'document', task_id: it.task_id || '', position: _sharePosition(it) };
         }) };
         var response = await fetch(API_BASE + '/share/' + TOKEN + '/feedback', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
         var data = await response.json();
@@ -1042,7 +1041,6 @@
         return {
           id: item.id || '', status: item.status || '', created: item.created || '', updated: item.updated || '',
           action: item.action || '', scope: item.scope || '', task_id: item.task_id || '',
-          start_line: item.start_line || item.startLine || 0, end_line: item.end_line || item.endLine || 0,
           text: item.content || '', note: item.note || '', position: _sharePosition(item)
         };
       });

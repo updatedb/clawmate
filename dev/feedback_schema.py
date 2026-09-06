@@ -1,8 +1,8 @@
 """
 Feedback Schema — 标准数据结构定义。
 
-.feedback.json 是唯一权威存储，所有 API 层直接透传字段，
-不做重命名翻译。
+.feedback.json 保存反馈和任务；不可变审计事件保存在并列的
+.feedback.audit.jsonl。API 层使用 canonical 字段，不做位置字段翻译。
 
 Usage:
     from feedback_schema import (
@@ -22,7 +22,7 @@ from typing import TypedDict
 # ── 标准字段名（.feedback.json 唯一权威）────────────────────────────
 
 # 顶层字段
-FEEDBACK_TOP_FIELDS = ("root", "project", "updated", "last_id", "items", "tasks", "audit")
+FEEDBACK_TOP_FIELDS = ("root", "project", "updated", "last_id", "items", "tasks")
 
 # item 级字段（API 响应、cron 模板、.feedback.json 全部统一）
 FEEDBACK_ITEM_FIELDS = (
@@ -31,14 +31,13 @@ FEEDBACK_ITEM_FIELDS = (
     "file",     # 相对路径
     "note",     # 用户备注/指令
     "content",  # 选中原文
-    "position", # 定位信息（Line {start}-{end} / Time {HH:MM:SS} 等标准化格式）
+    "position", # 由 preview-common 生成的定位信息
+    "content_hash", # 可选 sha256，覆盖完整 content/selected_text
     "action",   # delete | modify | explain | simplify | execute | other
     "scope",    # document | project
     "task_id",  # 任务模板标识（如 subtitle_correct, review_delete）
     "updated",  # 更新时间 YYYY-MM-DD HH:MM:SS
     "result",   # 处理结果摘要
-    "anchor",   # line + selected text hash + surrounding context
-    "audit",    # append-only item event ids (the full log is top-level)
 )
 
 # 合法状态值
@@ -65,6 +64,7 @@ class FeedbackItem(TypedDict, total=False):
     note: str
     content: str
     position: str
+    content_hash: str
     action: str
     scope: str
     task_id: str
@@ -73,7 +73,6 @@ class FeedbackItem(TypedDict, total=False):
     impact: str
     failure_reason: str
     failure_stage: str
-    anchor: dict
     source: str
     author: str
     share_token_id: str

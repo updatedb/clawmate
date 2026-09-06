@@ -81,20 +81,21 @@
     return 'Line ' + startLine + '-' + endLine;
   };
 
-  // The single selection-to-feedback anchor contract used by review and share
-  // surfaces. `position` is persisted; line fields remain machine-readable.
+  // The single selection-to-feedback locator used by review and share. The
+  // calculated line numbers only produce the existing position string; they
+  // are never part of the persisted feedback contract.
   global.getFeedbackSelectionPosition = function(options) {
     options = options || {};
     var ext = String(options.ext || '').toLowerCase();
     var text = String(options.text || '');
     var raw = String(options.rawContent || '');
     var range = options.range;
-    if (!text) return { position: '', start_line: 0, end_line: 0 };
+    if (!text) return { position: '' };
     if (options.markdownRendered && range) {
       var heading = global.detectSectionFromDOM(range);
-      if (heading) return { position: 'Section ' + heading, start_line: 0, end_line: 0 };
+      if (heading) return { position: 'Section ' + heading };
     }
-    if (options.htmlRendered) return { position: '', start_line: 0, end_line: 0 };
+    if (options.htmlRendered) return { position: '' };
     var start = 0, end = 0;
     var lines = text.split('\n').map(function(line) { return line.trim(); }).filter(Boolean);
     function lineAt(index) { return (raw.slice(0, index).match(/\n/g) || []).length + 1; }
@@ -120,7 +121,7 @@
       index = rendered.indexOf(lines[0]);
       if (index >= 0) { start = (rendered.slice(0, index).match(/\n/g) || []).length + 1; end = start + lines.length - 1; }
     }
-    return { position: start ? global.getPosValue(ext, start, end) : '', start_line: start, end_line: end };
+    return { position: start ? global.getPosValue(ext, start, end) : '' };
   };
 
   global.getFeedbackPositionPlaceholder = function(ext) {
