@@ -97,8 +97,24 @@ def test_feedback_cards_follow_status_visibility_order_sorting_and_manual_refres
     assert "setInterval" not in js
     assert "拒绝理由" not in js
     assert "确认删除该反馈" not in js
-    assert "closeRightSidebar();" in js
+    # Successful feedback submission keeps the review panel open so the
+    # newly-created pending_review cards can be shown immediately.
+    submit_all = js.split("async function submitAllItems", 1)[1].split("// CSS ::selection fallback", 1)[0]
+    assert "closeRightSidebar();" not in submit_all
     assert "position: static;" in css
+
+
+def test_review_feedback_submission_preserves_template_action_scope_and_task_id():
+    """Adding/submitting feedback must keep all template fields, not task_id alone."""
+    js = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
+    assert "var _lastPstSelection = null;" in js
+    assert "_lastPstSelection = { action: t.action, scope: t.scope, task_id: t.id };" in js
+    assert "var _mapEntry = _lastPstSelection ||" in js
+    assert "action: item.action || ''" in js
+    assert "scope: item.scope || 'document'" in js
+    submit_all = js.split("async function submitAllItems", 1)[1].split("// CSS ::selection fallback", 1)[0]
+    assert "action: it.action || ''" in submit_all
+    assert "scope: it.scope || 'document'" in submit_all
 
 
 def test_feedback_position_contract_uses_canonical_position_and_visible_fallback():

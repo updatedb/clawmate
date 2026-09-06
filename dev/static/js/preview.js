@@ -5811,7 +5811,14 @@
   function buildTaskSelection(item) {
     // 将 feedback panel 的 item 转为 task/run 的 selection 格式
     const taskId = item.task_id || (item.action ? 'review_' + item.action : 'review_modify');
-    return { task_id: taskId, content: item.text || item.content || '', note: item.note || '', position: _feedbackPosition(item) };
+    return {
+      task_id: taskId,
+      action: item.action || '',
+      scope: item.scope || 'document',
+      content: item.text || item.content || '',
+      note: item.note || '',
+      position: _feedbackPosition(item),
+    };
   }
 
   async function submitSingleItem(item) {
@@ -5880,7 +5887,6 @@
         else if (item.type === 'image') reloadFn = loadImageCompletedFeedback;
         else reloadFn = loadCompletedFeedback;
         _refreshFeedbackList(reloadFn);
-        closeRightSidebar();
         showToast('✅ 已发送', 2000);
       } else {
         // Error: show inline in tooltip status
@@ -5918,7 +5924,16 @@
           root: rootId,
           file: filePath,
           selections: pendingArray.map(it => {
-            const p = { task_id: it.task_id || (it.action ? 'review_' + it.action : 'review_modify'), content: it.text || it.content || '', note: it.note || '', position: _feedbackPosition(it) };
+            // task_id identifies a template, but action/scope are persisted
+            // feedback fields and must be transmitted with it.
+            const p = {
+              task_id: it.task_id || (it.action ? 'review_' + it.action : 'review_modify'),
+              action: it.action || '',
+              scope: it.scope || 'document',
+              content: it.text || it.content || '',
+              note: it.note || '',
+              position: _feedbackPosition(it),
+            };
             if ((itemType === 'text' || itemType === 'markdown') && it.startLine > 0) {
               p.startLine = it.startLine;
               p.endLine = it.endLine || it.startLine;
@@ -5941,7 +5956,6 @@
         }
         renderFeedbackPanel();
         _refreshFeedbackList(onReload);
-        closeRightSidebar();
         btn.textContent = '✅ 已提交';
         setTimeout(function() {
           btn.disabled = false;
@@ -6021,6 +6035,7 @@
     document.querySelectorAll('.pst-tag').forEach(function(b) { b.classList.remove('active'); });
     document.getElementById('pstNote').value = '';
     _lastPstTag = '';
+    _lastPstSelection = null;
     if (window.getSelection) window.getSelection().removeAllRanges();
   }
 
@@ -6370,6 +6385,10 @@
   // Add to panel
   // Quick tags: 从 /api/config 动态加载 task_templates，按文件扩展名过滤
   var _lastPstTag = '';
+  // Keep the selected template itself, rather than trying to recover it from
+  // its display/prompt text when the draft is moved into the feedback panel.
+  // The latter is user-editable and can legitimately differ from agent_prompt.
+  var _lastPstSelection = null;
   var _taskTemplates = [];
 
   // Restore the 提交评审 label without removing the svg icon. The button
@@ -6404,6 +6423,7 @@
       btn.addEventListener('click', function() {
         var tag = this.getAttribute('data-tag');
         _lastPstTag = tag;
+        _lastPstSelection = { action: t.action, scope: t.scope, task_id: t.id };
         document.querySelectorAll('.pst-tag').forEach(function(b) { b.classList.remove('active'); });
         this.classList.add('active');
         var noteEl = document.getElementById('pstNote');
@@ -6448,7 +6468,7 @@
     }
 
     var _itemAction = 'other', _itemScope = 'document';
-    var _mapEntry = _resolvePstAction(_lastPstTag) || _resolvePstAction(note);
+    var _mapEntry = _lastPstSelection || _resolvePstAction(_lastPstTag) || _resolvePstAction(note);
     if (_mapEntry) {
       _itemAction = _mapEntry.action;
       _itemScope = _mapEntry.scope;
@@ -6520,7 +6540,7 @@
     }
 
     var _sendAction = 'other', _sendScope = 'document';
-    var _sendEntry = _resolvePstAction(_lastPstTag);
+    var _sendEntry = _lastPstSelection || _resolvePstAction(_lastPstTag);
     if (_sendEntry) { _sendAction = _sendEntry.action; _sendScope = _sendEntry.scope; }
     var _sendTaskId = _sendEntry ? (_sendEntry.task_id || '') : '';
     const selPayload = { text: currentSelText, note, action: _sendAction, scope: _sendScope, task_id: _sendTaskId };
