@@ -4,13 +4,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_preview_uses_review_gate_not_direct_task_run_for_feedback_submission():
-    """任何 /task/run 都必须在 review/confirm 之后、且带 review_task_id 走门禁。"""
+def test_preview_uses_single_atomic_execute_request_for_feedback_submission():
+    """Batch execution has no user-visible plan/confirm/task-run loop."""
     source = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
-    assert "/api/clawmate/review/confirm" in source
-    assert "review_task_id" in source
-    assert source.count("/api/clawmate/task/run") >= 1
-    assert source.count("/api/clawmate/review/confirm") >= 1
+    review_panel = source.split("// ── Internal review queue", 1)[1]
+    assert "/api/clawmate/review/execute" in review_panel
+    assert "/api/clawmate/review/confirm" not in review_panel
+    assert "/api/clawmate/task/run" not in review_panel
     for label in ("待提交", "待评审", "已评审", "已拒绝", "已执行"):
         assert label in source
 
@@ -30,7 +30,7 @@ def test_preview_review_panel_has_3row_layout_and_review_actions():
     # 已取消 = deleted; deleted is grouped under 已拒绝
     assert "已取消" in js
     assert "statuses: ['rejected', 'deleted']" in js
-    assert "statuses: ['in_progress', 'executed', 'failed']" in js
+    assert "statuses: ['in_progress', 'executed', 'failed', 'needs_attention']" in js
     assert "/api/clawmate/feedback/delete" in js
     # 待评审 editable; 已评审 read-only + ✕ delete + 执行反馈; no multi-select
     assert "评审通过" in js

@@ -34,7 +34,7 @@ from config import load as config
 from store import (
     update_item, list_items, batch_update_items, create_items, review_items,
     create_execution_plan, confirm_execution_plan, execution_task,
-    record_execution_result, delete_item,
+    create_execution_task, record_execution_result, delete_item,
 )
 from service import resolve_root
 
@@ -120,6 +120,29 @@ async def review_confirm(request: Request):
     return {"ok": True, "task": task}
 
 
+@router.post("/api/clawmate/review/execute", response_class=JSONResponse)
+async def review_execute(request: Request):
+    """Atomically reserve approved feedback and wake exactly one task agent."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    root_id = str(body.get("root", "")).strip()
+    project = str(body.get("project", "")).strip()
+    ids = [str(i) for i in body.get("ids", [])]
+    if not root_id or not project or not ids:
+        raise HTTPException(status_code=422, detail="Missing root/project/ids")
+    try:
+        task = create_execution_task(root_id, project, ids)
+        from task_runner import wake_review_task
+        wake_review_task(root_id, project, task["id"])
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return {"ok": True, "task": task}
+
+
 @router.post("/api/clawmate/review/result", response_class=JSONResponse)
 async def review_result(request: Request):
     """Internal executor callback with actual diff/artifact/check evidence."""
@@ -129,14 +152,17 @@ async def review_result(request: Request):
         raise HTTPException(status_code=400, detail="Invalid JSON")
     artifacts = body.get("artifacts", [])
     checks = body.get("checks", [])
+    outcomes = body.get("outcomes")
     if not isinstance(artifacts, list) or not isinstance(checks, list):
         raise HTTPException(status_code=422, detail="artifacts and checks must be arrays")
+    if outcomes is not None and not isinstance(outcomes, list):
+        raise HTTPException(status_code=422, detail="outcomes must be an array")
     try:
         task = record_execution_result(
             str(body.get("root", "")).strip(), str(body.get("project", "")).strip(),
             str(body.get("task_id", "")).strip(), success=bool(body.get("success")),
             summary=str(body.get("summary", "")).strip(), diff=str(body.get("diff", "")),
-            artifacts=artifacts, checks=checks)
+            artifacts=artifacts, checks=checks, outcomes=outcomes)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except ValueError as exc:

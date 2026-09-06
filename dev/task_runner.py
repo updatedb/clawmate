@@ -38,6 +38,16 @@ def _render_prompt_text(text: str, variables: dict) -> str:
     return text
 
 
+def wake_review_task(root_id: str, project: str, review_task_id: str) -> None:
+    """Wake one agent for one server-reserved review task (possibly many files)."""
+    from store import execution_task
+    task = execution_task(root_id, project, review_task_id)
+    if task.get("status") != "in_progress":
+        raise ValueError("review task is not executing")
+    _wake_agent_for_root(root_id, project=project, include_in_progress=True,
+                         review_task_id=review_task_id)
+
+
 @router.post("/api/clawmate/task/run", response_class=JSONResponse)
 async def task_run(request: Request):
     """执行一个或多个 AI 任务。
@@ -269,7 +279,13 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "", includ
     items, _ = list_items(root_id, project, status="pending_review", file=file)
     if include_in_progress:
         active, _ = list_items(root_id, project, status="in_progress", file=file)
-        items = active
+        if review_task_id:
+            from store import execution_task
+            task = execution_task(root_id, project, review_task_id)
+            task_ids = set(task.get("item_ids", []))
+            items = [item for item in active if item.get("id") in task_ids]
+        else:
+            items = active
 
     # ── 前置验证：按 scope 逐条检查 root/project/file 存在性，失败项直接标记 failed ──
     if items:
@@ -328,11 +344,8 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "", includ
             lines.append("")
         lines.append(f"步骤：")
         lines.append(f"0. 【效率优先】position 已标注目标位置（Section xxx / Line xxx），先用 grep 定位 position 得到行号范围，仅读取该范围内的内容匹配 content，避免全文件读取")
-        lines.append(f"1. 开始执行前，POST {base_url}/api/clawmate/feedback/batch-update 将所有 items 的 status 设为 in_progress，result 留空")
-        lines.append(f"   认证: Header X-Internal-Token: {hook_token}")
-        lines.append(f"2. 逐个执行 item，冲突或重复项标记 status=failed")
-        lines.append(f"3. 执行完成后，再次 POST batch-update 更新最终 status（done/failed）和 result（同样带上认证 Header）")
-        lines.append(f"请求体格式: root={root_id}, project={project}, items=[{{id, status, result}}]")
+        lines.append("1. 同一文件/同一位置的 feedback 必须一起重新定位、合并并判断冲突；anchor 是提示，不得因文本次数或版本变化直接拒绝。")
+        lines.append("2. 逐条处理；无法安全执行的反馈填 needs_attention 或 failed，不得影响其它反馈。")
         lines.append(f"")
         lines.append(f"⚠️ 安全约束：")
         lines.append(f"- 所有操作只在本地文件系统完成（不访问远程目录 / 远程系统）")
@@ -340,7 +353,8 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "", includ
         lines.append(f"- 禁止创建或删除任何文件/目录（包括临时文件）")
         lines.append(f"- 禁止修改配置文件和项目配置（config.json, config.example.json, .gitignore 等）")
         if review_task_id:
-            lines.append(f"- 此为已确认评审任务 task_id={review_task_id}；完成后必须 POST {base_url}/api/clawmate/review/result，写入真实 success、summary、diff、artifacts（ClawMate 链接）和 checks；未知字段留空/[]，不得伪造。")
+            lines.append(f"- 此为内部执行任务 task_id={review_task_id}；完成后必须 POST {base_url}/api/clawmate/review/result，写入真实 success、summary、diff、artifacts、checks 和 outcomes。")
+            lines.append("- outcomes 必须恰好每个 feedback_id 一条：{feedback_id,status(executed|failed|needs_attention),impact,result,failure_reason,failure_stage}；未知字段填空字符串，禁止用 task summary 覆盖逐条结果。")
         message = "\n".join(lines)
     else:
         message = f"ClawMate 反馈通知：{scope} 目前无待处理 feedback。"

@@ -51,15 +51,37 @@ def test_review_requires_approval_and_confirmed_plan(review_project):
     assert started["status"] == "in_progress"
 
 
-def test_stale_anchor_blocks_plan_and_is_audited(review_project):
+def test_changed_anchor_is_passed_to_executor_instead_of_blocking_task(review_project):
     created = store.create_items("root", "project", "project/note.md", [{"text": "selected text", "note": "x"}])
     item_id = created[0]["id"]
     store.review_items("root", "project", [item_id], "approved")
     review_project.write_text("before\nreplaced\nafter\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="anchor stale"):
-        store.create_execution_plan("root", "project", [item_id])
+    task = store.create_execution_task("root", "project", [item_id])
+    assert task["status"] == "in_progress"
     path = review_project.parent / ".clawmate" / "feedback.json"
-    assert "anchor_invalid" in path.read_text(encoding="utf-8")
+    assert "execution_task_created" in path.read_text(encoding="utf-8")
+
+
+def test_atomic_task_locks_items_and_persists_per_feedback_outcomes(review_project):
+    created = store.create_items("root", "project", "project/note.md", [
+        {"text": "selected text", "note": "first"},
+        {"text": "before", "note": "second"},
+    ])
+    ids = [item["id"] for item in created]
+    store.review_items("root", "project", ids, "approved")
+    task = store.create_execution_task("root", "project", ids)
+    with pytest.raises(ValueError, match="reserved"):
+        store.create_execution_task("root", "project", [ids[0]])
+    store.record_execution_result("root", "project", task["id"], success=False, summary="task summary",
+        outcomes=[
+            {"feedback_id": ids[0], "status": "executed", "impact": "line 2", "result": "updated"},
+            {"feedback_id": ids[1], "status": "needs_attention", "failure_reason": "conflict", "failure_stage": "merge"},
+        ])
+    items, _ = store.list_items("root", "project")
+    by_id = {item["id"]: item for item in items}
+    assert by_id[ids[0]]["result"] == "updated"
+    assert by_id[ids[1]]["status"] == "needs_attention"
+    assert by_id[ids[1]]["failure_stage"] == "merge"
 
 
 def test_list_items_matches_equivalent_relative_paths(review_project):

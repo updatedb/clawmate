@@ -7178,12 +7178,12 @@
     { key: 'pending_review', label: '待评审',           statuses: ['pending_review'] },
     { key: 'approved',       label: '已评审',           statuses: ['approved', 'planned'] },
     { key: 'rejected',       label: '已拒绝',           statuses: ['rejected', 'deleted'] },
-    { key: 'executed',       label: '已执行',           statuses: ['in_progress', 'executed', 'failed'] },
+    { key: 'executed',       label: '已执行',           statuses: ['in_progress', 'executed', 'failed', 'needs_attention'] },
   ];
 
   function _statusLabel(status) {
     var map = { pending_review: '待评审', approved: '已评审', planned: '已评审', rejected: '已拒绝',
-                in_progress: '执行中', executed: '已执行', failed: '执行失败', pending: '待提交',
+                in_progress: '执行中', executed: '已执行', failed: '执行失败', needs_attention: '需人工确认', pending: '待提交',
                 deleted: '已取消' };
     return map[status] || status;
   }
@@ -7388,6 +7388,14 @@
       var note = document.createElement('div'); note.className = 'review-card-note';
       note.innerHTML = '<strong>建议：</strong>' + _reviewEscape(item.note || '') + (item.review_reason ? '<div><strong>评审意见：</strong>' + _reviewEscape(item.review_reason) + '</div>' : '');
       card.appendChild(note);
+      if (item.status === 'executed' || item.status === 'failed' || item.status === 'needs_attention' || item.status === 'in_progress') {
+        var outcome = document.createElement('div'); outcome.className = 'review-card-note';
+        outcome.innerHTML = '<strong>影响内容：</strong>' + _reviewEscape(item.impact || '—') +
+          '<div><strong>结果：</strong>' + _reviewEscape(item.result || '—') + '</div>' +
+          (item.failure_reason ? '<div><strong>失败原因：</strong>' + _reviewEscape(item.failure_reason) + '</div>' : '') +
+          (item.failure_stage ? '<div><strong>失败阶段：</strong>' + _reviewEscape(item.failure_stage) + '</div>' : '');
+        card.appendChild(outcome);
+      }
     }
 
     var actions = document.createElement('div'); actions.className = 'fb-card-actions';
@@ -7409,17 +7417,7 @@
     }
     if (item.status === 'approved') {
       act('执行反馈', async function() {
-        var d = await _reviewRequest('/api/clawmate/review/plan', {root:rootId,project:project,ids:[item.id]});
-        alert('执行计划：\n影响文件：' + (d.task.files || []).join('\n') + '\n即将确认并执行。');
-        var c = await _reviewRequest('/api/clawmate/review/confirm', {root:rootId,project:project,task_id:d.task.id});
-        await _reviewRequest('/api/clawmate/task/run', {root:rootId,project:project,file:item.file,review_task_id:d.task.id,selections:[{task_id:item.task_id||'review_modify'}]});
-        renderReviewPanel();
-      });
-    }
-    if (item.status === 'planned') {
-      act('确认并执行', async function() {
-        var d = await _reviewRequest('/api/clawmate/review/confirm', {root:rootId,project:project,task_id:item.execution_task_id});
-        await _reviewRequest('/api/clawmate/task/run', {root:rootId,project:project,file:item.file,review_task_id:d.task.id,selections:[{task_id:item.task_id||'review_modify'}]});
+        await _reviewRequest('/api/clawmate/review/execute', {root:rootId,project:project,ids:[item.id]});
         renderReviewPanel();
       });
     }
@@ -7463,21 +7461,16 @@
   if (btnReviewExec) btnReviewExec.addEventListener('click', async function() {
     var project = _reviewProject();
     if (!project) { showToastSafe('当前文件不属于项目'); return; }
-    // Merge-execute ALL approved/planned review cards (需求7: no multi-select).
+    // One request reserves all approved feedback; task_runner wakes one agent.
     try {
       var listUrl = '/api/clawmate/feedback/list?root=' + encodeURIComponent(rootId) + '&project=' + encodeURIComponent(project);
       if (filePath) listUrl += '&file=' + encodeURIComponent(filePath);
       var res = await fetch(listUrl);
       var data = await res.json();
-      var items = (data.items || []).filter(function(i){ return i.status === 'approved' || i.status === 'planned'; });
+      var items = (data.items || []).filter(function(i){ return i.status === 'approved'; });
       if (!items.length) { showToastSafe('暂无可执行的已评审反馈'); return; }
       var ids = items.map(function(i){ return i.id; });
-      var d = await _reviewRequest('/api/clawmate/review/plan', {root:rootId,project:project,ids:ids});
-      alert('执行计划已创建：' + d.task.id + '\n影响文件：' + (d.task.files || []).join('\n') + '\n即将确认并执行全部 ' + ids.length + ' 条已评审反馈。');
-      var c = await _reviewRequest('/api/clawmate/review/confirm', {root:rootId,project:project,task_id:d.task.id});
-      for (var i = 0; i < (d.task.files || []).length; i++) {
-        await _reviewRequest('/api/clawmate/task/run', {root:rootId,project:project,file:d.task.files[i],review_task_id:d.task.id,selections:[{task_id:'review_modify'}]});
-      }
+      await _reviewRequest('/api/clawmate/review/execute', {root:rootId,project:project,ids:ids});
       renderReviewPanel();
     } catch (err) {
       showToastSafe('❌ ' + err.message);

@@ -333,6 +333,11 @@ def _create_items_locked(
             "context_before": before,
             "context_after": after,
         }
+        try:
+            target = (load_config().root_dir(root_id) / file_path).resolve()
+            anchor["file_version"] = str(target.stat().st_mtime_ns) if target.is_file() else ""
+        except Exception:
+            anchor["file_version"] = ""
         new_items.append({
             "id": item_id,
             "status": "pending_review",
@@ -479,30 +484,6 @@ def review_items(root_id: str, project: str, item_ids: list[str], decision: str,
         return changed
 
 
-def _anchor_valid(root_id: str, item: dict) -> tuple[bool, str]:
-    """Require selected content hash to still occur exactly once before execution."""
-    anchor = item.get("anchor") or {}
-    selected = str(anchor.get("selected_text") or item.get("content") or "")
-    if not selected:
-        return False, "missing selected text anchor"
-    expected = str(anchor.get("content_hash", ""))
-    actual = "sha256:" + hashlib.sha256(selected.encode("utf-8")).hexdigest()
-    if expected and expected != actual:
-        return False, "stored anchor hash is invalid"
-    try:
-        root = load_config().root_dir(root_id).resolve()
-        candidate = (root / str(item.get("file", ""))).resolve()
-        if root not in candidate.parents or not candidate.is_file():
-            return False, "target file is unavailable"
-        content = candidate.read_text(encoding="utf-8", errors="replace")
-    except Exception as exc:
-        return False, f"cannot read target file: {exc}"
-    count = content.count(selected)
-    if count == 1:
-        return True, ""
-    return False, "anchor stale: selected content no longer has one unambiguous match"
-
-
 def create_execution_plan(root_id: str, project: str, item_ids: list[str]) -> dict:
     """Persist a review-approved execution plan. Confirmation is separate."""
     if not item_ids:
@@ -518,13 +499,6 @@ def create_execution_plan(root_id: str, project: str, item_ids: list[str]) -> di
                 raise LookupError(f"Item {item_id} not found")
             if item.get("status") != "approved":
                 raise ValueError(f"{item_id} is not approved")
-            valid, reason = _anchor_valid(root_id, item)
-            if not valid:
-                item["anchor_state"] = "stale"
-                item["anchor_error"] = reason
-                _append_audit(data, "anchor_invalid", item_ids=[item_id], detail={"reason": reason})
-                _atomic_write(path, root_id, project, data["items"], data.get("last_id", 0), data)
-                raise ValueError(f"{item_id}: {reason}")
             selected.append(item)
         task_id = f"RV-{uuid.uuid4().hex[:10]}"
         files = sorted({str(i.get("file", "")) for i in selected})
@@ -558,21 +532,51 @@ def confirm_execution_plan(root_id: str, project: str, task_id: str) -> dict:
             raise LookupError(f"Task {task_id} not found")
         if task.get("status") != "planned":
             raise ValueError("task is not awaiting confirmation")
-        selected = [i for i in data["items"] if i.get("id") in set(task.get("item_ids", []))]
-        for item in selected:
-            valid, reason = _anchor_valid(root_id, item)
-            if not valid:
-                item["anchor_state"] = "stale"
-                item["anchor_error"] = reason
-                _append_audit(data, "anchor_invalid", item_ids=[item["id"]], task_id=task_id,
-                              detail={"reason": reason})
-                _atomic_write(path, root_id, project, data["items"], data.get("last_id", 0), data)
-                raise ValueError(f"{item['id']}: {reason}")
         now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
         task["confirmed"] = True
         task["confirmed_at"] = now
         task["status"] = "confirmed"
         _append_audit(data, "execution_confirmed", item_ids=task["item_ids"], task_id=task_id)
+        _atomic_write(path, root_id, project, data["items"], data.get("last_id", 0), data)
+        return dict(task)
+
+
+def create_execution_task(root_id: str, project: str, item_ids: list[str]) -> dict:
+    """Atomically reserve approved feedback and start one internal task."""
+    if not item_ids or len(set(item_ids)) != len(item_ids):
+        raise ValueError("missing or duplicate approved review ids")
+    with _feedback_write_lock:
+        path = _get_feedback_path(root_id, project)
+        data = _read_feedback(path)
+        by_id = {i.get("id"): i for i in data.get("items", [])}
+        selected = []
+        for item_id in item_ids:
+            item = by_id.get(item_id)
+            if not item:
+                raise LookupError(f"Item {item_id} not found")
+            if item.get("status") != "approved":
+                if item.get("execution_task_id"):
+                    raise ValueError(f"{item_id} is already reserved by {item['execution_task_id']}")
+                raise ValueError(f"{item_id} is not approved")
+            selected.append(item)
+        now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
+        task_id = f"RV-{uuid.uuid4().hex[:10]}"
+        files = sorted({str(i.get("file", "")) for i in selected})
+        operations = [{"item_id": i["id"], "feedback_id": i["id"], "task_id": i.get("task_id", ""),
+                       "action": i.get("action", "modify"), "file": i.get("file", ""),
+                       "content": i.get("content", ""), "position": i.get("position") or i.get("location", ""),
+                       "note": i.get("note", ""), "anchor": i.get("anchor", {})} for i in selected]
+        task = {"id": task_id, "status": "in_progress", "item_ids": list(item_ids), "files": files,
+                "operations": operations, "plan": "Internal audit plan; executor relocates and merges feedback.",
+                "created": now, "started_at": now, "confirmed": True,
+                "result": {"diff": "", "artifacts": [], "checks": [], "summary": ""}}
+        data.setdefault("tasks", []).append(task)
+        for item in selected:
+            item["status"] = "in_progress"
+            item["execution_task_id"] = task_id
+            item["updated"] = now
+        _append_audit(data, "execution_task_created", item_ids=list(item_ids), task_id=task_id,
+                      detail={"files": files})
         _atomic_write(path, root_id, project, data["items"], data.get("last_id", 0), data)
         return dict(task)
 
@@ -608,7 +612,7 @@ def mark_execution_started(root_id: str, project: str, task_id: str) -> dict:
 
 def record_execution_result(root_id: str, project: str, task_id: str, *, success: bool,
                             summary: str, diff: str = "", artifacts: list | None = None,
-                            checks: list | None = None) -> dict:
+                            checks: list | None = None, outcomes: list | None = None) -> dict:
     """Persist real execution evidence supplied by the executor; never invent it."""
     with _feedback_write_lock:
         path = _get_feedback_path(root_id, project)
@@ -618,14 +622,25 @@ def record_execution_result(root_id: str, project: str, task_id: str, *, success
             raise LookupError(f"Task {task_id} not found")
         if task.get("status") != "in_progress":
             raise ValueError("task is not executing")
+        outcome_map = {str(o.get("feedback_id") or o.get("id")): o for o in (outcomes or []) if isinstance(o, dict)}
+        expected = set(task.get("item_ids", []))
+        if outcomes is not None and set(outcome_map) != expected:
+            raise ValueError("outcomes must contain exactly one result for every feedback_id")
         task["status"] = "executed" if success else "failed"
         task["completed_at"] = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
         task["result"] = {"diff": diff or "", "artifacts": artifacts or [], "checks": checks or [],
                           "summary": summary or ""}
         for item in data["items"]:
             if item.get("id") in set(task.get("item_ids", [])):
-                item["status"] = task["status"]
-                item["result"] = summary or ""
+                outcome = outcome_map.get(item["id"], {})
+                item_status = str(outcome.get("status", task["status"]))
+                if item_status not in ("executed", "failed", "needs_attention"):
+                    raise ValueError(f"invalid outcome status for {item['id']}")
+                item["status"] = item_status
+                item["impact"] = str(outcome.get("impact", ""))
+                item["result"] = str(outcome.get("result", summary or ""))
+                item["failure_reason"] = str(outcome.get("failure_reason", ""))
+                item["failure_stage"] = str(outcome.get("failure_stage", ""))
                 item["updated"] = task["completed_at"]
         _append_audit(data, "execution_completed" if success else "execution_failed",
                       item_ids=task["item_ids"], task_id=task_id,

@@ -44,7 +44,7 @@ FEEDBACK_ITEM_FIELDS = (
 # 合法状态值
 FEEDBACK_STATUSES = (
     "pending_review", "approved", "rejected", "planned",
-    "in_progress", "executed", "failed",
+    "in_progress", "executed", "failed", "needs_attention",
     # Legacy values remain readable and are normalized on read.
     "pending", "done",
 )
@@ -70,6 +70,9 @@ class FeedbackItem(TypedDict, total=False):
     task_id: str
     updated: str
     result: str
+    impact: str
+    failure_reason: str
+    failure_stage: str
     anchor: dict
     source: str
     author: str
