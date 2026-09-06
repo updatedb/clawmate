@@ -87,7 +87,7 @@ def test_feedback_cards_follow_status_visibility_order_sorting_and_manual_refres
     share = (ROOT / "dev/static/share-view.html").read_text(encoding="utf-8")
     css = (ROOT / "dev/static/css/preview.css").read_text(encoding="utf-8")
 
-    assert "item.status !== 'pending_review'" in js
+    assert "var isPendingReview = (item.status === 'pending_review');" in js
     assert "if (!isReadOnly)" in share
     assert "if (isReadOnly)" in share
     assert ".sort(function(a, b)" in js

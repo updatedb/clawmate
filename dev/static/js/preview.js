@@ -5330,14 +5330,15 @@
     head.appendChild(id); head.appendChild(meta); head.appendChild(status); head.appendChild(del);
     card.appendChild(head);
 
-    // Action then position; tag controls below remain the source of edits.
-    var positionLabel = _appendFeedbackMeta(card, item, null, null, false);
+    // Editable cards render one locator control only; tag controls below
+    // remain the source of action/scope/task_id edits.
     var pos = document.createElement('input'); pos.type='text'; pos.className='fb-card-position-edit';
     pos.value = _feedbackPosition(item) || (item.startLine > 0 ? 'Line '+item.startLine+'-'+item.endLine : '');
     pos.placeholder = '定位：—（Line {start}-{end}）';
+    pos.title = '定位（可编辑）';
+    pos.setAttribute('aria-label', '定位（可编辑）');
     pos.addEventListener('input', function(){
       item.position = pos.value;
-      positionLabel.textContent = _feedbackPositionLabel(item);
       var m = pos.value.match(/(\d+)(?:-(\d+))?/);
       if (m) { item.startLine = parseInt(m[1],10); item.endLine = m[2]?parseInt(m[2],10):item.startLine; }
       _persistReviewPending();
@@ -5349,7 +5350,8 @@
     var sel = document.createElement('textarea');
     sel.className = 'fb-note-input';
     sel.value = item.text || '';
-    sel.placeholder = '<选填>粘贴针对的文中内容';
+    sel.placeholder = '原文（选填）';
+    sel.setAttribute('aria-label', '原文（可编辑）');
     sel.rows = 2;
     sel.style.cssText = 'font-size:11px;color:var(--text-muted);font-family:monospace;background:var(--bg-code);border-radius:4px;padding:6px 8px;white-space:pre-wrap;word-break:break-all;line-height:1.4;border:1px solid var(--border-color);width:100%;box-sizing:border-box;resize:vertical;';
     sel.addEventListener('input', function(){ item.text = sel.value; _persistReviewPending(); });
@@ -5359,7 +5361,8 @@
     // Note — editable
     var note = document.createElement('textarea');
     note.className = 'fb-note-input';
-    note.placeholder = '<必填>简要说明改动需求';
+    note.placeholder = '反馈（必填）：简要说明改动需求';
+    note.setAttribute('aria-label', '反馈（可编辑）');
     note.value = item.note || '';
     note.rows = 3;
     note.addEventListener('input', function(){ item.note = note.value; _persistReviewPending(); });
@@ -7302,16 +7305,25 @@
     head.appendChild(del);
     card.appendChild(head);
 
-    _appendFeedbackMeta(card, item, 'review-card-position', (item.file || '') + ' · ' + _feedbackPositionLabel(item), item.status !== 'pending_review');
-
     // Content: editable textarea only for 待评审 (pending_review)
     var isPendingReview = (item.status === 'pending_review');
     var noteText = item.note || '';
     if (isPendingReview) {
+      var pos = document.createElement('input');
+      pos.type = 'text'; pos.className = 'fb-card-position-edit';
+      pos.value = _feedbackPosition(item);
+      pos.placeholder = '定位：—（Line {start}-{end}）';
+      pos.title = '定位（可编辑）';
+      pos.setAttribute('aria-label', '定位（可编辑）');
+      pos.addEventListener('input', function(){ item.position = pos.value; });
+      pos.addEventListener('click', function(e){ e.stopPropagation(); });
+      card.appendChild(pos);
+
       var contentTa = document.createElement('textarea');
       contentTa.className = 'fb-note-input';
       contentTa.value = item.content || '';
-      contentTa.placeholder = '选中内容（评审时可编辑）';
+      contentTa.placeholder = '原文（评审时可编辑）';
+      contentTa.setAttribute('aria-label', '原文（可编辑）');
       contentTa.rows = 2;
       contentTa.style.cssText = 'font-size:11px;font-family:monospace;background:var(--bg-code);border-radius:4px;padding:6px 8px;white-space:pre-wrap;word-break:break-all;line-height:1.4;border:1px solid var(--border-color);width:100%;box-sizing:border-box;resize:vertical;color:var(--text-primary);';
       contentTa.addEventListener('input', function(){ item.content = contentTa.value; });
@@ -7320,13 +7332,15 @@
       var noteTa = document.createElement('textarea');
       noteTa.className = 'fb-note-input';
       noteTa.value = noteText;
-      noteTa.placeholder = '建议（评审时可编辑）';
+      noteTa.placeholder = '反馈（评审时可编辑）';
+      noteTa.setAttribute('aria-label', '反馈（可编辑）');
       noteTa.rows = 3;
       noteTa.addEventListener('input', function(){ item.note = noteTa.value; });
       card.appendChild(noteTa);
       // Editable action tag group (same source as 待提交/浮窗)
       card.appendChild(_buildActionTags(item, function(){ renderReviewPanel(); }, false));
     } else {
+      _appendFeedbackMeta(card, item, 'review-card-position', (item.file || '') + ' · ' + _feedbackPositionLabel(item), true);
       var content = document.createElement('div'); content.className = 'review-card-content';
       content.textContent = item.content || '';
       card.appendChild(content);
@@ -7335,7 +7349,7 @@
       card.appendChild(note);
     }
 
-    var actions = document.createElement('div'); actions.className = 'review-card-actions';
+    var actions = document.createElement('div'); actions.className = 'fb-card-actions';
     var act = function(label, fn, danger) {
       var b = document.createElement('button');
       b.className = 'preview-bottom-btn' + (danger ? ' danger' : '');

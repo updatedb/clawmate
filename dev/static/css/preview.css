@@ -487,8 +487,8 @@
     .review-card-note { font-size: 12px; color: var(--text-secondary); margin: 6px 0 2px; }
     .review-card-note strong { color: var(--text-primary); }
     .review-card-status { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
-    .review-card-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-    .review-card-actions .preview-bottom-btn { height: 26px; padding: 0 9px; font-size: 11px; }
+    .fb-card-actions { flex-wrap: wrap; }
+    .fb-card-actions .preview-bottom-btn { height: 26px; padding: 0 9px; font-size: 11px; }
     .review-refine-row { margin-top: 8px; }
     .review-refine-row textarea {
       width: 100%; box-sizing: border-box; border: 1px solid var(--border-color);

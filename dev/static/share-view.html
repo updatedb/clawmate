@@ -629,7 +629,8 @@
       head.appendChild(id); head.appendChild(time); head.appendChild(status); head.appendChild(del);
       card.appendChild(head);
 
-      // Action then locator, matching the review and preview cards.
+      // Read-only cards retain action/location metadata. Editable cards have
+      // exactly one locator input, followed by original, feedback, tags, actions.
       var feedbackMeta = document.createElement('div'); feedbackMeta.className = 'fb-card-meta';
       if (isReadOnly) {
         var action = document.createElement('span'); action.className = 'fb-card-action';
@@ -645,14 +646,12 @@
         feedbackMeta.appendChild(roPos);
         card.appendChild(feedbackMeta);
       } else {
-        var posLabel = document.createElement('div'); posLabel.className = 'fb-card-position';
-        posLabel.textContent = '定位：' + (_sharePosition(it) || '—');
-        feedbackMeta.appendChild(posLabel);
-        card.appendChild(feedbackMeta);
         var pos = document.createElement('input'); pos.type='text'; pos.className='fb-card-position-edit';
         pos.value = _sharePosition(it);
         pos.placeholder = '定位：—（Line {start}-{end}）';
-        pos.addEventListener('input', function(){ it.position = pos.value; posLabel.textContent = '定位：' + (_sharePosition(it) || '—'); _sharePersistPending(); });
+        pos.title = '定位（可编辑）';
+        pos.setAttribute('aria-label', '定位（可编辑）');
+        pos.addEventListener('input', function(){ it.position = pos.value; _sharePersistPending(); });
         pos.addEventListener('click', function(e){ e.stopPropagation(); });
         card.appendChild(pos);
       }
@@ -665,7 +664,8 @@
       } else {
         var text = document.createElement('textarea'); text.className = 'fb-note-input';
         text.value = it.text || ''; text.rows = 2;
-        text.placeholder = '<必填>选中内容';
+        text.placeholder = '原文（必填）';
+        text.setAttribute('aria-label', '原文（可编辑）');
         text.style.cssText = 'font-size:11px;font-family:monospace;color:var(--text-secondary);';
         text.addEventListener('input', function(){ it.text = text.value; _sharePersistPending(); });
         text.addEventListener('click', function(e){ e.stopPropagation(); });
@@ -680,7 +680,8 @@
       } else {
         var note = document.createElement('textarea'); note.className = 'fb-note-input';
         note.value = it.note || ''; note.rows = 3;
-        note.placeholder = '<必填>简要说明改动需求';
+        note.placeholder = '反馈（必填）：简要说明改动需求';
+        note.setAttribute('aria-label', '反馈（可编辑）');
         note.addEventListener('input', function(){ it.note = note.value; _sharePersistPending(); });
         note.addEventListener('click', function(e){ e.stopPropagation(); });
         card.appendChild(note);

@@ -87,24 +87,36 @@ def test_feedback_lists_share_scroll_and_card_inset_contract():
     assert "cardList.className = 'fb-card-list';" in PREVIEW
     assert ".share-right .preview-right-body { padding: 0; min-height: 0; }" in SHARE
 
-def test_feedback_card_action_position_and_header_status_layout_contract():
-    """Every feedback view keeps action before position, status in header, and X last."""
+def test_editable_feedback_cards_have_one_shared_field_order_without_meta():
+    """All editable cards share locator/original/feedback/tags/actions order."""
     preview = PREVIEW
     share = SHARE
     css = CSS
 
-    helper = preview.split("function _appendFeedbackMeta", 1)[1].split("// ============ Feedback Card Factory", 1)[0]
-    assert helper.index("meta.appendChild(action)") < helper.index("meta.appendChild(position)")
+    pending = preview.split("function createReviewPendingCard", 1)[1].split("function renderFeedbackPanel", 1)[0]
+    reviewing = preview.split("function buildReviewCard", 1)[1].split("// Wire the 3-row toolbar buttons", 1)[0]
+    share_card = share.split("function _shareBuildCard(it)", 1)[1].split("// Selection tooltip logic", 1)[0]
+
+    for source in (pending, reviewing, share_card):
+        assert "fb-card-position-edit" in source
+        assert source.count("fb-note-input") >= 2
+        assert "aria-label', '定位（可编辑）'" in source
+        assert "aria-label', '原文（可编辑）'" in source
+        assert "aria-label', '反馈（可编辑）'" in source
+        assert source.index("fb-card-position-edit") < source.index("fb-note-input")
+        tags = "pst-tags" if "pst-tags" in source else "_buildActionTags"
+        assert source.index("fb-note-input") < source.index(tags) < source.index("fb-card-actions")
+
+    assert "_appendFeedbackMeta(card, item" not in pending
+    assert "_appendFeedbackMeta(card, item" not in reviewing.split("} else {", 1)[0]
+    assert "feedbackMeta.appendChild(posLabel)" not in share_card
     assert "header.appendChild(id); header.appendChild(time); header.appendChild(status);" in preview
     assert "head.appendChild(time);\n    head.appendChild(status);" in preview
     assert "head.appendChild(id); head.appendChild(meta); head.appendChild(status); head.appendChild(del);" in preview
-    assert "item.status !== 'pending_review'" in preview
-
-    share_card = share.split("function _shareBuildCard(it)", 1)[1].split("// Selection tooltip logic", 1)[0]
-    assert share_card.index("feedbackMeta.appendChild(action);") < share_card.index("feedbackMeta.appendChild(roPos);")
     assert "head.appendChild(id); head.appendChild(time); head.appendChild(status); head.appendChild(del);" in share_card
     assert "if (isReadOnly)" in share_card
 
     assert ".fb-card-meta { display: flex;" in css
     assert ".fb-card-header .fb-btn-delete { flex: 0 0 auto;" in css
+    assert ".fb-card-actions .preview-bottom-btn" in css
     assert "@media (max-width: 480px)" in css
