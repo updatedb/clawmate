@@ -6207,11 +6207,12 @@
       if (tooltip.style.display === 'none') copyText(selText, '已复制到剪贴板');
 
       // 重置"提交评审"按钮状态（上次成功提交后 hideTooltip 不会恢复按钮状态，
-      // 导致新选中时按钮仍然显示为 disabled "⏳ ...")
+      // 导致新选中时按钮仍然显示为 disabled "⏳ ..."). Keep the svg icon — reset
+      // the label span only, never overwrite with plain textContent.
       const sendBtn = document.getElementById('pstBtnSend');
       if (sendBtn) {
         sendBtn.disabled = false;
-        sendBtn.textContent = '提交评审';
+        _resetPstSendLabel(sendBtn);
       }
 
       // ── Rendered Markdown mode: detect section heading ──
@@ -6445,6 +6446,19 @@
   var _lastPstTag = '';
   var _taskTemplates = [];
 
+  // Restore the 提交评审 label without removing the svg icon. The button
+  // contains an svg + text node; replace the trailing text node only.
+  function _resetPstSendLabel(btn) {
+    var label = '提交评审';
+    var textNode = null;
+    for (var i = btn.childNodes.length - 1; i >= 0; i--) {
+      var n = btn.childNodes[i];
+      if (n.nodeType === 3 && n.textContent.trim()) { textNode = n; break; }
+    }
+    if (textNode) { textNode.textContent = label; }
+    else { btn.appendChild(document.createTextNode(' ' + label)); }
+  }
+
   function initPstTags() {
     var ext = (filePath || '').split('.').pop().toLowerCase();
     var container = document.getElementById('pstTags');
@@ -6603,7 +6617,7 @@
       if (res.ok && data.ok) {
         // 恢复按钮状态（hideTooltip 不会重置按钮，避免新选中时仍显示 disabled "⏳ ...")
         btn.disabled = false;
-        btn.textContent = '提交评审';
+        _resetPstSendLabel(btn);
         // Immediately close tooltip and auto-open sidebar
         st.textContent = '✅ 已提交，进入待评审';
         st.className = 'pst-status pst-status-ok';
@@ -6623,13 +6637,13 @@
         st.textContent = '❌ ' + (err.detail || '发送失败');
         st.className = 'pst-status pst-status-error';
         btn.disabled = false;
-        btn.textContent = '提交评审';
+        _resetPstSendLabel(btn);
       }
     } catch (e) {
       st.textContent = '❌ 网络错误';
       st.className = 'pst-status pst-status-error';
       btn.disabled = false;
-      btn.textContent = '提交评审';
+      _resetPstSendLabel(btn);
     }
   });
 
@@ -7277,6 +7291,18 @@
     return map[status] || status;
   }
 
+  // Map an action code to its template label (used for the fb-card-status badge
+  // on 已评审/已拒绝/已执行 cards).
+  function _actionLabel(action) {
+    if (!action) return '';
+    for (var i = 0; i < _taskTemplates.length; i++) {
+      if (_taskTemplates[i].action === action) return _taskTemplates[i].label;
+    }
+    var map = { modify: '🔧 修改', delete: '🗑 删除', explain: '📈 扩展', simplify: '📉 简化',
+                translate: '🌐 翻译', add: '➕ 追加', execute: '⚡ 执行方案' };
+    return map[action] || action;
+  }
+
   function _renderFilterBar() {
     var bar = document.getElementById('previewFilterBar');
     if (!bar) return;
@@ -7386,10 +7412,13 @@
     var head = document.createElement('div'); head.className = 'fb-card-header';
     head.style.cssText = 'display:flex;align-items:center;gap:6px;';
 
-    // Status badge + time + id + fb-btn-delete (统一 fb-card 字段: 状态/时间/id/删除)
-    var status = document.createElement('span'); status.className = 'fb-card-status';
-    status.textContent = _statusLabel(item.status);
-    head.appendChild(status);
+    // 待评审：no fb-card-status (需求2). 已评审/已拒绝/已执行：fb-card-status shows
+    // the final selected action label instead of the review status (需求1).
+    if (item.status !== 'pending_review') {
+      var status = document.createElement('span'); status.className = 'fb-card-status';
+      status.textContent = _actionLabel(item.action) || _statusLabel(item.status);
+      head.appendChild(status);
+    }
     var time = document.createElement('span'); time.className = 'fb-card-time';
     time.textContent = (item.updated || '').substring(5,16);
     head.appendChild(time);

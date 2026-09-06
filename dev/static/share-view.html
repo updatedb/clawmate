@@ -753,10 +753,17 @@
         var data = await response.json();
         if (!response.ok) throw new Error(data.detail || '提交失败');
         var ids = data.ids || [];
-        // Move the successfully submitted items from pending → submitted
+        // Move the submitted items from pending → submitted. The item may have
+        // come directly from the tooltip (提交评审) without being in sharePending,
+        // so base the move on `list` itself (matched by id), then drop from pending.
         var pendingIds = new Set(list.map(function(it){ return it.id; }));
-        shareSubmitted = shareSubmitted.concat(sharePending.filter(function(it){ return pendingIds.has(it.id); })
-          .map(function(it){ var c = Object.assign({}, it); c.id = ids[shareSubmitted.length] || it.id; return c; }));
+        var submittedItems = list.map(function(it, idx) {
+          var c = Object.assign({}, it);
+          c.id = ids[idx] || it.id;
+          if (!c.created) c.created = new Date().toISOString();
+          return c;
+        });
+        shareSubmitted = shareSubmitted.concat(submittedItems);
         sharePending = sharePending.filter(function(it){ return !pendingIds.has(it.id); });
         shareFbFilter = 'submitted';
         _shareRender();
