@@ -81,6 +81,63 @@
     return 'Line ' + startLine + '-' + endLine;
   };
 
+  // The single selection-to-feedback anchor contract used by review and share
+  // surfaces. `position` is persisted; line fields remain machine-readable.
+  global.getFeedbackSelectionPosition = function(options) {
+    options = options || {};
+    var ext = String(options.ext || '').toLowerCase();
+    var text = String(options.text || '');
+    var raw = String(options.rawContent || '');
+    var range = options.range;
+    if (!text) return { position: '', start_line: 0, end_line: 0 };
+    if (options.markdownRendered && range) {
+      var heading = global.detectSectionFromDOM(range);
+      if (heading) return { position: 'Section ' + heading, start_line: 0, end_line: 0 };
+    }
+    if (options.htmlRendered) return { position: '', start_line: 0, end_line: 0 };
+    var start = 0, end = 0;
+    var lines = text.split('\n').map(function(line) { return line.trim(); }).filter(Boolean);
+    function lineAt(index) { return (raw.slice(0, index).match(/\n/g) || []).length + 1; }
+    var index = raw.indexOf(text);
+    if (index >= 0) { start = lineAt(index); end = start + (text.match(/\n/g) || []).length; }
+    if (!start && lines.length) {
+      index = raw.indexOf(lines[0]);
+      if (index >= 0) {
+        start = lineAt(index);
+        var last = raw.indexOf(lines[lines.length - 1]);
+        end = last >= 0 ? lineAt(last) : start + lines.length - 1;
+      }
+    }
+    if (!start && lines.length) {
+      for (var i = 0; i < raw.length - 10; i++) {
+        if (raw.substring(i, i + lines[0].length) === lines[0]) {
+          start = lineAt(i); end = start + lines.length - 1; break;
+        }
+      }
+    }
+    if (!start && options.renderedRoot && lines.length) {
+      var rendered = options.renderedRoot.textContent || '';
+      index = rendered.indexOf(lines[0]);
+      if (index >= 0) { start = (rendered.slice(0, index).match(/\n/g) || []).length + 1; end = start + lines.length - 1; }
+    }
+    return { position: start ? global.getPosValue(ext, start, end) : '', start_line: start, end_line: end };
+  };
+
+  global.getFeedbackPositionPlaceholder = function(ext) {
+    var e = String(ext || '').toLowerCase();
+    if (['docx','doc','pptx','ppt','pdf','odt','odp'].includes(e)) return 'Page {start}-{end}';
+    if (['xlsx','xls','csv','tsv'].includes(e)) return 'Range {col}{row}-{col}{row}';
+    if (global.AUDIO_EXTS.includes(e) || global.VIDEO_EXTS.includes(e)) return 'Time {HH:MM:SS}';
+    if (['png','jpg','jpeg','gif','bmp','webp','svg','ico'].includes(e)) return 'Area [x,y]xR';
+    return 'Line {start}-{end}';
+  };
+
+  global.formatFeedbackTime = function(seconds) {
+    seconds = Number(seconds) || 0;
+    var h = Math.floor(seconds / 3600), m = Math.floor((seconds % 3600) / 60), s = Math.floor(seconds % 60);
+    return [h, m, s].map(function(v) { return String(v).padStart(2, '0'); }).join(':');
+  };
+
   // ── Section 检测 ───────────────────────────────────────────────
   global.detectSectionFromDOM = function(range) {
     if (!range) return '';

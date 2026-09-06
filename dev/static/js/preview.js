@@ -6023,70 +6023,12 @@
 
   function buildSelectionPosition(range, selText) {
     if (!range || !selText) return '';
-
-    if (isMarkdownMode && !isRawMode && !isPlainTextEditMode) {
-      var heading = detectSectionFromDOM(range);
-      return heading ? 'Section ' + heading : '';
-    }
-
-    if (isHtmlMode && !isRawMode) {
-      return '';
-    }
-
-    var startLine = 0;
-    var endLine = 0;
-    var selLines = selText.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l; });
-
-    if (rawContent) {
-      var idx = rawContent.indexOf(selText);
-      if (idx !== -1) {
-        var tb = rawContent.substring(0, idx);
-        startLine = (tb.match(/\n/g) || []).length + 1;
-        endLine = startLine + (selText.match(/\n/g) || []).length;
-      }
-
-      if (!startLine && selLines.length > 0) {
-        var firstMatch = rawContent.indexOf(selLines[0]);
-        if (firstMatch !== -1) {
-          var tb2 = rawContent.substring(0, firstMatch);
-          startLine = (tb2.match(/\n/g) || []).length + 1;
-          var lastMatch = rawContent.indexOf(selLines[selLines.length - 1]);
-          if (lastMatch !== -1) {
-            var tbl = rawContent.substring(0, lastMatch);
-            endLine = (tbl.match(/\n/g) || []).length + 1;
-          } else {
-            endLine = startLine + selLines.length - 1;
-          }
-        }
-      }
-
-      if (!startLine && selLines.length > 0) {
-        for (var i = 0; i < rawContent.length - 10; i++) {
-          if (rawContent.substring(i, i + selLines[0].length) === selLines[0]) {
-            var tb3 = rawContent.substring(0, i);
-            startLine = (tb3.match(/\n/g) || []).length + 1;
-            endLine = startLine + selLines.length - 1;
-            break;
-          }
-        }
-      }
-
-      if (!startLine) {
-        var mdBody = document.querySelector('.markdown-body');
-        if (mdBody) {
-          var renderedText = mdBody.textContent;
-          var ridx = renderedText.indexOf(selLines[0]);
-          if (ridx !== -1) {
-            var rtb = renderedText.substring(0, ridx);
-            startLine = (rtb.match(/\n/g) || []).length + 1;
-            endLine = startLine + selLines.length - 1;
-          }
-        }
-      }
-    }
-
-    if (!startLine) return '';
-    return getPosValue(ext, startLine, endLine);
+    return getFeedbackSelectionPosition({
+      ext: ext, text: selText, rawContent: rawContent, range: range,
+      markdownRendered: isMarkdownMode && !isRawMode && !isPlainTextEditMode,
+      htmlRendered: isHtmlMode && !isRawMode,
+      renderedRoot: document.querySelector('.markdown-body')
+    }).position;
   }
 
   function buildAgentInsertText(positionText, selectionText) {

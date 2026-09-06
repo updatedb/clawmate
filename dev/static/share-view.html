@@ -553,15 +553,15 @@
         });
       } catch (e) { sharePending = []; }
     }
-    // Same line-based location contract used by the review tooltip. `position`
-    // is canonical; legacy `location` is read only through _sharePosition.
-    function _shareSelectionLocation(text) {
-      var source = String(_shareRawContent || '');
-      var index = source.indexOf(text);
-      if (index < 0) return { position: '', start_line: 0, end_line: 0 };
-      var start = (source.slice(0, index).match(/\n/g) || []).length + 1;
-      var end = start + (String(text).match(/\n/g) || []).length;
-      return { position: 'Line ' + start + '-' + end, start_line: start, end_line: end };
+    // Delegate automatic anchors to preview-common.js, the review-page contract.
+    function _shareSelectionLocation(text, range) {
+      var ext = (_shareFile || '').split('.').pop().toLowerCase();
+      return getFeedbackSelectionPosition({
+        ext: ext, text: text, rawContent: _shareRawContent, range: range,
+        markdownRendered: ['md','markdown','rmd','mdx'].includes(ext),
+        htmlRendered: ['html','htm'].includes(ext),
+        renderedRoot: body.querySelector('.markdown-body')
+      });
     }
     var _shareAuthor = '';
     var _shareSelSavedText = '';
@@ -775,7 +775,7 @@
       if (!note) { _shareSelRenderStatus('请填写建议', false); shareSelNote.focus(); return; }
       var action = _shareSelAction();
       if (!action) { _shareSelRenderStatus('请选择操作类型', false); return; }
-      var location = _shareSelectionLocation(sel);
+      var location = _shareSelectionLocation(sel, _shareSelRange);
       sharePending.push({ id: 'FD-' + (++_shareFbId), created: new Date().toISOString(), position: shareSelLocation.value.trim() || location.position, start_line: location.start_line, end_line: location.end_line, text: sel.slice(0,800), note: note, action: action, scope: _shareSelScope(), task_id: _shareSelTaskId() });
       _sharePersistPending();
       _shareSelNoteReset();
@@ -792,7 +792,7 @@
       if (!note) { _shareSelRenderStatus('请填写建议', false); shareSelNote.focus(); return; }
       if (!_shareSelAction()) { _shareSelRenderStatus('请选择操作类型', false); return; }
       var action = _shareSelAction();
-      var location = _shareSelectionLocation(sel);
+      var location = _shareSelectionLocation(sel, _shareSelRange);
       var item = { id: 'FD-' + (++_shareFbId), created: new Date().toISOString(), position: shareSelLocation.value.trim() || location.position, start_line: location.start_line, end_line: location.end_line, text: sel.slice(0,800), note: note, action: action, scope: _shareSelScope(), task_id: _shareSelTaskId() };
       _shareSelNoteReset();
       shareSelTooltip.classList.add('hidden');
@@ -800,9 +800,19 @@
     });
 
     // 面板「添加反馈」→ hint user to select text
-    document.getElementById('shareFbAdd').addEventListener('click', function() {
+    document.getElementById('shareFbAdd').addEventListener('click', function(e) {
+      if (e) e.stopPropagation();
+      var ext = (_shareFile || '').split('.').pop().toLowerCase();
+      if (['pdf','doc','docx','ppt','pptx','odt','odp'].includes(ext)) _shareOpenManualAnchor('[' + _shareFile + ']', 'Page 1');
+      else if (['xls','xlsx','csv','tsv','ods'].includes(ext)) _shareOpenManualAnchor('[' + _shareFile + ']', 'Range A1');
+      else if (AUDIO_EXTS.includes(ext) || VIDEO_EXTS.includes(ext)) {
+        var media = body.querySelector('audio,video');
+        _shareOpenManualAnchor('[' + _shareFile + ']', 'Time ' + formatFeedbackTime(media ? media.currentTime : 0));
+      }
+      else if (['png','jpg','jpeg','gif','bmp','webp','svg','ico'].includes(ext)) _shareOpenManualAnchor('[' + _shareFile + ']', 'Area [0,0]x0');
+      else if (['html','htm'].includes(ext)) _shareOpenManualAnchor('[' + _shareFile + ']', '');
+      else _shareFbStatus('请先在正文中选中内容，再点浮窗「加入待办」', false);
       shareFbFilter = 'pending'; openShareFeedback(); _shareRender();
-      _shareFbStatus('请先在正文中选中内容，再点浮窗「加入待办」', false);
     });
 
     // 面板「提交评审」→ submit all pending
@@ -879,6 +889,7 @@
       var a = shareSelTags.querySelector('.pst-tag.active');
       return a ? (a.getAttribute('data-task-id') || '') : '';
     }
+    var _shareSelRange = null;
     function _shareSelNoteReset() { shareSelNote.value = ''; if (shareSelLocation) shareSelLocation.value = ''; _shareSelRenderStatus(''); }
     function _handleShareSelection() {
       var sel = _shareGetSelection();
@@ -890,7 +901,10 @@
       _shareSelSavedText = sel;
       if (isNewSelection) { _shareSelNoteReset(); _shareInitTags(); }
       var rect = null;
-      try { var s = window.getSelection(); if (s.rangeCount) rect = s.getRangeAt(0).getBoundingClientRect(); } catch(e){}
+      try { var s = window.getSelection(); if (s.rangeCount) { _shareSelRange = s.getRangeAt(0).cloneRange(); rect = _shareSelRange.getBoundingClientRect(); } } catch(e){}
+      var anchor = _shareSelectionLocation(sel, _shareSelRange);
+      shareSelLocation.placeholder = getFeedbackPositionPlaceholder((_shareFile || '').split('.').pop());
+      shareSelLocation.value = anchor.position;
       if (rect) {
         var top = rect.bottom + 8;
         var left = rect.left + rect.width/2;
@@ -914,6 +928,31 @@
       var sel = _shareGetSelection();
       if (sel) setTimeout(_handleShareSelection, 10);
       else hideShareTooltip();
+    }
+    // Non-text previews have no browser selection layer. Reuse the same card
+    // and canonical formats, with a file label as the required feedback text.
+    function _shareOpenManualAnchor(text, position) {
+      _shareSelRange = null;
+      _shareSelSavedText = text;
+      _shareSelNoteReset(); _shareInitTags();
+      shareSelLocation.placeholder = getFeedbackPositionPlaceholder((_shareFile || '').split('.').pop());
+      shareSelLocation.value = position;
+      shareSelTooltip.classList.remove('hidden');
+      shareSelTooltip.style.top = '80px'; shareSelTooltip.style.left = '50%';
+      shareSelTooltip.style.transform = 'translateX(-50%)';
+    }
+    function _shareBindVisualAnchors(ext) {
+      var image = body.querySelector('img');
+      if (image) image.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var rect = image.getBoundingClientRect();
+        _shareOpenManualAnchor('[' + _shareFile + ']', 'Area [' + Math.round(e.clientX - rect.left) + ',' + Math.round(e.clientY - rect.top) + ']x0');
+      });
+      var media = body.querySelector('audio,video');
+      if (media) media.addEventListener('click', function(e) {
+        e.stopPropagation();
+        _shareOpenManualAnchor('[' + _shareFile + ']', 'Time ' + formatFeedbackTime(media.currentTime));
+      });
     }
     function hideShareTooltip() { shareSelTooltip.classList.add('hidden'); }
     // Show floating card on mouseup if there is a real selection. We read the
@@ -1020,6 +1059,7 @@
           hideTocInstant();
           renderPlainText(data.content || '');
         }
+        _shareBindVisualAnchors(ext);
       } catch(e) {
         body.innerHTML = '<div class="share-error">❌ 加载出错: ' + e.message + '</div>';
       }

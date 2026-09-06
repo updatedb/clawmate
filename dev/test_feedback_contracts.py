@@ -1,6 +1,7 @@
 """Deterministic contracts for browser-side feedback isolation and layout."""
 
 from pathlib import Path
+import subprocess
 
 
 ROOT = Path(__file__).parent
@@ -11,10 +12,43 @@ ROUTES = (ROOT / "share_routes.py").read_text(encoding="utf-8")
 
 
 def test_share_pst_payload_keeps_position_and_line_contract():
-    assert "function _shareSelectionLocation(text)" in SHARE
+    assert '<script src="./js/preview-common.js"></script>' in SHARE
+    assert "function _shareSelectionLocation(text, range)" in SHARE
+    assert "getFeedbackSelectionPosition({" in SHARE
+    assert "getFeedbackPositionPlaceholder" in SHARE
     assert "position: _sharePosition(it), start_line: it.start_line || it.startLine || 0" in SHARE
     assert "end_line: it.end_line || it.endLine || 0" in SHARE
     assert "return String(item.position || item.location || '').trim();" in SHARE
+
+
+def test_common_position_contract_has_deterministic_file_type_and_selection_formats():
+    """Exercise the actual shared JS instead of only asserting source strings."""
+    common = ROOT / "static/js/preview-common.js"
+    script = """
+const fs = require('fs'), vm = require('vm');
+const ctx = { window: {}, document: { querySelector: () => null } };
+vm.createContext(ctx); vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), ctx);
+const p = ctx.window.getFeedbackSelectionPosition;
+function eq(a, b) { if (a !== b) throw new Error(a + ' !== ' + b); }
+let line = p({ext:'js', text:'two\\nthree', rawContent:'one\\ntwo\\nthree'});
+eq(line.position, 'Line 2-3'); eq(line.start_line, 2); eq(line.end_line, 3);
+eq(ctx.window.getPosValue('pdf', 2, 3), 'Page 2-3');
+eq(ctx.window.getPosValue('xlsx', 2, 3), 'Range A2');
+eq(ctx.window.getFeedbackPositionPlaceholder('mp4'), 'Time {HH:MM:SS}');
+eq(ctx.window.getFeedbackPositionPlaceholder('png'), 'Area [x,y]xR');
+eq(ctx.window.formatFeedbackTime(3723), '01:02:03');
+"""
+    subprocess.run(["node", "-e", script, str(common)], check=True)
+
+
+def test_share_nontext_anchor_and_history_keep_canonical_position_contract():
+    assert "function _shareOpenManualAnchor(text, position)" in SHARE
+    assert "'Page 1'" in SHARE
+    assert "'Range A1'" in SHARE
+    assert "'Time ' + formatFeedbackTime" in SHARE
+    assert "'Area [' + Math.round" in SHARE
+    assert "['html','htm'].includes(ext)) _shareOpenManualAnchor" in SHARE
+    assert "text: item.content || '', note: item.note || '', position: _sharePosition(item)" in SHARE
 
 
 def test_share_pending_drafts_are_token_and_file_scoped_and_restored():
