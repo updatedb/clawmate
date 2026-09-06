@@ -47,7 +47,10 @@ def test_share_nontext_anchor_and_history_keep_canonical_position_contract():
     assert "'Range A1'" in SHARE
     assert "'Time ' + formatFeedbackTime" in SHARE
     assert "'Area [' + Math.round" in SHARE
-    assert "['html','htm'].includes(ext)) _shareOpenManualAnchor" in SHARE
+    # Toolbar add now creates a card directly; visual/manual anchoring remains
+    # available through _shareOpenManualAnchor for image/media interaction.
+    assert "_shareOpenManualAnchor('[' + _shareFile + ']', 'Area ['" in SHARE
+    assert "_shareOpenManualAnchor('[' + _shareFile + ']', 'Time '" in SHARE
     assert "text: item.content || '', note: item.note || '', position: _sharePosition(item)" in SHARE
 
 
@@ -58,6 +61,21 @@ def test_share_pending_drafts_are_token_and_file_scoped_and_restored():
     assert "_sharePersistPending();" in SHARE
     assert "_shareRestorePending();" in SHARE
     assert "sharePending = sharePending.filter(function(it){ return !pendingIds.has(it.id); });" in SHARE
+
+
+def test_share_toolbar_add_creates_and_persists_editable_pending_drafts_for_all_file_types():
+    """Toolbar add must not fall back to a selection-only hint or tooltip."""
+    add_handler = SHARE.split("function _shareAddPendingDraft(text, location)", 1)[1].split("// 面板「提交评审」", 1)[0]
+    assert "sharePending.push({" in add_handler
+    assert "_sharePersistPending();" in add_handler
+    assert "shareFbFilter = 'pending'; openShareFeedback(); _shareRender();" in add_handler
+    assert "_shareAddPendingDraft(text, location);" in add_handler
+    assert "请先在正文中选中内容" not in add_handler
+    # Keep existing position formats, but create the card instead of opening a
+    # separate manual-anchor tooltip from the toolbar.
+    for position in ("Page 1", "Range A1", "Time ' + formatFeedbackTime", "Area [0,0]x0"):
+        assert position in add_handler
+    assert "_shareOpenManualAnchor(" not in add_handler
 
 
 def test_review_pending_drafts_are_root_project_file_scoped_and_local_only():

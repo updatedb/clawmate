@@ -812,20 +812,52 @@
       _shareSubmitPending([item]);
     });
 
-    // 面板「添加反馈」→ hint user to select text
+    // Toolbar drafts follow the review panel: create a local editable card
+    // immediately.  Selections keep their existing canonical line anchor;
+    // manual file types receive the same editable Page/Range/Time/Area values
+    // used by the floating anchor workflow.
+    function _shareAddPendingDraft(text, location) {
+      location = location || {};
+      sharePending.push({
+        id: 'FD-' + (++_shareFbId), created: new Date().toISOString(),
+        position: location.position || '', start_line: location.start_line || 0,
+        end_line: location.end_line || 0, text: String(text || '').slice(0, 800),
+        note: '', action: '', scope: 'document', task_id: ''
+      });
+      _sharePersistPending();
+      shareFbFilter = 'pending'; openShareFeedback(); _shareRender();
+      return sharePending[sharePending.length - 1];
+    }
+
+    // 面板「添加反馈」→ create an editable pending card, like the review page.
     document.getElementById('shareFbAdd').addEventListener('click', function(e) {
       if (e) e.stopPropagation();
       var ext = (_shareFile || '').split('.').pop().toLowerCase();
-      if (['pdf','doc','docx','ppt','pptx','odt','odp'].includes(ext)) _shareOpenManualAnchor('[' + _shareFile + ']', 'Page 1');
-      else if (['xls','xlsx','csv','tsv','ods'].includes(ext)) _shareOpenManualAnchor('[' + _shareFile + ']', 'Range A1');
+      var text = _shareGetSelection();
+      var location = text ? _shareSelectionLocation(text, _shareSelRange) : { position: '' };
+      if (['pdf','doc','docx','ppt','pptx','odt','odp'].includes(ext)) {
+        text = '[' + _shareFile + ']'; location = { position: 'Page 1' };
+      }
+      else if (['xls','xlsx','csv','tsv','ods'].includes(ext)) {
+        text = '[' + _shareFile + ']'; location = { position: 'Range A1' };
+      }
       else if (AUDIO_EXTS.includes(ext) || VIDEO_EXTS.includes(ext)) {
         var media = body.querySelector('audio,video');
-        _shareOpenManualAnchor('[' + _shareFile + ']', 'Time ' + formatFeedbackTime(media ? media.currentTime : 0));
+        text = '[' + _shareFile + ']'; location = { position: 'Time ' + formatFeedbackTime(media ? media.currentTime : 0) };
       }
-      else if (['png','jpg','jpeg','gif','bmp','webp','svg','ico'].includes(ext)) _shareOpenManualAnchor('[' + _shareFile + ']', 'Area [0,0]x0');
-      else if (['html','htm'].includes(ext)) _shareOpenManualAnchor('[' + _shareFile + ']', '');
-      else _shareFbStatus('请先在正文中选中内容，再点浮窗「加入待办」', false);
-      shareFbFilter = 'pending'; openShareFeedback(); _shareRender();
+      else if (['png','jpg','jpeg','gif','bmp','webp','svg','ico'].includes(ext)) {
+        text = '[' + _shareFile + ']'; location = { position: 'Area [0,0]x0' };
+      }
+      else if (['html','htm'].includes(ext)) text = '[' + _shareFile + ']';
+      var item = _shareAddPendingDraft(text, location);
+      _shareFbStatus('✅ 已添加待提交反馈', true);
+      setTimeout(function() {
+        var card = shareFbCardList.querySelector('.fb-card-id');
+        if (card && card.textContent === item.id) {
+          var note = card.closest('.fb-card').querySelector('[aria-label="反馈（可编辑）"]');
+          if (note) note.focus();
+        }
+      }, 0);
     });
 
     // 面板「提交评审」→ submit all pending
