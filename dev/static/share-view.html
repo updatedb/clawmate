@@ -576,11 +576,10 @@
       var head = document.createElement('div'); head.className = 'fb-card-header';
       var id = document.createElement('span'); id.className = 'fb-card-id';
       id.textContent = it.id || '';
+      var status = document.createElement('span'); status.className = 'fb-status-pill ' + (isReadOnly ? 'pending_review' : 'pending');
+      status.textContent = isReadOnly ? '已提交' : '待提交';
       var time = document.createElement('span'); time.className = 'fb-card-time fb-card-stage-time';
       time.textContent = (isReadOnly ? '提交 ' : '创建 ') + String(it.updated || it.created || '').substring(5,16);
-      var action = document.createElement('span'); action.className = 'fb-card-action';
-      var actionMatch = _shareSelectionTemplates().find(function(t){ return t.action === it.action; });
-      action.textContent = actionMatch ? actionMatch.label : ({ modify:'🔧 修改', delete:'🗑 删除', explain:'📈 扩展', simplify:'📉 简化', translate:'🌐 翻译', add:'➕ 追加', execute:'⚡ 执行方案' }[it.action] || '—');
       var del = document.createElement('button'); del.className = 'fb-btn-delete'; del.textContent = '✕'; del.title = '删除';
       del.addEventListener('click', function(e) {
         e.stopPropagation();
@@ -588,7 +587,14 @@
         else shareSubmitted = shareSubmitted.filter(function(i){ return i.id !== it.id; });
         _shareRender();
       });
-      head.appendChild(time); head.appendChild(id); head.appendChild(action); head.appendChild(del);
+      head.appendChild(id); head.appendChild(status); head.appendChild(time);
+      if (isReadOnly) {
+        var action = document.createElement('span'); action.className = 'fb-card-action';
+        var actionMatch = _shareSelectionTemplates().find(function(t){ return t.action === it.action; });
+        action.textContent = actionMatch ? actionMatch.label : ({ modify:'🔧 修改', delete:'🗑 删除', explain:'📈 扩展', simplify:'📉 简化', translate:'🌐 翻译', add:'➕ 追加', execute:'⚡ 执行方案' }[it.action] || '—');
+        head.appendChild(action);
+      }
+      head.appendChild(del);
       card.appendChild(head);
 
       // 定位
@@ -634,7 +640,8 @@
         card.appendChild(note);
       }
 
-      // 操作 tag group (edit in 待提交; dynamic from task_templates)
+      // 操作 tag group appears only for editable 待提交 cards.
+      if (!isReadOnly) {
       var selections = _shareSelectionTemplates();
       var tagRow = document.createElement('div'); tagRow.className = 'pst-tags';
       tagRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;';
@@ -647,13 +654,13 @@
         if (it.action === p.action) b.classList.add('active');
         b.addEventListener('click', function(e){
           e.stopPropagation();
-          if (isReadOnly) return;
           it.action = p.action; it.scope = p.scope; it.task_id = p.task_id;
           _shareRender();
         });
         tagRow.appendChild(b);
       });
       card.appendChild(tagRow);
+      }
 
       // 提交评审 button (待提交 only)
       if (shareFbFilter === 'pending') {
@@ -677,7 +684,8 @@
 
     function _shareRender() {
       shareFbCardList.innerHTML = '';
-      var source = shareFbFilter === 'pending' ? sharePending : shareSubmitted;
+      var source = (shareFbFilter === 'pending' ? sharePending : shareSubmitted).slice()
+        .sort(function(a, b) { return String(b.updated || b.created || '').localeCompare(String(a.updated || a.created || '')); });
       if (!source.length) {
         var empty = document.createElement('div');
         empty.className = 'fb-empty';

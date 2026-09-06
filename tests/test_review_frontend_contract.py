@@ -78,3 +78,22 @@ def test_share_and_review_share_dynamic_action_templates_and_readonly_views():
     assert "review-card-note" in js
     # 浮窗 action 来源动态，不再写死列表
     assert "match_ext" in js
+
+
+def test_feedback_cards_follow_status_visibility_order_sorting_and_manual_refresh():
+    """Pending cards expose tags; completed cards expose their selected action.
+    Lists are newest-first and no feedback list is background-polled."""
+    js = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
+    share = (ROOT / "dev/static/share-view.html").read_text(encoding="utf-8")
+    css = (ROOT / "dev/static/css/preview.css").read_text(encoding="utf-8")
+
+    assert "item.status !== 'pending_review'" in js
+    assert "if (!isReadOnly)" in share
+    assert "if (isReadOnly)" in share
+    assert ".sort(function(a, b)" in js
+    assert ".sort(function(a, b)" in share
+    assert "setInterval" not in js
+    assert "拒绝理由" not in js
+    assert "确认删除该反馈" not in js
+    assert "closeRightSidebar();" in js
+    assert "position: static;" in css

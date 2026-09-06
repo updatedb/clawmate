@@ -217,6 +217,7 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
+      align-items: center;
     }
 
     .fb-section-sep {
@@ -254,15 +255,15 @@
       gap: 8px;
       position: relative;
       margin-bottom: 8px;
+      width: calc(100% - 8px);
+      box-sizing: border-box;
     }
     .fb-card > * + *,
     .feedback-card > * + * {
       margin-top: 8px;
     }
     .fb-card .fb-btn-delete {
-      position: absolute;
-      top: 6px;
-      right: 6px;
+      position: static;
       width: 22px; height: 22px;
       display: inline-flex; align-items: center; justify-content: center;
       padding: 0;
@@ -310,12 +311,12 @@
     .fb-btn-submit-all:disabled { opacity: 0.5; cursor: not-allowed; }
     .fb-card:hover { border-color: var(--text-muted); box-shadow: var(--card-shadow); }
     .fb-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: var(--bg-secondary); }
-    .fb-card-header { display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
+    .fb-card-header { display: flex; align-items: center; gap: var(--space-1); min-width: 0; width: 100%; }
     .fb-card-status { font-size: 14px; flex-shrink: 0; }
-    .fb-card-id { font-family: var(--font-mono); font-size: var(--font-size-xs); color: var(--text-secondary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .fb-card-time { font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
+    .fb-card-id { font-family: var(--font-mono); font-size: var(--font-size-xs); color: var(--text-secondary); flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fb-card-time { font-size: 10px; color: var(--text-muted); flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .fb-card-stage-time { font-variant-numeric: tabular-nums; }
-    .fb-card-action { max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 6px; border-radius: var(--radius-full); background: var(--accent-light); color: var(--accent-hover); font-size: 10px; font-weight: 600; flex-shrink: 1; }
+    .fb-card-action { max-width: 96px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 6px; border-radius: var(--radius-full); background: var(--accent-light); color: var(--accent-hover); font-size: 10px; font-weight: 600; flex: 0 1 auto; }
     .fb-card-note {
       color: var(--text-primary);
       font-size: 12px;
@@ -370,6 +371,9 @@
       line-height: 1.6;
     }
     .fb-status-pill.pending     { background: var(--warning-bg); color: var(--warning-text); }
+    .fb-status-pill.pending_review { background: var(--warning-bg); color: var(--warning-text); }
+    .fb-status-pill.approved, .fb-status-pill.planned { background: var(--accent-light); color: var(--accent-hover); }
+    .fb-status-pill.rejected { background: var(--danger-bg); color: var(--danger); }
     .fb-status-pill.in_progress { background: var(--accent-light); color: var(--info); }
     .fb-status-pill.done, .fb-status-pill.executed { background: var(--success-bg); color: var(--success); }
     .fb-status-pill.failed, .fb-status-pill.deleted { background: var(--danger-bg); color: var(--danger); }

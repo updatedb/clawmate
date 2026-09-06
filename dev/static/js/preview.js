@@ -1993,15 +1993,12 @@
   // Toggle right (feedback) panel
   document.getElementById('btnToggleRight').addEventListener('click', () => {
     if (rightSidebar.classList.contains('hidden')) {
-      // Opening sidebar — start auto-refresh and do an immediate load
-      _startSidebarRefresh();
+      // Opening sidebar explicitly refreshes the current filter once.
       reloadCurrentFeedback();
       openRightSidebar();
     } else {
       // Closing sidebar
       clearHL(); hideTooltip();
-      if (_desktopPollTimer) { clearInterval(_desktopPollTimer); _desktopPollTimer = null; }
-      _stopSidebarRefresh();
       closeRightSidebar();
     }
   });
@@ -2013,8 +2010,6 @@
   document.getElementById('btnCloseRight').addEventListener('click', () => {
     clearHL();
     hideTooltip();
-    if (_desktopPollTimer) { clearInterval(_desktopPollTimer); _desktopPollTimer = null; }
-    _stopSidebarRefresh();
     closeRightSidebar();
   });
 
@@ -2993,9 +2988,7 @@
     if (rightSidebar.classList.contains('hidden')) return;
     clearTimeout(_rightCloseTimer);
     rightSidebar.style.display = 'flex';        // override global .hidden
-    if (_desktopPollTimer) { clearInterval(_desktopPollTimer); _desktopPollTimer = null; }
     rightSidebar.classList.add('hidden');       // slide-out: 0 → 100%
-    _stopSidebarRefresh();
     document.getElementById('btnToggleRight').classList.remove('active');
     _rightCloseTimer = setTimeout(function () {
       rightSidebar.style.display = 'none';      // explicitly hide — CSS .preview-right.hidden broken in CSSOM
@@ -5242,11 +5235,15 @@
     card.className = 'fb-card' + (item.id === selectedPendingId ? ' selected' : '');
     card.dataset.id = item.id;
 
-    // Header: timestamp + delete (X)
+    // Header order is shared with all feedback states: ID, status, time, X.
     var head = document.createElement('div');
-    head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;';
+    head.className = 'fb-card-header';
+    var id = document.createElement('span'); id.className = 'fb-card-id';
+    id.textContent = 'FD-' + item.id;
+    var status = document.createElement('span'); status.className = 'fb-status-pill pending';
+    status.textContent = '待提交';
     var meta = document.createElement('span');
-    meta.style.cssText = 'font-size:11px;color:var(--text-muted);font-family:monospace;';
+    meta.className = 'fb-card-time fb-card-stage-time';
     if (!item.created) item.created = new Date().toISOString();
     var d = new Date(item.created);
     meta.textContent = String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
@@ -5259,7 +5256,7 @@
       clearHL();
       renderFeedbackPanel();
     });
-    head.appendChild(meta); head.appendChild(del);
+    head.appendChild(id); head.appendChild(status); head.appendChild(meta); head.appendChild(del);
     card.appendChild(head);
 
     // Position
@@ -5349,7 +5346,9 @@
       return;
     }
 
-    [...pendingItems].reverse().forEach(function (item) {
+    pendingItems.slice().sort(function(a, b) {
+      return String(b.updated || b.created || '').localeCompare(String(a.updated || a.created || ''));
+    }).forEach(function(item) {
       cardList.appendChild(createReviewPendingCard(item));
     });
     body.scrollTop = savedScrollTop;
@@ -5426,16 +5425,11 @@
         if (data.ok) {
           statusEl.textContent = '✅ 已提交';
           statusEl.className = 'fb-input-status ok';
-          // Immediately close the card and auto-open sidebar
-          setTimeout(function() { card.remove(); }, 400);
-          // Auto-open right sidebar
-          if (rightSidebar.classList.contains('hidden')) {
-            openRightSidebar();
-            document.getElementById('btnToggleRight').classList.add('active');
-          }
-          // Start polling with returned IDs
-          var ids = data.ids || [];
-          _startDesktopPolling(ids, reloadCurrentFeedback);
+          // Submission completes the feedback workflow: remove the input card
+          // and close the actual feedback sidebar, not merely the popup.
+          card.remove();
+          closeRightSidebar();
+          _refreshFeedbackList(reloadCurrentFeedback);
           if (onSubmit) {
             setTimeout(function() { onSubmit(); }, 100);
           }
@@ -5458,10 +5452,6 @@
     // Re-render the unified review panel so filter/list stay in sync.
     if (!isImageMode && !isMediaMode && !isOfficePdfMode && typeof renderReviewPanel === 'function') {
       try { renderReviewPanel(); } catch (e) {}
-    }
-    // Auto-start sidebar refresh timer if sidebar is visible
-    if (!rightSidebar.classList.contains('hidden')) {
-      _startSidebarRefresh();
     }
   }
 
@@ -5498,7 +5488,6 @@
     delBtn.title = '删除此反馈';
     delBtn.addEventListener('click', async e => {
       e.stopPropagation();
-      if (!confirm('确定删除此反馈？')) return;
       try {
         const f = item.file || (filePath ? filePath.split('/').pop() : '');
         await fetch('/api/clawmate/feedback/update', {
@@ -5735,93 +5724,10 @@
     } catch (_) {}
   }
 
-  // ── Desktop polling: refresh completed items until all submitted IDs are done/failed ──
-  var _desktopPollTimer = null;
-  var _desktopPollIds = [];
-
-  function _getCompletedItemsForMode() {
-    if (isImageMode) return imageCompletedItems;
-    if (isMediaMode) return mediaCompletedItems;
-    if (isOfficePdfMode) return officePdfCompletedItems;
-    return completedItems;
-  }
-
-  function _startDesktopPolling(ids, reloadFn) {
-    if (_desktopPollTimer) { clearInterval(_desktopPollTimer); _desktopPollTimer = null; }
-    _desktopPollIds = ids || [];
-    // Do an immediate reload
-    if (reloadFn) reloadFn();
-    if (!_desktopPollIds.length) return; // no IDs to track, one-shot reload is enough
-
-    var attempts = 0;
-    var MAX_ATTEMPTS = 30; // ~4 minutes at 8s intervals
-    var headerEl = document.querySelector('.preview-right-header span');
-    var _origHeaderText = headerEl ? headerEl.textContent : '💬 反馈';
-
-    _desktopPollTimer = setInterval(async function() {
-      attempts++;
-      if (attempts > MAX_ATTEMPTS) {
-        clearInterval(_desktopPollTimer);
-        _desktopPollTimer = null;
-        if (reloadFn) await reloadFn();
-        if (headerEl) headerEl.textContent = _origHeaderText;
-        return;
-      }
-      if (reloadFn) await reloadFn();
-      var allItems = _getCompletedItemsForMode();
-      var tracked = allItems.filter(function(it) { return _desktopPollIds.indexOf(it.id) >= 0; });
-      if (tracked.length === 0) {
-        // Items not yet in the list (still being created), keep polling
-        if (headerEl) headerEl.textContent = '⏳ 反馈';
-        return;
-      }
-      var doneCount = tracked.filter(function(it) { return it.status === 'done'; }).length;
-      var failCount = tracked.filter(function(it) { return it.status === 'failed'; }).length;
-      var total = tracked.length;
-      if (doneCount + failCount >= total) {
-        // All items resolved
-        clearInterval(_desktopPollTimer);
-        _desktopPollTimer = null;
-        if (headerEl) headerEl.textContent = _origHeaderText;
-        if (reloadFn) await reloadFn();
-        // Auto-open right sidebar if it was hidden
-        if (rightSidebar.classList.contains('hidden')) {
-          openRightSidebar();
-        }
-        _startSidebarRefresh();
-      } else {
-        if (headerEl) headerEl.textContent = '⏳ 反馈 (' + (doneCount + failCount) + '/' + total + ')';
-      }
-    }, 8000);
-  }
-
-  // Clean up desktop poll timer on page unload
-  window.addEventListener('beforeunload', function() {
-    if (_desktopPollTimer) { clearInterval(_desktopPollTimer); _desktopPollTimer = null; }
-    if (_sidebarRefreshTimer) { clearInterval(_sidebarRefreshTimer); _sidebarRefreshTimer = null; }
-  });
-
-  // ── Sidebar auto-refresh: poll feedback list every 10s while right sidebar is visible ──
-  var _sidebarRefreshTimer = null;
-
-  function _startSidebarRefresh() {
-    if (_sidebarRefreshTimer) return; // already running
-    _sidebarRefreshTimer = setInterval(function() {
-      if (rightSidebar.classList.contains('hidden')) {
-        // Sidebar was closed externally — stop
-        clearInterval(_sidebarRefreshTimer);
-        _sidebarRefreshTimer = null;
-        return;
-      }
-      reloadCurrentFeedback();
-    }, 10000);
-  }
-
-  function _stopSidebarRefresh() {
-    if (_sidebarRefreshTimer) {
-      clearInterval(_sidebarRefreshTimer);
-      _sidebarRefreshTimer = null;
-    }
+  // Feedback lists refresh only on an explicit user action (filter switch,
+  // submit, edit save, or review action).  Do not add background polling here.
+  function _refreshFeedbackList(reloadFn) {
+    return reloadFn ? reloadFn() : Promise.resolve();
   }
 
   function buildTaskSelection(item) {
@@ -5888,16 +5794,14 @@
         if (rightSidebar.classList.contains('hidden')) {
           openRightSidebar();
         }
-        _startSidebarRefresh();
         renderFeedbackPanel();
-        // Start polling with the returned IDs
-        var ids = data.ids || [];
         var reloadFn;
         if (item.type === 'media') reloadFn = loadMediaCompletedFeedback;
         else if (item.type === 'office') reloadFn = loadOfficePdfCompletedFeedback;
         else if (item.type === 'image') reloadFn = loadImageCompletedFeedback;
         else reloadFn = loadCompletedFeedback;
-        _startDesktopPolling(ids, reloadFn);
+        _refreshFeedbackList(reloadFn);
+        closeRightSidebar();
         showToast('✅ 已发送', 2000);
       } else {
         // Error: show inline in tooltip status
@@ -5957,11 +5861,9 @@
         if (rightSidebar.classList.contains('hidden')) {
           openRightSidebar();
         }
-        _startSidebarRefresh();
         renderFeedbackPanel();
-        // Start polling with returned IDs
-        var ids = data.ids || [];
-        _startDesktopPolling(ids, onReload);
+        _refreshFeedbackList(onReload);
+        closeRightSidebar();
         btn.textContent = '✅ 已提交';
         setTimeout(function() {
           btn.disabled = false;
@@ -6630,9 +6532,7 @@
         if (rightSidebar.classList.contains('hidden')) {
           openRightSidebar();
         }
-        // Start polling with returned IDs
-        var ids = data.ids || [];
-        _startDesktopPolling(ids, loadCompletedFeedback);
+        _refreshFeedbackList(loadCompletedFeedback);
         // Show the 待评审 list (already-submitted items land here, only deletable)
         _reviewFilter = 'pending_review';
         renderReviewPanel();
@@ -6786,8 +6686,6 @@
     var pendingText = '', pendingRange = null, pendingStart = 0, pendingEnd = 0;
     var _savedText = '';  // persists across panel open/close to prevent data loss
     var mobileSelTaskId = '';
-    var _pollTimer = null;
-    var _submittedIds = [];
 
     // Bottom panel elements
     var overlay = document.getElementById('mobileFbOverlay');
@@ -6833,7 +6731,6 @@
       overlay.classList.remove('visible');
       panel.classList.remove('visible');
       document.body.style.overflow = '';
-      if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
       if (!preserveText) {
         _savedText = '';
       }
@@ -7055,53 +6952,6 @@
       });
     })();
 
-    // ── 轮询提交的任务状态 ──
-    function _startPolling() {
-      if (_pollTimer) clearInterval(_pollTimer);
-      var attempts = 0;
-      var MAX_ATTEMPTS = 30; // 最多 5 分钟
-      _pollTimer = setInterval(async function() {
-        attempts++;
-        if (attempts > MAX_ATTEMPTS) {
-          clearInterval(_pollTimer);
-          _pollTimer = null;
-          if (fbStatus) { fbStatus.textContent = '⏰ 超时，请手动刷新'; fbStatus.style.color = 'var(--warning)'; }
-          return;
-        }
-        try {
-          var fn = (filePath || '').split('/').pop();
-          var proj = filePath && filePath.includes('/') ? filePath.split('/')[0] : (rootId || '');
-          var res = await fetch('/api/clawmate/feedback/list?root=' + encodeURIComponent(rootId) +
-            '&project=' + encodeURIComponent(proj) +
-            '&file=' + encodeURIComponent(fn));
-          if (!res.ok) return;
-          var data = await res.json();
-          var items = data.items || [];
-          var mine = items.filter(function(it) { return _submittedIds.indexOf(it.id) >= 0; });
-          if (mine.length === 0) return; // 尚未入库，等下一轮
-          var allDone = mine.every(function(it) { return it.status === 'done' || it.status === 'failed'; });
-          if (allDone) {
-            clearInterval(_pollTimer);
-            _pollTimer = null;
-            var doneCount = mine.filter(function(it) { return it.status === 'done'; }).length;
-            var failCount = mine.filter(function(it) { return it.status === 'failed'; }).length;
-            if (fbStatus) {
-              fbStatus.textContent = '✅ 完成 ' + doneCount + ' 项' + (failCount > 0 ? '，❌ ' + failCount + ' 项失败' : '');
-              fbStatus.style.color = failCount > 0 ? 'var(--warning)' : 'var(--success)';
-            }
-            // Also refresh the desktop completed items list (right sidebar)
-            if (typeof reloadCurrentFeedback === 'function') {
-              try { reloadCurrentFeedback(); } catch (_) {}
-            }
-            setTimeout(function() { hidePanel(false); }, 2000);
-          } else {
-            var progressCount = mine.filter(function(it) { return it.status === 'done' || it.status === 'failed'; }).length;
-            if (fbStatus) { fbStatus.textContent = '⏳ 处理中... (' + progressCount + '/' + mine.length + ')'; }
-          }
-        } catch (_) {}
-      }, 10000);
-    }
-
     // Submit
     if (fbSubmit) {
       fbSubmit.addEventListener('click', async function() {
@@ -7130,17 +6980,13 @@
           });
           var data = await res.json();
           if (data.ok) {
-            _submittedIds = data.ids || [];
             if (fbStatus) { fbStatus.textContent = '✅ 已提交'; fbStatus.style.color = 'var(--success)'; }
             clearMobileSelection();
             // Close bottom panel after brief success feedback
             setTimeout(function() { hidePanel(false); }, 600);
-            // Auto-open right sidebar so user can track feedback status
-            if (rightSidebar.classList.contains('hidden')) {
-              openRightSidebar();
-            }
-            // Start sidebar auto-refresh + immediate load
-            reloadCurrentFeedback();
+        // A successful submit closes the feedback window; lists refresh only
+        // when the user explicitly opens or changes a filter.
+        closeRightSidebar();
           } else {
             if (fbStatus) { fbStatus.textContent = '❌ ' + (data.detail || '提交失败'); fbStatus.style.color = 'var(--danger)'; }
             fbSubmit.disabled = false;
@@ -7191,8 +7037,6 @@
         // Snap feedback panel closed instantly (no transition) to avoid overlap flicker
         if (rightSidebar && !rightSidebar.classList.contains('hidden')) {
           rightSidebar.style.transition = 'none';
-          if (_desktopPollTimer) { clearInterval(_desktopPollTimer); _desktopPollTimer = null; }
-          _stopSidebarRefresh();
           closeRightSidebar();
           rightSidebar.offsetHeight; // force reflow
           rightSidebar.style.transition = '';
@@ -7368,7 +7212,8 @@
         });
       }
       // status must match the active filter
-      items = items.filter(function(i) { return (def.statuses || []).indexOf(i.status) >= 0; });
+      items = items.filter(function(i) { return (def.statuses || []).indexOf(i.status) >= 0; })
+        .sort(function(a, b) { return String(b.updated || b.created || '').localeCompare(String(a.updated || a.created || '')); });
       panel.innerHTML = '';
       if (!items.length) {
         var empty = document.createElement('div'); empty.className = 'fb-empty';
@@ -7427,19 +7272,19 @@
 
     var head = document.createElement('div'); head.className = 'fb-card-header';
 
-    var time = document.createElement('span'); time.className = 'fb-card-time fb-card-stage-time';
-    time.textContent = _feedbackStage(item);
-    head.appendChild(time);
     var id = document.createElement('span'); id.className = 'fb-card-id';
     id.textContent = item.id || '';
     head.appendChild(id);
-    var action = document.createElement('span'); action.className = 'fb-card-action';
-    action.textContent = _actionLabel(item.action) || '—';
-    head.appendChild(action);
-    if (['in_progress', 'executed', 'failed', 'deleted'].indexOf(item.status) >= 0) {
-      var status = document.createElement('span'); status.className = 'fb-status-pill ' + item.status;
-      status.textContent = _statusLabel(item.status);
-      head.appendChild(status);
+    var status = document.createElement('span'); status.className = 'fb-status-pill ' + (item.status || 'pending');
+    status.textContent = _statusLabel(item.status);
+    head.appendChild(status);
+    var time = document.createElement('span'); time.className = 'fb-card-time fb-card-stage-time';
+    time.textContent = _feedbackStage(item);
+    head.appendChild(time);
+    if (item.status !== 'pending_review') {
+      var action = document.createElement('span'); action.className = 'fb-card-action';
+      action.textContent = _actionLabel(item.action) || '—';
+      head.appendChild(action);
     }
 
     // ✕ delete (fb-btn-delete) → marks item deleted (已取消), shown in 已执行.
@@ -7448,7 +7293,6 @@
     del.textContent = '✕';
     del.title = '删除（标记为已取消）';
     del.addEventListener('click', async function(){
-      if (!confirm('确认删除该反馈？将标记为已取消')) return;
       try {
         await _reviewRequest('/api/clawmate/feedback/update', {root:rootId,project:project,id:item.id,status:'deleted'});
         renderReviewPanel();
@@ -7505,9 +7349,7 @@
         renderReviewPanel();
       });
       act('评审拒绝', async function() {
-        var reason = prompt('拒绝理由（必填）','');
-        if (reason === null) return;
-        await _reviewRequest('/api/clawmate/review/decision', {root:rootId,project:project,ids:[item.id],decision:'rejected',reason:reason});
+        await _reviewRequest('/api/clawmate/review/decision', {root:rootId,project:project,ids:[item.id],decision:'rejected'});
         renderReviewPanel();
       });
     }
@@ -7522,7 +7364,6 @@
     }
     if (item.status === 'planned') {
       act('确认并执行', async function() {
-        if (!confirm('确认执行计划并唤醒 Agent？')) return;
         var d = await _reviewRequest('/api/clawmate/review/confirm', {root:rootId,project:project,task_id:item.execution_task_id});
         await _reviewRequest('/api/clawmate/task/run', {root:rootId,project:project,file:item.file,review_task_id:d.task.id,selections:[{task_id:item.task_id||'review_modify'}]});
         renderReviewPanel();
@@ -7603,7 +7444,6 @@
       if (btnToggleAgent) btnToggleAgent.classList.remove('active');
       updateGridColumns();
       _syncPanelOpenClass();
-      if (_desktopPollTimer) { clearInterval(_desktopPollTimer); _desktopPollTimer = null; }
       if (window.Agent) {
         window.Agent.close();
       }
