@@ -148,3 +148,23 @@ def test_share_feedback_create_preserves_canonical_locator_and_selected_action(s
         "source": "share", "author": "匿名评审人",
         "share_token_id": share_routes.hashlib.sha256(token.encode()).hexdigest()[:16],
     }]
+
+
+def test_share_feedback_delete_is_scoped_to_the_share_token_and_file(share_client, monkeypatch):
+    token = share_client.post(
+        "/api/clawmate/share/create", json={"root": "root-a", "path": "note.md"}
+    ).json()["token"]
+    token_id = share_routes.hashlib.sha256(token.encode()).hexdigest()[:16]
+    monkeypatch.setattr(share_routes, "find_project_marker", lambda root, path: "project-a")
+    monkeypatch.setattr(
+        "store.list_items",
+        lambda *args, **kwargs: ([{"id": "FD-visible", "share_token_id": token_id, "file": "note.md"}], 1),
+    )
+    removed = []
+    monkeypatch.setattr("store.delete_item", lambda root, project, item_id: removed.append((root, project, item_id)))
+
+    response = share_client.post(f"/api/clawmate/share/{token}/feedback/delete", json={"id": "FD-visible"})
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "id": "FD-visible"}
+    assert removed == [("root-a", "project-a", "FD-visible")]

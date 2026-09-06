@@ -34,7 +34,7 @@ from config import load as config
 from store import (
     update_item, list_items, batch_update_items, create_items, review_items,
     create_execution_plan, confirm_execution_plan, execution_task,
-    record_execution_result,
+    record_execution_result, delete_item,
 )
 from service import resolve_root
 
@@ -292,6 +292,27 @@ async def feedback_update(request: Request):
     )
 
     return JSONResponse(content={"ok": True, "id": feedback_id, "newStatus": new_status})
+
+
+@router.post("/api/clawmate/feedback/delete", response_class=JSONResponse)
+async def feedback_delete(request: Request):
+    """Permanently delete one feedback item (distinct from review cancellation)."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    root_id = str(body.get("root", "")).strip()
+    project = str(body.get("project", "")).strip()
+    feedback_id = str(body.get("id", "")).strip()
+    if not root_id or not project or not feedback_id:
+        raise HTTPException(status_code=422, detail="Missing root/project/id")
+    try:
+        delete_item(root_id, project, feedback_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=".feedback.json not found")
+    except LookupError:
+        raise HTTPException(status_code=404, detail=f"Item {feedback_id} not found")
+    return {"ok": True, "id": feedback_id}
 
 
 @router.post("/api/clawmate/feedback/batch-update", response_class=JSONResponse)

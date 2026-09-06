@@ -629,7 +629,12 @@
       del.addEventListener('click', function(e) {
         e.stopPropagation();
         if (shareFbFilter === 'pending') { sharePending = sharePending.filter(function(i){ return i.id !== it.id; }); _sharePersistPending(); }
-        else shareSubmitted = shareSubmitted.filter(function(i){ return i.id !== it.id; });
+        else {
+          fetch(API_BASE + '/share/' + TOKEN + '/feedback/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:it.id})})
+            .then(function(response) { if (!response.ok) throw new Error('删除失败'); shareSubmitted = shareSubmitted.filter(function(i){ return i.id !== it.id; }); _shareRender(); })
+            .catch(function() { _shareFbStatus('❌ 删除失败', false); });
+          return;
+        }
         _shareRender();
       });
       head.appendChild(id); head.appendChild(time); head.appendChild(status); head.appendChild(del);

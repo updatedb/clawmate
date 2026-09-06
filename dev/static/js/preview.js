@@ -5572,10 +5572,10 @@
       e.stopPropagation();
       try {
         const f = item.file || (filePath ? filePath.split('/').pop() : '');
-        await fetch('/api/clawmate/feedback/update', {
+        await fetch('/api/clawmate/feedback/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ root: rootId, project, path: filePath || '', id: item.id, status: 'deleted' }),
+          body: JSON.stringify({ root: rootId, project, path: filePath || '', id: item.id }),
         });
         // Remove from appropriate completed array and re-render
         if (isImageMode) {
@@ -7149,8 +7149,8 @@
     { key: 'pending',        label: '待提交',           client: true  },
     { key: 'pending_review', label: '待评审',           statuses: ['pending_review'] },
     { key: 'approved',       label: '已评审',           statuses: ['approved', 'planned'] },
-    { key: 'rejected',       label: '已拒绝',           statuses: ['rejected'] },
-    { key: 'executed',       label: '已执行',           statuses: ['in_progress', 'executed', 'failed', 'deleted'] },
+    { key: 'rejected',       label: '已拒绝',           statuses: ['rejected', 'deleted'] },
+    { key: 'executed',       label: '已执行',           statuses: ['in_progress', 'executed', 'failed'] },
   ];
 
   function _statusLabel(status) {
@@ -7299,14 +7299,19 @@
     head.appendChild(time);
     head.appendChild(status);
 
-    // ✕ delete (fb-btn-delete) → marks item deleted (已取消), shown in 已执行.
+    // ✕ on reviewable cards means cancellation; historical cards are deleted.
     var del = document.createElement('button');
     del.className = 'fb-btn-delete';
     del.textContent = '✕';
-    del.title = '删除（标记为已取消）';
+    var canCancel = item.status === 'pending_review' || item.status === 'approved' || item.status === 'planned';
+    del.title = canCancel ? '标记为已取消' : '删除';
     del.addEventListener('click', async function(){
       try {
-        await _reviewRequest('/api/clawmate/feedback/update', {root:rootId,project:project,id:item.id,status:'deleted'});
+        if (canCancel) {
+          await _reviewRequest('/api/clawmate/feedback/update', {root:rootId,project:project,id:item.id,status:'deleted'});
+        } else {
+          await _reviewRequest('/api/clawmate/feedback/delete', {root:rootId,project:project,id:item.id});
+        }
         renderReviewPanel();
       } catch (e) { showToastSafe('❌ ' + (e.message || '删除失败')); }
     });

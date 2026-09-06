@@ -16,8 +16,8 @@ def test_preview_uses_review_gate_not_direct_task_run_for_feedback_submission():
 
 
 def test_preview_review_panel_has_3row_layout_and_review_actions():
-    """评审面板：3-row layout, 5-state filter, 已取消(deleted) in 已执行, editable 待评审,
-    read-only 已评审 with ✕ delete + 执行反馈, no multi-select checkboxes."""
+    """评审面板：3-row layout, 5-state filter, 已取消(deleted) in 已拒绝, editable 待评审,
+    only reviewable cards cancel; rejected/executed cards delete, no multi-select checkboxes."""
     js = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
     html = (ROOT / "dev/static/preview.html").read_text(encoding="utf-8")
     for label in ("待提交", "待评审", "已评审", "已拒绝", "已执行"):
@@ -27,9 +27,11 @@ def test_preview_review_panel_has_3row_layout_and_review_actions():
     assert "feedbackBody" in html
     for bid in ("btnReviewAdd", "btnReviewSubmit", "btnReviewExec"):
         assert bid in js and bid in html
-    # 已取消 = deleted; deleted is grouped under 已执行
+    # 已取消 = deleted; deleted is grouped under 已拒绝
     assert "已取消" in js
-    assert "deleted" in js
+    assert "statuses: ['rejected', 'deleted']" in js
+    assert "statuses: ['in_progress', 'executed', 'failed']" in js
+    assert "/api/clawmate/feedback/delete" in js
     # 待评审 editable; 已评审 read-only + ✕ delete + 执行反馈; no multi-select
     assert "评审通过" in js
     assert "评审拒绝" in js
@@ -138,6 +140,7 @@ def test_share_history_and_panel_state_contracts():
     assert "创建 ' + String(it.created" not in share
     assert "item.get(\"share_token_id\") == token_id" in routes
     assert "_feedback_paths_match(safe_rel, item.get(\"file\", \"\"))" in routes
+    assert "'/share/' + TOKEN + '/feedback/delete'" in share
 
 
 def test_readonly_feedback_cards_share_locator_time_and_content_contracts():

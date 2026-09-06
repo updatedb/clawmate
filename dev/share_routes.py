@@ -370,6 +370,42 @@ async def share_feedback_list(token: str):
     return {"items": visible}
 
 
+@router.post("/api/clawmate/share/{token}/feedback/delete")
+async def share_feedback_delete(token: str, request: Request):
+    """Delete one feedback item submitted through this exact share capability."""
+    link = _find_link(token)
+    if not link:
+        raise HTTPException(status_code=410, detail="链接已过期或不存在")
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    feedback_id = str(body.get("id", "")).strip()
+    if not feedback_id:
+        raise HTTPException(status_code=422, detail="Missing id")
+    try:
+        root_path, _, safe_rel = safe_path(link["root"], link["file"])
+        project = find_project_marker(root_path, safe_rel)
+    except Exception:
+        project = ""
+    if not project:
+        raise HTTPException(status_code=422, detail="共享文件不属于已初始化项目")
+    from store import _feedback_paths_match, delete_item, list_items
+    token_id = hashlib.sha256(token.encode()).hexdigest()[:16]
+    try:
+        items, _ = list_items(link["root"], project, file=safe_rel)
+    except (FileNotFoundError, ValueError):
+        items = []
+    allowed = any(item.get("id") == feedback_id
+                  and item.get("share_token_id") == token_id
+                  and _feedback_paths_match(safe_rel, item.get("file", ""))
+                  for item in items)
+    if not allowed:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+    delete_item(link["root"], project, feedback_id)
+    return {"ok": True, "id": feedback_id}
+
+
 @router.get("/api/clawmate/share/{token}/raw")
 async def share_raw(token: str):
     """返回原始文件内容（用于图片/音频/视频播放）"""

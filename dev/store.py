@@ -386,6 +386,23 @@ def update_item(
         return _update_item_locked(root_id, project, item_id, new_status, result)
 
 
+def delete_item(root_id: str, project: str, item_id: str) -> None:
+    """Permanently remove one feedback item while retaining its audit trail."""
+    with _feedback_write_lock:
+        path = _get_feedback_path(root_id, project)
+        if not path.exists():
+            raise FileNotFoundError(f".feedback.json not found: {path}")
+        data = _read_feedback(path)
+        items = list(data.get("items", []))
+        kept = [item for item in items if item.get("id") != item_id]
+        if len(kept) == len(items):
+            raise LookupError(f"Item {item_id} not found")
+        _append_audit(data, "feedback_deleted", item_ids=[item_id])
+        _atomic_write(path, root_id, project, kept, data.get("last_id", 0), data)
+        logger.info("[store.delete] %s root=%s project=%s id=%s",
+                    datetime.now(CST).isoformat(timespec="seconds"), root_id, project, item_id)
+
+
 def _update_item_locked(
     root_id: str,
     project: str,
@@ -675,7 +692,7 @@ def _cleanup_expired(items: list[dict]) -> list[dict]:
     # Review records are evidence.  Never remove review/execution items from
     # the authoritative file; audit history is append-only and must remain
     # explainable even after an execution fails. Cancelled (deleted) items are
-    # also kept so they remain visible as 已取消 in the 已执行 list.
+    # also kept so they remain visible as 已取消 in the 已拒绝 list.
     if any(i.get("status") in ("pending_review", "approved", "rejected", "planned", "executed", "deleted") for i in items):
         return items
     cfg = load_config()
