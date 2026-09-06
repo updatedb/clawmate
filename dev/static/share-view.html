@@ -770,8 +770,9 @@
       if (!sel) { _shareSelRenderStatus('请先选中内容', false); return; }
       if (!note) { _shareSelRenderStatus('请填写建议', false); shareSelNote.focus(); return; }
       var action = _shareSelAction();
+      if (!action) { _shareSelRenderStatus('请选择操作类型', false); return; }
       var location = _shareSelectionLocation(sel);
-      sharePending.push({ id: 'FD-' + (++_shareFbId), created: new Date().toISOString(), position: shareSelLocation.value.trim() || location.position, start_line: location.start_line, end_line: location.end_line, text: sel.slice(0,800), note: note, action: action, scope: _shareSelScope() });
+      sharePending.push({ id: 'FD-' + (++_shareFbId), created: new Date().toISOString(), position: shareSelLocation.value.trim() || location.position, start_line: location.start_line, end_line: location.end_line, text: sel.slice(0,800), note: note, action: action, scope: _shareSelScope(), task_id: _shareSelTaskId() });
       _sharePersistPending();
       _shareSelNoteReset();
       shareSelTooltip.classList.add('hidden');
@@ -788,11 +789,10 @@
       if (!_shareSelAction()) { _shareSelRenderStatus('请选择操作类型', false); return; }
       var action = _shareSelAction();
       var location = _shareSelectionLocation(sel);
-      var item = { id: 'FD-' + (++_shareFbId), created: new Date().toISOString(), position: shareSelLocation.value.trim() || location.position, start_line: location.start_line, end_line: location.end_line, text: sel.slice(0,800), note: note, action: action, scope: _shareSelScope() };
-      var panelWasOpen = !shareRight.classList.contains('hidden');
+      var item = { id: 'FD-' + (++_shareFbId), created: new Date().toISOString(), position: shareSelLocation.value.trim() || location.position, start_line: location.start_line, end_line: location.end_line, text: sel.slice(0,800), note: note, action: action, scope: _shareSelScope(), task_id: _shareSelTaskId() };
       _shareSelNoteReset();
       shareSelTooltip.classList.add('hidden');
-      _shareSubmitPending([item], { preservePanelState: panelWasOpen });
+      _shareSubmitPending([item]);
     });
 
     // 面板「添加反馈」→ hint user to select text
@@ -813,7 +813,7 @@
       _shareFbStatus('提交中...', false);
       try {
         var payload = { author: _shareAuthor, selections: list.map(function(it) {
-          return { text: it.text, note: it.note, action: it.action || 'modify', position: _sharePosition(it), start_line: it.start_line || it.startLine || 0, end_line: it.end_line || it.endLine || 0 };
+          return { text: it.text, note: it.note, action: it.action, scope: it.scope || 'document', task_id: it.task_id || '', position: _sharePosition(it), start_line: it.start_line || it.startLine || 0, end_line: it.end_line || it.endLine || 0 };
         }) };
         var response = await fetch(API_BASE + '/share/' + TOKEN + '/feedback', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
         var data = await response.json();
@@ -837,9 +837,9 @@
         shareFbFilter = 'submitted';
         _shareRender();
         _shareFbStatus('✅ 已提交评审（' + list.length + ' 条）', true);
-        // A selection-tooltip submission must leave the panel exactly as the
-        // user had it; panel/card submissions retain their close-on-success UX.
-        if (!options.preservePanelState) closeShareFeedback();
+        // Submission refreshes the filter, but never changes panel visibility.
+        // The header button state therefore remains an exact reflection of it.
+        syncShareFeedbackButton();
       } catch (err) {
         _shareFbStatus('❌ ' + err.message, false);
       } finally {
@@ -854,7 +854,7 @@
       var opts = _shareSelectionTemplates();
       if (!opts.length) opts = [{label:'🔧 修改',action:'modify',scope:'document'},{label:'🗑 删除',action:'delete',scope:'document'},{label:'📈 扩展',action:'explain',scope:'document'},{label:'📉 简化',action:'simplify',scope:'document'}];
       opts.forEach(function(t){
-        var b = document.createElement('button'); b.className = 'pst-tag'; b.textContent = t.label; b.setAttribute('data-action', t.action); b.setAttribute('data-scope', t.scope||'document');
+        var b = document.createElement('button'); b.className = 'pst-tag'; b.textContent = t.label; b.setAttribute('data-action', t.action); b.setAttribute('data-scope', t.scope||'document'); b.setAttribute('data-task-id', t.id || 'review_' + t.action);
         b.addEventListener('click', function(){
           shareSelTags.querySelectorAll('.pst-tag').forEach(function(x){ x.classList.remove('active'); });
           b.classList.add('active');
@@ -865,19 +865,26 @@
     }
     function _shareSelAction() {
       var a = shareSelTags.querySelector('.pst-tag.active');
-      return a ? (a.getAttribute('data-action') || 'modify') : 'modify';
+      return a ? (a.getAttribute('data-action') || '') : '';
     }
     function _shareSelScope() {
       var a = shareSelTags.querySelector('.pst-tag.active');
       return a ? (a.getAttribute('data-scope') || 'document') : 'document';
     }
+    function _shareSelTaskId() {
+      var a = shareSelTags.querySelector('.pst-tag.active');
+      return a ? (a.getAttribute('data-task-id') || '') : '';
+    }
     function _shareSelNoteReset() { shareSelNote.value = ''; if (shareSelLocation) shareSelLocation.value = ''; _shareSelRenderStatus(''); }
     function _handleShareSelection() {
       var sel = _shareGetSelection();
       if (!sel) { shareSelTooltip.classList.add('hidden'); return; }
+      // A delayed selectionchange can arrive after an action-tag click. Keep
+      // the current action/note for the same visible selection; reset only for
+      // a distinct selection or when reopening the floating card.
+      var isNewSelection = sel !== _shareSelSavedText || shareSelTooltip.classList.contains('hidden');
       _shareSelSavedText = sel;
-      _shareSelNoteReset();
-      _shareInitTags();
+      if (isNewSelection) { _shareSelNoteReset(); _shareInitTags(); }
       var rect = null;
       try { var s = window.getSelection(); if (s.rangeCount) rect = s.getRangeAt(0).getBoundingClientRect(); } catch(e){}
       if (rect) {
@@ -946,7 +953,9 @@
       shareSubmitted = (data.items || []).map(function(item) {
         return {
           id: item.id || '', status: item.status || '', created: item.created || '', updated: item.updated || '',
-          action: item.action || '', text: item.content || '', note: item.note || '', position: _sharePosition(item)
+          action: item.action || '', scope: item.scope || '', task_id: item.task_id || '',
+          start_line: item.start_line || item.startLine || 0, end_line: item.end_line || item.endLine || 0,
+          text: item.content || '', note: item.note || '', position: _sharePosition(item)
         };
       });
       _shareRender();

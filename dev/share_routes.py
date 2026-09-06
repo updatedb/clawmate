@@ -312,7 +312,10 @@ async def share_feedback_create(token: str, request: Request):
             "end_line": selection.get("end_line") or selection.get("endLine") or 0,
             "context_before": str(selection.get("context_before", ""))[-240:],
             "context_after": str(selection.get("context_after", ""))[:240],
-            "action": str(selection.get("action", "other")), "source": "share", "author": nickname,
+            "action": str(selection.get("action") or "other").strip(),
+            "scope": str(selection.get("scope") or "document").strip(),
+            "task_id": str(selection.get("task_id") or "").strip(),
+            "source": "share", "author": nickname,
             "share_token_id": hashlib.sha256(token.encode()).hexdigest()[:16]})
     if not normalized or not all(s["text"] for s in normalized):
         raise HTTPException(status_code=422, detail="反馈必须包含选中内容")
@@ -346,7 +349,7 @@ async def share_feedback_list(token: str):
         items, _ = list_items(link["root"], project, file=safe_rel)
     except (FileNotFoundError, ValueError):
         items = []
-    fields = ("id", "status", "created", "updated", "action", "content", "note")
+    fields = ("id", "status", "created", "updated", "action", "scope", "task_id", "content", "note")
     visible = []
     for item in items:
         if not (item.get("share_token_id") == token_id
@@ -358,6 +361,9 @@ async def share_feedback_list(token: str):
         position = item.get("position") or item.get("location") or ""
         response_item = {field: item.get(field, "") for field in fields}
         response_item["position"] = position
+        anchor = item.get("anchor") or {}
+        response_item["start_line"] = anchor.get("start_line") or item.get("start_line") or item.get("startLine") or 0
+        response_item["end_line"] = anchor.get("end_line") or item.get("end_line") or item.get("endLine") or 0
         if item.get("location"):
             response_item["location"] = item["location"]
         visible.append(response_item)

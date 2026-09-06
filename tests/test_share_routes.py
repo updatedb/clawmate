@@ -114,12 +114,37 @@ def test_share_feedback_history_is_limited_to_its_token_and_file(share_client, m
     assert response.json()["items"] == [
         {
             "id": "FD-visible", "status": "approved", "created": "2026-01-01 10:00:00",
-            "updated": "2026-01-02 10:00:00", "action": "modify", "content": "visible",
-            "note": "keep", "position": "Line 1",
+            "updated": "2026-01-02 10:00:00", "action": "modify", "scope": "", "task_id": "", "content": "visible",
+            "note": "keep", "position": "Line 1", "start_line": 0, "end_line": 0,
         },
         {
             "id": "FD-legacy", "status": "approved", "created": "", "updated": "",
-            "action": "", "content": "legacy", "note": "", "position": "Line 2",
-            "location": "Line 2",
+            "action": "", "scope": "", "task_id": "", "content": "legacy", "note": "", "position": "Line 2",
+            "start_line": 0, "end_line": 0, "location": "Line 2",
         },
     ]
+
+
+def test_share_feedback_create_preserves_canonical_locator_and_selected_action(share_client, monkeypatch):
+    token = share_client.post(
+        "/api/clawmate/share/create", json={"root": "root-a", "path": "note.md"}
+    ).json()["token"]
+    monkeypatch.setattr(share_routes, "find_project_marker", lambda root, path: "project-a")
+    captured = []
+    monkeypatch.setattr("store.create_items", lambda root, project, path, selections: (captured.extend(selections) or [{"id": "FD-1"}]))
+
+    response = share_client.post(f"/api/clawmate/share/{token}/feedback", json={"selections": [{
+        "text": "selected", "note": "remove this", "position": "Line 2-3",
+        "start_line": 2, "end_line": 3, "action": "delete", "scope": "paragraph",
+        "task_id": "review_delete",
+    }]})
+
+    assert response.status_code == 200
+    assert response.json()["ids"] == ["FD-1"]
+    assert captured == [{
+        "text": "selected", "note": "remove this", "position": "Line 2-3",
+        "start_line": 2, "end_line": 3, "context_before": "", "context_after": "",
+        "action": "delete", "scope": "paragraph", "task_id": "review_delete",
+        "source": "share", "author": "匿名评审人",
+        "share_token_id": share_routes.hashlib.sha256(token.encode()).hexdigest()[:16],
+    }]

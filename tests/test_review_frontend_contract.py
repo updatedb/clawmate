@@ -115,6 +115,10 @@ def test_feedback_position_contract_uses_canonical_position_and_visible_fallback
     assert "function _sharePosition(item)" in share
     assert "'定位：' + (_sharePosition(it) || '—')" in share
     assert "position: _sharePosition(it)" in share
+    assert "start_line: it.start_line || it.startLine || 0" in share
+    assert "end_line: it.end_line || it.endLine || 0" in share
+    assert "scope: it.scope || 'document'" in share
+    assert "task_id: it.task_id || ''" in share
     assert 'sel.get("position") or sel.get("location")' in store
     assert 'selection.get("position") or selection.get("location")' in share_routes
 
@@ -125,8 +129,8 @@ def test_share_history_and_panel_state_contracts():
     routes = (ROOT / "dev/share_routes.py").read_text(encoding="utf-8")
     assert "'/share/' + TOKEN + '/feedback'" in share
     assert "await _shareLoadSubmitted();" in share
-    assert "preservePanelState: panelWasOpen" in share
-    assert "if (!options.preservePanelState) closeShareFeedback();" in share
+    assert "closeShareFeedback();" not in share[share.index("async function _shareSubmitPending"):share.index("// Selection tooltip logic")]
+    assert "syncShareFeedbackButton();" in share[share.index("async function _shareSubmitPending"):share.index("// Selection tooltip logic")]
     assert "syncShareFeedbackButton" in share
     assert "aria-pressed=\"false\"" in share
     assert "_shareStatusLabel(it.status)" in share
