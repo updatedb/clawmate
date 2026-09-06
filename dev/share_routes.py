@@ -346,15 +346,21 @@ async def share_feedback_list(token: str):
         items, _ = list_items(link["root"], project, file=safe_rel)
     except (FileNotFoundError, ValueError):
         items = []
-    # Keep `location` as a read-only legacy alias so the public card can use
-    # the same position compatibility fallback as the review surface.
-    fields = ("id", "status", "created", "updated", "action", "content", "note", "position", "location")
-    visible = [
-        {field: item.get(field, "") for field in fields}
-        for item in items
-        if item.get("share_token_id") == token_id
-        and _feedback_paths_match(safe_rel, item.get("file", ""))
-    ]
+    fields = ("id", "status", "created", "updated", "action", "content", "note")
+    visible = []
+    for item in items:
+        if not (item.get("share_token_id") == token_id
+                and _feedback_paths_match(safe_rel, item.get("file", ""))):
+            continue
+        # `position` is canonical. Older records can contain only `location`,
+        # so normalize it while retaining a populated legacy alias for clients
+        # that still read it. Do not emit an empty alias for current records.
+        position = item.get("position") or item.get("location") or ""
+        response_item = {field: item.get(field, "") for field in fields}
+        response_item["position"] = position
+        if item.get("location"):
+            response_item["location"] = item["location"]
+        visible.append(response_item)
     return {"items": visible}
 
 

@@ -102,6 +102,7 @@ def test_share_feedback_history_is_limited_to_its_token_and_file(share_client, m
         "store.list_items",
         lambda *args, **kwargs: ([
             {"id": "FD-visible", "share_token_id": token_id, "file": "project-a/note.md", "status": "approved", "created": "2026-01-01 10:00:00", "updated": "2026-01-02 10:00:00", "action": "modify", "content": "visible", "note": "keep", "position": "Line 1"},
+            {"id": "FD-legacy", "share_token_id": token_id, "file": "note.md", "status": "approved", "content": "legacy", "location": "Line 2"},
             {"id": "FD-other-token", "share_token_id": "other", "file": "note.md", "content": "hidden"},
             {"id": "FD-other-file", "share_token_id": token_id, "file": "other.md", "content": "hidden"},
         ], 1),
@@ -110,8 +111,15 @@ def test_share_feedback_history_is_limited_to_its_token_and_file(share_client, m
     response = share_client.get(f"/api/clawmate/share/{token}/feedback")
 
     assert response.status_code == 200
-    assert response.json()["items"] == [{
-        "id": "FD-visible", "status": "approved", "created": "2026-01-01 10:00:00",
-        "updated": "2026-01-02 10:00:00", "action": "modify", "content": "visible",
-        "note": "keep", "position": "Line 1",
-    }]
+    assert response.json()["items"] == [
+        {
+            "id": "FD-visible", "status": "approved", "created": "2026-01-01 10:00:00",
+            "updated": "2026-01-02 10:00:00", "action": "modify", "content": "visible",
+            "note": "keep", "position": "Line 1",
+        },
+        {
+            "id": "FD-legacy", "status": "approved", "created": "", "updated": "",
+            "action": "", "content": "legacy", "note": "", "position": "Line 2",
+            "location": "Line 2",
+        },
+    ]

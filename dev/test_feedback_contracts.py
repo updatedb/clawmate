@@ -36,11 +36,12 @@ def test_review_pending_drafts_are_root_project_file_scoped_and_local_only():
     assert "localStorage.setItem(_reviewPendingStorageKey(), JSON.stringify(pendingItems))" in PREVIEW
 
 
-def test_share_history_returns_all_token_scoped_non_pending_statuses_and_legacy_location():
+def test_share_history_returns_scoped_canonical_position_and_populated_legacy_location():
     assert 'item.get("share_token_id") == token_id' in ROUTES
     assert "_feedback_paths_match(safe_rel, item.get(\"file\", \"\"))" in ROUTES
-    assert '"location"' in ROUTES
-    assert "pending_review" not in ROUTES.split("visible = [", 1)[1].split("]\n    return", 1)[0]
+    assert 'position = item.get("position") or item.get("location") or ""' in ROUTES
+    assert 'if item.get("location"):' in ROUTES
+    assert 'response_item["location"] = item["location"]' in ROUTES
 
 
 def test_feedback_lists_share_scroll_and_card_inset_contract():
