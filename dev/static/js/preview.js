@@ -4224,6 +4224,48 @@
     });
   }
 
+  // Project panel (需求 4) — preview surface
+  var btnProjectPanelPreview = document.getElementById('btnProjectPanel');
+  var _projPanelEl = null;
+  function _esc2(v) { var d = document.createElement('div'); d.textContent = String(v || ''); return d.innerHTML; }
+  function _closeProjectPanel2() { if (_projPanelEl) { _projPanelEl.remove(); _projPanelEl = null; } }
+  function _showProjectBtn2() { if (btnProjectPanelPreview) { btnProjectPanelPreview.style.display = project ? '' : 'none'; } }
+  async function _toggleProjectPanel2() {
+    if (_projPanelEl) { _closeProjectPanel2(); return; }
+    if (!project) { return; }
+    var overlay = document.createElement('div');
+    overlay.className = 'project-panel-overlay';
+    overlay.style.position = 'fixed'; overlay.style.top = '64px'; overlay.style.right = '16px';
+    overlay.style.width = '360px'; overlay.style.maxHeight = '70vh'; overlay.style.overflow = 'auto';
+    overlay.style.background = 'var(--bg,#fff)'; overlay.style.border = '1px solid var(--border-color,#ddd)';
+    overlay.style.borderRadius = '10px'; overlay.style.padding = '16px'; overlay.style.zIndex = '1200';
+    overlay.style.boxShadow = '0 8px 30px rgba(0,0,0,.18)';
+    overlay.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><strong>项目面板</strong><button class="project-panel-close" style="border:none;background:none;font-size:16px;cursor:pointer">✕</button></div><div class="project-panel-body">加载项目概况…</div>';
+    overlay.querySelector('.project-panel-close').addEventListener('click', _closeProjectPanel2);
+    document.body.appendChild(overlay);
+    _projPanelEl = overlay;
+    try {
+      var res = await fetch('/api/clawmate/project/' + encodeURIComponent(rootId) + '/' + encodeURIComponent(project) + '/overview');
+      var data = await res.json();
+      _renderProjectPanel2(overlay.querySelector('.project-panel-body'), data);
+    } catch (e) { overlay.querySelector('.project-panel-body').textContent = '加载项目概况失败'; }
+  }
+  function _renderProjectPanel2(body, data) {
+    if (!data || !data.ok) { body.textContent = '加载失败'; return; }
+    var todo = data.todo || {}, rv = data.review || {}, recs = data.recommendations || [];
+    var html = '<div style="margin-bottom:10px;color:var(--muted,#888)">' + _esc2(data.project) + ' · ' + _esc2(data.type_label || data.type || '') + '</div>';
+    html += '<div style="margin-bottom:10px"><div style="font-weight:600;margin-bottom:4px">待办 (' + (todo.total || 0) + ')</div>';
+    if (todo.items && todo.items.length) { html += '<ul style="margin:0;padding-left:18px">' + todo.items.slice(0, 10).map(function (i) { return '<li>' + _esc2(i) + '</li>'; }).join('') + '</ul>'; } else { html += '<div style="color:var(--muted,#888)">无未完成待办</div>'; }
+    html += '</div>';
+    html += '<div style="margin-bottom:10px"><div style="font-weight:600;margin-bottom:4px">评审</div><div>待评审 <b>' + (rv.pending_review || 0) + '</b> · 已评审(通过) <b>' + (rv.approved || 0) + '</b> · 已拒绝 <b>' + (rv.rejected || 0) + '</b> · 执行中 <b>' + (rv.in_progress || 0) + '</b> · 已执行 <b>' + (rv.executed || 0) + '</b></div></div>';
+    html += '<div><div style="font-weight:600;margin-bottom:4px">推荐任务</div>';
+    if (recs.length) { html += '<ul style="margin:0;padding-left:18px">' + recs.map(function (r) { return '<li>' + _esc2(r.label) + (r.detail ? ' <span style="color:var(--muted,#888)">· ' + _esc2(r.detail) + '</span>' : '') + '</li>'; }).join('') + '</ul>'; } else { html += '<div style="color:var(--muted,#888)">暂无推荐</div>'; }
+    html += '</div>';
+    body.innerHTML = html;
+  }
+  if (btnProjectPanelPreview) btnProjectPanelPreview.addEventListener('click', _toggleProjectPanel2);
+  _showProjectBtn2();
+
   /** Clear page title before print so browser header omits date/filename, restore after */
   function printWithoutHeaderFooter() {
     const origTitle = document.title;

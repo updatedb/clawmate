@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -286,4 +287,134 @@ async def project_convert(request: Request):
             "AGENTS.md": (target / "AGENTS.md").exists(),
             ".gitignore": (target / ".gitignore").exists(),
         },
+    })
+
+
+# ── Project overview + recommendations (需求 4) ────────────────────────
+
+_PROJECT_TYPE_LABELS = {"meeting": "会议/协作", "product": "产品/研发", "research": "研究/调研", "generic": "通用"}
+
+
+def _read_project_json(target: Path) -> dict:
+    """Parse .clawmate/project.json (best-effort)."""
+    path = target / ".clawmate" / "project.json"
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _count_clawlist_todo(target: Path) -> tuple[int, list[str]]:
+    """Count unchecked tasks in CLAWLIST.md (lines matching '- [ ]')."""
+    path = target / "CLAWLIST.md"
+    if not path.exists():
+        return 0, []
+    items: list[str] = []
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            m = re.match(r"^\s*-\s*\[ \]\s*(.*)$", line)
+            if m and m.group(1).strip():
+                items.append(m.group(1).strip())
+    except Exception:
+        return 0, []
+    return len(items), items
+
+
+def _count_review(target: Path) -> dict:
+    """Count review items by status from .clawmate/feedback.json."""
+    path = target / ".clawmate" / "feedback.json"
+    counts = {"pending_review": 0, "approved": 0, "rejected": 0, "in_progress": 0, "executed": 0}
+    if not path.exists():
+        return counts
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        for item in data.get("items", []):
+            st = item.get("status")
+            if st in ("pending_review", "pending"):
+                counts["pending_review"] += 1
+            elif st in ("approved",):
+                counts["approved"] += 1
+            elif st in ("rejected",):
+                counts["rejected"] += 1
+            elif st in ("in_progress", "planned", "execution_pending"):
+                counts["in_progress"] += 1
+            elif st in ("executed", "done"):
+                counts["executed"] += 1
+    except Exception:
+        pass
+    return counts
+
+
+def _recommendations_for(target: Path) -> list[dict]:
+    """Recommend project actions from built-in archetypes + project.json.
+
+    Lightweight rules: match on project type and the presence of marker files
+    (e.g. meeting dirs / CHANGELOG) to surface the most likely next action.
+    Custom rules come from .clawmate/project.json 'recommendations'.
+    """
+    cfg = _read_project_json(target)
+    ptype = str(cfg.get("type") or "generic").lower()
+    name = target.name
+    recs: list[dict] = []
+
+    # Custom recommendations from project.json take precedence.
+    for r in cfg.get("recommendations") or []:
+        if isinstance(r, dict) and r.get("label"):
+            recs.append({"source": "custom", **r})
+
+    names = {p.name.lower() for p in target.iterdir() if p.is_file()}
+    dirs = {p.name.lower() for p in target.iterdir() if p.is_dir()}
+
+    def _add(label: str, kind: str, detail: str = "") -> None:
+        recs.append({"source": "rule", "label": label, "kind": kind, "detail": detail})
+
+    if ptype == "meeting" or any("meeting" in d for d in dirs) or any("meeting" in n for n in names):
+        _add("更新会议信息", "meeting", "刷新进度/纪要/日程")
+        _add("生成/更新会议纪要", "meeting", "沉淀本次会议结论")
+    if ptype == "product" or any("changelog" in n for n in names) or any("prd" in d for d in dirs):
+        _add("更新 CHANGELOG", "release", "记录本次变更")
+        _add("评审未关闭项", "review", "推进待评审/已评审项")
+    if ptype == "research" or "research" in dirs:
+        _add("整理调研结论", "research", "归档到 archive/research")
+    _add("完善项目说明", "doc", "更新 PROJECT_NOTE.md")
+    _add("规划待办", "plan", "推进 CLAWLIST 未完成项")
+    return recs[:8]
+
+
+@router.get("/api/clawmate/project/{root}/{project}/overview")
+async def project_overview(root: str, project: str):
+    """Aggregate project overview: CLAWLIST todo + review counts + recommendations."""
+    if not root:
+        raise HTTPException(status_code=422, detail="Missing root")
+    if not project:
+        raise HTTPException(status_code=422, detail="Missing project")
+    try:
+        root_path, target, safe_rel = safe_path(root, project)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Project not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid path")
+
+    if not (target / ".clawmate").is_dir():
+        raise HTTPException(status_code=404, detail="Not a ClawMate project")
+
+    todo_total, todo_items = _count_clawlist_todo(target)
+    review = _count_review(target)
+    recs = _recommendations_for(target)
+    pj = _read_project_json(target)
+
+    return JSONResponse(content={
+        "ok": True,
+        "root": root,
+        "project": project,
+        "name": target.name,
+        "type": pj.get("type", "generic"),
+        "type_label": _PROJECT_TYPE_LABELS.get(str(pj.get("type", "generic")).lower(), "通用"),
+        "todo": {"total": todo_total, "items": todo_items[:30]},
+        "review": review,
+        "recommendations": recs,
     })
