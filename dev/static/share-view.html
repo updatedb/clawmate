@@ -545,12 +545,10 @@
       var card = document.createElement('div');
       card.className = 'fb-card';
 
-      // Header row: time + id + fb-btn-delete (top-right)
+      // Header row: time + id + fb-btn-delete (top-right). No status badge —
+      // the share surface has no status concept (only 待提交/已提交 views).
       var head = document.createElement('div'); head.className = 'fb-card-header';
       head.style.cssText = 'display:flex;align-items:center;gap:6px;';
-      var status = document.createElement('span'); status.className = 'fb-card-status';
-      status.textContent = '📝';
-      if (shareFbFilter === 'submitted') status.textContent = ' ✅ ';
       var id = document.createElement('span'); id.className = 'fb-card-id';
       id.textContent = it.id || '';
       var time = document.createElement('span'); time.className = 'fb-card-time';
@@ -562,7 +560,7 @@
         else shareSubmitted = shareSubmitted.filter(function(i){ return i.id !== it.id; });
         _shareRender();
       });
-      head.appendChild(status); head.appendChild(id); head.appendChild(time); head.appendChild(del);
+      head.appendChild(id); head.appendChild(time); head.appendChild(del);
       card.appendChild(head);
 
       // 定位 (editable in 待提交)
@@ -761,10 +759,33 @@
         shareSelTooltip.style.transform = 'translateX(-50%)';
       }
     }
+    function _shareOnSelection() {
+      var sel = _shareGetSelection();
+      if (sel) setTimeout(_handleShareSelection, 10);
+      else hideShareTooltip();
+    }
+    function hideShareTooltip() { shareSelTooltip.style.display = 'none'; }
+    // Show floating card on mouseup if there is a real selection. We read the
+    // selection synchronously in the same handler so it is still alive.
     document.addEventListener('mouseup', function(e) {
       var sel = _shareGetSelection();
-      if (sel) { setTimeout(_handleShareSelection, 10); }
-      else if (!shareSelTooltip.contains(e.target)) { shareSelTooltip.style.display = 'none'; }
+      if (sel) { _handleShareSelection(); }
+      else if (!shareSelTooltip.contains(e.target)) { hideShareTooltip(); }
+    });
+    // Debounced selectionchange fallback that only shows when a stable non-empty
+    // selection exists; never fires a hide on its own (avoid hiding right after show).
+    var _selTimer = null;
+    document.addEventListener('selectionchange', function() {
+      var sel = _shareGetSelection();
+      if (sel && !shareSelTooltip.contains(document.activeElement)) {
+        if (_selTimer) clearTimeout(_selTimer);
+        _selTimer = setTimeout(_handleShareSelection, 120);
+      }
+    });
+    // Explicit clicks outside the tooltip clear it only when nothing is selected.
+    document.addEventListener('click', function(e) {
+      if (shareSelTooltip.contains(e.target)) return;
+      if (!_shareGetSelection() && !_shareSelSavedText) hideShareTooltip();
     });
     shareSelTooltip.addEventListener('click', function(e){ e.stopPropagation(); });
 

@@ -6203,12 +6203,12 @@
       // 桌面端选中文本时自动复制到剪贴板（仅新选中时触发，tooltip 已显示时不重复复制）
       if (tooltip.style.display === 'none') copyText(selText, '已复制到剪贴板');
 
-      // 重置"立刻执行"按钮状态（上次成功提交后 hideTooltip 不会恢复按钮状态，
+      // 重置"提交评审"按钮状态（上次成功提交后 hideTooltip 不会恢复按钮状态，
       // 导致新选中时按钮仍然显示为 disabled "⏳ ...")
       const sendBtn = document.getElementById('pstBtnSend');
       if (sendBtn) {
         sendBtn.disabled = false;
-        sendBtn.textContent = '⚡ 立刻执行';
+        sendBtn.textContent = '提交评审';
       }
 
       // ── Rendered Markdown mode: detect section heading ──
