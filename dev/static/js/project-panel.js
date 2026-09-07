@@ -90,6 +90,36 @@
       global.addEventListener('pagehide', function () { source.close(); }, {once:true});
     }
     global.addEventListener('pagehide', close, {once:true});
+    return {close:close};
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mountPreview); else mountPreview();
+  function installPreviewPanel() {
+    if (global.ClawMatePanels) {
+      var query = new URLSearchParams(global.location.search);
+      var root = query.get('root'), file = query.get('file') || '', project = file.split('/')[0];
+      global.ClawMatePanels.install('preview', {
+        project:{mount:mountPreview},
+        // Preview keeps its mature card/filter renderer. These lightweight
+        // controllers expose the same data/action sources for independent
+        // consumers without binding a second set of UI handlers.
+        feedback:{context:{root:root, project:project, file:file}},
+        review:{context:{root:root, project:project, file:file}}
+      });
+      return;
+    }
+    // preview-common normally appends this asset first. Dynamic scripts do not
+    // participate in defer ordering, so wait for its load rather than creating
+    // a second project mount or losing this initialization.
+    var script = document.querySelector('script[data-clawmate-panels]');
+    if (!script) {
+      script = document.createElement('script');
+      script.src = './js/clawmate-panels.js';
+      script.dataset.clawmatePanels = '1';
+      document.head.appendChild(script);
+    }
+    if (!script.dataset.clawmatePanelsWaiting) {
+      script.dataset.clawmatePanelsWaiting = '1';
+      script.addEventListener('load', installPreviewPanel, {once:true});
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installPreviewPanel); else installPreviewPanel();
 })(window);

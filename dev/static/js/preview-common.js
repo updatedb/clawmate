@@ -9,6 +9,15 @@
 
   var hasDocument = typeof document !== 'undefined';
 
+  // A preview/share-like document can use the registry without putting panel
+  // setup into its heavy feature script.
+  if (hasDocument && document.head && !global.ClawMatePanels && !document.querySelector('script[data-clawmate-panels]')) {
+    var panelsScript = document.createElement('script');
+    panelsScript.src = './js/clawmate-panels.js';
+    panelsScript.dataset.clawmatePanels = '1';
+    document.head.appendChild(panelsScript);
+  }
+
   // Project panel is shared with the directory surface but loaded separately
   // so preview's heavy features remain lazy.  It binds before preview.js.
   if (hasDocument && document.head && !global.ClawMateProjectPanel && !document.querySelector('script[data-clawmate-project-panel]')) {
