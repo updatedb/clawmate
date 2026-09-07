@@ -7,6 +7,15 @@
 (function(global) {
   'use strict';
 
+  // Project panel is shared with the directory surface but loaded separately
+  // so preview's heavy features remain lazy.  It binds before preview.js.
+  if (!document.querySelector('script[data-clawmate-project-panel]')) {
+    var projectPanelScript = document.createElement('script');
+    projectPanelScript.src = './js/project-panel.js';
+    projectPanelScript.dataset.clawmateProjectPanel = '1';
+    document.head.appendChild(projectPanelScript);
+  }
+
   // ── 文件类型常量 ──────────────────────────────────────────────
   global.AUDIO_EXTS = ['mp3','ogg','wav','flac','m4a','aac','wma'];
   global.VIDEO_EXTS = ['mp4','webm','mov','avi','mkv','wmv','flv','m4v'];

@@ -299,6 +299,9 @@ async def project_convert(request: Request):
 _clawlist_write_lock = threading.Lock()
 
 _PROJECT_TYPE_LABELS = {"meeting": "会议/协作", "product": "产品/研发", "research": "研究/调研", "generic": "通用"}
+_LEARNED_DOCS = ("AGENTS.md", "WORKFLOW.md", "README.md", "PROJECT_NOTE.md")
+_TASK_WORDS = ("更新", "进展", "会议", "状态", "下一步", "维护", "提交", "检查", "报告", "TODO", "待办")
+_SCRIPT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*\.(?:py|sh)$")
 
 
 def _read_project_json(target: Path) -> dict:
@@ -328,6 +331,54 @@ def _write_project_json(target: Path, data: dict) -> None:
         except FileNotFoundError:
             pass
         raise
+
+
+def _learned_markdown_sources(target: Path) -> list[Path]:
+    """Return only documented, project-local sources used by discovery."""
+    result = [target / name for name in _LEARNED_DOCS if (target / name).is_file()]
+    for path in target.glob("*.md"):
+        if path not in result and any(word in path.name for word in ("说明", "流程", "规范")):
+            result.append(path)
+    return result
+
+
+def _safe_project_scripts(target: Path) -> list[Path]:
+    """Scripts are opt-in: only direct children of this project's scripts/ dir."""
+    scripts = target / "scripts"
+    return [p for p in scripts.iterdir() if p.is_file() and _SCRIPT_NAME.fullmatch(p.name)] if scripts.is_dir() else []
+
+
+def discover_project_tasks(target: Path) -> dict:
+    """Learn local task candidates without executing or inventing commands."""
+    scripts, found = _safe_project_scripts(target), []
+    for doc in _learned_markdown_sources(target):
+        try:
+            lines = doc.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for number, line in enumerate(lines, 1):
+            text = re.sub(r"^\s*(?:[-*]|\d+[.)])\s*(?:\[[ xX]\]\s*)?", "", line).strip()
+            todo = bool(re.match(r"^\s*[-*]\s*\[ \]", line))
+            keyword = any(word.lower() in text.lower() for word in _TASK_WORDS)
+            workflow = doc.name in {"AGENTS.md", "WORKFLOW.md"} and any(x in text.lower() for x in ("触发", "workflow", "流程"))
+            if not text or not (todo or keyword or workflow):
+                continue
+            candidate = next((p for p in scripts if ("会议" in text or "进展" in text) and ("meeting" in p.name.lower() or "pipeline" in p.name.lower())), None)
+            rel = candidate.relative_to(target).as_posix() if candidate else None
+            command = (("python " if candidate.suffix == ".py" else "sh ") + rel + " --json") if candidate else None
+            found.append({"id": "learned-" + re.sub(r"[^a-z0-9]+", "-", (doc.name + "-" + str(number) + "-" + text).lower()).strip("-")[:80], "label": text[:100], "origin_file": doc.name, "origin_line": number, "kind": "todo" if todo else ("workflow" if workflow else "keyword"), "priority": "high" if todo else "normal", "frequency": 0, "estimated_duration_seconds": 900, "source": "discover", "execution": "script" if command else "needs_agent", "command": command, "script_path": rel})
+    unique, labels = [], set()
+    for task in found:
+        if task["label"] not in labels:
+            labels.add(task["label"]); unique.append(task)
+    cfg = _read_project_json(target)
+    existing = cfg.get("recommended_tasks") if isinstance(cfg.get("recommended_tasks"), list) else []
+    existing_ids = {str(item.get("id")) for item in existing if isinstance(item, dict)}
+    cfg["recommended_tasks"] = existing + [item for item in unique if item["id"] not in existing_ids]
+    cfg["learned_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    cfg["markdown_sources"] = [p.name for p in _learned_markdown_sources(target)]
+    _write_project_json(target, cfg)
+    return {"learned_at": cfg["learned_at"], "markdown_sources": cfg["markdown_sources"], "recommended_tasks": cfg["recommended_tasks"]}
 
 
 def _project_task_catalog(target: Path) -> list[dict]:
@@ -561,6 +612,20 @@ def _project_target(root: str, project: str) -> Path:
     if not target.is_dir() or not (target / ".clawmate").is_dir():
         raise FileNotFoundError("Not a ClawMate project")
     return target
+
+
+@router.post("/api/clawmate/project/{root}/{project}/discover")
+async def project_discover(root: str, project: str):
+    """Refresh learned recommendations from project-local docs and scripts."""
+    try:
+        _, target, _ = safe_path(root, project)
+    except (ValueError, PermissionError):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not target.is_dir():
+        raise HTTPException(status_code=404, detail="Project not found")
+    return JSONResponse(content={"ok": True, **discover_project_tasks(target)})
 
 
 @router.post("/api/clawmate/project/{root}/{project}/tasks/{task_id}/run")

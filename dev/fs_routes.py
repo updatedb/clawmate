@@ -11,7 +11,9 @@ automatically for same-origin requests.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -40,6 +42,7 @@ async def clawmate_fs_events(
     request: Request,
     root: str = Query(""),
     dir: str = Query(""),
+    file: str = Query(""),
 ):
     """Stream directory change events as a Server-Sent Event stream.
 
@@ -51,8 +54,9 @@ async def clawmate_fs_events(
     if not _WATCHDOG_AVAILABLE:
         raise HTTPException(status_code=503, detail="fs watch unavailable (watchdog is not installed)")
 
+    requested = file or dir
     try:
-        root_path, target, safe_rel = safe_path(root, dir)
+        root_path, target, safe_rel = safe_path(root, requested)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Directory not found")
     except PermissionError:
@@ -60,6 +64,12 @@ async def clawmate_fs_events(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid path")
 
+    watched_file = None
+    if file:
+        # Subscribe to the parent exactly as the directory UI does, then filter
+        # the stream to this one root-relative path.  No new observer type.
+        watched_file = safe_rel
+        target, safe_rel = target.parent, str(Path(safe_rel).parent).replace("\\", "/")
     if not target.exists() or not target.is_dir():
         raise HTTPException(status_code=404, detail="Directory not found")
 
@@ -76,6 +86,13 @@ async def clawmate_fs_events(
                     # Heartbeat comment; keeps the TCP connection warm.
                     yield ": keepalive\n\n"
                     continue
+                if watched_file:
+                    try:
+                        event = json.loads(payload[6:].strip())
+                    except Exception:
+                        continue
+                    if event.get("type") != "refresh" and event.get("path") != watched_file:
+                        continue
                 yield payload
         except asyncio.CancelledError:
             raise

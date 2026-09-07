@@ -1833,3 +1833,6 @@
     padding-bottom: calc(8px + env(safe-area-inset-bottom));
   }
 }
+/* Session-scoped external-file change indicator; content is never auto-reloaded. */
+#btnRefreshContent.has-update { color: var(--accent, #6366f1); position: relative; }
+#btnRefreshContent.has-update::after { content: ''; position: absolute; width: 6px; height: 6px; border-radius: 50%; background: #ef4444; top: 2px; right: 2px; }
