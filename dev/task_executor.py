@@ -10,6 +10,7 @@ import logging
 import os
 import shutil
 import subprocess
+import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,6 +22,11 @@ BACKENDS = frozenset({"claude", "codex", "openclaw", "auto"})
 CLI_BACKENDS = frozenset({"claude", "codex"})
 
 
+_ACTIVE_PROCESSES: dict[str, subprocess.Popen] = {}
+_ACTIVE_LOCK = threading.Lock()
+_TERMINAL = frozenset({"succeeded", "failed", "cancelled"})
+
+
 @dataclass(frozen=True)
 class LaunchReceipt:
     task_run_id: str
@@ -30,6 +36,9 @@ class LaunchReceipt:
     status: str = "failed"
     started_at: str = ""
     failure_reason: str = ""
+    latest_feedback: str = ""
+    error: str = ""
+    result: str = ""
 
     def payload(self) -> dict:
         return asdict(self)
@@ -44,7 +53,8 @@ class TaskExecutor:
         self.cfg = cfg
 
     def _receipt(self, task_run_id, requested, actual="", external="", status="failed", reason=""):
-        return LaunchReceipt(task_run_id, requested, actual, str(external or ""), status, _now(), reason)
+        return LaunchReceipt(task_run_id, requested, actual, str(external or ""), status, _now(), reason,
+                             "", reason if status == "failed" else "", "")
 
     def _cli_binary(self, backend: str) -> str | None:
         return shutil.which(backend)
@@ -104,7 +114,9 @@ class TaskExecutor:
         try:
             proc = subprocess.Popen(args, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                     stderr=subprocess.DEVNULL, env=env, start_new_session=True)
-            return self._receipt(task_run_id, requested, backend, proc.pid, "started")
+            with _ACTIVE_LOCK:
+                _ACTIVE_PROCESSES[task_run_id] = proc
+            return self._receipt(task_run_id, requested, backend, proc.pid, "running")
         except OSError:
             return self._receipt(task_run_id, requested, backend, reason="CLI process could not start")
 
@@ -117,14 +129,82 @@ class TaskExecutor:
             data = response.json() if response.status_code == 200 else {}
             run_id = data.get("runId")
             if response.status_code == 200 and run_id:
-                return self._receipt(task_run_id, requested, "openclaw", run_id, "started")
+                return self._receipt(task_run_id, requested, "openclaw", run_id, "running")
             return self._receipt(task_run_id, requested, "openclaw", reason="Gateway did not acknowledge run")
         except (httpx.HTTPError, ValueError):
             return self._receipt(task_run_id, requested, "openclaw", reason="Gateway request failed")
 
 
-def persist_project_receipt(project_dir: Path, receipt: LaunchReceipt) -> None:
-    """Append independent project run history without touching feedback audit."""
+def _runs_path(project_dir: Path) -> Path:
+    return project_dir / ".clawmate" / "task-runs.jsonl"
+
+
+def persist_project_receipt(project_dir: Path, receipt: LaunchReceipt, *, task: dict | None = None) -> dict:
+    """Append safe project-run metadata without prompt/audit data."""
+    project_dir.joinpath(".clawmate").mkdir(parents=True, exist_ok=True)
+    record = receipt.payload()
+    if task:
+        record["task"] = {key: task[key] for key in ("id", "label", "frequency", "estimated_minutes") if key in task}
     path = project_dir / ".clawmate" / "task-runs.jsonl"
     with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(receipt.payload(), ensure_ascii=False) + "\n")
+        handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+    return record
+
+
+def _read_project_runs(project_dir: Path) -> list[dict]:
+    """Read only bounded, safe fields from project history (newest first)."""
+    path = _runs_path(project_dir)
+    if not path.exists():
+        return []
+    safe = {"task_run_id", "backend_requested", "backend_actual", "external_run_id", "status", "started_at", "latest_feedback", "failure_reason", "error", "result", "task", "ended_at", "exit_code"}
+    rows: list[dict] = []
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            value = json.loads(line)
+            if isinstance(value, dict):
+                rows.append({key: value[key] for key in safe if key in value})
+    except (OSError, ValueError, json.JSONDecodeError):
+        logger.warning("Unable to read project task history")
+    return list(reversed(rows))
+
+
+def update_project_run(project_dir: Path, task_run_id: str, **changes) -> dict | None:
+    """Append a state snapshot; JSONL preserves an audit trail and is atomic per line."""
+    rows = _read_project_runs(project_dir)
+    current = next((row for row in rows if row.get("task_run_id") == task_run_id), None)
+    if not current:
+        return None
+    allowed = {"status", "latest_feedback", "failure_reason", "error", "result", "ended_at", "exit_code"}
+    current.update({key: value for key, value in changes.items() if key in allowed and value is not None})
+    with _runs_path(project_dir).open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(current, ensure_ascii=False) + "\n")
+    return current
+
+
+def refresh_project_runs(project_dir: Path) -> list[dict]:
+    """Refresh CLI lifecycle for processes owned by this server; Gateway stays running until callback support exists."""
+    runs = _read_project_runs(project_dir)
+    refreshed: list[dict] = []
+    for run in runs:
+        if run.get("status") not in {"starting", "running", "waiting_input"} or run.get("backend_actual") not in CLI_BACKENDS:
+            refreshed.append(run)
+            continue
+        with _ACTIVE_LOCK:
+            proc = _ACTIVE_PROCESSES.get(run.get("task_run_id"))
+        if proc is None:
+            refreshed.append(run)
+            continue
+        code = proc.poll()
+        if code is None:
+            refreshed.append(run)
+            continue
+        with _ACTIVE_LOCK:
+            _ACTIVE_PROCESSES.pop(run.get("task_run_id"), None)
+        if code == 0:
+            updated = update_project_run(project_dir, run["task_run_id"], status="succeeded", result="CLI task completed", exit_code=code, ended_at=_now())
+        else:
+            updated = update_project_run(project_dir, run["task_run_id"], status="failed", error="CLI task exited with an error", failure_reason="CLI task exited with an error", exit_code=code, ended_at=_now())
+        refreshed.append(updated or run)
+    # collapse snapshots to newest state per id and preserve newest-first order
+    seen: set[str] = set()
+    return [row for row in refreshed if not (row.get("task_run_id") in seen or seen.add(row.get("task_run_id")))]

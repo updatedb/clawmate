@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import asyncio
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -121,13 +122,17 @@ def test_main_project_panel_is_switchable_and_auto_opens_once_per_session_projec
     assert 'if (_isProjectPanelOpen()) _setProjectPanelOpen(false);' in js
     assert ".project-panel { display: flex; flex-direction: column; overflow: hidden; position: fixed;" in css
     assert "_setProjectPanelOpen(!_isProjectPanelOpen())" in js
-    assert "推荐任务" in js
-    assert "recommended_tasks；格式示例" in js
+    assert "现在要处理" in js
+    assert "正在执行" in js
+    assert "CLAWLIST" in js
     assert 'data-project-review>待评审 (' not in js
     assert "project_tasks" in js
     assert "data-project-action" in js
     assert "/clawlist/complete" in js
     assert "/tasks/" in js
+    assert "/runs/" in js
+    assert "_scheduleProjectRunPolling" in js
+    assert "feedback_filter=" in js
 
 def test_panel_actions_have_explicit_sources_and_hide_zero_counts(tmp_path):
     from project_routes import _clawlist_tasks, _project_panel_actions
@@ -142,3 +147,19 @@ def test_panel_actions_have_explicit_sources_and_hide_zero_counts(tmp_path):
     assert all(action["source"] for action in actions)
     assert _clawlist_tasks(p) == [{"task": "已完成需求", "completed": True}, {"task": "待办需求", "completed": False}]
     assert _project_panel_actions(p, {"pending_review": 0, "approved": 0}, {}, now=now) == []
+
+
+def test_project_runs_api_is_bounded_and_excludes_prompt(tmp_path, monkeypatch):
+    import project_routes
+    p = _mk_project(tmp_path)
+    monkeypatch.setattr(project_routes, "_project_target", lambda root, project: p)
+    import task_executor
+    monkeypatch.setattr(task_executor, "refresh_project_runs", lambda target: [{
+        "task_run_id": "r1", "status": "running", "backend_actual": "codex",
+        "task": {"id": "docs", "label": "维护文档"}, "prompt": "must never leak",
+    }] * 12)
+    response = asyncio.run(project_routes.project_task_runs("root", "project"))
+    body = json.loads(response.body)
+    assert len(body["recent"]) == 10
+    assert body["active"][0]["task_run_id"] == "r1"
+    assert "prompt" not in json.dumps(body)

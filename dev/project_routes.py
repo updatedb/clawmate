@@ -342,6 +342,8 @@ def _project_task_catalog(target: Path) -> list[dict]:
         task["id"] = str(task.get("id") or task["label"])
         task["label"] = str(task["label"]).strip()
         task["frequency"] = int(task.get("frequency") or 0)
+        if task.get("estimated_minutes") is not None:
+            task["estimated_minutes"] = max(0, int(task["estimated_minutes"]))
         tasks.append(task)
     known = {task["id"] for task in tasks}
     defaults = [
@@ -581,15 +583,48 @@ async def project_task_run(root: str, project: str, task_id: str):
                    + "\n遵循项目 AGENTS.md；不要访问项目外路径；完成后如有事实变更，更新相关项目文档。")
         receipt = TaskExecutor(cfg).launch(task_run_id=f"PR-{uuid.uuid4().hex[:12]}", message=message,
             cwd=str(target), root_id=root, name=f"clawmate-project-{task['id']}")
-        persist_project_receipt(target, receipt)
-        if receipt.status != "started":
-            raise HTTPException(status_code=503, detail="Agent backend unavailable")
+        record = persist_project_receipt(target, receipt, task=task)
+        if receipt.status not in {"starting", "running", "waiting_input"}:
+            return JSONResponse(status_code=503, content={"ok": False, "task": {"id": task["id"], "label": task["label"]}, "status": receipt.status, "receipt": record})
     except HTTPException:
         raise
     except Exception as exc:
         logger.warning("[project.task] spawn failed: %s", exc)
         raise HTTPException(status_code=503, detail="Unable to start Agent task")
-    return JSONResponse(content={"ok": True, "task": {"id": task["id"], "label": task["label"]}, "status": "started", "receipt": receipt.payload()})
+    return JSONResponse(content={"ok": True, "task": {"id": task["id"], "label": task["label"]}, "status": receipt.status, "receipt": record})
+
+
+@router.get("/api/clawmate/project/{root}/{project}/runs")
+async def project_task_runs(root: str, project: str):
+    """Return current-project run lifecycle only; prompts and credentials never leave disk."""
+    try:
+        target = _project_target(root, project)
+    except (ValueError, PermissionError):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Project not found")
+    from task_executor import refresh_project_runs
+    safe_fields = {"task_run_id", "backend_requested", "backend_actual", "external_run_id", "status", "started_at", "latest_feedback", "failure_reason", "error", "result", "ended_at", "exit_code", "task"}
+    runs = [{key: value for key, value in run.items() if key in safe_fields} for run in refresh_project_runs(target)]
+    active = [run for run in runs if run.get("status") in {"starting", "running", "waiting_input"}]
+    return JSONResponse(content={"ok": True, "active": active, "recent": runs[:10]})
+
+
+@router.post("/api/clawmate/project/{root}/{project}/runs/{task_run_id}/retry")
+async def project_task_retry(root: str, project: str, task_run_id: str):
+    """Retry only a failed recommendation by resolving its persisted task id anew."""
+    try:
+        target = _project_target(root, project)
+    except (ValueError, PermissionError):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Project not found")
+    from task_executor import refresh_project_runs
+    failed = next((run for run in refresh_project_runs(target) if run.get("task_run_id") == task_run_id), None)
+    task_id = (failed or {}).get("task", {}).get("id")
+    if not failed or failed.get("status") != "failed" or not task_id:
+        raise HTTPException(status_code=409, detail="Only failed recommended tasks can be retried")
+    return await project_task_run(root, project, str(task_id))
 
 
 @router.post("/api/clawmate/project/{root}/{project}/clawlist/complete")
@@ -633,6 +668,10 @@ async def project_overview(root: str, project: str):
     pj = _read_project_json(target)
     project_tasks = _clawlist_tasks(target)
     actions = _project_panel_actions(target, review, pj)
+    from task_executor import refresh_project_runs
+    runs = refresh_project_runs(target)
+    active_runs = [run for run in runs if run.get("status") in {"starting", "running", "waiting_input"}]
+    failed_runs = [run for run in runs if run.get("status") == "failed"]
 
     return JSONResponse(content={
         "ok": True,
@@ -647,4 +686,6 @@ async def project_overview(root: str, project: str):
         "review": review,
         "recommendations": recs,
         "actions": actions,
+        "runs": {"active": active_runs, "recent": runs[:10]},
+        "status": {"refreshed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "running": len(active_runs), "pending": int(review.get("pending_review") or 0) + int(review.get("approved") or 0), "failed": len(failed_runs)},
     })

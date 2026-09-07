@@ -370,7 +370,7 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "", includ
             message=message, cwd=resolve_session_cwd(root_id, file), root_id=root_id, name=run_name)
         if review_task_id:
             record_execution_launch(root_id, project, review_task_id, receipt.payload())
-        if receipt.status == "started":
+        if receipt.status in {"starting", "running", "waiting_input"}:
             logger.info("[task.wake] started root=%s backend=%s external=%s", root_id,
                         receipt.backend_actual, receipt.external_run_id)
         else:
