@@ -70,60 +70,6 @@
   global.CODE_EXTS = ['py','js','ts','tsx','jsx','html','css','scss','less','sh','bash','zsh','fish','bat','ps1','sql','go','rs','rb','php','c','cpp','h','hpp','java','swift','kt','dart','scala','vue','svelte','astro','ejs','hbs','r','lua','pl','pm','hs'];
   global.ARCHIVE_EXTS = ['zip','rar','tar','gz','tgz','bz2','tbz2','xz','txz','7z'];
 
-  // ── HTML 工具 ──────────────────────────────────────────────────
-  global.escHtml = function(str) {
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  };
-
-  // ── 文件大小格式化 ────────────────────────────────────────────
-  global.formatSize = function(bytes) {
-    if (!bytes) return '-';
-    var units = ['B', 'KB', 'MB', 'GB'];
-    var i = 0, num = bytes;
-    while (num >= 1024 && i < units.length - 1) { num /= 1024; i++; }
-    return num.toFixed(1) + ' ' + units[i];
-  };
-
-  // ── Toast 通知 ─────────────────────────────────────────────────
-  global.showToast = function(msg, duration) {
-    if (!hasDocument) return;
-    var el = document.getElementById('toast');
-    if (!el) return;
-    el.textContent = msg;
-    el.style.display = 'block';
-    el.style.opacity = '1';
-    clearTimeout(el._timer);
-    el._timer = setTimeout(function() {
-      el.style.opacity = '0';
-      setTimeout(function() { el.style.display = 'none'; }, 300);
-    }, duration || 2000);
-  };
-
-  // ── 剪贴板复制 ─────────────────────────────────────────────────
-  global.copyText = async function(text, msg) {
-    try {
-      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(text);
-        global.showToast(msg || '已复制');
-        return;
-      }
-    } catch (_) {}
-    if (!hasDocument || !document.body) return;
-    var ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px';
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-    global.showToast(msg || '已复制');
-  };
-
   // Single source of truth for actions offered for a selected file. Both the
   // review page and public share page receive templates from /config (where
   // extensions are exposed as match_ext); accepting match.ext too keeps this
@@ -383,6 +329,28 @@
   };
 
   // ── 为代码块添加复制按钮 ──────────────────────────────────────
+  function copyCodeBlock(text) {
+    var writer = typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText
+      ? function(value) { return navigator.clipboard.writeText(value); }
+      : null;
+    if (global.utils && global.utils.copyText && writer) {
+      global.utils.copyText(text, writer).catch(function() { copyWithSelection(text); });
+      return;
+    }
+    copyWithSelection(text);
+  }
+
+  function copyWithSelection(text) {
+    if (!hasDocument || !document.body) return;
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+
   global.addCopyButtons = function(container) {
     if (!hasDocument || !container) return;
     container.querySelectorAll('pre').forEach(function(pre) {
@@ -393,7 +361,7 @@
       btn.addEventListener('click', function() {
         var code = pre.querySelector('code');
         var text = code ? code.textContent : pre.textContent;
-        global.copyText(text, '代码已复制');
+        copyCodeBlock(text);
         btn.textContent = '已复制';
         btn.classList.add('copied');
         setTimeout(function() { btn.textContent = '复制'; btn.classList.remove('copied'); }, 1500);

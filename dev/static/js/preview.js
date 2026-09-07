@@ -32,6 +32,39 @@
   const OFFICE_EXTS = window.OFFICE_EXTS;
   const ARCHIVE_EXTS = window.ARCHIVE_EXTS;
   const PDF_EXT = 'pdf';
+  const previewUtils = window.utils;
+  const escHtml = previewUtils.escHtml;
+  const formatSize = previewUtils.formatSize;
+
+  function showToast(msg, duration) {
+    var el = document.getElementById('toast');
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = 'block';
+    el.style.opacity = '1';
+    clearTimeout(el._timer);
+    el._timer = setTimeout(function() {
+      el.style.opacity = '0';
+      setTimeout(function() { el.style.display = 'none'; }, 300);
+    }, duration || 2000);
+  }
+
+  async function copyText(text, msg) {
+    try {
+      var copied = await previewUtils.copyText(text, function(value) {
+        return navigator.clipboard.writeText(value);
+      });
+      if (copied) { showToast(msg || '已复制'); return; }
+    } catch (_) {}
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast(msg || '已复制');
+  }
 
   // ── Auth session expiry handler ──────────────────────────────
   const _origFetch = window.fetch;
@@ -141,7 +174,7 @@
     } else {
       varsEl.textContent = '[data-theme=light] .markdown-body { color:#1f2328; background-color:#ffffff; font-family:' + _mdFontStack + '; } [data-theme=light] .markdown-body table tr { background-color:#ffffff; border-top:1px solid #d1d9e0b3; } [data-theme=light] .markdown-body table td,[data-theme=light] .markdown-body table th { border:1px solid #d1d9e0; } [data-theme=light] .markdown-body code { background:rgba(175,184,193,0.2); color:#d73a49; } [data-theme=light] .markdown-body pre { background:#f6f8fa; color:#1f2328; } [data-theme=light] .markdown-body pre code { background:transparent; color:#1f2328; } [data-theme=light] .markdown-body blockquote { color:#656d76; border-left-color:#d0d7de; }';
     }
-  }  // escHtml / formatSize / copyText / showToast: defined in preview-common.js
+  }
 
   function buildDownloadLink(path) {
     return `/api/clawmate/download?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(path)}`;
