@@ -16,11 +16,29 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 
+_LIVE_WATCHDOG = pytest.mark.skipif(
+    not fs_watch_mod._WATCHDOG_AVAILABLE,
+    reason="watchdog is optional in this test environment",
+)
+
+
 # ── fs_watch service: subscribe → filesystem event → SSE payload ────────────
 
 
 @pytest.fixture
-def watch_entry(tmp_path):
+def watch_entry(tmp_path, monkeypatch):
+    if not fs_watch_mod._WATCHDOG_AVAILABLE:
+        class _Event:
+            def __init__(self, src_path, dest_path=None):
+                self.src_path = src_path
+                self.dest_path = dest_path
+
+        for name in (
+            "DirCreatedEvent", "DirDeletedEvent", "DirModifiedEvent", "DirMovedEvent",
+            "FileCreatedEvent", "FileDeletedEvent", "FileModifiedEvent", "FileMovedEvent",
+        ):
+            monkeypatch.setattr(fs_watch_mod, name, type(name, (_Event,), {}), raising=False)
+        monkeypatch.setattr(fs_watch_mod, "_WATCHDOG_AVAILABLE", True)
     watched = tmp_path / "sub"
     watched.mkdir()
     entry = _WatchEntry("test-root", "sub", tmp_path, watched, asyncio.new_event_loop())
@@ -60,6 +78,26 @@ def test_deleted_direct_child_is_deleted(watch_entry):
     assert entry._buffer == {"sub/gone.txt": "deleted"}
 
 
+def test_created_and_modified_direct_children_are_reported(watch_entry):
+    entry, watched = watch_entry
+    created = watched / "new.txt"
+    existing = watched / "doc.txt"
+
+    entry._on_event(fs_watch_mod.FileCreatedEvent(str(created)))
+    entry._on_event(fs_watch_mod.FileModifiedEvent(str(existing)))
+
+    assert entry._buffer == {"sub/new.txt": "added", "sub/doc.txt": "modified"}
+
+
+def test_nested_child_event_is_ignored_for_non_recursive_directory_view(watch_entry):
+    entry, watched = watch_entry
+    nested = watched / "folder" / "inside.txt"
+
+    entry._on_event(fs_watch_mod.FileCreatedEvent(str(nested)))
+
+    assert entry._buffer == {}
+
+
 def test_move_out_of_watched_directory_is_deleted(watch_entry, tmp_path):
     entry, watched = watch_entry
     source = watched / "gone.txt"
@@ -82,6 +120,7 @@ def test_same_path_move_is_single_modified_event(watch_entry):
 
 
 @pytest.mark.asyncio
+@_LIVE_WATCHDOG
 async def test_watch_emits_added_event_for_new_file(tmp_path):
     root_path = tmp_path
     watched = tmp_path / "sub"
@@ -104,6 +143,7 @@ async def test_watch_emits_added_event_for_new_file(tmp_path):
 
 
 @pytest.mark.asyncio
+@_LIVE_WATCHDOG
 async def test_watch_emits_modified_event_for_existing_file(tmp_path):
     root_path = tmp_path
     watched = tmp_path / "sub"
@@ -126,6 +166,7 @@ async def test_watch_emits_modified_event_for_existing_file(tmp_path):
 
 
 @pytest.mark.asyncio
+@_LIVE_WATCHDOG
 async def test_watch_emits_deleted_event(tmp_path):
     root_path = tmp_path
     watched = tmp_path / "sub"
@@ -148,6 +189,7 @@ async def test_watch_emits_deleted_event(tmp_path):
 
 
 @pytest.mark.asyncio
+@_LIVE_WATCHDOG
 async def test_watch_coalesces_burst_into_refresh(tmp_path):
     """A burst of many distinct paths in one window coalesces into a refresh."""
     root_path = tmp_path
@@ -189,3 +231,8 @@ def test_fs_events_returns_503_when_watchdog_unavailable(fs_client, monkeypatch)
     monkeypatch.setattr(fs_routes, "_WATCHDOG_AVAILABLE", False)
     response = fs_client.get("/api/clawmate/fs/events?root=test&dir=sub")
     assert response.status_code == 503
+
+
+def test_root_file_parent_uses_same_empty_directory_key_as_root_listing():
+    assert fs_routes._parent_dir_rel("README.md") == ""
+    assert fs_routes._parent_dir_rel("sub/README.md") == "sub"

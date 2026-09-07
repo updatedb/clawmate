@@ -1493,6 +1493,7 @@ let _fsEventSource = null;
 let _fsDirKey = "";       // "rootId:dir" the current EventSource is bound to
 let _recentChanges = {};  // relPath -> "added" | "modified"
 let _fsRefreshTimer = null;
+let _fsWatchConnected = false;
 const _FS_REFRESH_DEBOUNCE = 400;
 
 function _currentFsDirKey() {
@@ -1512,13 +1513,19 @@ function _connectFsWatch() {
     + '&dir=' + encodeURIComponent(state.dir || '');
   let es;
   try {
-    es = new EventSource(url);
+    // Explicit credentials make the session-cookie contract clear. This is
+    // same-origin today, so it has the same behavior as authFetch.
+    es = new EventSource(url, { withCredentials: true });
   } catch (e) {
     updateStatus('目录监听初始化失败');
     return;
   }
   _fsEventSource = es;
   _fsDirKey = key;
+  _fsWatchConnected = false;
+  es.onopen = function () {
+    if (_currentFsDirKey() === key) _fsWatchConnected = true;
+  };
   es.onmessage = function (evt) {
     let data;
     try { data = JSON.parse(evt.data); } catch (_) { return; }
@@ -1540,7 +1547,15 @@ function _connectFsWatch() {
     }
   };
   es.onerror = function () {
-    // EventSource reconnects automatically. Keep errors quiet to avoid noise.
+    // EventSource cannot expose a 401/403 response body. Keep reconnecting,
+    // but make an unavailable/expired authenticated stream visible instead of
+    // silently leaving the directory stale.
+    if (_currentFsDirKey() === key && _fsWatchConnected) {
+      updateStatus('目录监听暂时断开，正在重连…');
+    } else if (_currentFsDirKey() === key) {
+      updateStatus('目录监听连接失败，正在重连…');
+    }
+    _fsWatchConnected = false;
     if (window.console && console.warn) console.warn('[clawmate] fs event source error, readyState=' + es.readyState);
   };
 }
@@ -1551,6 +1566,7 @@ function _disconnectFsWatch() {
     _fsEventSource = null;
   }
   _fsDirKey = "";
+  _fsWatchConnected = false;
   if (_fsRefreshTimer) { clearTimeout(_fsRefreshTimer); _fsRefreshTimer = null; }
 }
 

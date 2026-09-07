@@ -38,7 +38,7 @@
     function subscribe() {
       close();
       if (disposed || !root || !file || !global.EventSource) return;
-      source = new global.EventSource('/api/clawmate/fs/events?root=' + encodeURIComponent(root) + '&file=' + encodeURIComponent(file));
+      source = new global.EventSource('/api/clawmate/fs/events?root=' + encodeURIComponent(root) + '&file=' + encodeURIComponent(file), {withCredentials:true});
       source.onmessage = function (event) {
         var update;
         try { update = JSON.parse(event.data); } catch (_) { return; }

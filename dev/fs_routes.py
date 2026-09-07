@@ -37,6 +37,12 @@ _SSE_HEADERS = {
 _HEARTBEAT_SECONDS = 15
 
 
+def _parent_dir_rel(rel_path: str) -> str:
+    """Return a canonical root-relative parent directory (root is ``\"\"``)."""
+    parent = Path(rel_path).parent
+    return "" if str(parent) in ("", ".") else parent.as_posix()
+
+
 @router.get("/api/clawmate/fs/events")
 async def clawmate_fs_events(
     request: Request,
@@ -69,7 +75,7 @@ async def clawmate_fs_events(
         # Subscribe to the parent exactly as the directory UI does, then filter
         # the stream to this one root-relative path.  No new observer type.
         watched_file = safe_rel
-        target, safe_rel = target.parent, str(Path(safe_rel).parent).replace("\\", "/")
+        target, safe_rel = target.parent, _parent_dir_rel(safe_rel)
     if not target.exists() or not target.is_dir():
         raise HTTPException(status_code=404, detail="Directory not found")
 
