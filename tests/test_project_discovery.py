@@ -8,6 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "dev"))
 
+import project_routes
 from project_routes import discover_project_tasks
 
 
@@ -122,3 +123,68 @@ def test_discovery_sources_and_keywords_can_be_overridden(tmp_path: Path):
     assert result["markdown_sources"] == ["CUSTOM.md"]
     assert [task["label"] for task in tasks] == ["执行发布检查"]
     assert tasks[0]["execution"] == "needs_agent"
+
+
+def test_llm_discovery_validates_and_replaces_own_snapshot(tmp_path: Path, monkeypatch):
+    project = tmp_path / "3gpp"
+    (project / "scripts").mkdir(parents=True)
+    (project / "scripts" / "meeting_pipeline.py").write_text("# fixture", encoding="utf-8")
+    (project / "AGENTS.md").write_text("3gpp meeting workflow", encoding="utf-8")
+    (project / "WORKFLOW.md").write_text("更新会议资料", encoding="utf-8")
+    (project / ".clawmate").mkdir()
+    (project / ".clawmate" / "project.json").write_text(json.dumps({
+        "type": "meeting", "task_discovery": {"engine": "llm"},
+        "recommended_tasks": [{"id": "manual", "label": "手工任务", "source": "manual"}, {"id": "old", "label": "旧发现", "source": "discover"}],
+    }), encoding="utf-8")
+    monkeypatch.setattr(project_routes, "_llm_extract", lambda *args: [
+        {"label": "更新会议信息", "kind": "update", "priority": "high", "reason": "会议资料变化", "script": "meeting_pipeline.py"},
+        {"label": "分析会议文档", "kind": "analyze", "priority": "normal", "reason": "整理议题"},
+        {"label": "收集会议结论", "kind": "collect", "priority": "normal", "reason": "行动项"},
+    ])
+    tasks = discover_project_tasks(project)["recommended_tasks"]
+    assert tasks[0]["id"] == "manual"
+    learned = [item for item in tasks if item.get("source") == "discover-llm"]
+    assert [item["label"] for item in learned] == ["更新会议信息", "分析会议文档", "收集会议结论"]
+    assert learned[0]["command"] == "python scripts/meeting_pipeline.py --json"
+    assert all(item["kind"] in {"update", "analyze", "collect", "followup"} for item in learned)
+    assert all(item["id"] != "old" for item in tasks)
+
+
+def test_llm_invalid_command_or_response_falls_back_to_rules(tmp_path: Path, monkeypatch):
+    project = tmp_path / "meeting"
+    project.mkdir()
+    (project / "WORKFLOW.md").write_text("- [ ] 更新会议信息\n", encoding="utf-8")
+    (project / ".clawmate").mkdir()
+    (project / ".clawmate" / "project.json").write_text(json.dumps({"task_discovery": {"engine": "llm"}}), encoding="utf-8")
+    monkeypatch.setattr(project_routes, "_llm_extract", lambda *args: [
+        {"label": "更新会议信息", "kind": "update", "priority": "high", "command": "rm -rf /", "script": "../../evil.py"}
+    ])
+    tasks = discover_project_tasks(project)["recommended_tasks"]
+    assert any(item["source"] == "discover" for item in tasks)
+    assert all(item.get("command") != "rm -rf /" for item in tasks)
+
+
+def test_llm_timeout_falls_back_without_error(tmp_path: Path, monkeypatch):
+    project = tmp_path / "timeout"
+    project.mkdir()
+    (project / "WORKFLOW.md").write_text("- [ ] 更新状态报告\n", encoding="utf-8")
+    (project / ".clawmate").mkdir()
+    (project / ".clawmate" / "project.json").write_text(json.dumps({"task_discovery": {"engine": "llm"}}), encoding="utf-8")
+    def timeout(*_args):
+        raise TimeoutError("mock timeout")
+    monkeypatch.setattr(project_routes, "_llm_extract", timeout)
+    tasks = discover_project_tasks(project)["recommended_tasks"]
+    assert any(item["source"] == "discover" for item in tasks)
+
+
+def test_large_document_change_is_detected(tmp_path: Path):
+    project = tmp_path / "changed"
+    project.mkdir()
+    (project / "AGENTS.md").write_text("更新状态", encoding="utf-8")
+    (project / ".clawmate").mkdir()
+    (project / ".clawmate" / "project.json").write_text(json.dumps({"task_discovery": {"change_threshold": 10}}), encoding="utf-8")
+    discover_project_tasks(project)
+    cfg = project_routes._read_project_json(project)
+    assert not project_routes._should_auto_discover(project, cfg)
+    (project / "AGENTS.md").write_text("更新状态" + "新增内容" * 10, encoding="utf-8")
+    assert project_routes._should_auto_discover(project, cfg)

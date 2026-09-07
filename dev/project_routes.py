@@ -14,6 +14,7 @@ already a project and is left untouched.
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import os
 import re
@@ -29,6 +30,7 @@ from fastapi.responses import JSONResponse
 
 from service import safe_path, find_project_marker
 from config import load as load_cfg
+from project_llm import extract as _llm_extract
 
 router = APIRouter()
 logger = logging.getLogger("clawmate.project")
@@ -304,6 +306,18 @@ _TASK_WORDS = ("更新", "进展", "会议", "状态", "下一步", "维护", "�
 _SCRIPT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*\.(?:py|sh)$")
 _TASK_ACTIONS = ("更新", "维护", "处理", "检查", "提交", "整理", "跟进", "同步", "发布", "执行", "update", "maintain", "prepare", "review", "report")
 _NON_TASK_PREFIXES = ("维护者", "关联文件", "本文档", "说明", "备注", "引用", "链接", "作者", "版本", "日期")
+_LLM_KINDS = {
+    "meeting": {"update", "analyze", "collect", "followup"},
+    "product": {"feature", "bugfix", "issue", "docs", "review"},
+    "research": {"collect", "analyze", "review", "docs"},
+    "generic": {"maintain", "update", "review", "commit"},
+}
+_LLM_TEMPLATES = {
+    "meeting": "围绕会议信息更新、文档分析、结论收集和会后跟进生成任务。",
+    "product": "围绕功能建议、Bug、遗留问题、文档与评审生成任务。",
+    "research": "围绕资料收集、分析、结论评审与研究文档生成任务。",
+    "generic": "围绕维护、更新、评审和提交生成任务。",
+}
 
 
 def _read_project_json(target: Path) -> dict:
@@ -371,6 +385,69 @@ def _discovery_settings(config: dict) -> tuple[set[str], tuple[str, ...]]:
     return words, _TASK_ACTIONS + tuple(words)
 
 
+def _discovery_config(config: dict) -> dict:
+    value = config.get("task_discovery") or config.get("discovery") or {}
+    return value if isinstance(value, dict) else {}
+
+
+def _discovery_docs(target: Path, config: dict) -> dict[str, str]:
+    """Read only selected project docs and bound prompt size."""
+    options = _discovery_config(config)
+    included = options.get("include_docs", ["AGENTS", "WORKFLOW"])
+    included = {str(name).upper().removesuffix(".MD") for name in included} if isinstance(included, list) else {"AGENTS", "WORKFLOW"}
+    docs: dict[str, str] = {}
+    for path in _learned_markdown_sources(target, config):
+        if path.stem.upper() not in included:
+            continue
+        try:
+            docs[path.name] = path.read_text(encoding="utf-8")[:24000]
+        except OSError:
+            pass
+    return docs
+
+
+def _project_type(target: Path, config: dict, docs: dict[str, str]) -> str:
+    value = str(config.get("type") or "").lower()
+    if value in _LLM_KINDS:
+        return value
+    text = " ".join(docs.values()).lower() + " " + target.name.lower()
+    return "meeting" if any(word in text for word in ("meeting", "会议", "3gpp", "maastricht")) else "generic"
+
+
+def _validate_llm_tasks(raw: object, project_type: str, scripts: list[Path], target: Path) -> list[dict]:
+    """Strictly accept model metadata; commands and paths are never trusted."""
+    if isinstance(raw, dict):
+        raw = raw.get("tasks")
+    if not isinstance(raw, list):
+        return []
+    allowed = _LLM_KINDS.get(project_type, _LLM_KINDS["generic"])
+    names = {p.name: p for p in scripts}
+    out: list[dict] = []
+    for item in raw[:12]:
+        if not isinstance(item, dict):
+            return []
+        # A model may request only a script basename. Any command or path field
+        # is an injection attempt, so reject the whole response and fall back.
+        if "command" in item or "script_path" in item:
+            return []
+        label, kind = str(item.get("label", "")).strip(), str(item.get("kind", "")).lower()
+        if kind not in allowed or not re.fullmatch(r"[\u4e00-\u9fffA-Za-z0-9，、（）()\- ]{2,40}", label):
+            return []
+        priority = str(item.get("priority", "normal")).lower()
+        if priority not in {"low", "normal", "high"}:
+            return []
+        # Only an exact local script basename may bind execution.
+        script = item.get("script")
+        candidate = names.get(script) if isinstance(script, str) and _SCRIPT_NAME.fullmatch(script) else None
+        rel = candidate.relative_to(target).as_posix() if candidate else None
+        command = (("python " if candidate and candidate.suffix == ".py" else "sh ") + rel + " --json") if candidate else None
+        out.append({"id": _semantic_task_id(label), "label": label, "kind": kind, "priority": priority,
+                    "reason": str(item.get("reason", ""))[:240], "frequency": 0,
+                    "estimated_duration_seconds": 900, "source": "discover-llm",
+                    "execution": "script" if command else "needs_agent", "command": command, "script_path": rel})
+    return out
+
+
 def _clean_task_text(text: str) -> str:
     text = re.sub(r"`([^`]*)`", r"\1", text)
     text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)
@@ -419,6 +496,34 @@ def discover_project_tasks(target: Path) -> dict:
     """Semantically extract executable tasks from local Markdown task structures."""
     cfg = _read_project_json(target)
     scripts, found = _safe_project_scripts(target), []
+    options = _discovery_config(cfg)
+    engine = str(options.get("engine", "llm")).lower()
+    # LLM discovery is optional at runtime.  No adapter, timeout, malformed
+    # output, or an empty task list all deliberately use the established rules.
+    if engine == "llm":
+        docs = _discovery_docs(target, cfg)
+        project_type = _project_type(target, cfg, docs)
+        templates = options.get("prompts") if isinstance(options.get("prompts"), dict) else {}
+        template = str(templates.get(project_type) or _LLM_TEMPLATES[project_type])
+        try:
+            backend = load_cfg().agent.backend
+        except Exception:
+            backend = "auto"
+        try:
+            raw_llm_tasks = _llm_extract(backend, project_type, docs, template, float(options.get("timeout_seconds", 8)))
+        except Exception:
+            logger.warning("[project] LLM task discovery unavailable; falling back to rules")
+            raw_llm_tasks = None
+        llm_tasks = _validate_llm_tasks(raw_llm_tasks, project_type, scripts, target)
+        if llm_tasks:
+            existing = cfg.get("recommended_tasks") if isinstance(cfg.get("recommended_tasks"), list) else []
+            preserved = [item for item in existing if not isinstance(item, dict) or item.get("source") not in {"discover", "discover-llm"}]
+            cfg["recommended_tasks"] = preserved + llm_tasks
+            cfg["learned_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            cfg["markdown_sources"] = list(docs)
+            cfg["task_discovery_state"] = _discovery_fingerprint(target, cfg)
+            _write_project_json(target, cfg)
+            return {"learned_at": cfg["learned_at"], "markdown_sources": cfg["markdown_sources"], "recommended_tasks": cfg["recommended_tasks"]}
     keywords, actions = _discovery_settings(cfg)
     for doc in _learned_markdown_sources(target, cfg):
         try:
@@ -453,12 +558,66 @@ def discover_project_tasks(target: Path) -> dict:
     # append-only history.  Replacing its own records removes legacy
     # ``learned-*`` noise on the first subsequent discovery while preserving
     # user-authored and other integration-provided recommendations intact.
-    preserved = [item for item in existing if not isinstance(item, dict) or item.get("source") != "discover"]
+    preserved = [item for item in existing if not isinstance(item, dict) or item.get("source") not in {"discover", "discover-llm"}]
     cfg["recommended_tasks"] = preserved + unique
     cfg["learned_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     cfg["markdown_sources"] = [p.name for p in _learned_markdown_sources(target, cfg)]
+    cfg["task_discovery_state"] = _discovery_fingerprint(target, cfg)
     _write_project_json(target, cfg)
     return {"learned_at": cfg["learned_at"], "markdown_sources": cfg["markdown_sources"], "recommended_tasks": cfg["recommended_tasks"]}
+
+
+def _discovery_fingerprint(target: Path, config: dict) -> dict:
+    """A bounded, deterministic content state used to avoid repeated refreshes."""
+    rows = []
+    for path in _learned_markdown_sources(target, config):
+        try:
+            content = path.read_bytes()
+            rows.append((path.name, len(content), int(path.stat().st_mtime_ns), hashlib.sha256(content).hexdigest()))
+        except OSError:
+            continue
+    return {"docs": rows, "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+
+
+def _should_auto_discover(target: Path, config: dict) -> bool:
+    """Detect substantial doc changes without polling; small edits wait for TTL."""
+    options = _discovery_config(config)
+    state = config.get("task_discovery_state") if isinstance(config.get("task_discovery_state"), dict) else {}
+    old = {row[0]: row for row in state.get("docs", []) if isinstance(row, (list, tuple)) and len(row) >= 4}
+    current = _discovery_fingerprint(target, config)["docs"]
+    if not old:
+        return bool(current)
+    threshold = max(1, int(options.get("change_threshold", 800)))
+    changed = sum(abs(row[1] - old.get(row[0], ("", 0, 0, 0))[1]) for row in current)
+    changed += sum(1 for row in current if row[0] not in old) * threshold
+    # Same-size meaningful rewrites are considered a change once mtime differs.
+    changed += sum(threshold for row in current if row[0] in old and row[2] != old[row[0]][2] and row[3] != old[row[0]][3])
+    return changed >= threshold
+
+
+_auto_discovery_lock = threading.Lock()
+_auto_discovery_active: set[str] = set()
+
+
+def _schedule_auto_discover(target: Path) -> None:
+    """One background refresh per project when overview observes a large change."""
+    cfg = _read_project_json(target)
+    if not _should_auto_discover(target, cfg):
+        return
+    key = str(target.resolve())
+    with _auto_discovery_lock:
+        if key in _auto_discovery_active:
+            return
+        _auto_discovery_active.add(key)
+    def run() -> None:
+        try:
+            discover_project_tasks(target)
+        except Exception:
+            logger.exception("[project] automatic task discovery failed: %s", target)
+        finally:
+            with _auto_discovery_lock:
+                _auto_discovery_active.discard(key)
+    threading.Thread(target=run, name="project-task-discovery", daemon=True).start()
 
 
 def _project_task_catalog(target: Path) -> list[dict]:
@@ -809,6 +968,9 @@ async def project_overview(root: str, project: str):
         raise HTTPException(status_code=404, detail="Not a ClawMate project")
 
     review = _count_review(target)
+    # Deliberately fire-and-forget: overview remains read-only from its caller's
+    # perspective and never waits for an LLM or document scan.
+    _schedule_auto_discover(target)
     recs = _recommendations_for(target)
     pj = _read_project_json(target)
     project_tasks = _clawlist_tasks(target)
