@@ -97,11 +97,11 @@ flowchart LR
 
 Feedback 任务智能路由：PTY 活跃时直接注入终端执行，否则通过 webhook 唤醒。
 
-### 4. 文件预览与反馈 & AI 修复
+### 4. 文件预览
 
-点击即渲染，选中即反馈，AI 自动修改：
+点击即渲染：
 
-预览页选中代码段即可通过浮动按钮直接将文件路径发送到 Agent 终端，文件管理页也支持一键"添加到会话"。
+文件管理页支持一键“添加到会话”，将文件路径发送到 Agent 终端。
 
 **全格式预览**：
 
@@ -116,15 +116,72 @@ Feedback 任务智能路由：PTY 活跃时直接注入终端执行，否则通�
 | 图片 | ‹ › 导航切换 + 缩略图大纲 |
 | 音视频 | 内嵌播放器 + 字幕同步 |
 
+### 5. 反馈评审与 AI 修复
+
+预览页选中代码段即可通过浮动按钮创建反馈，AI 自动修改：
+
+**反馈卡流转（按页面与过滤器）**：
+
+```mermaid
+flowchart LR
+    subgraph Share[分享页：外部评审人]
+        direction TB
+        ShareDraft[待提交过滤器<br/>卡片可编辑：定位、建议、操作<br/>删除：仅移除本地草稿]
+        ShareSubmitted[已提交过滤器<br/>卡片只读：仅限该分享链接和文件<br/>删除：移除已提交反馈]
+        ShareDraft -->|提交评审| ShareSubmitted
+    end
+
+    subgraph Review[项目内预览页：评审面板]
+        direction TB
+        ReviewDraft[待提交过滤器<br/>卡片可编辑<br/>删除：移除本地草稿]
+        Pending[待评审过滤器<br/>卡片可编辑：核对定位、建议、操作]
+        Approved[已评审过滤器<br/>卡片只读：等待执行]
+        Rejected[已拒绝过滤器<br/>拒绝卡／已取消卡，均只读]
+        Running[已执行过滤器：执行中<br/>卡片只读，不能取消]
+        Done[已执行过滤器：已执行<br/>卡片只读，可查看结果]
+        Failed[已执行过滤器：执行失败<br/>卡片只读，项目成员人工处理]
+
+        ReviewDraft -->|提交评审| Pending
+        Pending -->|评审通过| Approved
+        Pending -->|评审拒绝| Rejected
+        Pending -->|取消：状态标记为 deleted| Rejected
+        Approved -->|执行反馈：创建任务并唤醒 Agent| Running
+        Approved -->|取消：状态标记为 deleted| Rejected
+        Running -->|执行成功| Done
+        Running -->|执行失败| Failed
+    end
+
+    ShareSubmitted -->|同一张已提交卡进入项目评审队列| Pending
+    Rejected -->|删除：物理移除卡片| Removed([不再显示])
+    Running -->|删除：物理移除卡片| Removed
+    Done -->|删除：物理移除卡片| Removed
+    Failed -->|删除：物理移除卡片| Removed
+    ShareSubmitted -->|删除：移除反馈| Removed
+
+    classDef share fill:#eef6ff,stroke:#4f82b8,color:#163b63
+    classDef draft fill:#edf8f0,stroke:#4f9b68,color:#174b2c
+    classDef active fill:#fff7df,stroke:#c99228,color:#5c4100
+    classDef readonly fill:#f4f4f5,stroke:#71717a,color:#27272a
+    classDef removed fill:#fdf2f2,stroke:#b84f4f,color:#631616
+    class ShareDraft,ShareSubmitted share
+    class ReviewDraft draft
+    class Pending,Approved,Running active
+    class Rejected,Done,Failed readonly
+    class Removed removed
+```
+
+> 分享链接只绑定一个文件。外部评审人只能维护其“待提交／已提交”卡片；同一张提交后的卡会出现在项目成员的“待评审”过滤器中，但分享页不提供评审或执行操作。
+
 **反馈闭环**：
 
 ```
-选中文本 → 浮层弹出 → 填写备注 → 提交 → pending → in_progress → done/failed
+待提交 → 提交评审 → 待评审 → 评审通过 → 已评审 → 执行反馈 → 执行中 → 已执行／执行失败
+                              └────────────→ 评审拒绝／取消 → 已拒绝／已取消
 ```
 
 连续选中多个位置统一提交，反馈 timeline 全程可追溯，修改完成后可重新评审进入下一轮迭代。
 
-### 5. 按文件类型 AI 扩展
+### 6. 按文件类型 AI 扩展
 
 不同文件类型触发不同的 AI 能力：
 
@@ -137,7 +194,7 @@ Feedback 任务智能路由：PTY 活跃时直接注入终端执行，否则通�
 
 扩展通过 `task_templates` 体系注册，新文件类型可插拔接入。
 
-### 6. Skill 驱动关联
+### 7. Skill 驱动关联
 
 通过 Skill 体系联动项目、链接与 feedback：
 

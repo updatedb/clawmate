@@ -347,6 +347,7 @@ Task: schema 补全 action/scope/task_id 字段、note 优先保留不因模板�
 - 目录转项目：POST /api/clawmate/project/convert（f7bab2d）
 - 项目面板 + 概览聚合 + 推荐任务（P2/P3）：overview 聚合 CLAWLIST 待办、评审计数、推荐任务（c55e6eb）
 - 可运行推荐任务 + 抽屉化项目面板：新增 /tasks/{task_id}/run、/clawlist/complete 与版本提交联动 project.json（7d3d1a6）
+- source-labelled 项目面板动作 + 零计数隐藏：新增 _clawlist_tasks、_changed_project_file_count、_project_panel_actions；overview 返回 project_tasks 与 actions（信号按钮带来源标注、count=0 隐藏）；前端按评审/实施双模式渲染（2487a2e）
 ### 终端与 Agent
 - OpenClaw 网关代理（49fd9a8）与会话作用域（cwd）隔离、per-panel isolation（e01b33d）
 ### 预览
