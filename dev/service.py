@@ -491,6 +491,7 @@ def delete_file(root_id: str, rel_path: str) -> None:
         raise FileNotFoundError("File not found")
     if target.is_dir():
         raise ValueError("Cannot delete directory")
+    _release_deleted_file_feedback(root_id, root_path, safe_rel)
     target.unlink()
 
 
@@ -504,7 +505,23 @@ def delete_dir(root_id: str, rel_path: str) -> None:
         raise FileNotFoundError("Directory not found")
     if not target.is_dir():
         raise ValueError("Not a directory")
+    # Resolve feedback while markers still exist, then remove the directory.
+    # .clawmate is runtime metadata, never a user feedback target.
+    for child in target.rglob("*"):
+        if child.is_file() and ".clawmate" not in child.relative_to(root_path).parts:
+            _release_deleted_file_feedback(root_id, root_path, str(child.relative_to(root_path)).replace("\\", "/"))
     shutil.rmtree(target)
+
+
+def _release_deleted_file_feedback(root_id: str, root_path: Path, safe_rel: str) -> None:
+    """Remove releasable feedback for one root-relative file in its project."""
+    project = find_project_marker(root_path, str(Path(safe_rel).parent).replace("\\", "/"))
+    if not project:
+        return
+    # Store owns feedback locking and atomic persistence; import lazily to
+    # avoid a service/store import cycle at process start.
+    from store import remove_unexecuted_items_for_deleted_file
+    remove_unexecuted_items_for_deleted_file(root_id, project, safe_rel)
 
 
 def create_dir(root_id: str, rel_dir: str, name: str) -> Path:

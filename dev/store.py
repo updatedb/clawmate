@@ -412,6 +412,42 @@ def delete_item(root_id: str, project: str, item_id: str) -> None:
                     datetime.now(CST).isoformat(timespec="seconds"), root_id, project, item_id)
 
 
+def remove_unexecuted_items_for_deleted_file(root_id: str, project: str, file_path: str) -> list[str]:
+    """Release non-executed feedback targeting a file which is being deleted.
+
+    Executed items stay in ``feedback.json`` so later review can still explain
+    historical work; every released item is recorded in the append-only audit.
+    """
+    normalized = _normalize_feedback_path(file_path)
+    project_prefix = _normalize_feedback_path(project)
+    # Preview stores root-relative paths, while older/share flows can store a
+    # project-relative path. Accept only these exact forms, never a basename.
+    accepted = {normalized}
+    if project_prefix and normalized.startswith(project_prefix + "/"):
+        accepted.add(normalized[len(project_prefix) + 1:])
+
+    with _feedback_write_lock:
+        path = _get_feedback_path(root_id, project)
+        if not path.exists():
+            return []
+        data = _read_feedback(path)
+        items = list(data.get("items", []))
+        matched = [item for item in items if _normalize_feedback_path(item.get("file", "")) in accepted]
+        if not matched:
+            return []
+        removed = [item for item in matched if item.get("status") not in ("executed", "done")]
+        removed_ids = [str(item.get("id", "")) for item in removed if item.get("id")]
+        matched_ids = [str(item.get("id", "")) for item in matched if item.get("id")]
+        kept = [item for item in items if item not in removed]
+        _append_audit(data, "file_deleted", item_ids=matched_ids,
+                      detail={"file": normalized})
+        _atomic_write(path, root_id, project, kept, data.get("last_id", 0), data)
+        logger.info("[store.file_deleted] %s root=%s project=%s file=%s removed=%d",
+                    datetime.now(CST).isoformat(timespec="seconds"), root_id,
+                    project, normalized, len(removed_ids))
+        return removed_ids
+
+
 def _update_item_locked(
     root_id: str,
     project: str,

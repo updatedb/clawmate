@@ -50,7 +50,17 @@
     async function refresh() { var c = context(); if (!c || !c.root || !c.project || !body) return; try { var res = await request(endpoint('/overview')); var next = await res.json(); var nextStatic = staticSignature(next), nextRuns = runsSignature(next); overview = next; if (nextStatic !== staticKey || !body.querySelector('[data-project-runs]')) { staticKey = nextStatic; render(); } else if (nextRuns !== runsKey) renderRuns(); runsKey = nextRuns; schedulePolling(); } catch (_) { body.textContent = '加载项目概况失败'; } }
     return {refresh:refresh, render:render, renderRuns:renderRuns, stop:stopPolling};
   }
-  global.ClawMateProjectPanel = {mount:mount, runCard:runCard};
+  function previewUpdateMatches(update, file) {
+    return Boolean(update) && (update.type === 'refresh' || update.path === file);
+  }
+  function setPreviewUpdateIndicator(button, hasUpdate) {
+    if (!button) return;
+    button.classList.toggle('has-update', Boolean(hasUpdate));
+    var label = hasUpdate ? '有更新，点击刷新' : '刷新大纲和内容';
+    button.title = label;
+    button.setAttribute('aria-label', label);
+  }
+  global.ClawMateProjectPanel = {mount:mount, runCard:runCard, previewUpdateMatches:previewUpdateMatches, setPreviewUpdateIndicator:setPreviewUpdateIndicator};
 
   // Preview has no directory state object.  Its URL is the context, while the
   // feedback action deliberately stays in this document and uses its existing
@@ -82,11 +92,21 @@
     }
     button.dataset.sharedPanelBound = '1';
     button.addEventListener('click', function (event) { event.preventDefault(); event.stopImmediatePropagation(); if (panel) close(); else open(); }, true);
-    // Keep the preview's lightweight single-file update signal intact.
+    // Clear the update affordance on the existing refresh action. This does
+    // not replace preview.js's content reload handler.
+    var refreshButton = document.getElementById('btnRefreshContent');
+    if (refreshButton && !refreshButton.dataset.updateClearBound) {
+      refreshButton.dataset.updateClearBound = '1';
+      refreshButton.addEventListener('click', function () {
+        setPreviewUpdateIndicator(refreshButton, false);
+      });
+    }
+    // URLSearchParams decodes the query once; fs_routes compares against the
+    // same root-relative safe path before emitting, so this remains exact.
     if (global.EventSource) {
       var changed = false;
       var source = new EventSource('/api/clawmate/fs/events?root=' + encodeURIComponent(root) + '&file=' + encodeURIComponent(file));
-      source.onmessage = function (event) { try { var update = JSON.parse(event.data); } catch (_) { return; } if (update.type === 'refresh' || update.path === file) { changed = true; var refresh = document.getElementById('btnRefreshContent'); if (refresh) { refresh.classList.add('has-update'); refresh.title = '有更新，点击刷新'; refresh.setAttribute('aria-label', '有更新，点击刷新'); } } };
+      source.onmessage = function (event) { try { var update = JSON.parse(event.data); } catch (_) { return; } if (previewUpdateMatches(update, file)) { changed = true; setPreviewUpdateIndicator(document.getElementById('btnRefreshContent'), true); } };
       global.addEventListener('pagehide', function () { source.close(); }, {once:true});
     }
     global.addEventListener('pagehide', close, {once:true});
