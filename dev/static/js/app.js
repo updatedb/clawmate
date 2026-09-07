@@ -4,15 +4,7 @@ if (window.hljs) {
   hljs.configure({ ignoreUnescapedHTML: true });
 }
 
-// HTML escape utility
-function escHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
+const utils = window.utils;
 
 // ── Auth error handler ─────────────────────────────────────────────
 function handleAuthError(res) {
@@ -143,27 +135,6 @@ function updateSortPills() {
   });
 }
 
-// ===== Utilities =====
-function formatSize(bytes) {
-  if (bytes === 0 || bytes == null) return "-";
-  const units = ["B", "KB", "MB", "GB"];
-  let i = 0;
-  let num = bytes;
-  while (num >= 1024 && i < units.length - 1) {
-    num /= 1024;
-    i++;
-  }
-  return `${num.toFixed(1)} ${units[i]}`;
-}
-
-function formatMtime(ts) {
-  if (!ts) return "-";
-  var dt = new Date(ts * 1000);
-  if (isNaN(dt.getTime())) return "-";
-  var mo = dt.getMonth() + 1, d = dt.getDate(), h = dt.getHours(), mi = dt.getMinutes();
-  return mo + '/' + d + ' ' + String(h).padStart(2,'0') + ':' + String(mi).padStart(2,'0');
-}
-
 function getFileTypeLabel(entry) {
   if (entry.category && entry.category !== "other") return entry.category;
   const name = entry.name || "";
@@ -172,10 +143,11 @@ function getFileTypeLabel(entry) {
   return entry.category || "文件";
 }
 
-function setStatus(text) {
+function updateStatus(text) {
+  const formatted = utils.formatStatusText(text);
   var st = document.getElementById('statusText');
-  if (st) st.textContent = text || "";
-  else els.status.textContent = text || "";
+  if (st) st.textContent = formatted;
+  else els.status.textContent = formatted;
 }
 
 function sanitizeDir(raw) {
@@ -313,20 +285,20 @@ async function deleteEntry(entry) {
   );
   if (!confirmed) return;
 
-  setStatus("删除中...");
+  updateStatus("删除中...");
   try {
     const url = isDir ? buildDirDeleteUrl(entry.relPath) : buildDeleteUrl(entry.relPath);
     const res = await authFetch(url, { method: "DELETE" });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: "删除失败" }));
-      setStatus(err.error || "删除失败");
+      updateStatus(err.error || "删除失败");
       return;
     }
-    setStatus("删除成功");
+    updateStatus("删除成功");
     invalidateDirCache();
     await loadDir(state.dir);
   } catch (e) {
-    setStatus("删除失败: " + e.message);
+    updateStatus("删除失败: " + e.message);
   }
 }
 
@@ -380,13 +352,15 @@ function toAbsoluteUrl(url) {
   return new URL(url, window.location.origin).href;
 }
 
-async function copyText(text, successMessage) {
+async function copyToClipboard(text, successMessage) {
   // Try modern Clipboard API first
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(text);
-      setStatus(successMessage || "已复制到剪贴板");
-      return true;
+      const copied = await utils.copyText(text, (value) => navigator.clipboard.writeText(value));
+      if (copied) {
+        updateStatus(successMessage || "已复制到剪贴板");
+        return true;
+      }
     }
   } catch (_) {}
 
@@ -403,13 +377,13 @@ async function copyText(text, successMessage) {
     const ok = document.execCommand("copy");
     document.body.removeChild(ta);
     if (ok) {
-      setStatus(successMessage || "已复制到剪贴板");
+      updateStatus(successMessage || "已复制到剪贴板");
       return true;
     }
   } catch (_) {}
 
   window.prompt("复制失败，请手动复制：", text);
-  setStatus("已提供复制内容");
+  updateStatus("已提供复制内容");
   return false;
 }
 
@@ -424,14 +398,14 @@ function triggerDownload(url) {
 }
 
 function triggerBatchDownload(url, folderName) {
-  setStatus(`正在打包下载 ${folderName || state.dir || "当前目录"} ...`);
+  updateStatus(`正在打包下载 ${folderName || state.dir || "当前目录"} ...`);
   const link = document.createElement("a");
   link.href = url;
   link.download = `${(folderName || "download").replace(/[/\\:*?"<>|]/g, "-")}.zip`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  setTimeout(() => setStatus(""), 3000);
+  setTimeout(() => updateStatus(""), 3000);
 }
 
 // ===== TOC Generation =====
@@ -485,7 +459,7 @@ function addCopyButtons(div) {
     btn.addEventListener('click', async () => {
       const code = pre.querySelector('code');
       const text = code ? code.textContent : pre.textContent;
-      const ok = await copyText(text, '代码已复制');
+      const ok = await copyToClipboard(text, '代码已复制');
       if (ok) {
         btn.textContent = '已复制';
         btn.classList.add('copied');
@@ -782,7 +756,7 @@ function createMarkdownRenderer(entryRelPath, mermaidStore) {
       const fullPath = dir ? dir + '/' + href : href;
       href = `/api/clawmate/preview?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(fullPath)}`;
     }
-    return `<img src="${href}" alt="${escHtml(text)}"${title ? ` title="${escHtml(title)}"` : ''}>`;
+    return `<img src="${href}" alt="${utils.escHtml(text)}"${title ? ` title="${utils.escHtml(title)}"` : ''}>`;
   };
 
   // Handle fenced code blocks (mermaid + syntax highlighting)
@@ -815,7 +789,7 @@ function createMarkdownRenderer(entryRelPath, mermaidStore) {
     }
 
     // No highlighting — escape HTML safely
-    return `<pre><code class="${className}">${escHtml(raw)}</code></pre>`;
+    return `<pre><code class="${className}">${utils.escHtml(raw)}</code></pre>`;
   };
 
   return md;
@@ -865,7 +839,7 @@ function renderBreadcrumbs() {
     e.preventDefault();
     var root = getRootById(state.rootId);
     var absPath = root ? (root.dir + (state.dir ? '/' + state.dir : '')) : (state.dir || '');
-    copyText(absPath || state.rootLabel || '');
+    copyToClipboard(absPath || state.rootLabel || '');
     copyBtn.classList.add('copied');
     setTimeout(function () { copyBtn.classList.remove('copied'); }, 1200);
   });
@@ -1067,7 +1041,7 @@ async function batchDelete() {
   );
   if (!confirmed) return;
 
-  setStatus(`正在删除 ${paths.length} 个文件...`);
+  updateStatus(`正在删除 ${paths.length} 个文件...`);
   let deleted = 0;
   let failed = 0;
   const errors = [];
@@ -1094,9 +1068,9 @@ async function batchDelete() {
   }
 
   if (errors.length > 0) {
-    setStatus(`删除完成: ${deleted} 成功, ${failed} 失败。${errors.slice(0, 3).join("; ")}`);
+    updateStatus(`删除完成: ${deleted} 成功, ${failed} 失败。${errors.slice(0, 3).join("; ")}`);
   } else {
-    setStatus(`成功删除 ${deleted} 个文件`);
+    updateStatus(`成功删除 ${deleted} 个文件`);
   }
 
   // Reload current directory
@@ -1105,13 +1079,13 @@ async function batchDelete() {
 
 function batchMoveSelected() {
   const paths = Array.from(state.selectedPaths);
-  if (paths.length === 0) { setStatus("请先选择要移动的文件"); return; }
-  if (!state.rootId) { setStatus("请先选择根目录"); return; }
+  if (paths.length === 0) { updateStatus("请先选择要移动的文件"); return; }
+  if (!state.rootId) { updateStatus("请先选择根目录"); return; }
 
   openDirPicker(`选择目标目录 — 移动 ${paths.length} 个文件`);
   dirPickerCallback = async function (destDir) {
     if (!destDir) return;
-    setStatus(`正在移动 ${paths.length} 个文件...`);
+    updateStatus(`正在移动 ${paths.length} 个文件...`);
     let moved = 0;
     let failed = 0;
     const errors = [];
@@ -1138,9 +1112,9 @@ function batchMoveSelected() {
     }
 
     if (errors.length > 0) {
-      setStatus(`移动完成: ${moved} 成功, ${failed} 失败。${errors.slice(0, 3).join("; ")}`);
+      updateStatus(`移动完成: ${moved} 成功, ${failed} 失败。${errors.slice(0, 3).join("; ")}`);
     } else {
-      setStatus(`成功移动 ${moved} 个文件`);
+      updateStatus(`成功移动 ${moved} 个文件`);
     }
 
     updateBatchBar();
@@ -1151,19 +1125,19 @@ function batchMoveSelected() {
 function batchDownloadSelected() {
   const paths = Array.from(state.selectedPaths);
   if (paths.length === 0) return;
-  if (!state.rootId) { setStatus("请先选择根目录"); return; }
+  if (!state.rootId) { updateStatus("请先选择根目录"); return; }
 
   // Try batch-download API with comma-separated paths
   const pathsParam = paths.map(encodeURIComponent).join(",");
   const url = `/api/clawmate/batch-download?root=${encodeURIComponent(state.rootId)}&paths=${pathsParam}`;
-  setStatus(`正在打包下载 ${paths.length} 个文件...`);
+  updateStatus(`正在打包下载 ${paths.length} 个文件...`);
   const link = document.createElement("a");
   link.href = url;
   link.download = `batch-${paths.length}-files.zip`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  setTimeout(() => setStatus(""), 3000);
+  setTimeout(() => updateStatus(""), 3000);
 }
 
 function batchClear() {
@@ -1173,7 +1147,7 @@ function batchClear() {
 
 async function extractEntryToDir(entry, destDir) {
   if (!entry || entry.is_dir || entry.category !== "archive") return;
-  setStatus('正在解压 "' + entry.name + '"...');
+  updateStatus('正在解压 "' + entry.name + '"...');
   try {
     var res = await authFetch('/api/clawmate/extract', {
       method: 'POST',
@@ -1183,13 +1157,13 @@ async function extractEntryToDir(entry, destDir) {
     var data = await res.json().catch(function () { return {}; });
     if (res.ok && data.ok) {
       invalidateDirCache();
-      setStatus('解压完成，共 ' + (data.count || 0) + ' 个文件');
+      updateStatus('解压完成，共 ' + (data.count || 0) + ' 个文件');
       await loadDir(destDir || '');
     } else {
-      setStatus('解压失败: ' + (data.detail || data.error || '未知错误'));
+      updateStatus('解压失败: ' + (data.detail || data.error || '未知错误'));
     }
   } catch (e) {
-    setStatus('解压失败: ' + e.message);
+    updateStatus('解压失败: ' + e.message);
   }
 }
 
@@ -1303,7 +1277,7 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
 
       const meta = document.createElement("div");
       meta.className = "meta";
-      meta.innerHTML = `<span>${formatMtime(entry.mtime)}</span><span>${entry.is_dir ? "-" : formatSize(entry.size)}</span>`;
+      meta.innerHTML = `<span>${utils.formatMtime(entry.mtime)}</span><span>${entry.is_dir ? "-" : utils.formatSize(entry.size)}</span>`;
 
       card.appendChild(thumb);
       card.appendChild(title);
@@ -1369,7 +1343,7 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
           dropdown.appendChild(item);
         }
         addItem('copy', '复制文件名', function () {
-          copyText(entry.name, "已复制文件名");
+          copyToClipboard(entry.name, "已复制文件名");
         });
         // 添加到会话 (agent panel open 时显示)
         if (window.Agent && window.Agent.isOpen && window.Agent.isOpen()) {
@@ -1409,7 +1383,7 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
               .then(function (r) { return r.json(); })
               .then(function (data) {
                 if (data.ok) {
-                  setStatus('已转换为项目：' + (data.project || pname));
+                  updateStatus('已转换为项目：' + (data.project || pname));
                   invalidateDirCache();
                   if (state.rootId) loadDir(state.dir); else loadConfig();
                 } else { alert('转换失败：' + (data.detail || data.error || '未知错误')); }
@@ -1467,7 +1441,7 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
                     var idx = state.activeShares[root].indexOf(entry.relPath);
                     if (idx !== -1) state.activeShares[root].splice(idx, 1);
                   }
-                  setStatus("已取消分享");
+                  updateStatus("已取消分享");
                   if (typeof showToast === "function") showToast("已取消分享");
                 }
               } catch (_) {}
@@ -1488,7 +1462,7 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
                 });
                 if (res.ok) {
                   var data = await res.json();
-                  await copyText(data.url, '✅ 分享链接已复制到剪贴板');
+                  await copyToClipboard(data.url, '✅ 分享链接已复制到剪贴板');
                   // Update card visual
                   document.querySelectorAll('[data-path="' + CSS.escape(entry.relPath) + '"]').forEach(function (el) {
                     el.classList.add("shared");
@@ -1498,7 +1472,7 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
                   if (state.activeShares[state.rootId].indexOf(entry.relPath) === -1) {
                     state.activeShares[state.rootId].push(entry.relPath);
                   }
-                  setStatus("已生成分享链接");
+                  updateStatus("已生成分享链接");
                   if (typeof showToast === "function") showToast("🔗 已复制分享链接 · " + expiresDays + "天有效", 3000);
                 }
               } catch (_) {}
@@ -1585,7 +1559,7 @@ function renderList(markdownEntries, folderEntries, otherEntries) {
       copyBtn.title = "复制文件名";
       copyBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        copyText(entry.name, "已复制文件名");
+        copyToClipboard(entry.name, "已复制文件名");
         copyBtn.classList.add("copied");
         setTimeout(function () { copyBtn.classList.remove("copied"); }, 1200);
       });
@@ -1625,7 +1599,7 @@ function renderList(markdownEntries, folderEntries, otherEntries) {
       const type = document.createElement("span");
       type.textContent = entry.is_dir ? "目录" : entry.category;
       const size = document.createElement("span");
-      size.textContent = entry.is_dir ? "-" : formatSize(entry.size);
+      size.textContent = entry.is_dir ? "-" : utils.formatSize(entry.size);
       const mtime = document.createElement("span");
       const dt = new Date(entry.mtime * 1000);
       var mo = dt.getMonth() + 1, d = dt.getDate(), h = dt.getHours(), mi = dt.getMinutes();
@@ -1704,11 +1678,11 @@ function render() {
     if (emptyStateEl) emptyStateEl.classList.remove('hidden');
   }
   if (!state.searchResults && baseCount === 0) {
-    setStatus("目录为空");
+    updateStatus("目录为空");
   } else {
     const searchPrefix = state.searchResults ? `搜索 "${state.searchQuery}"，综合匹配 ${baseCount} 项` : `${baseCount} 项`;
     const filterInfo = filteredCount !== baseCount ? `，显示 ${filteredCount} 项` : "";
-    setStatus(`${searchPrefix}${filterInfo} · 第 ${state.page}/${totalPages} 页`);
+    updateStatus(`${searchPrefix}${filterInfo} · 第 ${state.page}/${totalPages} 页`);
   }
 }
 
@@ -1789,10 +1763,10 @@ function setupDragDrop() {
   });
 
   mainEl.addEventListener('drop', async e => {
-    if (!state.rootId) { setStatus('请先选择根目录'); return; }
+    if (!state.rootId) { updateStatus('请先选择根目录'); return; }
     const files = Array.from(e.dataTransfer.files);
     if (!files.length) return;
-    setStatus(`正在上传 ${files.length} 个文件...`);
+    updateStatus(`正在上传 ${files.length} 个文件...`);
     let uploaded = 0, failed = 0;
     for (const file of files) {
       try {
@@ -1808,7 +1782,7 @@ function setupDragDrop() {
         failed++;
       }
     }
-    setStatus(`上传完成: ${uploaded} 成功${failed ? ', ' + failed + ' 失败' : ''}`);
+    updateStatus(`上传完成: ${uploaded} 成功${failed ? ', ' + failed + ' 失败' : ''}`);
     if (uploaded > 0) loadDir(state.dir);
   });
 
@@ -1817,7 +1791,7 @@ function setupDragDrop() {
     // Ignore paste in input/textarea/contenteditable
     var tag = e.target && e.target.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
-    if (!state.rootId) { setStatus('请先选择根目录'); return; }
+    if (!state.rootId) { updateStatus('请先选择根目录'); return; }
     var files = e.clipboardData.files;
     var items = e.clipboardData.items;
     var imageFile = null;
@@ -1859,7 +1833,7 @@ function setupDragDrop() {
     }
     var filename = 'paste-' + ts + '.' + ext;
 
-    setStatus('正在上传剪切板图片...');
+    updateStatus('正在上传剪切板图片...');
     try {
       var formData = new FormData();
       formData.append('file', imageFile, filename);
@@ -1869,13 +1843,13 @@ function setupDragDrop() {
       );
       if (res.ok) {
         var data = await res.json();
-        setStatus('剪切板图片已上传: ' + (data.filename || filename));
+        updateStatus('剪切板图片已上传: ' + (data.filename || filename));
         loadDir(state.dir);
       } else {
-        setStatus('上传失败: ' + res.status);
+        updateStatus('上传失败: ' + res.status);
       }
     } catch (err) {
-      setStatus('上传出错: ' + (err.message || err));
+      updateStatus('上传出错: ' + (err.message || err));
     }
   });
 }
@@ -1927,7 +1901,7 @@ function _connectFsWatch() {
   try {
     es = new EventSource(url);
   } catch (e) {
-    setStatus('目录监听初始化失败');
+    updateStatus('目录监听初始化失败');
     return;
   }
   _fsEventSource = es;
@@ -1989,7 +1963,7 @@ function _scheduleFsRefresh() {
 
 async function loadDir(dir) {
   if (!state.rootId) {
-    setStatus("请先选择根目录");
+    updateStatus("请先选择根目录");
     return;
   }
   // Mobile: auto-close directory panel after navigation
@@ -2003,7 +1977,7 @@ async function loadDir(dir) {
   }
   const safeDir = sanitizeDir(dir);
   if (dir && safeDir !== dir) {
-    setStatus("非法目录，已回退到根目录");
+    updateStatus("非法目录，已回退到根目录");
   }
   state.searchResults = null;
   state.searchQuery = "";
@@ -2030,16 +2004,16 @@ async function loadDir(dir) {
     return;
   }
 
-  setStatus("加载中...");
+  updateStatus("加载中...");
   // Show skeleton while loading
   if (state.view === 'grid') { showGallerySkeleton(); } else { showListSkeleton(); }  const res = await authFetch(`/api/clawmate/list?root=${encodeURIComponent(state.rootId)}&dir=${encodeURIComponent(safeDir)}&limit=${state.pageLimit}`);
   if (!res.ok) {
     if (res.status === 404) {
-      setStatus("目录不存在");
+      updateStatus("目录不存在");
     } else if (res.status === 403) {
-      setStatus("没有权限访问该目录");
+      updateStatus("没有权限访问该目录");
     } else {
-      setStatus("无法加载目录");
+      updateStatus("无法加载目录");
     }
     return;
   }
@@ -2120,19 +2094,19 @@ function teardownInfiniteScroll() {
 
 async function fileSearch() {
   if (!state.rootId) {
-    setStatus("请先选择根目录");
+    updateStatus("请先选择根目录");
     return;
   }
   const q = els.searchInput.value.trim();
   if (!q) return;
-  setStatus("搜索中...");
+  updateStatus("搜索中...");
   _hideContentResults();
   const recursive = "true";
   const res = await authFetch(
     `/api/clawmate/search?root=${encodeURIComponent(state.rootId)}&q=${encodeURIComponent(q)}&dir=${encodeURIComponent(state.dir)}&recursive=${recursive}`
   );
   if (!res.ok) {
-    setStatus("搜索失败");
+    updateStatus("搜索失败");
     return;
   }
   const data = await res.json();
@@ -2266,7 +2240,7 @@ els.searchInput.addEventListener("keydown", (e) => {
 if (els.rootSelect) {
   els.rootSelect.addEventListener("change", (e) => {
     if (!selectRoot(e.target.value)) {
-      setStatus("根目录无效");
+      updateStatus("根目录无效");
       return;
     }
     // Reset state.dir before _initAgent to avoid stale dir from old root
@@ -2457,7 +2431,7 @@ let _projectRunPollTimer = null;
 let _projectPanelStaticSignature = '';
 let _projectRunsSignature = '';
 
-function _esc(v) { return escHtml(String(v || '')); }
+function _esc(v) { return utils.escHtml(String(v || '')); }
 function _projectPanelSessionKey() {
   return 'clawmate.projectPanel.seen:' + encodeURIComponent(state.rootId) + ':' + encodeURIComponent(state.project);
 }
@@ -2547,13 +2521,13 @@ function renderProjectRuns() {
   target.querySelectorAll('[data-project-retry]').forEach(btn => btn.onclick = async () => {
     btn.disabled = true;
     const res = await authFetch('/api/clawmate/project/' + encodeURIComponent(state.rootId) + '/' + encodeURIComponent(state.project) + '/runs/' + encodeURIComponent(btn.getAttribute('data-project-retry')) + '/retry', {method:'POST'});
-    if (res.ok) await refreshProjectPanel(); else { btn.disabled = false; setStatus('项目任务未能重试'); }
+    if (res.ok) await refreshProjectPanel(); else { btn.disabled = false; updateStatus('项目任务未能重试'); }
   });
 }
 function _openProjectFeedback(filter) {
   const file = encodeURIComponent(state.project + '/PROJECT_NOTE.md');
   const popup = window.open('/clawmate/preview.html?root=' + encodeURIComponent(state.rootId) + '&file=' + file, '_blank');
-  if (!popup) { setStatus('浏览器阻止了反馈预览窗口'); return; }
+  if (!popup) { updateStatus('浏览器阻止了反馈预览窗口'); return; }
   // Preview owns its feedback UI; open it and select its existing filter without
   // passing feedback text between windows. Both documents are same-origin.
   popup.addEventListener('load', () => {
@@ -2596,20 +2570,20 @@ function renderProjectPanel() {
     else if (action === 'commit_version' || action === 'maintain_project_docs' || action === 'update_meeting_agenda' || action === 'update_meeting_conclusion') {
       const task = recs.find(item => item.id === action || ((action === 'update_meeting_agenda' || action === 'update_meeting_conclusion') && item.id === 'update_meeting_info'));
       if (task) projectPanelBody.querySelector('[data-project-task="' + CSS.escape(task.id) + '"]')?.click();
-      else setStatus('该行动需要先在 project.json 的 recommended_tasks 中配置对应任务');
+      else updateStatus('该行动需要先在 project.json 的 recommended_tasks 中配置对应任务');
     }
   });
   projectPanelBody.querySelectorAll('[data-clawlist-task]').forEach(btn => btn.onclick = async () => {
     const task = btn.getAttribute('data-clawlist-task'); btn.disabled = true;
     const res = await authFetch('/api/clawmate/project/' + encodeURIComponent(state.rootId) + '/' + encodeURIComponent(state.project) + '/clawlist/complete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({task})});
-    if (res.ok) refreshProjectPanel(); else { btn.disabled = false; setStatus('无法完成该 CLAWLIST 任务'); }
+    if (res.ok) refreshProjectPanel(); else { btn.disabled = false; updateStatus('无法完成该 CLAWLIST 任务'); }
   });
   renderProjectRuns();
   projectPanelBody.querySelectorAll('[data-project-task]').forEach(btn => btn.onclick = async () => {
     btn.disabled = true;
     const id = btn.getAttribute('data-project-task');
     const res = await authFetch('/api/clawmate/project/' + encodeURIComponent(state.rootId) + '/' + encodeURIComponent(state.project) + '/tasks/' + encodeURIComponent(id) + '/run', {method:'POST'});
-    if (res.ok) { setStatus('项目 Agent 任务已启动'); await refreshProjectPanel(); } else { setStatus('项目 Agent 任务未启动'); btn.disabled = false; }
+    if (res.ok) { updateStatus('项目 Agent 任务已启动'); await refreshProjectPanel(); } else { updateStatus('项目 Agent 任务未启动'); btn.disabled = false; }
   });
 }
 // Rendering and lifecycle updates live in the shared renderer.  Keep the
@@ -2620,7 +2594,7 @@ const _sharedProjectPanel = window.ClawMateProjectPanel && window.ClawMateProjec
   getContext: () => ({root: state.rootId, project: state.project}),
   fetch: authFetch,
   isOpen: _isProjectPanelOpen,
-  setStatus,
+   setStatus: updateStatus,
   openFeedback: _openProjectFeedback,
 });
 // Register existing controllers only; this does not duplicate either surface's
@@ -2652,7 +2626,7 @@ btnLogoutMain && btnLogoutMain.addEventListener("click", async function() {
 
 // Create menu dropdown
 function toggleCreateMenu() {
-  if (!state.rootId) { setStatus("请先选择根目录"); return; }
+  if (!state.rootId) { updateStatus("请先选择根目录"); return; }
 
   var btn = els.btnCreate;
   // Toggle: close if already open
@@ -2694,16 +2668,16 @@ function toggleCreateMenu() {
         body: JSON.stringify({ root: state.rootId, dir: state.dir, name: name }),
       });
       if (res.ok) {
-        setStatus("目录已创建: " + name);
+        updateStatus("目录已创建: " + name);
         invalidateDirCache();
         loadDir(state.dir);
       } else {
         var detail = "";
         try { var err = await res.json(); detail = err.detail || ""; } catch (_) {}
-        setStatus("创建失败: " + (detail || res.status));
+        updateStatus("创建失败: " + (detail || res.status));
       }
     } catch (e) {
-      setStatus("创建出错: " + (e.message || e));
+      updateStatus("创建出错: " + (e.message || e));
     }
   });
 
@@ -2727,16 +2701,16 @@ function toggleCreateMenu() {
         { method: 'POST', body: formData }
       );
       if (res.ok) {
-        setStatus("Markdown 已创建: " + name);
+        updateStatus("Markdown 已创建: " + name);
         invalidateDirCache();
         loadDir(state.dir);
       } else {
         var detail = "";
         try { var err = await res.json(); detail = err.detail || ""; } catch (_) {}
-        setStatus("创建失败: " + (detail || res.status));
+        updateStatus("创建失败: " + (detail || res.status));
       }
     } catch (e) {
-      setStatus("创建出错: " + (e.message || e));
+      updateStatus("创建出错: " + (e.message || e));
     }
   });
 
@@ -2756,12 +2730,12 @@ els.createFileInput && els.createFileInput.addEventListener("change", async func
   const file = this.files && this.files[0];
   if (!file) return;
   if (!state.rootId) {
-    setStatus("请先选择根目录");
+    updateStatus("请先选择根目录");
     this.value = "";
     return;
   }
 
-  setStatus("正在上传 " + file.name + "...");
+  updateStatus("正在上传 " + file.name + "...");
   try {
     const formData = new FormData();
     formData.append('file', file);
@@ -2772,16 +2746,16 @@ els.createFileInput && els.createFileInput.addEventListener("change", async func
     if (res.ok) {
       let data = {};
       try { data = await res.json(); } catch (_) {}
-      setStatus("文件已上传: " + (data.filename || file.name));
+      updateStatus("文件已上传: " + (data.filename || file.name));
       invalidateDirCache();
       loadDir(state.dir);
     } else {
       let detail = "";
       try { const err = await res.json(); detail = err.detail || ""; } catch (_) {}
-      setStatus("上传失败: " + (detail || res.status));
+      updateStatus("上传失败: " + (detail || res.status));
     }
   } catch (e) {
-    setStatus("上传出错: " + (e.message || e));
+    updateStatus("上传出错: " + (e.message || e));
   } finally {
     this.value = "";
   }
@@ -2797,7 +2771,7 @@ els.batchClearBtn && els.batchClearBtn.addEventListener("click", batchClear);
 
 // Batch download button (pagination bar)
 els.batchDownloadBtn && els.batchDownloadBtn.addEventListener("click", () => {
-  if (!state.rootId) { setStatus("请先选择根目录"); return; }
+  if (!state.rootId) { updateStatus("请先选择根目录"); return; }
   triggerBatchDownload(buildBatchDownloadLink(state.dir), state.dir || "root");
 });
 
@@ -2816,7 +2790,7 @@ function showFeedbackDetailModal(item, statusIcon) {
   hdr.className = 'fb-detail-header';
   hdr.innerHTML = '<div class="fb-detail-header-left">' +
     '<span>' + (statusIcon || '📋') + '</span>' +
-    '<span>' + escHtml(item.id || '') + '</span>' +
+    '<span>' + utils.escHtml(item.id || '') + '</span>' +
     '</div>';
   var closeBtn = document.createElement('button');
   closeBtn.className = 'fb-detail-close';
@@ -2832,7 +2806,7 @@ function showFeedbackDetailModal(item, statusIcon) {
     var row = document.createElement('div');
     row.className = 'fb-detail-row';
     row.innerHTML = '<div class="fb-detail-label">' + label + '</div>' +
-      '<div class="fb-detail-value' + (cls ? ' ' + cls : '') + '">' + escHtml(value) + '</div>';
+      '<div class="fb-detail-value' + (cls ? ' ' + cls : '') + '">' + utils.escHtml(value) + '</div>';
     body.appendChild(row);
   }
 
@@ -3059,16 +3033,16 @@ function createFeedbackPanel(container, context) {
         const isDoneFailed = item.status === 'done' || item.status === 'failed';
         const resultText = (item.result || item.processing_result || '');
         const resultHtml = (isDoneFailed && resultText)
-          ? '<div class="sfb-result">📋 ' + escHtml(resultText.length > 100 ? resultText.substring(0, 100) + '…' : resultText) + '</div>'
+          ? '<div class="sfb-result">📋 ' + utils.escHtml(resultText.length > 100 ? resultText.substring(0, 100) + '…' : resultText) + '</div>'
           : '';
         card.innerHTML = `
           <div class="sfb-header">
             <span class="sfb-status">${statusIcon}</span>
-            <span class="sfb-id">${escHtml(item.id || '')}</span>
-            <span class="sfb-time">${escHtml(item.updated || '').substring(5, 16)}</span>
+            <span class="sfb-id">${utils.escHtml(item.id || '')}</span>
+            <span class="sfb-time">${utils.escHtml(item.updated || '').substring(5, 16)}</span>
           </div>
-          <div class="sfb-note">${escHtml(item.user_note || item.note || '（无备注）')}</div>
-          <div class="sfb-location">${escHtml(item.location || item.file || '')}</div>
+          <div class="sfb-note">${utils.escHtml(item.user_note || item.note || '（无备注）')}</div>
+          <div class="sfb-location">${utils.escHtml(item.location || item.file || '')}</div>
           ${resultHtml}
         `;
         // Click to show detail modal
@@ -3083,7 +3057,7 @@ function createFeedbackPanel(container, context) {
 
   async function _sendCardItem(item) {
     if (!item.note || !item.note.trim()) {
-      _showToast('请填写备注');
+        utils.showToast('请填写备注', updateStatus, () => els.status && els.status.textContent);
       return;
     }
     try {
@@ -3113,21 +3087,14 @@ function createFeedbackPanel(container, context) {
         if (items.length === 0) {
           api.hide();
         }
-        _showToast('✅ 已发送');
+        utils.showToast('✅ 已发送', updateStatus, () => els.status && els.status.textContent);
       } else {
         const err = await res.json().catch(() => ({}));
-        _showToast('❌ ' + (err.detail || '发送失败'));
+        utils.showToast('❌ ' + (err.detail || '发送失败'), updateStatus, () => els.status && els.status.textContent);
       }
     } catch (e) {
-      _showToast('❌ 网络错误');
+      utils.showToast('❌ 网络错误', updateStatus, () => els.status && els.status.textContent);
     }
-  }
-
-  function _showToast(msg) {
-    setStatus(msg);
-    setTimeout(() => {
-      if (els.status && els.status.textContent === msg) setStatus('');
-    }, 2000);
   }
 
   function _updateToggleBadge() {
@@ -3283,16 +3250,16 @@ async function init() {
 
   if (!rootParam) {
     if (hasDirParam) {
-      setStatus("请在 URL 中指定 root，例如 ?root=<id>");
+      updateStatus("请在 URL 中指定 root，例如 ?root=<id>");
       return;
     }
     const fallbackRootId = state.defaultRootId || (state.roots[0] && state.roots[0].id) || "";
     if (!fallbackRootId) {
-      setStatus("没有可用根目录");
+      updateStatus("没有可用根目录");
       return;
     }
     if (!selectRoot(fallbackRootId)) {
-      setStatus("root 不在白名单内");
+      updateStatus("root 不在白名单内");
       return;
     }
     updateUrl();
@@ -3302,7 +3269,7 @@ async function init() {
   }
 
   if (!selectRoot(rootParam)) {
-    setStatus("root 不在白名单内");
+    updateStatus("root 不在白名单内");
     return;
   }
   await loadDir(dirParam || "");
@@ -3492,7 +3459,7 @@ async function openDirPicker(title) {
       tree.appendChild(note);
     }
   } catch (e) {
-    tree.innerHTML = '<div style="text-align:center;color:var(--danger);padding:20px;">加载目录失败: ' + escHtml(e.message) + '</div>';
+    tree.innerHTML = '<div style="text-align:center;color:var(--danger);padding:20px;">加载目录失败: ' + utils.escHtml(e.message) + '</div>';
   }
 }
 
@@ -3506,7 +3473,7 @@ function _renderDirPickerTreeLazy(container, rootName) {
   html += '<div class="dir-picker-item" data-dir="" style="display:flex;align-items:center;padding:4px 8px;cursor:pointer;border-radius:4px;margin:1px 0;' + (dirPickerSelectedDir === '' ? 'background:var(--accent);color:#fff;' : '') + '">';
   html += '<span style="width:16px;flex-shrink:0;text-align:center;margin-right:2px;user-select:none;">▼</span>';
   html += folderSvg;
-  html += '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(rootLabel) + ' (根目录)</span>';
+  html += '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + utils.escHtml(rootLabel) + ' (根目录)</span>';
   html += '</div>';
 
   // Children of root
@@ -3586,7 +3553,7 @@ function _renderDirChildrenHtml(parentPath, depth) {
     var isLoading = !!dirPickerLoading[fullPath];
     var isSelected = dirPickerSelectedDir === fullPath;
 
-    html += '<div class="dir-picker-item" data-dir="' + escHtml(fullPath) + '" style="display:flex;align-items:center;padding:4px 8px 4px ' + (8 + depth * 16) + 'px;cursor:pointer;border-radius:4px;margin:1px 0;' + (isSelected ? 'background:var(--accent);color:#fff;' : '') + '">';
+    html += '<div class="dir-picker-item" data-dir="' + utils.escHtml(fullPath) + '" style="display:flex;align-items:center;padding:4px 8px 4px ' + (8 + depth * 16) + 'px;cursor:pointer;border-radius:4px;margin:1px 0;' + (isSelected ? 'background:var(--accent);color:#fff;' : '') + '">';
 
     // Arrow / loading indicator / empty spacer
     if (isLoading) {
@@ -3599,7 +3566,7 @@ function _renderDirChildrenHtml(parentPath, depth) {
     }
 
     html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;flex-shrink:0;"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>';
-    html += '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(child.name) + '</span>';
+    html += '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + utils.escHtml(child.name) + '</span>';
     html += '</div>';
 
     // Children (recursive — only render if expanded and has children)
@@ -3637,17 +3604,17 @@ document.addEventListener('click', function (e) {
 // ===== Unified Search — 文件名 + ripgrep 内容搜索 =====
 
 async function contentSearch() {
-  if (!state.rootId) { setStatus('请先选择根目录'); return; }
+  if (!state.rootId) { updateStatus('请先选择根目录'); return; }
   var q = els.searchInput.value.trim();
   if (!q) return;
 
-  setStatus('搜索中...');
+  updateStatus('搜索中...');
 
   var contentRes;
   try {
     contentRes = await authFetch('/api/clawmate/search/content?q=' + encodeURIComponent(q) + '&root=' + encodeURIComponent(state.rootId) + '&dir=' + encodeURIComponent(state.dir));
   } catch (_) {
-    setStatus('内容搜索失败');
+    updateStatus('内容搜索失败');
     return;
   }
 
@@ -3657,9 +3624,9 @@ async function contentSearch() {
   } else {
     try {
       var errBody = await contentRes.json();
-      setStatus(errBody.detail || '内容搜索失败 (' + contentRes.status + ')');
+      updateStatus(errBody.detail || '内容搜索失败 (' + contentRes.status + ')');
     } catch (_) {
-      setStatus('内容搜索失败 (' + contentRes.status + ')');
+      updateStatus('内容搜索失败 (' + contentRes.status + ')');
     }
     return;
   }
@@ -3871,9 +3838,9 @@ function _buildFileSection(r, fileIndex, lowerQ, query) {
     var idx2 = text.toLowerCase().indexOf(lowerQ);
     if (idx2 >= 0) {
       matchText.innerHTML =
-        escHtml(text.substring(0, idx2)) +
-        '<span class="cmd-match-hl">' + escHtml(text.substring(idx2, idx2 + query.length)) + '</span>' +
-        escHtml(text.substring(idx2 + query.length));
+        utils.escHtml(text.substring(0, idx2)) +
+        '<span class="cmd-match-hl">' + utils.escHtml(text.substring(idx2, idx2 + query.length)) + '</span>' +
+        utils.escHtml(text.substring(idx2 + query.length));
     } else {
       matchText.textContent = text;
     }
