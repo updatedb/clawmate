@@ -43,7 +43,8 @@ class OpenClawConfig:
 
 @dataclass
 class AgentConfig:
-    backend: str = "claude"          # "claude" | "openclaw" | "codex"
+    backend: str = "claude"          # "claude" | "openclaw" | "codex" | "auto"
+    ui_backend: str = "claude"       # interactive panel: concrete backend only
     openclaw_ws_url: str = ""        # wss://ai.updatedb.online:18443
     openclaw_token: str = ""         # gateway auth token
     openclaw_device_secret: str = "" # HMAC secret for device pairing
@@ -163,6 +164,18 @@ class AppConfig:
 
 _CONFIG_PATH: Path | None = None
 _CONFIG_CACHE: tuple[float, AppConfig] | None = None
+
+
+def _agent_backend(value: str) -> str:
+    value = value.strip().lower()
+    if value not in {"claude", "codex", "openclaw", "auto"}:
+        raise ValueError("agent.backend must be claude, codex, openclaw, or auto")
+    return value
+
+
+def _ui_agent_backend(value: str, fallback: str) -> str:
+    value = value.strip().lower() or _agent_backend(fallback)
+    return value if value in {"claude", "codex", "openclaw"} else "openclaw"
 _CONFIG_TTL: int = 60
 
 
@@ -268,7 +281,8 @@ def _parse_config(raw: dict) -> AppConfig:
 
         ),
         agent=AgentConfig(
-            backend=env_agent_backend or str(ag.get("backend", "claude")),
+            backend=_agent_backend(env_agent_backend or str(ag.get("backend", "claude"))),
+            ui_backend=_ui_agent_backend(str(ag.get("ui_backend", "")), env_agent_backend or str(ag.get("backend", "claude"))),
             openclaw_ws_url=str(ag.get("openclaw_ws_url", "")),
             openclaw_token=str(ag.get("openclaw_token", "")),
             openclaw_device_secret=str(ag.get("openclaw_device_secret", "")),

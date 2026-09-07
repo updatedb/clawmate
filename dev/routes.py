@@ -66,7 +66,7 @@ async def public_config(request: Request):
         "roots": [{"id": r.id, "label": r.label, "dir": r.dir, "agent_id": r.agent_id} for r in cfg.roots],
         "defaultRootId": cfg.default_root_id,
         "agent": {
-            "backend": cfg.agent.backend,
+            "backend": cfg.agent.ui_backend,
             "ws_url": _agent_ws_url(request),
             # OpenClaw uses Gateway protocol v4, rather than the PTY protocol
             # used by Claude and Codex.  Keep its authenticated connection

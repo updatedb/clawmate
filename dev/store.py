@@ -616,6 +616,21 @@ def mark_execution_started(root_id: str, project: str, task_id: str) -> dict:
         return dict(task)
 
 
+def record_execution_launch(root_id: str, project: str, task_id: str, receipt: dict) -> dict:
+    """Store executor identity on the existing review task without changing audit history."""
+    with _feedback_write_lock:
+        path = _get_feedback_path(root_id, project)
+        data = _read_feedback(path)
+        task = next((t for t in data.get("tasks", []) if t.get("id") == task_id), None)
+        if not task:
+            raise LookupError(f"Task {task_id} not found")
+        task["launch"] = dict(receipt)
+        _append_audit(data, "execution_launch", item_ids=task.get("item_ids", []), task_id=task_id,
+                      detail={"backend": receipt.get("backend_actual", ""), "external_run_id": receipt.get("external_run_id", "")})
+        _atomic_write(path, root_id, project, data["items"], data.get("last_id", 0), data)
+        return dict(task)
+
+
 def record_execution_result(root_id: str, project: str, task_id: str, *, success: bool,
                             summary: str, diff: str = "", artifacts: list | None = None,
                             checks: list | None = None, outcomes: list | None = None) -> dict:

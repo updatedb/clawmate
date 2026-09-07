@@ -214,9 +214,7 @@ async def task_run(request: Request):
 
 # ── Webhook wake 工具 ───────────────────────────────────────────
 
-import threading
 import time as time_module
-import httpx
 
 from config import load as _config
 from store import list_items, scan_all
@@ -249,14 +247,6 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "", includ
     可传 project + file 缩小 agent 查询范围。
     """
     cfg = _config()
-    oc = cfg.openclaw
-    hook_token = oc.hook_token
-    gateway_url = oc.gateway_url
-
-    if not hook_token:
-        logger.warning("[feedback] wake skipped: openclaw.hook_token not configured in config.json")
-        return
-
     # 解析 agent_id
     agent_id = cfg.root_agent(root_id)
 
@@ -370,67 +360,25 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "", includ
         message = f"ClawMate 反馈通知：{scope} 目前无待处理 feedback。"
     run_name = f"clawmate-fb-{root_id}"
 
-    # ── 优先后台子进程执行 ──
+    # All unattended work goes through the common executor.  It returns only
+    # after a CLI Popen or a Gateway runId acknowledgement.
     if items:
-        try:
-            from agent_routes import spawn_background_agent, resolve_session_cwd
+        from agent_routes import resolve_session_cwd
+        from task_executor import TaskExecutor
+        from store import record_execution_launch
+        receipt = TaskExecutor(cfg).launch(task_run_id=review_task_id or f"feedback-{root_id}",
+            message=message, cwd=resolve_session_cwd(root_id, file), root_id=root_id, name=run_name)
+        if review_task_id:
+            record_execution_launch(root_id, project, review_task_id, receipt.payload())
+        if receipt.status == "started":
+            logger.info("[task.wake] started root=%s backend=%s external=%s", root_id,
+                        receipt.backend_actual, receipt.external_run_id)
+        else:
+            logger.warning("[task.wake] launch failed root=%s reason=%s", root_id, receipt.failure_reason)
+        return
 
-            cwd = resolve_session_cwd(root_id, file)
-            ok = spawn_background_agent(
-                message=message,
-                cwd=cwd,
-                backend="claude",
-                extra_env=cfg.agent.env,
-            )
-            if ok:
-                _ts_end = datetime.now(CST).isoformat(timespec="seconds")
-                logger.info(
-                    "[task.wake] %s background agent spawned root_id=%s agent_id=%s items=%d",
-                    _ts_end, root_id, agent_id, len(items),
-                )
-                return
-        except ImportError:
-            pass  # agent_routes not available (e.g. test context)
-        except Exception as e:
-            logger.warning("[task.wake] background agent spawn failed, falling back to webhook: %s", e)
-
-    # ── 回退：通过 webhook 发送给 OpenClaw gateway ──
-    def _do_wake_sync():
-        try:
-            with httpx.Client(timeout=10.0) as client:
-                r = client.post(
-                    f"{gateway_url}/hooks/agent",
-                    headers={"Authorization": f"Bearer {hook_token}"},
-                    json={
-                        "message": message,
-                        "agentId": agent_id,
-                        "name": run_name,
-                        "wakeMode": "now",
-                        "deliver": False,
-                    },
-                )
-            if r.status_code == 200:
-                data = r.json()
-                _ts_end = datetime.now(CST).isoformat(timespec="seconds")
-                logger.info(
-                    "[task.wake] %s success root_id=%s agent_id=%s run_name=%s run_id=%s",
-                    _ts_end, root_id, agent_id, run_name, data.get("runId", ""),
-                )
-            else:
-                _ts_end = datetime.now(CST).isoformat(timespec="seconds")
-                logger.warning(
-                    "[task.wake] %s failed root_id=%s agent_id=%s HTTP=%d body=%s",
-                    _ts_end, root_id, agent_id, r.status_code, r.text[:200],
-                )
-        except Exception as e:
-            _ts_end = datetime.now(CST).isoformat(timespec="seconds")
-            logger.warning(
-                "[task.wake] %s error root_id=%s agent_id=%s: %s",
-                _ts_end, root_id, agent_id, e,
-            )
-
-    threading.Thread(target=_do_wake_sync, daemon=True).start()
-
+    # Nothing to execute.  Do not wake an executor merely for an empty queue.
+    return
 
 # ── 路由 ─────────────────────────────────────────────────────────────
 

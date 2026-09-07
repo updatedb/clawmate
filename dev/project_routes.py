@@ -20,6 +20,7 @@ import re
 import subprocess
 import tempfile
 import threading
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -575,20 +576,20 @@ async def project_task_run(root: str, project: str, task_id: str):
     prompt = str(task.get("prompt") or f"在项目内完成推荐任务：{task['label']}。")
     try:
         cfg = load_cfg()
-        from agent_routes import spawn_background_agent
-        backend = cfg.agent.backend
-        if backend not in ("claude", "codex"):
-            raise HTTPException(status_code=409, detail="Configured Agent backend does not support background project tasks")
+        from task_executor import TaskExecutor, persist_project_receipt
         message = ("ClawMate 项目推荐任务（仅限当前项目目录）：\n" + prompt
                    + "\n遵循项目 AGENTS.md；不要访问项目外路径；完成后如有事实变更，更新相关项目文档。")
-        if not spawn_background_agent(message, str(target), backend=backend, extra_env=cfg.agent.env):
+        receipt = TaskExecutor(cfg).launch(task_run_id=f"PR-{uuid.uuid4().hex[:12]}", message=message,
+            cwd=str(target), root_id=root, name=f"clawmate-project-{task['id']}")
+        persist_project_receipt(target, receipt)
+        if receipt.status != "started":
             raise HTTPException(status_code=503, detail="Agent backend unavailable")
     except HTTPException:
         raise
     except Exception as exc:
         logger.warning("[project.task] spawn failed: %s", exc)
         raise HTTPException(status_code=503, detail="Unable to start Agent task")
-    return JSONResponse(content={"ok": True, "task": {"id": task["id"], "label": task["label"]}, "status": "started"})
+    return JSONResponse(content={"ok": True, "task": {"id": task["id"], "label": task["label"]}, "status": "started", "receipt": receipt.payload()})
 
 
 @router.post("/api/clawmate/project/{root}/{project}/clawlist/complete")
