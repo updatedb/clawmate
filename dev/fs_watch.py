@@ -112,6 +112,11 @@ class _WatchEntry:
         self._observer: Optional[Observer] = None
         self._started = False
         self._buffer: Dict[str, str] = {}  # rel_path -> kind
+        # A moved event arrives after its destination has been installed, so
+        # ``Path(dest).exists()`` alone cannot distinguish a rename-overwrite
+        # from a rename to a new name. Keep the direct children known before
+        # each event instead.
+        self._direct_children: Optional[Set[str]] = self._snapshot_direct_children()
         self._flush_timer: Optional[threading.Timer] = None
         self._lock = threading.Lock()
 
@@ -153,21 +158,52 @@ class _WatchEntry:
         changed = False
         with self._lock:
             if isinstance(event, (FileMovedEvent, DirMovedEvent)):
-                # A move out of the watched dir is a delete; a move in is an add.
+                # A move out of the watched dir is a delete. For a destination
+                # inside it, a pre-existing direct child means an editor-style
+                # rename-overwrite and is therefore a modification, not an add.
                 src = getattr(event, "src_path", None)
                 dest = getattr(event, "dest_path", None)
-                if src and self._is_direct_child(src):
-                    self._buffer_set(self._rel(src), _DELETED)
+                src_is_child = bool(src and self._is_direct_child(src))
+                dest_is_child = bool(dest and self._is_direct_child(dest))
+                if src_is_child and dest_is_child and self._same_path(src, dest):
+                    # Some backends report an in-place replacement as a move
+                    # with equal paths. It must not become deleted + added.
+                    rel = self._rel(dest)
+                    self._buffer_set(rel, _MODIFIED)
+                    self._remember_direct_child(rel)
                     changed = True
-                if dest and self._is_direct_child(dest):
-                    self._buffer_set(self._rel(dest), _ADDED)
-                    changed = True
+                else:
+                    if src_is_child:
+                        src_rel = self._rel(src)
+                        # Atomic-save temporary files are often created in the
+                        # watched directory immediately before this move. They
+                        # were not present in the pre-event snapshot, so their
+                        # disappearance is an implementation detail rather
+                        # than a user-visible deletion.
+                        if not dest_is_child or self._was_direct_child(src_rel):
+                            self._buffer_set(src_rel, _DELETED)
+                            changed = True
+                        self._forget_direct_child(src_rel)
+                    if dest_is_child:
+                        dest_rel = self._rel(dest)
+                        # If the pre-event snapshot is unavailable, prefer
+                        # modified: editor atomic saves commonly overwrite an
+                        # existing target, and calling that an add is misleading.
+                        kind = _MODIFIED if self._was_direct_child(dest_rel) else _ADDED
+                        self._buffer_set(dest_rel, kind)
+                        self._remember_direct_child(dest_rel)
+                        changed = True
             else:
                 kind = _normalize_kind(event)
                 if kind:
                     path = getattr(event, "src_path", None) or getattr(event, "path", None)
                     if path and self._is_direct_child(path):
-                        self._buffer_set(self._rel(path), kind)
+                        rel = self._rel(path)
+                        self._buffer_set(rel, kind)
+                        if kind == _DELETED:
+                            self._forget_direct_child(rel)
+                        else:
+                            self._remember_direct_child(rel)
                         changed = True
             if changed:
                 self._arm_flush()
@@ -186,6 +222,30 @@ class _WatchEntry:
         except ValueError:
             return Path(path).name
         return rel.replace(os.sep, "/")
+
+    def _snapshot_direct_children(self) -> Optional[Set[str]]:
+        """Return the initial direct-child set, or None when it cannot be read."""
+        try:
+            return {self._rel(str(path)) for path in self.dir_abs.iterdir()}
+        except OSError:
+            logger.debug("cannot snapshot watched directory %s", self.dir_abs, exc_info=True)
+            return None
+
+    def _was_direct_child(self, rel_path: str) -> bool:
+        """Whether the destination existed before this event; unknown -> modified."""
+        return self._direct_children is None or rel_path in self._direct_children
+
+    def _remember_direct_child(self, rel_path: str) -> None:
+        if self._direct_children is not None:
+            self._direct_children.add(rel_path)
+
+    def _forget_direct_child(self, rel_path: str) -> None:
+        if self._direct_children is not None:
+            self._direct_children.discard(rel_path)
+
+    @staticmethod
+    def _same_path(src: str, dest: str) -> bool:
+        return os.path.normcase(os.path.abspath(src)) == os.path.normcase(os.path.abspath(dest))
 
     def _buffer_set(self, rel_path: str, kind: str) -> None:
         existing = self._buffer.get(rel_path)
