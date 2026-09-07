@@ -449,8 +449,12 @@ def discover_project_tasks(target: Path) -> dict:
         if task["label"] not in labels:
             labels.add(task["label"]); unique.append(task)
     existing = cfg.get("recommended_tasks") if isinstance(cfg.get("recommended_tasks"), list) else []
-    existing_ids = {str(item.get("id")) for item in existing if isinstance(item, dict)}
-    cfg["recommended_tasks"] = existing + [item for item in unique if item["id"] not in existing_ids]
+    # Discovery is a snapshot of the current project documentation, not an
+    # append-only history.  Replacing its own records removes legacy
+    # ``learned-*`` noise on the first subsequent discovery while preserving
+    # user-authored and other integration-provided recommendations intact.
+    preserved = [item for item in existing if not isinstance(item, dict) or item.get("source") != "discover"]
+    cfg["recommended_tasks"] = preserved + unique
     cfg["learned_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     cfg["markdown_sources"] = [p.name for p in _learned_markdown_sources(target, cfg)]
     _write_project_json(target, cfg)

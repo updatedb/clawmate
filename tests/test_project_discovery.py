@@ -39,6 +39,35 @@ def test_discover_never_invents_command_and_preserves_manual_task(tmp_path: Path
     assert learned["command"] is None and learned["script_path"] is None
 
 
+def test_discover_replaces_legacy_discover_records_and_is_idempotent(tmp_path: Path):
+    project = tmp_path / "polluted-meeting"
+    scripts = project / "scripts"
+    scripts.mkdir(parents=True)
+    (project / "AGENTS.md").write_text("## Meeting-update trigger\n更新会议进展\n", encoding="utf-8")
+    (project / "WORKFLOW.md").write_text("- [ ] 更新会议信息\n", encoding="utf-8")
+    (scripts / "meeting_pipeline.py").write_text("# fixture", encoding="utf-8")
+    (project / ".clawmate").mkdir()
+    (project / ".clawmate" / "project.json").write_text(
+        json.dumps({"recommended_tasks": [
+            {"id": "learned-agents-md-12", "label": "维护者：路姐", "source": "discover"},
+            {"id": "learned-workflow-md-4", "label": "关联文件：会议记录", "source": "discover"},
+            {"id": "manual-review", "label": "手工推荐", "source": "manual", "running": True},
+        ]}),
+        encoding="utf-8",
+    )
+
+    first = discover_project_tasks(project)["recommended_tasks"]
+    second = discover_project_tasks(project)["recommended_tasks"]
+
+    assert first == second
+    assert first[0] == {"id": "manual-review", "label": "手工推荐", "source": "manual", "running": True}
+    discovered = [task for task in first if task.get("source") == "discover"]
+    assert {task["id"] for task in discovered} == {"meet-update-progress", "meet-update-info"}
+    assert all(not task["id"].startswith("learned-") for task in discovered)
+    assert all(task["execution"] == "script" for task in discovered)
+    assert all(task["command"] == "python scripts/meeting_pipeline.py --json" for task in discovered)
+
+
 def test_discover_semantically_extracts_tasks_and_ignores_document_prose(tmp_path: Path):
     project = tmp_path / "3gpp"
     scripts = project / "scripts"
