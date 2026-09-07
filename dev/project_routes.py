@@ -302,6 +302,8 @@ _PROJECT_TYPE_LABELS = {"meeting": "会议/协作", "product": "产品/研发", 
 _LEARNED_DOCS = ("AGENTS.md", "WORKFLOW.md", "README.md", "PROJECT_NOTE.md")
 _TASK_WORDS = ("更新", "进展", "会议", "状态", "下一步", "维护", "提交", "检查", "报告", "TODO", "待办")
 _SCRIPT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*\.(?:py|sh)$")
+_TASK_ACTIONS = ("更新", "维护", "处理", "检查", "提交", "整理", "跟进", "同步", "发布", "执行", "update", "maintain", "prepare", "review", "report")
+_NON_TASK_PREFIXES = ("维护者", "关联文件", "本文档", "说明", "备注", "引用", "链接", "作者", "版本", "日期")
 
 
 def _read_project_json(target: Path) -> dict:
@@ -333,8 +335,19 @@ def _write_project_json(target: Path, data: dict) -> None:
         raise
 
 
-def _learned_markdown_sources(target: Path) -> list[Path]:
+def _learned_markdown_sources(target: Path, config: dict | None = None) -> list[Path]:
     """Return only documented, project-local sources used by discovery."""
+    discovery = (config or {}).get("task_discovery") or (config or {}).get("discovery") or {}
+    configured = discovery.get("sources") if isinstance(discovery, dict) else None
+    if isinstance(configured, list):
+        result = []
+        for name in configured:
+            if not isinstance(name, str) or not name.endswith(".md") or "/" in name or "\\" in name:
+                continue
+            path = target / name
+            if path.is_file():
+                result.append(path)
+        return result
     result = [target / name for name in _LEARNED_DOCS if (target / name).is_file()]
     for path in target.glob("*.md"):
         if path not in result and any(word in path.name for word in ("说明", "流程", "规范")):
@@ -348,35 +361,98 @@ def _safe_project_scripts(target: Path) -> list[Path]:
     return [p for p in scripts.iterdir() if p.is_file() and _SCRIPT_NAME.fullmatch(p.name)] if scripts.is_dir() else []
 
 
+def _discovery_settings(config: dict) -> tuple[set[str], tuple[str, ...]]:
+    """Read optional project-local discovery overrides without widening access."""
+    discovery = config.get("task_discovery") or config.get("discovery") or {}
+    keywords = discovery.get("keywords") if isinstance(discovery, dict) else None
+    if not isinstance(keywords, list):
+        return set(_TASK_WORDS), _TASK_ACTIONS
+    words = {str(word).strip().lower() for word in keywords if str(word).strip()}
+    return words, _TASK_ACTIONS + tuple(words)
+
+
+def _clean_task_text(text: str) -> str:
+    text = re.sub(r"`([^`]*)`", r"\1", text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"^[#>\s*\-–—\d.)]+", "", text).strip(" ：:。.;；")
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _semantic_task_label(text: str) -> str | None:
+    """Turn an actionable Markdown node into a short, human-readable Chinese task."""
+    text = _clean_task_text(text)
+    lower = text.lower()
+    if not text or text.startswith(_NON_TASK_PREFIXES) or text.startswith(("http://", "https://")):
+        return None
+    meeting = any(word in lower for word in ("会议", "meeting", "3gpp", "maastricht"))
+    if meeting and any(word in lower for word in ("更新", "进展", "状态", "下一步", "update", "trigger", "workflow")):
+        return "更新会议信息" if "进展" not in text else "更新会议进展"
+    if "maastricht" in lower:
+        return "处理 Maastricht 会后事项" if "post" in lower else "处理 Maastricht 会前准备"
+    if any(word in lower for word in ("文档", "readme", "clawlist")) and any(word in lower for word in ("维护", "更新", "maintain")):
+        return "维护项目文档"
+    if re.match(r"^[A-Za-z]+\d+\s*(增量|任务|事项)", text):
+        return f"处理 {re.split(r'[：:；;。]', text, maxsplit=1)[0].strip()[:30]}"
+    if any(word in lower for word in _TASK_ACTIONS):
+        text = re.split(r"[：:；;。]", text, maxsplit=1)[0].strip()
+        return text[:40] if text else None
+    return None
+
+
+def _semantic_task_id(label: str) -> str:
+    lower = label.lower()
+    if "会议" in label:
+        return "meet-update-progress" if "进展" in label else "meet-update-info"
+    if "maastricht" in lower:
+        return "maastricht-post" if "会后" in label else "maastricht-prep"
+    if "文档" in label:
+        return "maintain-docs"
+    english = re.sub(r"[^a-z0-9]+", "-", lower).strip("-")
+    return english[:32] or "project-task"
+
+
+def _meeting_script(scripts: list[Path]) -> Path | None:
+    return next((p for p in scripts if p.name.lower() == "meeting_pipeline.py"), None)
+
+
 def discover_project_tasks(target: Path) -> dict:
-    """Learn local task candidates without executing or inventing commands."""
+    """Semantically extract executable tasks from local Markdown task structures."""
+    cfg = _read_project_json(target)
     scripts, found = _safe_project_scripts(target), []
-    for doc in _learned_markdown_sources(target):
+    keywords, actions = _discovery_settings(cfg)
+    for doc in _learned_markdown_sources(target, cfg):
         try:
             lines = doc.read_text(encoding="utf-8").splitlines()
         except OSError:
             continue
         for number, line in enumerate(lines, 1):
-            text = re.sub(r"^\s*(?:[-*]|\d+[.)])\s*(?:\[[ xX]\]\s*)?", "", line).strip()
             todo = bool(re.match(r"^\s*[-*]\s*\[ \]", line))
-            keyword = any(word.lower() in text.lower() for word in _TASK_WORDS)
-            workflow = doc.name in {"AGENTS.md", "WORKFLOW.md"} and any(x in text.lower() for x in ("触发", "workflow", "流程"))
-            if not text or not (todo or keyword or workflow):
+            heading = re.match(r"^\s{0,3}#{1,6}\s+(.+)$", line)
+            bullet = re.match(r"^\s*(?:[-*]|\d+[.)])\s+(.+)$", line)
+            plain_sentence = not heading and not bullet and doc.name in {"AGENTS.md", "WORKFLOW.md"}
+            raw = (heading.group(1) if heading else bullet.group(1) if bullet else line if plain_sentence else "")
+            text = _clean_task_text(re.sub(r"^\[[ xX]\]\s*", "", raw))
+            workflow_heading = bool(heading and doc.name in {"AGENTS.md", "WORKFLOW.md"} and any(word in text.lower() for word in ("触发", "workflow", "流程", "trigger")))
+            actionable_bullet = bool(bullet and (todo or any(word in text.lower() for word in actions) or any(word in text.lower() for word in keywords)))
+            task_sentence = bool(plain_sentence and any(text.lower().startswith(word) for word in actions))
+            if not (todo or workflow_heading or actionable_bullet or task_sentence):
                 continue
-            candidate = next((p for p in scripts if ("会议" in text or "进展" in text) and ("meeting" in p.name.lower() or "pipeline" in p.name.lower())), None)
+            label = _semantic_task_label(text)
+            if not label:
+                continue
+            candidate = _meeting_script(scripts) if any(word in (label + text).lower() for word in ("会议", "meeting", "3gpp", "maastricht")) else None
             rel = candidate.relative_to(target).as_posix() if candidate else None
             command = (("python " if candidate.suffix == ".py" else "sh ") + rel + " --json") if candidate else None
-            found.append({"id": "learned-" + re.sub(r"[^a-z0-9]+", "-", (doc.name + "-" + str(number) + "-" + text).lower()).strip("-")[:80], "label": text[:100], "origin_file": doc.name, "origin_line": number, "kind": "todo" if todo else ("workflow" if workflow else "keyword"), "priority": "high" if todo else "normal", "frequency": 0, "estimated_duration_seconds": 900, "source": "discover", "execution": "script" if command else "needs_agent", "command": command, "script_path": rel})
+            found.append({"id": _semantic_task_id(label), "label": label, "origin_file": doc.name, "origin_line": number, "kind": "todo" if todo else ("workflow" if workflow_heading else "action"), "priority": "high" if todo else "normal", "frequency": 0, "estimated_duration_seconds": 900, "source": "discover", "execution": "script" if command else "needs_agent", "command": command, "script_path": rel})
     unique, labels = [], set()
     for task in found:
         if task["label"] not in labels:
             labels.add(task["label"]); unique.append(task)
-    cfg = _read_project_json(target)
     existing = cfg.get("recommended_tasks") if isinstance(cfg.get("recommended_tasks"), list) else []
     existing_ids = {str(item.get("id")) for item in existing if isinstance(item, dict)}
     cfg["recommended_tasks"] = existing + [item for item in unique if item["id"] not in existing_ids]
     cfg["learned_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    cfg["markdown_sources"] = [p.name for p in _learned_markdown_sources(target)]
+    cfg["markdown_sources"] = [p.name for p in _learned_markdown_sources(target, cfg)]
     _write_project_json(target, cfg)
     return {"learned_at": cfg["learned_at"], "markdown_sources": cfg["markdown_sources"], "recommended_tasks": cfg["recommended_tasks"]}
 
