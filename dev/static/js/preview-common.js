@@ -7,9 +7,11 @@
 (function(global) {
   'use strict';
 
+  var hasDocument = typeof document !== 'undefined';
+
   // Project panel is shared with the directory surface but loaded separately
   // so preview's heavy features remain lazy.  It binds before preview.js.
-  if (!document.querySelector('script[data-clawmate-project-panel]')) {
+  if (hasDocument && document.head && !document.querySelector('script[data-clawmate-project-panel]')) {
     var projectPanelScript = document.createElement('script');
     projectPanelScript.src = './js/project-panel.js';
     projectPanelScript.dataset.clawmateProjectPanel = '1';
@@ -48,6 +50,7 @@
 
   // ── Toast 通知 ─────────────────────────────────────────────────
   global.showToast = function(msg, duration) {
+    if (!hasDocument) return;
     var el = document.getElementById('toast');
     if (!el) return;
     el.textContent = msg;
@@ -63,12 +66,13 @@
   // ── 剪贴板复制 ─────────────────────────────────────────────────
   global.copyText = async function(text, msg) {
     try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(text);
         global.showToast(msg || '已复制');
         return;
       }
     } catch (_) {}
+    if (!hasDocument || !document.body) return;
     var ta = document.createElement('textarea');
     ta.value = text;
     ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px';
@@ -170,7 +174,7 @@
 
   // ── Section 检测 ───────────────────────────────────────────────
   global.detectSectionFromDOM = function(range) {
-    if (!range) return '';
+    if (!hasDocument || !range) return '';
     var mdBody = document.querySelector('.markdown-body');
     if (!mdBody) return '';
     var node = range.startContainer;
@@ -339,6 +343,7 @@
 
   // ── 为代码块添加复制按钮 ──────────────────────────────────────
   global.addCopyButtons = function(container) {
+    if (!hasDocument || !container) return;
     container.querySelectorAll('pre').forEach(function(pre) {
       if (pre.querySelector('.code-copy-btn')) return;
       var btn = document.createElement('button');
@@ -371,4 +376,4 @@
     });
   };
 
-})(window);
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : {}));
