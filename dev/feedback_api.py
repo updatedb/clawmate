@@ -45,6 +45,20 @@ CST = timezone(timedelta(hours=8))
 router = APIRouter()
 
 
+def _callback_source(request: Request) -> str:
+    """Return a safe origin class for operational diagnostics, never an IP/token."""
+    host = request.client.host if request.client else ""
+    return "loopback" if host in {"127.0.0.1", "::1", "localhost"} else "non_loopback"
+
+
+def _callback_log(status: int, request: Request, *, task_id: str = "",
+                  missing_ids: list[str] | None = None, extra_ids: list[str] | None = None,
+                  field_errors: list[str] | None = None) -> None:
+    logger.warning("[review.result] status=%d task_id=%s source=%s missing_ids=%s extra_ids=%s field_errors=%s",
+                   status, task_id or "unknown", _callback_source(request),
+                   missing_ids or [], extra_ids or [], field_errors or [])
+
+
 @router.post("/api/clawmate/feedback", response_class=JSONResponse)
 async def feedback_create(request: Request):
     """Create review suggestions only. Creation never wakes an agent."""
@@ -149,24 +163,53 @@ async def review_result(request: Request):
     try:
         body = await request.json()
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+        _callback_log(400, request, field_errors=["body: invalid JSON"])
+        raise HTTPException(status_code=400, detail="Invalid JSON; submit a JSON object matching the review result contract")
+    if not isinstance(body, dict):
+        _callback_log(422, request, field_errors=["body: expected object"])
+        raise HTTPException(status_code=422, detail="JSON body must be an object")
+    task_id = str(body.get("task_id", "")).strip()
+    type_errors = []
+    for field in ("root", "project", "task_id", "summary", "diff"):
+        if field not in body or not isinstance(body.get(field), str):
+            type_errors.append(f"{field}: expected string")
+    if not isinstance(body.get("success"), bool):
+        type_errors.append("success: expected boolean")
+    if type_errors:
+        _callback_log(422, request, task_id=task_id, field_errors=type_errors)
+        raise HTTPException(status_code=422, detail="Invalid review result fields: " + "; ".join(type_errors))
     artifacts = body.get("artifacts", [])
     checks = body.get("checks", [])
     outcomes = body.get("outcomes")
     if not isinstance(artifacts, list) or not isinstance(checks, list):
-        raise HTTPException(status_code=422, detail="artifacts and checks must be arrays")
-    if outcomes is not None and not isinstance(outcomes, list):
-        raise HTTPException(status_code=422, detail="outcomes must be an array")
+        errors = (["artifacts: expected array"] if not isinstance(artifacts, list) else []) + (["checks: expected array"] if not isinstance(checks, list) else [])
+        _callback_log(422, request, task_id=task_id, field_errors=errors)
+        raise HTTPException(status_code=422, detail="artifacts and checks must be arrays; correct their JSON types and retry once")
+    if not isinstance(outcomes, list):
+        _callback_log(422, request, task_id=task_id, field_errors=["outcomes: expected array"])
+        raise HTTPException(status_code=422, detail="outcomes must be an array with exactly one entry for every feedback_id")
     try:
         task = record_execution_result(
             str(body.get("root", "")).strip(), str(body.get("project", "")).strip(),
-            str(body.get("task_id", "")).strip(), success=bool(body.get("success")),
+            task_id, success=bool(body.get("success")),
             summary=str(body.get("summary", "")).strip(), diff=str(body.get("diff", "")),
             artifacts=artifacts, checks=checks, outcomes=outcomes)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        missing_ids = getattr(exc, "missing_ids", [])
+        extra_ids = getattr(exc, "extra_ids", [])
+        field_errors = getattr(exc, "field_errors", [])
+        _callback_log(422, request, task_id=task_id, missing_ids=missing_ids,
+                      extra_ids=extra_ids, field_errors=field_errors)
+        detail = str(exc)
+        if missing_ids:
+            detail += "; missing feedback_ids: " + ", ".join(missing_ids)
+        if extra_ids:
+            detail += "; unexpected feedback_ids: " + ", ".join(extra_ids)
+        if field_errors:
+            detail += "; field errors: " + "; ".join(field_errors)
+        raise HTTPException(status_code=422, detail=detail)
     return {"ok": True, "task": task}
 
 

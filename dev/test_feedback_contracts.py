@@ -1,7 +1,15 @@
 """Deterministic contracts for browser-side feedback isolation and layout."""
 
 from pathlib import Path
+import json
 import subprocess
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+import auth
+import feedback_api
+import store
 
 
 ROOT = Path(__file__).parent
@@ -9,6 +17,75 @@ SHARE = (ROOT / "static/share-view.html").read_text(encoding="utf-8")
 PREVIEW = (ROOT / "static/js/preview.js").read_text(encoding="utf-8")
 CSS = (ROOT / "static/css/preview.css").read_text(encoding="utf-8")
 ROUTES = (ROOT / "share_routes.py").read_text(encoding="utf-8")
+
+
+def _execution_payload(**overrides):
+    payload = {
+        "root": "root", "project": "project", "task_id": "task-1",
+        "success": True, "summary": "done", "diff": "", "artifacts": [], "checks": [],
+        "outcomes": [
+            {"feedback_id": "FB-1", "status": "executed", "impact": "", "result": "done",
+             "failure_reason": "", "failure_stage": ""},
+            {"feedback_id": "FB-2", "status": "needs_attention", "impact": "", "result": "",
+             "failure_reason": "needs review", "failure_stage": "apply"},
+        ],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _callback_app(monkeypatch, tmp_path, *, token_allowed=False):
+    feedback_path = tmp_path / "feedback.json"
+    feedback_path.write_text(json.dumps({
+        "root": "root", "project": "project", "last_id": 2,
+        "items": [{"id": "FB-1", "status": "in_progress"}, {"id": "FB-2", "status": "in_progress"}],
+        "tasks": [{"id": "task-1", "status": "in_progress", "item_ids": ["FB-1", "FB-2"]}],
+    }), encoding="utf-8")
+    monkeypatch.setattr(store, "_get_feedback_path", lambda root, project: feedback_path)
+    monkeypatch.setattr(auth, "is_auth_enabled", lambda config=None: True)
+    monkeypatch.setattr(auth, "verify_internal_token", lambda request: token_allowed and request.headers.get("X-Internal-Token") == "test-capability")
+    app = FastAPI()
+    app.add_middleware(auth.AuthMiddleware, config={})
+    app.include_router(feedback_api.router)
+    return app
+
+
+def test_review_loading_is_compact_and_does_not_change_document_loading_contract():
+    assert ".review-loading {" in CSS
+    assert "min-height: 72px;" in CSS
+    assert "padding: 18px 12px;" in CSS
+    assert ".review-loading::before" in CSS
+    assert "@keyframes review-loading-spin" in CSS
+    assert ".preview-loading {\n      text-align: center;\n      padding: 80px 20px;" in CSS
+    assert ".fb-card-list > .fb-card { margin: 0; width: 100%; }" in CSS
+
+
+def test_review_result_auth_boundary_allows_loopback_and_token_fallback(monkeypatch, tmp_path):
+    # A non-loopback request cannot use the callback without the existing
+    # internal capability; a local CLI callback needs no browser session.
+    denied = TestClient(_callback_app(monkeypatch, tmp_path, token_allowed=False))
+    assert denied.post("/api/clawmate/review/result", json=_execution_payload()).status_code == 401
+
+    loopback = TestClient(_callback_app(monkeypatch, tmp_path, token_allowed=False), client=("127.0.0.1", 43210))
+    assert loopback.post("/api/clawmate/review/result", json=_execution_payload()).status_code == 200
+
+    fallback = TestClient(_callback_app(monkeypatch, tmp_path, token_allowed=True))
+    assert fallback.post("/api/clawmate/review/result", json=_execution_payload(), headers={"X-Internal-Token": "test-capability"}).status_code == 200
+
+
+def test_review_result_422_identifies_missing_extra_and_field_type_errors(monkeypatch, tmp_path):
+    client = TestClient(_callback_app(monkeypatch, tmp_path), client=("127.0.0.1", 43210))
+    payload = _execution_payload(outcomes=[
+        {"feedback_id": "FB-1", "status": "executed", "impact": 7, "result": "", "failure_reason": "", "failure_stage": ""},
+        {"feedback_id": "FB-X", "status": "bad", "impact": "", "result": "", "failure_reason": "", "failure_stage": ""},
+    ])
+    response = client.post("/api/clawmate/review/result", json=payload)
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "missing feedback_ids: FB-2" in detail
+    assert "unexpected feedback_ids: FB-X" in detail
+    assert "outcomes[0].impact: expected string" in detail
+    assert "outcomes[1].status: expected executed, failed, or needs_attention" in detail
 
 
 def test_share_pst_payload_keeps_canonical_position_contract():

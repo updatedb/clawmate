@@ -30,6 +30,19 @@ if not logger.handlers:
 
 CST = timezone(timedelta(hours=8))
 
+
+class ExecutionResultValidationError(ValueError):
+    """A callback contract error with safe, caller-actionable diagnostics."""
+
+    def __init__(self, detail: str, *, expected_ids: set[str] | None = None,
+                 received_ids: set[str] | None = None, field_errors: list[str] | None = None):
+        super().__init__(detail)
+        expected_ids = expected_ids or set()
+        received_ids = received_ids or set()
+        self.missing_ids = sorted(expected_ids - received_ids)
+        self.extra_ids = sorted(received_ids - expected_ids)
+        self.field_errors = field_errors or []
+
 # ── 并发写保护 ─────────────────────────────────────────────────────
 # 所有读-改-写操作共用此锁，防止并发请求导致 .feedback.json 数据丢失。
 _feedback_write_lock = threading.Lock()
@@ -615,10 +628,39 @@ def record_execution_result(root_id: str, project: str, task_id: str, *, success
             raise LookupError(f"Task {task_id} not found")
         if task.get("status") != "in_progress":
             raise ValueError("task is not executing")
-        outcome_map = {str(o.get("feedback_id") or o.get("id")): o for o in (outcomes or []) if isinstance(o, dict)}
         expected = set(task.get("item_ids", []))
-        if outcomes is not None and set(outcome_map) != expected:
-            raise ValueError("outcomes must contain exactly one result for every feedback_id")
+        if not isinstance(outcomes, list):
+            raise ExecutionResultValidationError("outcomes must be an array with one entry per feedback_id",
+                                                 expected_ids=expected,
+                                                 field_errors=["outcomes: expected array"])
+        field_errors = []
+        outcome_map = {}
+        received_ids = set()
+        for index, outcome in enumerate(outcomes):
+            prefix = f"outcomes[{index}]"
+            if not isinstance(outcome, dict):
+                field_errors.append(f"{prefix}: expected object")
+                continue
+            feedback_id = outcome.get("feedback_id", outcome.get("id"))
+            if not isinstance(feedback_id, str) or not feedback_id.strip():
+                field_errors.append(f"{prefix}.feedback_id: expected non-empty string")
+                continue
+            feedback_id = feedback_id.strip()
+            if feedback_id in received_ids:
+                field_errors.append(f"{prefix}.feedback_id: duplicate {feedback_id}")
+                continue
+            received_ids.add(feedback_id)
+            status = outcome.get("status")
+            if status not in ("executed", "failed", "needs_attention"):
+                field_errors.append(f"{prefix}.status: expected executed, failed, or needs_attention")
+            for field in ("impact", "result", "failure_reason", "failure_stage"):
+                if field in outcome and not isinstance(outcome[field], str):
+                    field_errors.append(f"{prefix}.{field}: expected string")
+            outcome_map[feedback_id] = outcome
+        if field_errors or received_ids != expected:
+            raise ExecutionResultValidationError(
+                "outcomes must contain exactly one valid result for every feedback_id",
+                expected_ids=expected, received_ids=received_ids, field_errors=field_errors)
         task["status"] = "executed" if success else "failed"
         task["completed_at"] = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
         task["result"] = {"diff": diff or "", "artifacts": artifacts or [], "checks": checks or [],
@@ -627,8 +669,6 @@ def record_execution_result(root_id: str, project: str, task_id: str, *, success
             if item.get("id") in set(task.get("item_ids", [])):
                 outcome = outcome_map.get(item["id"], {})
                 item_status = str(outcome.get("status", task["status"]))
-                if item_status not in ("executed", "failed", "needs_attention"):
-                    raise ValueError(f"invalid outcome status for {item['id']}")
                 item["status"] = item_status
                 item["impact"] = str(outcome.get("impact", ""))
                 item["result"] = str(outcome.get("result", summary or ""))

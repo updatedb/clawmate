@@ -367,6 +367,30 @@
       padding: 30px 12px;
     }
 
+    /* Compact panel-only loading state; independent of document loading. */
+    .review-loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-height: 72px;
+      padding: 18px 12px;
+      color: var(--text-muted);
+      font-size: 12px;
+      text-align: center;
+      box-sizing: border-box;
+    }
+    .review-loading::before {
+      content: '';
+      width: 13px;
+      height: 13px;
+      border: 2px solid var(--border-color);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: review-loading-spin .75s linear infinite;
+    }
+    @keyframes review-loading-spin { to { transform: rotate(360deg); } }
+
     /* ── Feedback Timeline ── */
     /* ── Status Pills ── */
     .fb-status-pill {

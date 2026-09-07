@@ -272,7 +272,9 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "", includ
     _last_wake[root_id] = now
 
     # 内联 message — 从 store 读取所有 pending items 拼入 prompt
-    base_url = cfg.public_base_url or "http://localhost:5533"
+    # The preferred executor is a local CLI process. Keep its callback on
+    # loopback so it cannot traverse a reverse proxy or need a credential.
+    callback_url = "http://127.0.0.1:5533/api/clawmate/review/result"
     scope = f"root={root_id}"
     if project:
         scope += f"&project={project}"
@@ -360,8 +362,9 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "", includ
         lines.append(f"- 禁止创建或删除任何文件/目录（包括临时文件）")
         lines.append(f"- 禁止修改配置文件和项目配置（config.json, config.example.json, .gitignore 等）")
         if review_task_id:
-            lines.append(f"- 此为内部执行任务 task_id={review_task_id}；完成后必须 POST {base_url}/api/clawmate/review/result，写入真实 success、summary、diff、artifacts、checks 和 outcomes。")
-            lines.append("- outcomes 必须恰好每个 feedback_id 一条：{feedback_id,status(executed|failed|needs_attention),impact,result,failure_reason,failure_stage}；未知字段填空字符串，禁止用 task summary 覆盖逐条结果。")
+            lines.append(f"- 此为内部执行任务 task_id={review_task_id}；完成后必须向 {callback_url} POST JSON（仅本机 loopback；不附带或索取任何凭据）。")
+            lines.append("- JSON 必须含 root、project、task_id、success(boolean)、summary(string)、diff(string)、artifacts(array)、checks(array)、outcomes(array)。")
+            lines.append("- outcomes 必须恰好每个 feedback_id 一条且不可重复：{feedback_id:string,status:executed|failed|needs_attention,impact:string,result:string,failure_reason:string,failure_stage:string}；未知字符串字段填空字符串，禁止用 task summary 覆盖逐条结果。")
         message = "\n".join(lines)
     else:
         message = f"ClawMate 反馈通知：{scope} 目前无待处理 feedback。"

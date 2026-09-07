@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import json
+import logging
 import secrets
 import socket
 import time
@@ -24,6 +25,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from urllib.parse import quote
 from starlette.responses import JSONResponse, PlainTextResponse, RedirectResponse
+
+logger = logging.getLogger("clawmate.auth")
 
 # ── Config keys (read from shared config dict injected by main.py) ────────────
 AUTH_CONFIG_KEY = "auth"
@@ -310,8 +313,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if _is_local_client(client_host):
             return await call_next(request)
 
-        # Internal token check for feedback/shared API routes (used by OpenClaw agent callbacks)
-        if path.startswith("/api/clawmate/feedback/") or path.startswith("/api/clawmate/task/"):
+        # A locally spawned executor calls review/result over loopback and
+        # bypasses auth above. A non-loopback fallback is allowed only with
+        # the existing internal capability token.
+        if (path.startswith("/api/clawmate/feedback/")
+                or path.startswith("/api/clawmate/task/")
+                or path == "/api/clawmate/review/result"):
             if verify_internal_token(request):
                 return await call_next(request)
 
@@ -332,6 +339,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Session check
         sid = get_session_from_cookie(request)
         if not sid:
+            if path == "/api/clawmate/review/result":
+                task_id = "unknown"
+                try:
+                    body = await request.json()
+                    if isinstance(body, dict) and isinstance(body.get("task_id"), str):
+                        task_id = body["task_id"].strip() or "unknown"
+                except Exception:
+                    pass
+                logger.warning("[review.result] status=401 task_id=%s source=non_loopback reason=authentication_required", task_id)
             return self._auth_failure_redirect(request, "请先登录")
 
         session = await get_session(sid)
