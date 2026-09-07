@@ -132,7 +132,8 @@ def test_main_project_panel_is_switchable_and_auto_opens_once_per_session_projec
     assert "/tasks/" in js
     assert "/runs/" in js
     assert "_scheduleProjectRunPolling" in js
-    assert "feedback_filter=" in js
+    assert "_openProjectFeedback" in js
+    assert "#previewFilterBar button" in js
 
 def test_panel_actions_have_explicit_sources_and_hide_zero_counts(tmp_path):
     from project_routes import _clawlist_tasks, _project_panel_actions

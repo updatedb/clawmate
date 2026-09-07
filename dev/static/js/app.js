@@ -2518,6 +2518,25 @@ function _projectRunCard(run, active) {
   const retry = !active && status === 'failed' && task.id ? '<button class="project-panel-action" data-project-retry="' + _esc(run.task_run_id) + '">重试</button>' : '';
   return '<article class="project-run project-run-' + _esc(status) + '"><div><b>' + _esc(task.label || '项目任务') + '</b><span class="project-run-state">' + _esc(status) + '</span></div><small>' + _esc(run.backend_actual || '—') + (elapsed ? ' · 已用 ' + elapsed : '') + '</small>' + (detail ? '<p>' + _esc(detail).slice(0, 120) + '</p>' : '') + retry + '</article>';
 }
+function _openProjectFeedback(filter) {
+  const file = encodeURIComponent(state.project + '/PROJECT_NOTE.md');
+  const popup = window.open('/clawmate/preview.html?root=' + encodeURIComponent(state.rootId) + '&file=' + file, '_blank');
+  if (!popup) { setStatus('浏览器阻止了反馈预览窗口'); return; }
+  // Preview owns its feedback UI; open it and select its existing filter without
+  // passing feedback text between windows. Both documents are same-origin.
+  popup.addEventListener('load', () => {
+    const toggle = popup.document.getElementById('btnToggleRight');
+    if (toggle) toggle.click();
+    const desired = filter === 'approved' ? '已评审' : '待评审';
+    let attempts = 0;
+    const select = () => {
+      const button = [...popup.document.querySelectorAll('#previewFilterBar button')].find(item => item.textContent.includes(desired));
+      if (button) button.click();
+      else if (++attempts < 8) popup.setTimeout(select, 250);
+    };
+    popup.setTimeout(select, 250);
+  }, {once: true});
+}
 function renderProjectPanel() {
   const data = _projectOverview;
   if (!data || !data.ok || !projectPanelBody) return;
@@ -2540,8 +2559,7 @@ function renderProjectPanel() {
     const action = btn.getAttribute('data-project-action');
     if (action === 'review_feedback' || action === 'implement_feedback') {
       const filter = action === 'review_feedback' ? 'pending_review' : 'approved';
-      const file = encodeURIComponent(state.project + '/PROJECT_NOTE.md');
-      window.open('/clawmate/preview.html?root=' + encodeURIComponent(state.rootId) + '&file=' + file + '&feedback_filter=' + filter + '&open_feedback=1', '_blank', 'noopener');
+      _openProjectFeedback(filter);
     }
     else if (action === 'commit_version' || action === 'maintain_project_docs' || action === 'update_meeting_agenda' || action === 'update_meeting_conclusion') {
       const task = recs.find(item => item.id === action || ((action === 'update_meeting_agenda' || action === 'update_meeting_conclusion') && item.id === 'update_meeting_info'));
