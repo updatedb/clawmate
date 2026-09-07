@@ -35,6 +35,30 @@
     document.head.appendChild(feedbackPanelScript);
   }
 
+  // The Agent facade remains lazy in preview.js; this tiny adapter only
+  // registers the already-present DOM as the preview surface's reusable panel.
+  function mountPreviewAgentPanel() {
+    if (!global.ClawMatePanels) {
+      var registryScript = document.querySelector('script[data-clawmate-panels]');
+      if (registryScript && !registryScript.dataset.clawmateAgentWaiting) {
+        registryScript.dataset.clawmateAgentWaiting = '1';
+        registryScript.addEventListener('load', mountPreviewAgentPanel, {once:true});
+      }
+      return;
+    }
+    if (!global.ClawMateAgentPanel) return;
+    global.ClawMateAgentPanel.mount({surface:'preview', panelId:'previewAgentPanel', buttonId:'btnToggleAgent', hideDisplay:true});
+  }
+  if (hasDocument && document.head) {
+    if (!global.ClawMateAgentPanel && !document.querySelector('script[data-clawmate-agent-panel]')) {
+      var agentPanelScript = document.createElement('script');
+      agentPanelScript.src = './js/agent-panel.js';
+      agentPanelScript.dataset.clawmateAgentPanel = '1';
+      agentPanelScript.addEventListener('load', mountPreviewAgentPanel, {once:true});
+      document.head.appendChild(agentPanelScript);
+    } else mountPreviewAgentPanel();
+  }
+
   // ── 文件类型常量 ──────────────────────────────────────────────
   global.AUDIO_EXTS = ['mp3','ogg','wav','flac','m4a','aac','wma'];
   global.VIDEO_EXTS = ['mp4','webm','mov','avi','mkv','wmv','flv','m4v'];

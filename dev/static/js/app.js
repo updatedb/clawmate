@@ -2599,9 +2599,10 @@ const _sharedProjectPanel = window.ClawMateProjectPanel && window.ClawMateProjec
 });
 // Register existing controllers only; this does not duplicate either surface's
 // page-level event bindings or Agent runtime initialization.
-if (window.ClawMatePanels) window.ClawMatePanels.install('index', {
-  project: {controller: _sharedProjectPanel},
-  agent: {open: () => window.Agent && window.Agent.open && window.Agent.open(), close: () => window.Agent && window.Agent.close && window.Agent.close(), isOpen: () => Boolean(window.Agent && window.Agent.isOpen && window.Agent.isOpen())}
+if (window.ClawMatePanels) window.ClawMatePanels.install('index', {project: {controller: _sharedProjectPanel}});
+if (window.ClawMateAgentPanel) window.ClawMateAgentPanel.mount({
+  surface: 'index', panelId: 'agentPanel', buttonId: 'btnToggleAgent',
+  getAgent: () => window.Agent
 });
 refreshProjectPanel = () => _sharedProjectPanel && _sharedProjectPanel.refresh();
 renderProjectPanel = () => _sharedProjectPanel && _sharedProjectPanel.render();
