@@ -12,7 +12,7 @@ import feedback_api
 import store
 
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).resolve().parent.parent / "dev"
 SHARE = (ROOT / "static/share-view.html").read_text(encoding="utf-8")
 PREVIEW = (ROOT / "static/js/preview.js").read_text(encoding="utf-8")
 CSS = (ROOT / "static/css/preview.css").read_text(encoding="utf-8")
