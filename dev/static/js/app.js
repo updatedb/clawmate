@@ -2454,6 +2454,8 @@ const btnCloseProjectPanel = document.getElementById("btnCloseProjectPanel");
 let _projectOverview = null;
 let _projectPanelContext = null;
 let _projectRunPollTimer = null;
+let _projectPanelStaticSignature = '';
+let _projectRunsSignature = '';
 
 function _esc(v) { return escHtml(String(v || '')); }
 function _projectPanelSessionKey() {
@@ -2506,17 +2508,47 @@ async function refreshProjectPanel() {
   if (!state.project || !state.rootId || !projectPanelBody) return;
   try {
     const res = await authFetch('/api/clawmate/project/' + encodeURIComponent(state.rootId) + '/' + encodeURIComponent(state.project) + '/overview');
-    _projectOverview = await res.json();
-    renderProjectPanel();
+    const next = await res.json();
+    const nextStaticSignature = JSON.stringify({status_summary: next.status_summary, actions: next.actions, recommendations: next.recommendations, project_tasks: next.project_tasks, review: next.review, type: next.type});
+    const nextRunsSignature = JSON.stringify({runs: next.runs, status: {
+      running: next.status?.running, pending: next.status?.pending, failed: next.status?.failed,
+    }});
+    _projectOverview = next;
+    // A poll normally changes only lifecycle data. Keep the surrounding DOM
+    // stable so expanded CLAWLIST entries and button state are not reset.
+    if (nextStaticSignature !== _projectPanelStaticSignature || !projectPanelBody.querySelector('[data-project-runs]')) {
+      _projectPanelStaticSignature = nextStaticSignature;
+      renderProjectPanel();
+    } else if (nextRunsSignature !== _projectRunsSignature) {
+      renderProjectRuns();
+    }
+    _projectRunsSignature = nextRunsSignature;
     _scheduleProjectRunPolling();
   } catch (_) { projectPanelBody.textContent = '加载项目概况失败'; }
 }
 function _projectRunCard(run, active) {
-  const task = run.task || {}, status = run.status || 'running';
+  const task = run.task || {}, rawStatus = run.status || 'running';
+  const status = rawStatus === 'waiting_input' ? 'needs_attention' : rawStatus;
   const elapsed = run.started_at ? Math.max(0, Math.floor((Date.now() - Date.parse(run.started_at)) / 60000)) + ' 分钟' : '';
+  const started = run.started_at ? run.started_at.replace('T', ' ').replace(/\+00:00$/, ' UTC').slice(0, 19) : '启动时间未知';
   const detail = run.latest_feedback || run.result || run.error || run.failure_reason || '';
   const retry = !active && status === 'failed' && task.id ? '<button class="project-panel-action" data-project-retry="' + _esc(run.task_run_id) + '">重试</button>' : '';
-  return '<article class="project-run project-run-' + _esc(status) + '"><div><b>' + _esc(task.label || '项目任务') + '</b><span class="project-run-state">' + _esc(status) + '</span></div><small>' + _esc(run.backend_actual || '—') + (elapsed ? ' · 已用 ' + elapsed : '') + '</small>' + (detail ? '<p>' + _esc(detail).slice(0, 120) + '</p>' : '') + retry + '</article>';
+  return '<article class="project-run project-run-' + _esc(status) + '"><div><b>' + _esc(task.label || '项目任务') + '</b><span class="project-run-state">' + _esc(status) + '</span></div><small>后端 ' + _esc(run.backend_actual || '—') + ' · 启动 ' + _esc(started) + (elapsed ? ' · 已用 ' + elapsed : '') + '</small>' + (detail ? '<p>' + _esc(detail).slice(0, 120) + '</p>' : '') + retry + '</article>';
+}
+function renderProjectRuns() {
+  const data = _projectOverview || {}, runs = data.runs || {active: [], recent: []}, summary = data.status || {};
+  const target = projectPanelBody && projectPanelBody.querySelector('[data-project-runs]');
+  if (!target) return;
+  const visible = (runs.active.length ? runs.active : runs.recent).slice(0, 3);
+  target.previousElementSibling.textContent = runs.active.length ? '正在执行' : '最近执行';
+  target.innerHTML = visible.map(run => _projectRunCard(run, runs.active.includes(run))).join('') || '<p class="project-panel-hint">暂无执行记录</p>';
+  const statusBar = projectPanelBody.querySelector('[data-project-status]');
+  if (statusBar) statusBar.textContent = '执行中 ' + (summary.running || 0) + ' · 待处理 ' + (summary.pending || 0) + ' · 失败 ' + (summary.failed || 0);
+  target.querySelectorAll('[data-project-retry]').forEach(btn => btn.onclick = async () => {
+    btn.disabled = true;
+    const res = await authFetch('/api/clawmate/project/' + encodeURIComponent(state.rootId) + '/' + encodeURIComponent(state.project) + '/runs/' + encodeURIComponent(btn.getAttribute('data-project-retry')) + '/retry', {method:'POST'});
+    if (res.ok) await refreshProjectPanel(); else { btn.disabled = false; setStatus('项目任务未能重试'); }
+  });
 }
 function _openProjectFeedback(filter) {
   const file = encodeURIComponent(state.project + '/PROJECT_NOTE.md');
@@ -2544,9 +2576,9 @@ function renderProjectPanel() {
   const actions = data.actions || [], projectTasks = data.project_tasks || [];
   const runs = data.runs || {active: [], recent: []}, summary = data.status || {};
   if (projectPanelSummary) projectPanelSummary.textContent = data.status_summary || data.project || '';
-  let html = '<div class="project-status-bar"><span>更新于 ' + _esc((summary.refreshed_at || '').replace('T', ' ').slice(0, 16)) + '</span><span>执行中 ' + (summary.running || 0) + ' · 待处理 ' + (summary.pending || 0) + ' · 失败 ' + (summary.failed || 0) + '</span></div>';
+  let html = '<div class="project-status-bar"><span>更新于 ' + _esc((summary.refreshed_at || '').replace('T', ' ').slice(0, 16)) + '</span><span data-project-status>执行中 ' + (summary.running || 0) + ' · 待处理 ' + (summary.pending || 0) + ' · 失败 ' + (summary.failed || 0) + '</span></div>';
   html += '<section class="project-panel-section"><b>现在要处理</b><div class="project-actions">' + (actions.slice(0, 3).map(item => '<div class="project-panel-signal"><span>' + _esc(item.label) + '</span><button class="project-panel-action" data-project-action="' + _esc(item.id) + '" title="来源：' + _esc(item.source) + '">' + _esc(item.action) + '</button></div>').join('') || '<p class="project-panel-hint">暂无条件行动</p>') + '</div></section>';
-  html += '<section class="project-panel-section"><b>' + (runs.active.length ? '正在执行' : '最近执行') + '</b><div class="project-runs">' + ((runs.active.length ? runs.active : runs.recent).slice(0, 3).map(run => _projectRunCard(run, runs.active.includes(run))).join('') || '<p class="project-panel-hint">暂无执行记录</p>') + '</div></section>';
+  html += '<section class="project-panel-section"><b>' + (runs.active.length ? '正在执行' : '最近执行') + '</b><div class="project-runs" data-project-runs>' + ((runs.active.length ? runs.active : runs.recent).slice(0, 3).map(run => _projectRunCard(run, runs.active.includes(run))).join('') || '<p class="project-panel-hint">暂无执行记录</p>') + '</div></section>';
   html += '<section class="project-panel-section"><b>推荐任务</b><p class="project-panel-hint">来自项目配置；规则提示不作为可执行任务。</p><ul>';
   html += recs.map(r => '<li><span><strong>' + _esc(r.label) + '</strong><small>频率 ' + (r.frequency || 0) + ' · ' + (r.estimated_minutes != null ? _esc(String(r.estimated_minutes)) + ' 分钟' : '时长未知') + '</small></span><button class="project-panel-action" data-project-task="' + _esc(r.id) + '">执行</button></li>').join('') || '<li>暂无可执行推荐任务</li>';
   html += '</ul></section><section class="project-panel-section"><b>CLAWLIST</b><ul>';
@@ -2572,11 +2604,7 @@ function renderProjectPanel() {
     const res = await authFetch('/api/clawmate/project/' + encodeURIComponent(state.rootId) + '/' + encodeURIComponent(state.project) + '/clawlist/complete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({task})});
     if (res.ok) refreshProjectPanel(); else { btn.disabled = false; setStatus('无法完成该 CLAWLIST 任务'); }
   });
-  projectPanelBody.querySelectorAll('[data-project-retry]').forEach(btn => btn.onclick = async () => {
-    btn.disabled = true;
-    const res = await authFetch('/api/clawmate/project/' + encodeURIComponent(state.rootId) + '/' + encodeURIComponent(state.project) + '/runs/' + encodeURIComponent(btn.getAttribute('data-project-retry')) + '/retry', {method:'POST'});
-    if (res.ok) await refreshProjectPanel(); else { btn.disabled = false; setStatus('项目任务未能重试'); }
-  });
+  renderProjectRuns();
   projectPanelBody.querySelectorAll('[data-project-task]').forEach(btn => btn.onclick = async () => {
     btn.disabled = true;
     const id = btn.getAttribute('data-project-task');

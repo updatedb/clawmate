@@ -3278,6 +3278,7 @@ pre:hover .code-copy-btn,
 .project-run { margin-top:7px; padding:8px; border-left:3px solid var(--accent); border-radius:4px; background:var(--bg-secondary); animation: project-card-in 180ms ease-out; }
 .project-run-failed { border-left-color: var(--danger, #d9534f); }
 .project-run-succeeded { border-left-color: var(--success, #3c9b61); }
+.project-run-needs_attention { border-left-color: var(--warning, #c98a16); }
 .project-run-state { float:right; font-size:11px; color:var(--text-secondary); }
 .project-run small, .project-run p { color:var(--text-secondary); font-size:11px; margin:3px 0 0; }
 @keyframes project-card-in { from { opacity:.45; } to { opacity:1; } }

@@ -164,3 +164,19 @@ def test_project_runs_api_is_bounded_and_excludes_prompt(tmp_path, monkeypatch):
     assert len(body["recent"]) == 10
     assert body["active"][0]["task_run_id"] == "r1"
     assert "prompt" not in json.dumps(body)
+
+
+def test_project_panel_frontend_uses_run_contract_without_full_poll_redraw():
+    root = Path(__file__).resolve().parents[1]
+    js = (root / "dev" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    css = (root / "dev" / "static" / "css" / "style.css").read_text(encoding="utf-8")
+
+    assert "data-project-runs" in js
+    assert "renderProjectRuns()" in js
+    assert "nextRunsSignature !== _projectRunsSignature" in js
+    assert "rawStatus === 'waiting_input' ? 'needs_attention'" in js
+    assert "后端 " in js and "启动 " in js and "已用 " in js
+    assert "data-project-retry" in js
+    assert "data-project-task" in js
+    assert "data-project-cancel" not in js
+    assert ".project-run-needs_attention" in css
