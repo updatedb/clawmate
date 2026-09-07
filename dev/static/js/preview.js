@@ -4249,20 +4249,31 @@
 
   // Refresh content + outline button (skips feedback & agent panel)
   var btnRefreshContent = document.getElementById('btnRefreshContent');
+  var previewFileWatch = window.ClawMateFileWatch && window.ClawMateFileWatch.start({
+    root: rootId,
+    file: filePath,
+    button: btnRefreshContent,
+    onChange: function () { return previewFileWatch && previewFileWatch.refreshPanels(); }
+  });
   if (btnRefreshContent) {
     btnRefreshContent.addEventListener('click', async function () {
       btnRefreshContent.classList.add('spinning');
-      _skipFeedbackLoad = true;
-      var outlineWasOpen = !leftSidebar.classList.contains('hidden');
       try {
-        await loadContent({ preserveOutlineState: true, forceRefresh: true });
+        var refreshContent = async function () {
+          _skipFeedbackLoad = true;
+          var outlineWasOpen = !leftSidebar.classList.contains('hidden');
+          try { await loadContent({ preserveOutlineState: true, forceRefresh: true }); }
+          finally {
+            // Rendering a new Markdown body rebuilds the TOC. Restore the user's
+            // explicit panel choice after that rebuild instead of applying the
+            // normal desktop auto-open behavior.
+            if (outlineWasOpen) openLeftSidebar(); else closeLeftSidebar();
+            _skipFeedbackLoad = false;
+          }
+        };
+        if (previewFileWatch) await previewFileWatch.manualRefresh(refreshContent);
+        else await refreshContent();
       } finally {
-        // Rendering a new Markdown body rebuilds the TOC. Restore the user's
-        // explicit panel choice after that rebuild instead of applying the
-        // normal desktop auto-open behavior.
-        if (outlineWasOpen) openLeftSidebar();
-        else closeLeftSidebar();
-        _skipFeedbackLoad = false;
         btnRefreshContent.classList.remove('spinning');
       }
       fetchVersionInfo();
