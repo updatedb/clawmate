@@ -93,6 +93,72 @@ flowchart LR
 | **Codex** | xterm.js PTY 终端 | 完整 CLI（Read/Write/Edit/Bash），60fps |
 | **OpenClaw** | Markdown 聊天 | chat.send 协议，Gateway 多 Agent 协作 |
 
+```mermaid
+flowchart TB
+    CONFIG["⚙️ agent 配置<br/>backend: auto<br/>ui_backend: openclaw"]
+
+    subgraph UI["🖥️ 浏览器交互层：由 ui_backend 决定"]
+        direction LR
+        PANEL["Agent 面板 / 项目工作区"]
+        XTERM["xterm.js PTY<br/>Claude Code / Codex"]
+        CHAT["Markdown Chat<br/>OpenClaw"]
+        PANEL -->|"ui_backend = claude / codex"| XTERM
+        PANEL -->|"ui_backend = openclaw"| CHAT
+    end
+
+    subgraph SERVICE["⚙️ ClawMate 服务层"]
+        direction TB
+        API["统一 Agent API / 会话隔离<br/>root + project + 面板实例"]
+        EXECUTOR["统一 TaskExecutor<br/>项目面板 / 已确认反馈 / 媒体任务"]
+        SELECT{"agent.backend"}
+        AUTO["auto：依次预检<br/>codex → claude → openclaw"]
+        CLI["CLI Executor<br/>启动 Claude / Codex 进程"]
+        GATEWAY["OpenClaw Executor<br/>Gateway hook / WebSocket 代理"]
+        RECEIPT["任务回执与状态<br/>实际 backend · PID/runId · started_at"]
+
+        EXECUTOR --> SELECT
+        SELECT -->|"codex / claude"| CLI
+        SELECT -->|"openclaw"| GATEWAY
+        SELECT -->|"auto"| AUTO
+        AUTO --> CLI
+        AUTO --> GATEWAY
+        CLI --> RECEIPT
+        GATEWAY --> RECEIPT
+    end
+
+    subgraph AGENTS["🤖 Agent 运行时"]
+        direction LR
+        CODEX["Codex CLI"]
+        CLAUDE["Claude Code CLI"]
+        OPENCLAW["OpenClaw Gateway"]
+    end
+
+    CONFIG -->|"读取两项独立配置"| API
+    CONFIG -->|"读取两项独立配置"| EXECUTOR
+    XTERM <-->|"同源 PTY WebSocket"| API
+    CHAT <-->|"同源 WSS 代理 / Gateway v4"| API
+    API --> CODEX
+    API --> CLAUDE
+    API --> OPENCLAW
+    CLI --> CODEX
+    CLI --> CLAUDE
+    GATEWAY --> OPENCLAW
+    RECEIPT --> RESULT["📋 任务面板<br/>运行中 / 成功 / 失败 / 需人工确认"]
+
+    classDef config fill:#FFF3CD,stroke:#856404,stroke-width:2px,color:#4A3600
+    classDef ui fill:#D9EAF7,stroke:#1D5D89,stroke-width:2px,color:#103E5C
+    classDef service fill:#DDF3E4,stroke:#287A45,stroke-width:2px,color:#174E2B
+    classDef agent fill:#EEE4F7,stroke:#694C8D,stroke-width:2px,color:#40265D
+    classDef result fill:#FCE0E0,stroke:#A83C3C,stroke-width:2px,color:#651F1F
+    class CONFIG config
+    class PANEL,XTERM,CHAT ui
+    class API,EXECUTOR,SELECT,AUTO,CLI,GATEWAY,RECEIPT service
+    class CODEX,CLAUDE,OPENCLAW agent
+    class RESULT result
+```
+
+> `backend` 仅决定无人值守任务由哪个执行器启动；`ui_backend` 仅决定 Agent 面板默认连接哪个具体后端，不能设为 `auto`。因此二者可独立配置，例如 `backend: auto` 与 `ui_backend: openclaw`。
+
 **OpenClaw 细节**：浏览器经同源 `wss://…/api/clawmate/agent/openclaw` 代理连接 Gateway（协议 v4），凭证/令牌留在服务端；会话按 `root + project + 面板实例` 三级隔离，跨项目/多标签不串；并把会话工作目录钉到 `resolve_session_cwd()` 指向的项目目录，使 openclaw 的文件工具与 `pwd` 作用于所打开的项目而非默认工作区；人格从各 agent 自身工作区读取。
 
 Feedback 任务智能路由：PTY 活跃时直接注入终端执行，否则通过 webhook 唤醒。
