@@ -11,7 +11,7 @@
 
   // Project panel is shared with the directory surface but loaded separately
   // so preview's heavy features remain lazy.  It binds before preview.js.
-  if (hasDocument && document.head && !document.querySelector('script[data-clawmate-project-panel]')) {
+  if (hasDocument && document.head && !global.ClawMateProjectPanel && !document.querySelector('script[data-clawmate-project-panel]')) {
     var projectPanelScript = document.createElement('script');
     projectPanelScript.src = './js/project-panel.js';
     projectPanelScript.dataset.clawmateProjectPanel = '1';

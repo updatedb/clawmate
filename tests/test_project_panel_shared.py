@@ -12,3 +12,19 @@ def test_preview_uses_shared_panel_and_single_file_watch_contract():
     assert "&file=" in panel
     assert "has-update" in panel
     assert "stopImmediatePropagation" in panel
+
+
+def test_directory_and_preview_mount_the_same_complete_project_panel_renderer():
+    root = Path(__file__).resolve().parents[1]
+    panel = (root / "dev/static/js/project-panel.js").read_text(encoding="utf-8")
+    app = (root / "dev/static/js/app.js").read_text(encoding="utf-8")
+    preview = (root / "dev/static/js/preview.js").read_text(encoding="utf-8")
+    index = (root / "dev/static/index.html").read_text(encoding="utf-8")
+    assert "ClawMateProjectPanel.mount" in app
+    assert 'src="./js/project-panel.js"' in index
+    assert "mountPreview" in panel and "openFeedback" in panel
+    assert "_renderProjectPanel2" not in preview
+    for feature in ("project-status-bar", "data-project-runs", "data-project-retry", "backend_actual", "CLAWLIST", "<details>", "推荐任务"):
+        assert feature in panel
+    assert "#previewFilterBar button" in panel
+    assert "window.open" not in panel

@@ -2612,6 +2612,21 @@ function renderProjectPanel() {
     if (res.ok) { setStatus('项目 Agent 任务已启动'); await refreshProjectPanel(); } else { setStatus('项目 Agent 任务未启动'); btn.disabled = false; }
   });
 }
+// Rendering and lifecycle updates live in the shared renderer.  Keep the
+// surrounding directory-side panel/open-once behaviour local to this surface.
+const _sharedProjectPanel = window.ClawMateProjectPanel && window.ClawMateProjectPanel.mount({
+  body: projectPanelBody,
+  summary: projectPanelSummary,
+  getContext: () => ({root: state.rootId, project: state.project}),
+  fetch: authFetch,
+  isOpen: _isProjectPanelOpen,
+  setStatus,
+  openFeedback: _openProjectFeedback,
+});
+refreshProjectPanel = () => _sharedProjectPanel && _sharedProjectPanel.refresh();
+renderProjectPanel = () => _sharedProjectPanel && _sharedProjectPanel.render();
+renderProjectRuns = () => _sharedProjectPanel && _sharedProjectPanel.renderRuns();
+_stopProjectRunPolling = () => { if (_sharedProjectPanel) _sharedProjectPanel.stop(); };
 if (btnProjectPanel) btnProjectPanel.addEventListener('click', () => {
   if (!state.project || !state.rootId) return;
   _setProjectPanelOpen(!_isProjectPanelOpen());
