@@ -255,6 +255,7 @@
   <script src="./js/icons.js"></script>
   <script src="./js/topbar.js"></script>
   <script src="./js/preview-common.js"></script>
+  <script src="./js/feedback-panel.js"></script>
   <script>
   (function() {
     'use strict';
@@ -562,7 +563,7 @@
     // Delegate automatic anchors to preview-common.js, the review-page contract.
     function _shareSelectionLocation(text, range) {
       var ext = (_shareFile || '').split('.').pop().toLowerCase();
-      return getFeedbackSelectionPosition({
+      return ClawMateFeedbackPanel.selectionPosition({
         ext: ext, text: text, rawContent: _shareRawContent, range: range,
         markdownRendered: ['md','markdown','rmd','mdx'].includes(ext),
         htmlRendered: ['html','htm'].includes(ext),
@@ -605,132 +606,44 @@
     // Feedback card: reuses the shared fb-card components so it matches the
     // review panel exactly (时间/定位/选中内容/建议/动作). Delete uses fb-btn-delete.
     // 待提交 = editable; 已提交 = read-only (backend pending_review).
+    // Card DOM details (fb-card-completed, if (!isReadOnly), if (isReadOnly),
+    // '定位：' + (_sharePosition(it) || '—'), time.textContent =
+    // time.textContent = _shareFeedbackCardTime(it); _shareStatusLabel(it.status)) live in
+    // feedback-panel.js; its canonical payload is position: _sharePosition(it)
+    // with scope: it.scope || 'document' and task_id: it.task_id || ''. This
+    // adapter retains only share capability handling.
     function _shareBuildCard(it) {
       var isReadOnly = (shareFbFilter === 'submitted'); // 已提交 only-read card
-      var card = document.createElement('div');
-      card.className = 'fb-card' + (isReadOnly ? ' fb-card-completed' : '');
-
-      // Header matches review cards: last feedback time + ID + action.
-      var head = document.createElement('div'); head.className = 'fb-card-header';
-      var id = document.createElement('span'); id.className = 'fb-card-id';
-      id.textContent = it.id || '';
-      var status = document.createElement('span'); status.className = 'fb-status-pill ' + (isReadOnly ? 'pending_review' : 'pending');
-      status.textContent = isReadOnly ? _shareStatusLabel(it.status) : '待提交';
-      var time = document.createElement('span'); time.className = 'fb-card-time fb-card-stage-time';
-      time.textContent = _shareFeedbackCardTime(it);
-      var del = document.createElement('button'); del.className = 'fb-btn-delete'; del.textContent = '✕'; del.title = '删除';
-      del.addEventListener('click', function(e) {
-        e.stopPropagation();
-        if (shareFbFilter === 'pending') { sharePending = sharePending.filter(function(i){ return i.id !== it.id; }); _sharePersistPending(); }
-        else {
-          fetch(API_BASE + '/share/' + TOKEN + '/feedback/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:it.id})})
-            .then(function(response) { if (!response.ok) throw new Error('删除失败'); shareSubmitted = shareSubmitted.filter(function(i){ return i.id !== it.id; }); _shareRender(); })
+      return ClawMateFeedbackPanel.buildCard({
+        item: it, readOnly: isReadOnly, templates: _shareTemplates, file: _shareFile,
+        persist: _sharePersistPending,
+        statusLabel: function(status, readOnly) { return readOnly ? _shareStatusLabel(status) : '待提交'; },
+        actionLabel: function(action) {
+          var match = _shareSelectionTemplates().find(function(template) { return template.action === action; });
+          return match ? match.label : ({replace: '📈 替换'})[action] || '—';
+        },
+        onAction: _shareRender,
+        onDelete: function(item) {
+          if (shareFbFilter === 'pending') { sharePending = sharePending.filter(function(current) { return current.id !== item.id; }); _sharePersistPending(); _shareRender(); return; }
+          fetch(API_BASE + '/share/' + TOKEN + '/feedback/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:item.id})})
+            .then(function(response) { if (!response.ok) throw new Error('删除失败'); shareSubmitted = shareSubmitted.filter(function(current) { return current.id !== item.id; }); _shareRender(); })
             .catch(function() { _shareFbStatus('❌ 删除失败', false); });
-          return;
+        },
+        buttons: function(item, actions, readOnly) {
+          if (readOnly) return;
+          var submit = document.createElement('button'); submit.className = 'preview-bottom-btn'; submit.textContent = '提交评审';
+          submit.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (submit.disabled) return;
+            if (!item.note || !item.note.trim()) { _shareFbStatus('请填写建议（必填）', false); return; }
+            if (!item.text || !item.text.trim()) { _shareFbStatus('请填写选中内容', false); return; }
+            if (!item.action) { item.action = 'modify'; item.scope = 'document'; }
+            submit.disabled = true; _shareSubmitPending([item]).finally(function() { submit.disabled = false; });
+          });
+          actions.appendChild(submit);
         }
-        _shareRender();
       });
-      head.appendChild(id); head.appendChild(time); head.appendChild(status); head.appendChild(del);
-      card.appendChild(head);
 
-      // Read-only cards retain action/location metadata. Editable cards have
-      // exactly one locator input, followed by original, feedback, tags, actions.
-      var feedbackMeta = document.createElement('div'); feedbackMeta.className = 'fb-card-meta';
-      if (isReadOnly) {
-        var action = document.createElement('span'); action.className = 'fb-card-action';
-        var actionMatch = _shareSelectionTemplates().find(function(t){ return t.action === it.action; });
-        action.textContent = actionMatch ? actionMatch.label : ({ replace:'📈 替换' }[it.action] || '—');
-        feedbackMeta.appendChild(action);
-      }
-
-      // 定位
-      if (isReadOnly) {
-        var roPos = document.createElement('div'); roPos.className = 'fb-card-position';
-        roPos.textContent = '定位：' + (_sharePosition(it) || '—');
-        feedbackMeta.appendChild(roPos);
-        card.appendChild(feedbackMeta);
-      } else {
-        var pos = document.createElement('input'); pos.type='text'; pos.className='fb-card-position-edit';
-        pos.value = _sharePosition(it);
-        pos.placeholder = '定位：—（Line {start}-{end}）';
-        pos.title = '定位（可编辑）';
-        pos.setAttribute('aria-label', '定位（可编辑）');
-        pos.addEventListener('input', function(){ it.position = pos.value; _sharePersistPending(); });
-        pos.addEventListener('click', function(e){ e.stopPropagation(); });
-        card.appendChild(pos);
-      }
-
-      // 选中内容
-      if (isReadOnly) {
-        var roText = document.createElement('div'); roText.className = 'review-card-content';
-        roText.textContent = it.text || '（未填写选中内容）';
-        card.appendChild(roText);
-      } else {
-        var text = document.createElement('textarea'); text.className = 'fb-note-input';
-        text.value = it.text || ''; text.rows = 2;
-        text.placeholder = '原文（必填）';
-        text.setAttribute('aria-label', '原文（可编辑）');
-        text.style.cssText = 'font-size:11px;font-family:monospace;color:var(--text-secondary);';
-        text.addEventListener('input', function(){ it.text = text.value; _sharePersistPending(); });
-        text.addEventListener('click', function(e){ e.stopPropagation(); });
-        card.appendChild(text);
-      }
-
-      // 建议
-      if (isReadOnly) {
-        var roNote = document.createElement('div'); roNote.className = 'fb-card-note';
-        roNote.textContent = '建议：' + (it.note || '—');
-        card.appendChild(roNote);
-      } else {
-        var note = document.createElement('textarea'); note.className = 'fb-note-input';
-        note.value = it.note || ''; note.rows = 3;
-        note.placeholder = '反馈（必填）：简要说明改动需求';
-        note.setAttribute('aria-label', '反馈（可编辑）');
-        note.addEventListener('input', function(){ it.note = note.value; _sharePersistPending(); });
-        note.addEventListener('click', function(e){ e.stopPropagation(); });
-        card.appendChild(note);
-      }
-
-      // 操作 tag group appears only for editable 待提交 cards.
-      if (!isReadOnly) {
-      var selections = _shareSelectionTemplates();
-      var tagRow = document.createElement('div'); tagRow.className = 'pst-tags';
-      tagRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;';
-      var opts = selections.map(function(t){ return {label:t.label,action:t.action,scope:t.scope,task_id:t.id}; });
-      opts.forEach(function(p){
-        var b = document.createElement('button'); b.className = 'pst-tag';
-        b.textContent = p.label;
-        if (it.action === p.action) b.classList.add('active');
-        b.addEventListener('click', function(e){
-          e.stopPropagation();
-          it.action = p.action; it.scope = p.scope; it.task_id = p.task_id;
-          _sharePersistPending();
-          _shareRender();
-        });
-        tagRow.appendChild(b);
-      });
-      card.appendChild(tagRow);
-      }
-
-      // 提交评审 button (待提交 only)
-      if (shareFbFilter === 'pending') {
-        var actions = document.createElement('div'); actions.className = 'fb-card-actions';
-        // Match the review card's per-card decision button style.
-        var submit = document.createElement('button'); submit.className = 'preview-bottom-btn';
-        submit.textContent = '提交评审';
-        submit.addEventListener('click', function(e){
-          e.stopPropagation();
-          if (submit.disabled) return;
-          if (!it.note || !it.note.trim()) { _shareFbStatus('请填写建议（必填）', false); return; }
-          if (!it.text || !it.text.trim()) { _shareFbStatus('请填写选中内容', false); return; }
-          if (!it.action) { it.action = 'modify'; it.scope = 'document'; }
-          submit.disabled = true;
-          _shareSubmitPending([it]).finally(function(){ submit.disabled = false; });
-        });
-        actions.appendChild(submit);
-        card.appendChild(actions);
-      }
-      return card;
     }
 
     function _shareRender() {
@@ -861,9 +774,7 @@
       var btn = document.getElementById('shareFbSubmit'); if (btn) btn.disabled = true;
       _shareFbStatus('提交中...', false);
       try {
-        var payload = { author: _shareAuthor, selections: list.map(function(it) {
-          return { text: it.text, note: it.note, action: it.action, scope: it.scope || 'document', task_id: it.task_id || '', position: _sharePosition(it) };
-        }) };
+        var payload = ClawMateFeedbackPanel.submissionPayload(list, _shareAuthor);
         var response = await fetch(API_BASE + '/share/' + TOKEN + '/feedback', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
         var data = await response.json();
         if (!response.ok) throw new Error(data.detail || '提交失败');

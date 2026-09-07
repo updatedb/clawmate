@@ -26,6 +26,14 @@
     projectPanelScript.dataset.clawmateProjectPanel = '1';
     document.head.appendChild(projectPanelScript);
   }
+  // Shared card factory is loaded independently of preview.js so lightweight
+  // share and heavy preview surfaces retain the same feedback DOM contract.
+  if (hasDocument && document.head && !global.ClawMateFeedbackPanel && !document.querySelector('script[data-clawmate-feedback-panel]')) {
+    var feedbackPanelScript = document.createElement('script');
+    feedbackPanelScript.src = './js/feedback-panel.js';
+    feedbackPanelScript.dataset.clawmateFeedbackPanel = '1';
+    document.head.appendChild(feedbackPanelScript);
+  }
 
   // ── 文件类型常量 ──────────────────────────────────────────────
   global.AUDIO_EXTS = ['mp3','ogg','wav','flac','m4a','aac','wma'];
