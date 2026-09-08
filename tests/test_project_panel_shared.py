@@ -53,3 +53,11 @@ def test_recommendation_controls_present():
     assert "data-recommend-delete" in js
     assert "recommendations/analyze" in js
     assert "recommendations/" in js and "delete" in js
+    filter_line = next(
+        line for line in js.split("\n") if "data.recommendations" in line and ".filter(" in line
+    )
+    assert (
+        "project_json" in filter_line
+        and "discover" in filter_line
+        and "codex" in filter_line
+    ), "recs filter must keep project_json, discover AND codex recommendations"
