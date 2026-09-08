@@ -42,3 +42,14 @@ def test_directory_and_preview_mount_the_same_complete_project_panel_renderer():
         assert feature in panel
     assert "#previewFilterBar button" in panel
     assert "window.open" not in panel
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_recommendation_controls_present():
+    js = (ROOT / "dev/static/js/project-panel.js").read_text(encoding="utf-8")
+    assert "data-project-analyze" in js
+    assert "data-recommend-delete" in js
+    assert "recommendations/analyze" in js
+    assert "recommendations/" in js and "delete" in js

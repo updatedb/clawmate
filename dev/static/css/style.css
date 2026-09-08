@@ -2913,6 +2913,8 @@ pre:hover .code-copy-btn,
 .project-panel-section li { display: flex; gap: 6px; align-items: center; padding: 3px 0; }
 .project-panel-section li > span { flex: 1; min-width: 0; }
 .project-panel-section li small { display: block; margin-top: 2px; color: var(--text-secondary); font-size: 11px; }
+.project-panel-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.recommend-actions { display: flex; gap: 6px; align-items: center; }
 /* CLAWLIST checklist rows — table-style layout, outer columns pinned to content width. */
 .project-panel-section li.claw-row { display: grid; grid-template-columns: min-content 1fr min-content; gap: 8px; align-items: start; padding: 6px 4px; border-radius: 5px; transition: background var(--duration-fast) var(--ease-out); }
 .project-panel-section li.claw-row + li.claw-row { margin-top: 2px; }
