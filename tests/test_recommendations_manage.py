@@ -4,10 +4,14 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "dev"))
 
+from main import app
+
 from types import SimpleNamespace
+import auth
 from config import set_config_path, clear_config_cache, load as load_cfg
 from task_executor import TaskExecutor
 from project_routes import _extract_codex_tasks, _project_task_catalog, _merge_codex_recommendations
@@ -150,3 +154,31 @@ def test_merge_codex_replaces_old_codex(_rec_proj):
     assert ids == ["b", "a", "c"]
     assert merged[1]["label"] == "新codex"
     assert "dismissed_recommendations" in PR._read_project_json(_rec_proj)
+
+
+def _client():
+    return TestClient(app)
+
+
+def test_recommendation_delete_persists_dismissed(_rec_proj, monkeypatch):
+    import project_routes as PR
+    monkeypatch.setattr(auth, "is_auth_enabled", lambda config=None: False)
+    monkeypatch.setattr(PR, "_project_target", lambda root, project: _rec_proj)
+    PR._write_project_json(_rec_proj, {
+        "recommended_tasks": [{"id": "zap", "label": "删我", "source": "discover"}],
+        "dismissed_recommendations": [],
+    })
+    res = _client().post("/api/clawmate/project/r/proj/recommendations/zap/delete")
+    assert res.status_code == 200
+    cfg = PR._read_project_json(_rec_proj)
+    assert cfg["recommended_tasks"] == []
+    assert "zap" in cfg["dismissed_recommendations"]
+
+
+def test_recommendation_delete_idempotent(_rec_proj, monkeypatch):
+    import project_routes as PR
+    monkeypatch.setattr(auth, "is_auth_enabled", lambda config=None: False)
+    monkeypatch.setattr(PR, "_project_target", lambda root, project: _rec_proj)
+    res = _client().post("/api/clawmate/project/r/proj/recommendations/missing/delete")
+    assert res.status_code == 200
+    assert res.json()["ok"] is True

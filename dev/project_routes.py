@@ -970,6 +970,25 @@ async def project_task_retry(root: str, project: str, task_run_id: str):
     return await project_task_run(root, project, str(task_id))
 
 
+@router.post("/api/clawmate/project/{root}/{project}/recommendations/{task_id}/delete")
+async def project_recommendation_delete(root: str, project: str, task_id: str):
+    """Persistently dismiss a recommendation; it will not resurrect."""
+    try:
+        target = _project_target(root, project)
+    except (ValueError, PermissionError):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Project not found")
+    cfg = _read_project_json(target)
+    dismissed = set(cfg.get("dismissed_recommendations") or [])
+    dismissed.add(task_id)
+    existing = cfg.get("recommended_tasks") if isinstance(cfg.get("recommended_tasks"), list) else []
+    cfg["recommended_tasks"] = [t for t in existing if isinstance(t, dict) and str(t.get("id")) != task_id]
+    cfg["dismissed_recommendations"] = sorted(dismissed)
+    _write_project_json(target, cfg)
+    return JSONResponse(content={"ok": True, "task_id": task_id})
+
+
 @router.post("/api/clawmate/project/{root}/{project}/clawlist/complete")
 async def project_clawlist_complete(root: str, project: str, request: Request):
     try:
