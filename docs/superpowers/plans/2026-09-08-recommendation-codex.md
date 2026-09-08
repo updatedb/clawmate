@@ -560,9 +560,9 @@ class _FakeExecutor:
 
 def test_recommendations_analyze_success(_rec_proj, monkeypatch):
     import project_routes as PR
-    from task_executor import TaskExecutor
+    import task_executor as TE
     monkeypatch.setattr(PR, "_project_target", lambda root, project: _rec_proj)
-    monkeypatch.setattr(PR, "TaskExecutor", lambda cfg: _FakeExecutor(
+    monkeypatch.setattr(TE, "TaskExecutor", lambda cfg: _FakeExecutor(
         {"ok": True, "backend": "codex", "output": '[{"label":"做甲","id":"a"}]', "error": "", "code": 0}))
     monkeypatch.setattr(PR, "load_cfg", lambda: SimpleNamespace())
     res = _client().post("/api/clawmate/project/r/proj/recommendations/analyze")
@@ -575,8 +575,9 @@ def test_recommendations_analyze_success(_rec_proj, monkeypatch):
 
 def test_recommendations_analyze_failure(_rec_proj, monkeypatch):
     import project_routes as PR
+    import task_executor as TE
     monkeypatch.setattr(PR, "_project_target", lambda root, project: _rec_proj)
-    monkeypatch.setattr(PR, "TaskExecutor", lambda cfg: _FakeExecutor(
+    monkeypatch.setattr(TE, "TaskExecutor", lambda cfg: _FakeExecutor(
         {"ok": False, "backend": "", "output": "", "error": "codex: timeout", "code": -1}))
     monkeypatch.setattr(PR, "load_cfg", lambda: SimpleNamespace())
     res = _client().post("/api/clawmate/project/r/proj/recommendations/analyze")
@@ -586,8 +587,9 @@ def test_recommendations_analyze_failure(_rec_proj, monkeypatch):
 
 def test_recommendations_analyze_unparseable(_rec_proj, monkeypatch):
     import project_routes as PR
+    import task_executor as TE
     monkeypatch.setattr(PR, "_project_target", lambda root, project: _rec_proj)
-    monkeypatch.setattr(PR, "TaskExecutor", lambda cfg: _FakeExecutor(
+    monkeypatch.setattr(TE, "TaskExecutor", lambda cfg: _FakeExecutor(
         {"ok": True, "backend": "codex", "output": "garbage no json", "error": "", "code": 0}))
     monkeypatch.setattr(PR, "load_cfg", lambda: SimpleNamespace())
     res = _client().post("/api/clawmate/project/r/proj/recommendations/analyze")
