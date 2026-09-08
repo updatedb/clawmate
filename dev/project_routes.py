@@ -811,6 +811,31 @@ def _recommendations_for(target: Path) -> list[dict]:
     return unique[:5]
 
 
+def _extract_codex_tasks(output: str) -> list[dict]:
+    """Pull a JSON array of recommended tasks out of a free-form CLI response."""
+    text = str(output or "").strip()
+    start, end = text.find("["), text.rfind("]")
+    if start < 0 or end <= start:
+        raise ValueError("No JSON array in codex response")
+    payload = json.loads(text[start:end + 1])
+    if not isinstance(payload, list):
+        raise ValueError("Expected a JSON array from codex")
+    tasks: list[dict] = []
+    for item in payload:
+        if not isinstance(item, dict) or not str(item.get("label", "")).strip():
+            continue
+        label = str(item["label"]).strip()
+        tasks.append({
+            "id": str(item.get("id") or label).strip() or label,
+            "label": label,
+            "prompt": str(item.get("prompt") or f"在项目内完成推荐任务：{label}。"),
+            "kind": str(item.get("kind") or "plan"),
+            "frequency": int(item.get("frequency") or 0),
+            "source": "codex",
+        })
+    return tasks
+
+
 
 def _mark_clawlist_task_done(target: Path, task: str) -> bool:
     """Check exactly one unchecked CLAWLIST item, never fuzzy-match user input."""

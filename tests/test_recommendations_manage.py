@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "dev"))
 from types import SimpleNamespace
 from config import set_config_path, clear_config_cache, load as load_cfg
 from task_executor import TaskExecutor
+from project_routes import _extract_codex_tasks
 
 
 def _write_cfg(agent: dict) -> Path:
@@ -85,3 +86,26 @@ def test_run_summary_analysis_non_cli_backend_fails(monkeypatch):
         agent = Agent()
     res = TaskExecutor(FakeCfg()).run_summary_analysis("hi", cwd=".")
     assert res["ok"] is False
+
+
+def test_extract_codex_tasks_parses_clean_json():
+    out = '[{"id":"a","label":"甲","prompt":"做甲","kind":"plan","frequency":0}]'
+    tasks = _extract_codex_tasks(out)
+    assert len(tasks) == 1
+    assert tasks[0]["id"] == "a" and tasks[0]["source"] == "codex"
+
+
+def test_extract_codex_tasks_strips_fences():
+    out = '```json\n[{"label":"乙"}]\n```'
+    tasks = _extract_codex_tasks(out)
+    assert tasks[0]["label"] == "乙"
+    assert tasks[0]["id"] == "乙"  # id 回退到 label
+
+
+def test_extract_codex_tasks_skips_invalid_and_raises_when_empty():
+    out = '[{"prompt":"无 label"}, {"label":"有效"}]'
+    tasks = _extract_codex_tasks(out)
+    assert len(tasks) == 1 and tasks[0]["label"] == "有效"
+    import pytest as _p
+    with _p.raises(ValueError):
+        _extract_codex_tasks("no json here")
