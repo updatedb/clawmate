@@ -2083,7 +2083,8 @@
     if (!dyn) return;
     dyn.innerHTML = '<button class="preview-bottom-btn" id="imageZoomOut" title="缩小图片">− 缩小</button>' +
       '<span id="imageZoomLevel" aria-live="polite">100%</span>' +
-      '<button class="preview-bottom-btn" id="imageZoomIn" title="放大图片">+ 放大</button>';
+      '<button class="preview-bottom-btn" id="imageZoomIn" title="放大图片">+ 放大</button>' +
+      '<button class="preview-bottom-btn" id="btnEditImage" title="创建受控生成资产">编辑图片</button>';
     document.getElementById('imageZoomOut').addEventListener('click', function() {
       imageZoomScale = Math.max(IMAGE_ZOOM_MIN, imageZoomScale - IMAGE_ZOOM_STEP);
       applyImageZoom();
@@ -2092,6 +2093,38 @@
       imageZoomScale = Math.min(IMAGE_ZOOM_MAX, imageZoomScale + IMAGE_ZOOM_STEP);
       applyImageZoom();
     });
+    document.getElementById('btnEditImage').addEventListener('click', openImageAssets);
+  }
+
+  function loadImageAssetsPanel() {
+    if (window.ClawMateImageAssetsPanel) return Promise.resolve();
+    return new Promise(function(resolve, reject) {
+      var script = document.createElement('script');
+      script.src = './js/image-assets-panel.js';
+      script.onload = resolve;
+      script.onerror = function() { reject(new Error('image asset panel failed to load')); };
+      document.head.appendChild(script);
+    });
+  }
+
+  function openImageAssets() {
+    if (!isImageMode) return;
+    var panel = document.getElementById('previewImageAssetsPanel');
+    if (!panel) return;
+    if (rightSidebar && !rightSidebar.classList.contains('hidden')) closeRightSidebar();
+    if (agentPanel && !agentPanel.classList.contains('hidden')) { agentPanel.classList.add('hidden'); if (window.Agent) window.Agent.close(); }
+    var projectPanel = document.getElementById('previewProjectPanel');
+    if (projectPanel) projectPanel.remove();
+    loadImageAssetsPanel().then(function() {
+      var controller = window.ClawMateImageAssetsPanel.mount({
+        getContext: function() { return {root: rootId, project: project, file: filePath}; },
+        onClose: function() { updateGridColumns(); _syncPanelOpenClass(); }
+      });
+      if (window.ClawMatePanels) window.ClawMatePanels.install('preview', {imageAssets: {controller: controller}});
+      controller.open();
+      threeCol.style.gridTemplateColumns = (isLeftSidebarVisible() ? '240px' : '0px') + ' 1fr 0px 420px';
+      document.body.classList.add('preview-panel-open');
+    }).catch(function() { showToast('生成资产面板加载失败', 3000); });
   }
 
   // ============ Image Sort ============
@@ -2920,8 +2953,9 @@
     const rHidden = rightSidebar.classList.contains('hidden');
     const agentHidden = agentPanel ? agentPanel.classList.contains('hidden') : true;
     const projectOpen = Boolean(document.getElementById('previewProjectPanel'));
+    const imageAssetsOpen = Boolean(document.getElementById('previewImageAssetsPanel') && !document.getElementById('previewImageAssetsPanel').classList.contains('hidden'));
     const lW = lHidden ? '0px' : '240px';
-    const panelOpen = !rHidden || !agentHidden || projectOpen;
+    const panelOpen = !rHidden || !agentHidden || projectOpen || imageAssetsOpen;
     var vw = window.innerWidth;
     var lWpx = lHidden ? 0 : 240;
     // Content-first (Rule 1a) + Rule 4: when the right panel (feedback/agent) would
@@ -2941,9 +2975,9 @@
     } else {
       // The feedback and Agent panels share the draggable boundary (col3). The
       // project panel is a fixed-width column, so it doesn't show the handle.
-      if (resizeHandle) resizeHandle.classList.toggle('hidden', projectOpen);
-      var panelW = projectOpen ? 420 : (!agentHidden ? getAgentPanelWidth() : rightPanelWidth);
-      var handleCol = projectOpen ? '0px' : '5px';
+      if (resizeHandle) resizeHandle.classList.toggle('hidden', projectOpen || imageAssetsOpen);
+      var panelW = (projectOpen || imageAssetsOpen) ? 420 : (!agentHidden ? getAgentPanelWidth() : rightPanelWidth);
+      var handleCol = (projectOpen || imageAssetsOpen) ? '0px' : '5px';
       threeCol.style.gridTemplateColumns = `${lW} 1fr ${handleCol} ${panelW}px`;
     }
   }
@@ -3015,6 +3049,8 @@
     // Mutual exclusion: opening feedback closes the project panel right column
     var pp = document.getElementById('previewProjectPanel');
     if (pp) pp.remove();
+    var imageAssets = document.getElementById('previewImageAssetsPanel');
+    if (imageAssets) imageAssets.classList.add('hidden');
     // Snap agent panel closed instantly (no transition) to avoid overlap flicker
     if (agentPanel && !agentPanel.classList.contains('hidden')) {
       agentPanel.style.transition = 'none';
@@ -3102,6 +3138,7 @@
     var agentOpen = agentPanel && !agentPanel.classList.contains('hidden');
     var pp = document.getElementById('previewProjectPanel');
     var projectOpen = Boolean(pp);
+    var imageAssetsOpen = Boolean(document.getElementById('previewImageAssetsPanel') && !document.getElementById('previewImageAssetsPanel').classList.contains('hidden'));
     // Mutual exclusion: the project panel (previewProjectPanel right column) yields
     // to the feedback/agent right panels — only one right column may be open.
     if (pp && (rightOpen || agentOpen)) { pp.remove(); projectOpen = false; updateGridColumns(); }
@@ -3118,7 +3155,7 @@
     if (ba) { ba.classList.toggle('active', agentOpen); ba.setAttribute('aria-expanded', String(agentOpen)); }
     var bp = document.getElementById('btnProjectPanel');
     if (bp) { bp.classList.toggle('active', projectOpen); bp.setAttribute('aria-expanded', String(projectOpen)); }
-    document.body.classList.toggle('preview-panel-open', rightOpen || agentOpen || projectOpen);
+    document.body.classList.toggle('preview-panel-open', rightOpen || agentOpen || projectOpen || imageAssetsOpen);
     syncResponsiveOutlineVisibility();
   }
 
@@ -7163,6 +7200,8 @@
       var isOpen = !agentPanel.classList.contains('hidden');
 
       if (!isOpen) {
+        var imageAssets = document.getElementById('previewImageAssetsPanel');
+        if (imageAssets) imageAssets.classList.add('hidden');
         // Snap feedback panel closed instantly (no transition) to avoid overlap flicker
         if (rightSidebar && !rightSidebar.classList.contains('hidden')) {
           rightSidebar.style.transition = 'none';

@@ -162,6 +162,22 @@
           </div>
         </div>
       </aside>
+
+      <aside class="preview-image-assets-panel hidden" id="previewImageAssetsPanel" aria-label="生成资产">
+        <div class="preview-image-assets-header"><span>生成资产</span><button class="panel-close-btn" id="previewImageAssetsClose" type="button" title="关闭">✕</button></div>
+        <div class="preview-image-assets-body">
+          <p class="image-assets-source-prompt"><b>原图生成提示词</b><span id="previewImageAssetsSourcePrompt">未记录</span></p>
+          <form id="previewImageAssetsForm">
+            <label>修改方向<textarea id="previewImageAssetsPrompt" required maxlength="8000" placeholder="描述要生成或修改的内容"></textarea></label>
+            <label>用途<input id="previewImageAssetsPurpose" maxlength="500" placeholder="例如：PRD 视觉表达" /></label>
+            <label>主题目录<input id="previewImageAssetsTopic" required value="generated" /></label>
+            <label>候选数量<input id="previewImageAssetsCount" type="number" min="1" max="4" value="1" /></label>
+            <button class="preview-bottom-btn" type="submit">生成候选</button>
+          </form>
+          <div id="previewImageAssetsStatus" aria-live="polite"></div>
+          <div id="previewImageAssetsCandidates"></div>
+        </div>
+      </aside>
     </div>
 
     <!-- Bottom toolbar -->
