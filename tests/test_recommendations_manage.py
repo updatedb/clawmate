@@ -139,6 +139,14 @@ def test_catalog_filters_dismissed(_rec_proj):
     assert "commit_version" not in ids  # 默认任务也被 dismissed 压制,不复活
 
 
+def test_catalog_suppresses_dismissed_default_without_raw_entry(_rec_proj):
+    cfg = PR._read_project_json(_rec_proj)
+    cfg["dismissed_recommendations"] = ["commit_version"]
+    PR._write_project_json(_rec_proj, cfg)
+    ids = [t["id"] for t in _project_task_catalog(_rec_proj)]
+    assert "commit_version" not in ids
+
+
 def test_merge_codex_replaces_old_codex(_rec_proj):
     cfg = PR._read_project_json(_rec_proj)
     cfg["recommended_tasks"] = [
@@ -154,6 +162,23 @@ def test_merge_codex_replaces_old_codex(_rec_proj):
     assert ids == ["b", "a", "c"]
     assert merged[1]["label"] == "新codex"
     assert "dismissed_recommendations" in PR._read_project_json(_rec_proj)
+
+
+def test_merge_codex_respects_label_derived_dismissal(_rec_proj):
+    cfg = PR._read_project_json(_rec_proj)
+    cfg["recommended_tasks"] = [
+        {"label": "Foo", "source": "project_json"},
+        {"id": "bar", "label": "保留", "source": "project_json"},
+    ]
+    cfg["dismissed_recommendations"] = ["Foo"]
+    PR._write_project_json(_rec_proj, cfg)
+    merged = _merge_codex_recommendations(_rec_proj, [
+        {"id": "new1", "label": "新增", "prompt": "p", "source": "codex"},
+    ])
+    ids = [t["id"] for t in merged]
+    assert "Foo" not in ids
+    assert "bar" in ids
+    assert "new1" in ids
 
 
 def _client():
@@ -182,6 +207,21 @@ def test_recommendation_delete_idempotent(_rec_proj, monkeypatch):
     res = _client().post("/api/clawmate/project/r/proj/recommendations/missing/delete")
     assert res.status_code == 200
     assert res.json()["ok"] is True
+
+
+def test_recommendation_delete_removes_idless_label_entry(_rec_proj, monkeypatch):
+    import project_routes as PR
+    monkeypatch.setattr(auth, "is_auth_enabled", lambda config=None: False)
+    monkeypatch.setattr(PR, "_project_target", lambda root, project: _rec_proj)
+    PR._write_project_json(_rec_proj, {
+        "recommended_tasks": [{"label": "Foo", "source": "discover"}],
+        "dismissed_recommendations": [],
+    })
+    res = _client().post("/api/clawmate/project/r/proj/recommendations/Foo/delete")
+    assert res.status_code == 200
+    cfg = PR._read_project_json(_rec_proj)
+    assert cfg["recommended_tasks"] == []
+    assert "Foo" in cfg["dismissed_recommendations"]
 
 
 class _FakeExecutor:

@@ -42,6 +42,29 @@ def test_auto_selects_first_preflighted_backend(monkeypatch):
     assert receipt.backend_actual == "claude"
 
 
+def test_run_summary_analysis_auto_failure_fallback(monkeypatch):
+    class FakeCfg:
+        class Agent:
+            project_backend = "auto"
+            env = {}
+        agent = Agent()
+    calls = []
+    import subprocess
+    def fake_binary(backend):
+        return backend  # both codex and claude resolve to binaries
+    def fake_run(args, **kw):
+        calls.append(args[0])
+        if args[0] == "codex":
+            return SimpleNamespace(returncode=1, stdout="", stderr="codex boom", code=1)
+        return SimpleNamespace(returncode=0, stdout='[{"label":"ok"}]', stderr="", code=0)
+    monkeypatch.setattr(TaskExecutor, "_cli_binary", lambda self, b: fake_binary(b))
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    res = TaskExecutor(FakeCfg()).run_summary_analysis("hi", cwd=".")
+    assert res["ok"] is True
+    assert res["backend"] == "claude"
+    assert calls == ["codex", "claude"]
+
+
 def test_project_receipt_is_jsonl_persisted(tmp_path):
     marker = tmp_path / ".clawmate"
     marker.mkdir()

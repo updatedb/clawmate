@@ -164,7 +164,10 @@ class TaskExecutor:
             except OSError:
                 failures.append(f"{backend}: could not start")
                 continue
-            return {"ok": proc.returncode == 0, "backend": backend,
+            if proc.returncode != 0:
+                failures.append(f"{backend}: exit {proc.returncode}")
+                continue
+            return {"ok": True, "backend": backend,
                     "output": proc.stdout, "error": proc.stderr, "code": proc.returncode}
         return {"ok": False, "backend": "", "output": "",
                 "error": "; ".join(failures) or "No CLI backend available", "code": -1}

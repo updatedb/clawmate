@@ -660,9 +660,17 @@ def _merge_codex_recommendations(target: Path, new_tasks: list[dict]) -> list[di
     cfg = _read_project_json(target)
     existing = cfg.get("recommended_tasks") if isinstance(cfg.get("recommended_tasks"), list) else []
     dismissed = set(cfg.get("dismissed_recommendations") or [])
-    preserved = [t for t in existing if t.get("source") != "codex" and t.get("id") not in dismissed]
-    kept = {t["id"] for t in preserved}
-    merged = preserved + [t for t in new_tasks if t["id"] not in dismissed and t["id"] not in kept]
+    preserved = [t for t in existing if t.get("source") != "codex" and (str(t.get("id") or t.get("label") or "")) not in dismissed]
+    kept = {(str(t.get("id") or t.get("label") or "")) for t in preserved}
+    seen = set(kept)
+    appended: list[dict] = []
+    for t in new_tasks:
+        tid = str(t.get("id") or t.get("label") or "")
+        if tid in dismissed or tid in seen:
+            continue
+        seen.add(tid)
+        appended.append(t)
+    merged = preserved + appended
     cfg["recommended_tasks"] = merged
     cfg["dismissed_recommendations"] = sorted(dismissed)
     _write_project_json(target, cfg)
@@ -991,14 +999,14 @@ async def project_recommendation_delete(root: str, project: str, task_id: str):
     dismissed = set(cfg.get("dismissed_recommendations") or [])
     dismissed.add(task_id)
     existing = cfg.get("recommended_tasks") if isinstance(cfg.get("recommended_tasks"), list) else []
-    cfg["recommended_tasks"] = [t for t in existing if isinstance(t, dict) and str(t.get("id")) != task_id]
+    cfg["recommended_tasks"] = [t for t in existing if isinstance(t, dict) and (str(t.get("id") or t.get("label") or "")) != task_id]
     cfg["dismissed_recommendations"] = sorted(dismissed)
     _write_project_json(target, cfg)
     return JSONResponse(content={"ok": True, "task_id": task_id})
 
 
 @router.post("/api/clawmate/project/{root}/{project}/recommendations/analyze")
-async def project_recommendations_analyze(root: str, project: str):
+def project_recommendations_analyze(root: str, project: str):
     """Generate recommendations by analyzing the project with the project-panel backend."""
     try:
         target = _project_target(root, project)
@@ -1013,7 +1021,7 @@ async def project_recommendations_analyze(root: str, project: str):
         return JSONResponse(status_code=502, content={"ok": False, "detail": result.get("error") or "codex 分析失败"})
     try:
         new_tasks = _extract_codex_tasks(result.get("output") or "")
-    except (ValueError, json.JSONDecodeError) as exc:
+    except ValueError as exc:
         return JSONResponse(status_code=422, content={"ok": False, "detail": f"无法解析 codex 输出：{exc}"})
     if not new_tasks:
         return JSONResponse(content={"ok": True, "recommended_tasks": _project_task_catalog(target), "detail": "codex 未返回可执行任务"})
