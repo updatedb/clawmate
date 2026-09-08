@@ -31,6 +31,14 @@ if not logger.handlers:
 CST = timezone(timedelta(hours=8))
 
 
+def _parse_ts(ts: str) -> datetime:
+    """Parse "YYYY-MM-DD HH:MM:SS" as CST; invalid input → datetime.min."""
+    try:
+        return datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=CST)
+    except Exception:
+        return datetime.min.replace(tzinfo=CST)
+
+
 class ExecutionResultValidationError(ValueError):
     """A callback contract error with safe, caller-actionable diagnostics."""
 
@@ -174,12 +182,6 @@ def list_items(
             except ValueError:
                 cutoff = None
         if cutoff:
-
-            def _parse_ts(ts: str):
-                try:
-                    return datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=CST)
-                except Exception:
-                    return datetime.min.replace(tzinfo=CST)
 
             items = [i for i in items if _parse_ts(i.get("updated", "")) >= cutoff]
 
@@ -733,53 +735,6 @@ def record_execution_result(root_id: str, project: str, task_id: str, *, success
         return dict(task)
 
 
-# ── 扫描 ──────────────────────────────────────────────────────────
-
-
-class ScanResult:
-    checked_roots: int = 0
-    pending_total: int = 0
-    pending_roots: list[str] = []
-    errors: list[str] = []
-
-
-def scan_all() -> ScanResult:
-    """
-    扫描所有 root 下所有 project 的 .feedback.json。
-    不抛异常（错误收集到 return.errors）。
-    """
-    result = ScanResult()
-    try:
-        cfg = load_config()
-    except Exception as e:
-        result.errors.append(f"load config: {e}")
-        return result
-
-    for root in cfg.roots:
-        root_dir = Path(root.dir).expanduser().resolve()
-        if not root_dir.is_dir():
-            continue
-        try:
-            for entry in root_dir.iterdir():
-                if not entry.is_dir():
-                    continue
-                fb_path = entry / ".clawmate" / "feedback.json"
-                if not fb_path.exists():
-                    continue
-                result.checked_roots += 1
-                data = _read_feedback(fb_path)
-                items = data.get("items", [])
-                pending = sum(1 for i in items if i.get("status") == "pending")
-                if pending > 0:
-                    result.pending_total += pending
-                    if root.id not in result.pending_roots:
-                        result.pending_roots.append(root.id)
-        except Exception as e:
-            result.errors.append(f"scan {root.id}: {e}")
-
-    return result
-
-
 def _cleanup_expired(items: list[dict]) -> list[dict]:
     """移除超过阈值的 done/failed/deleted 条目。
 
@@ -800,12 +755,6 @@ def _cleanup_expired(items: list[dict]) -> list[dict]:
         return items  # 禁用清理
 
     cutoff = datetime.now(CST) - timedelta(days=threshold_days)
-
-    def _parse_ts(ts: str):
-        try:
-            return datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=CST)
-        except Exception:
-            return datetime.min.replace(tzinfo=CST)
 
     kept = []
     removed = 0

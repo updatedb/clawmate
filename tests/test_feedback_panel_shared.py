@@ -46,3 +46,32 @@ console.log(JSON.stringify({
         "text": "x", "note": "n", "action": "modify", "scope": "document",
         "task_id": "", "position": "Line 4",
     }]}
+
+
+def test_shared_panel_validation_rule_enforces_required_fields():
+    """The review/share 浮窗 share one required-field rule via validateSubmission."""
+    panel = ROOT / "dev/static/js/feedback-panel.js"
+    script = r'''
+const fs = require('fs'), vm = require('vm');
+const context = { window: {}, document: { head: null } };
+vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), context);
+const api = context.window.ClawMateFeedbackPanel;
+console.log(JSON.stringify({
+  bare: api.validateSubmission([{ text:'x', note:'n', action:'modify' }]),
+  noText: api.validateSubmission([{ text:'', note:'n', action:'modify' }]),
+  noNote: api.validateSubmission([{ text:'x', note:'', action:'modify' }]),
+  noAction: api.validateSubmission([{ text:'x', note:'n', action:'' }]),
+  noActionOptOut: api.validateSubmission([{ text:'x', note:'n' }], { requireAction:false }),
+  missingNoteSecond: api.validateSubmission([{ text:'x', note:'n', action:'modify' }, { text:'y', note:'' }]),
+  emptyList: api.validateSubmission([]),
+}));
+'''
+    result = subprocess.run(["node", "-e", script, str(panel)], check=True, capture_output=True, text=True)
+    outcome = json.loads(result.stdout)
+    assert outcome["bare"] is None
+    assert outcome["noText"] == "请填写选中内容"
+    assert outcome["noNote"] == "请填写建议"
+    assert outcome["noAction"] == "请选择操作类型"
+    assert outcome["noActionOptOut"] is None
+    assert outcome["missingNoteSecond"] == "请填写建议"
+    assert outcome["emptyList"] is None

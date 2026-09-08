@@ -9,6 +9,7 @@
   </script>
   <link rel="icon" type="image/png" sizes="32x32" href="./asset/clawmate-logo.png" />
   <link rel="apple-touch-icon" href="./asset/clawmate-logo.png" />
+  <link rel="stylesheet" href="./css/tokens.css" />
   <title>ONLYOFFICE 预览</title>
   <style>
     html, body {
@@ -18,9 +19,9 @@
       height: 100%;
       overflow: auto;
       scrollbar-width: none;
-      font-family: "Helvetica Neue", Arial, sans-serif;
-      background: #0f1115;
-      color: #f2f4f8;
+      font-family: var(--font-ui);
+      background: var(--bg-primary);
+      color: var(--text-primary);
     }
     html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
     #onlyoffice {
@@ -31,13 +32,13 @@
     .hidden { display: none; }
     .fallback {
       padding: 16px 20px;
-      border-top: 1px solid rgba(255, 255, 255, 0.08);
-      background: rgba(255, 255, 255, 0.02);
+      border-top: 1px solid var(--border-color);
+      background: var(--bg-secondary);
     }
     .fallback-title {
       font-size: 14px;
       margin-bottom: 10px;
-      color: #f8b4b4;
+      color: var(--danger);
     }
     .fallback-actions {
       display: flex;
@@ -47,8 +48,8 @@
     .fallback-actions a {
       padding: 6px 12px;
       border-radius: 6px;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      color: #f2f4f8;
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
       text-decoration: none;
       font-size: 13px;
     }

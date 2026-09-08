@@ -30,7 +30,6 @@ ClawMate E2E Smoke Tests — Playwright (self-contained, no pytest fixtures need
   playwright install chromium
 """
 
-import glob
 import os
 import sys
 import traceback

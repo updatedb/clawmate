@@ -3,7 +3,7 @@ Unit tests for service.py — safe_path, file operations.
 
 Usage:
     cd /home/openclaw/webprojects/clawmate
-    python -m pytest test/test_service.py -v
+    python -m pytest tests/test_service.py -v
 """
 
 from __future__ import annotations

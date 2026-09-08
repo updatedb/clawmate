@@ -26,7 +26,6 @@ from __future__ import annotations
 import re
 import time
 from pathlib import Path
-from urllib.parse import urlparse, urlunparse
 
 from starlette.types import ASGIApp, Scope, Receive, Send
 from starlette.datastructures import MutableHeaders
@@ -56,16 +55,6 @@ def _get_mtime(abs_path: str) -> int:
 
 # HTML tag patterns — match src="..." or href="..." that point to local
 # static files (not CDN, not data: URIs, not absolute URLs).
-_STATIC_DIRS = ("js/", "css/", "asset/", "dist/", "vendor/", "pdfjs/")
-_RE_SCRIPT_SRC = re.compile(
-    r'(<script\b[^>]*?\ssrc=")(\.\.?/)(js/[^"]+)(")',
-    re.IGNORECASE,
-)
-_RE_LINK_HREF = re.compile(
-    r'(<link\b[^>]*?\s(?:href)=")(\.\.?/)(css/[^"]+\.css)(")',
-    re.IGNORECASE,
-)
-# Broader pattern for any local reference under ./ that we can mtime-stamp
 _RE_ANY_SRC = re.compile(
     r'((?:src|href)=")(\.\.?/)((?:js|css|asset|dist|vendor|pdfjs)/[^"]+)(")',
     re.IGNORECASE,

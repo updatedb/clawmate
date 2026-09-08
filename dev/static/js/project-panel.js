@@ -39,8 +39,8 @@
       var html = '<div class="project-status-bar"><span>更新于 ' + esc((summary.refreshed_at || '').replace('T', ' ').slice(0, 16)) + '</span><span data-project-status>执行中 ' + (summary.running || 0) + ' · 待处理 ' + (summary.pending || 0) + ' · 失败 ' + (summary.failed || 0) + '</span></div>';
       html += '<section class="project-panel-section"><b>现在要处理</b><div class="project-actions">' + (actions.slice(0,3).map(function (item) { return '<div class="project-panel-signal"><span>' + esc(item.label) + '</span><button class="project-panel-action" data-project-action="' + esc(item.id) + '" title="来源：' + esc(item.source) + '">' + esc(item.action) + '</button></div>'; }).join('') || '<p class="project-panel-hint">暂无条件行动</p>') + '</div></section>';
       html += '<section class="project-panel-section"><b>' + (runs.active.length ? '正在执行' : '最近执行') + '</b><div class="project-runs" data-project-runs></div></section>';
-      html += '<section class="project-panel-section"><b>推荐任务</b><p class="project-panel-hint">来自项目配置；规则提示不作为可执行任务。</p><ul>' + (recs.map(function (r) { return '<li><span><strong>' + esc(r.label) + '</strong><small>频率 ' + (r.frequency || 0) + ' · ' + (r.estimated_minutes != null ? esc(String(r.estimated_minutes)) + ' 分钟' : '时长未知') + '</small></span><button class="project-panel-action" data-project-task="' + esc(r.id) + '">执行</button></li>'; }).join('') || '<li>暂无可执行推荐任务</li>') + '</ul></section><section class="project-panel-section"><b>CLAWLIST</b><ul>' + (projectTasks.filter(function (item) { return !item.completed; }).map(function (item) { return '<li><span class="project-panel-check">☐</span><span>' + esc(item.task) + '</span><button class="project-panel-action" data-clawlist-task="' + esc(item.task) + '">完成</button></li>'; }).join('') || '<li>暂无未完成任务</li>');
-      var done = projectTasks.filter(function (item) { return item.completed; }); if (done.length) html += '<details><summary>已完成（' + done.length + '）</summary>' + done.map(function (item) { return '<li><span class="project-panel-check">☑</span><span>' + esc(item.task) + '</span></li>'; }).join('') + '</details>';
+      html += '<section class="project-panel-section"><b>推荐任务</b><p class="project-panel-hint">来自项目配置；规则提示不作为可执行任务。</p><ul class="recommended-list">' + (recs.map(function (r) { return '<li><span><strong>' + esc(r.label) + '</strong><small>频率 ' + (r.frequency || 0) + ' · ' + (r.estimated_minutes != null ? esc(String(r.estimated_minutes)) + ' 分钟' : '时长未知') + '</small></span><button class="project-panel-action" data-project-task="' + esc(r.id) + '">执行</button></li>'; }).join('') || '<li>暂无可执行推荐任务</li>') + '</ul></section><section class="project-panel-section"><b>CLAWLIST</b><ul class="claw-list">' + (projectTasks.filter(function (item) { return !item.completed; }).map(function (item) { return '<li class="claw-row"><span class="claw-check" aria-hidden="true"></span><span class="claw-text">' + esc(item.task) + '</span><button class="project-panel-action" data-clawlist-task="' + esc(item.task) + '">完成</button></li>'; }).join('') || '<li>暂无未完成任务</li>');
+      var done = projectTasks.filter(function (item) { return item.completed; }); if (done.length) html += '<details><summary>已完成（' + done.length + '）</summary>' + done.map(function (item) { return '<li class="claw-row claw-done"><span class="claw-check" aria-hidden="true"></span><span class="claw-text">' + esc(item.task) + '</span></li>'; }).join('') + '</details>';
       body.innerHTML = html + '</ul></section>';
       body.querySelectorAll('[data-project-action]').forEach(function (button) { button.onclick = function () { var action = button.getAttribute('data-project-action'); if (action === 'review_feedback' || action === 'implement_feedback') { options.openFeedback && options.openFeedback(action === 'review_feedback' ? 'pending_review' : 'approved'); return; } var task = recs.find(function (item) { return item.id === action || ((action === 'update_meeting_agenda' || action === 'update_meeting_conclusion') && item.id === 'update_meeting_info'); }); if (task) { var taskButton = body.querySelector('[data-project-task="' + (global.CSS && CSS.escape ? CSS.escape(task.id) : task.id) + '"]'); if (taskButton) taskButton.click(); } else notify('该行动需要先在 project.json 的 recommended_tasks 中配置对应任务'); }; });
       body.querySelectorAll('[data-clawlist-task]').forEach(function (button) { button.onclick = async function () { var task = button.getAttribute('data-clawlist-task'); button.disabled = true; var res = await request(endpoint('/clawlist/complete'), {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({task:task})}); if (res.ok) refresh(); else { button.disabled = false; notify('无法完成该 CLAWLIST 任务'); } }; });
@@ -63,7 +63,22 @@
     if (!root || !project) return;
     button.style.display = '';
     var panel = null, controller = null;
-    function close() { if (controller) controller.stop(); if (panel) panel.remove(); panel = null; controller = null; button.classList.remove('active'); button.setAttribute('aria-expanded', 'false'); }
+    function close() {
+      if (controller) controller.stop();
+      if (panel) panel.remove();
+      panel = null; controller = null;
+      button.classList.remove('active'); button.setAttribute('aria-expanded', 'false');
+      // The project panel is a right-side grid column on preview; on close, let
+      // the grid refresh so the content reclaims the column.
+      var grid = global.document.querySelector('.preview-three-col');
+      if (grid) {
+        var g = (grid.style.gridTemplateColumns || '240px 1fr 0px 0px').split(' ');
+        g[3] = '0px';
+        grid.style.gridTemplateColumns = g.join(' ');
+      }
+      // Let preview.js reconcile the grid + mutually-exclusive button states.
+      global.dispatchEvent(new Event('previewPanelChange'));
+    }
     function openFeedback(filter) {
       var toggle = document.getElementById('btnToggleRight');
       var bar = document.getElementById('previewFilterBar');
@@ -74,9 +89,29 @@
     }
     function open() {
       panel = document.createElement('aside'); panel.id = 'previewProjectPanel'; panel.className = 'project-panel';
-      panel.innerHTML = '<header class="project-panel-header"><strong>项目面板</strong><span id="projectPanelSummary"></span><button class="project-panel-close" aria-label="关闭项目面板">✕</button></header><div class="project-panel-body">加载项目概况…</div>';
-      document.body.appendChild(panel); button.classList.add('active'); button.setAttribute('aria-expanded', 'true');
-      panel.querySelector('.project-panel-close').onclick = close;
+      panel.innerHTML = '<header class="project-panel-header"><strong>项目面板</strong><span id="projectPanelSummary"></span><button class="panel-close-btn" aria-label="关闭项目面板"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></header><div class="project-panel-body">加载项目概况…</div>';
+      // The project panel is a right-side grid column (col4) on the preview surface:
+      // it should push content and be mutually exclusive with feedback/agent right panels.
+      var grid = global.document.querySelector('.preview-three-col');
+      if (grid) {
+        var rightSb = global.document.getElementById('rightSidebar');
+        if (rightSb && !rightSb.classList.contains('hidden')) { rightSb.classList.add('hidden'); rightSb.style.display = 'none'; var rt = global.document.getElementById('btnToggleRight'); if (rt) rt.classList.remove('active'); }
+        ['agentPanel', 'previewAgentPanel'].forEach(function (agentId) {
+          var agent = global.document.getElementById(agentId);
+          if (agent && !agent.classList.contains('hidden')) { agent.classList.add('hidden'); agent.style.display = 'none'; var ab = global.document.getElementById('btnToggleAgent'); if (ab) ab.classList.remove('active'); }
+        });
+        // The grid columns are owned by preview.js's updateGridColumns(), which runs on
+        // the previewPanelChange event dispatched below: narrow screens draw the panel as
+        // a bounded overlay drawer (col4=0, content-first); desktop shows it as a 420px
+        // column beside content. Only append the panel here.
+        grid.appendChild(panel);
+      } else {
+        global.document.body.appendChild(panel);
+      }
+      button.classList.add('active'); button.setAttribute('aria-expanded', 'true');
+      // Let preview.js reconcile the grid + mutually-exclusive button states.
+      global.dispatchEvent(new Event('previewPanelChange'));
+      panel.querySelector('.panel-close-btn').onclick = close;
       controller = mount({body:panel.querySelector('.project-panel-body'), summary:panel.querySelector('#projectPanelSummary'), getContext:function () { return {root:root, project:project}; }, isOpen:function () { return Boolean(panel); }, openFeedback:openFeedback});
       controller.refresh();
     }

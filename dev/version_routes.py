@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 import subprocess
 from pathlib import Path
-from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse

@@ -86,22 +86,15 @@ def search_media(query: str, root_id: str, rel_dir: str = "", recursive: bool = 
 
 # ── Content search ──────────────────────────────────────────────────────────────
 
-# File extensions that can be content-searched as plain text directly
-_CONTENT_TEXT_EXTS = {
-    ".txt", ".md", ".markdown", ".mdx", ".json", ".csv", ".log",
-    ".py", ".js", ".ts", ".tsx", ".jsx", ".html", ".css", ".yaml", ".yml",
-    ".ini", ".toml", ".xml", ".gpx", ".kml", ".conf", ".env", ".sh", ".bat",
-    ".ps1", ".sql", ".r", ".go", ".java", ".c", ".cpp", ".h", ".hpp", ".vue",
-    ".srt", ".rst", ".tex", ".Makefile", ".dockerfile", ".cfg",
-}
-
-# File extensions that need text extraction before search
-_CONTENT_EXTRACT_EXTS = {
-    ".pdf": "pymupdf",
-    ".docx": "python-docx",
+# Extensions that need text extraction before search, mapped to the import
+# module that provides the extractor — the single source of this extension list.
+_EXTRACTOR_MODULES = {
+    ".pdf": "fitz",
+    ".docx": "docx",
     ".xlsx": "openpyxl",
-    ".pptx": "python-pptx",
+    ".pptx": "pptx",
 }
+_CONTENT_EXTRACT_EXTS = frozenset(_EXTRACTOR_MODULES)
 
 
 _RG_PATH = None
@@ -113,14 +106,8 @@ def _check_extractors() -> Dict[str, bool]:
     Python's own import cache makes repeated checks essentially free,
     so no manual cache is needed.
     """
-    checks = {
-        ".pdf": "fitz",
-        ".docx": "docx",
-        ".xlsx": "openpyxl",
-        ".pptx": "pptx",
-    }
     result: Dict[str, bool] = {}
-    for ext, mod in checks.items():
+    for ext, mod in _EXTRACTOR_MODULES.items():
         try:
             __import__(mod)
             result[ext] = True
@@ -311,62 +298,6 @@ def extract_text(file_path: Path, project_dir: Path) -> Path | None:
         pass
 
     return cache_file
-
-
-def _find_projects(root_path: Path, target: Path, max_depth: int,
-                   exclude_dir: set, timeout_deadline: float) -> List[Path]:
-    """BFS walk from target to discover project directories (those containing .clawmate/).
-
-    Returns a list of project root Paths (immediate children of root_path that have .clawmate/).
-    Also returns non-project directories that should get filename-only search.
-    """
-    import time as _time
-    projects = []
-
-    # Check if target itself is a project
-    if (target / ".clawmate").is_dir():
-        projects.append(target)
-        return projects  # target is a project, no need to search subdirectories
-
-    queue: deque = deque([(target, 0)])
-    seen_dirs = {target}
-
-    while queue:
-        if _time.time() > timeout_deadline:
-            break
-        dir_path, depth = queue.popleft()
-        if depth > max_depth:
-            continue
-
-        try:
-            entries = sorted(dir_path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
-        except (OSError, PermissionError):
-            continue
-
-        for entry in entries:
-            if _time.time() > timeout_deadline:
-                break
-            if not entry.is_dir():
-                continue
-            if entry.name.startswith(".") and entry.name in exclude_dir:
-                continue
-            # Skip all hidden directories (not in exclude list)
-            if entry.name.startswith("."):
-                continue
-            if entry.name.lower() in exclude_dir:
-                continue
-
-            # Check if this is a project
-            if (entry / ".clawmate").is_dir():
-                projects.append(entry)
-                # Don't recurse into project subdirectories — rg handles that
-                continue
-
-            if depth < max_depth and entry not in seen_dirs:
-                seen_dirs.add(entry)
-                queue.append((entry, depth + 1))
-
-    return projects
 
 
 def _project_cache_root(root_path: Path, target: Path) -> Path | None:
@@ -602,7 +533,6 @@ def search_content(query: str, root_id: str, rel_dir: str = "",
             resolved_results[abs_path] = info
 
     # Step 7: Build final response
-    from service import get_public_base_url as _get_base_url
 
     results_by_file = []
     # Sort by match count descending

@@ -1,0 +1,29 @@
+{
+  "screen": "share-view",
+  "selectedLayout": "A",
+  "layoutApproach": "Public read-only doc: collapsible TOC (left) + content center + feedback-only right panel (pending/submitted). Selection tooltip is the primary feedback input. Bottombar shows expiry. Deliberately no forward navigation (dead end by design) and no review/execute/file APIs.",
+  "regions": ["topbar", "tocLeft", "contentCenter", "rightFeedback", "bottombar"],
+  "components": {
+    "topbar": ["brand", "shareTitle", "toggleToc", "toggleFeedback", "themeToggle"],
+    "tocLeft": ["outline", "tocEmpty"],
+    "contentCenter": ["markdownBody", "image", "audio", "video", "htmlIframe", "plainText", "officeNote"],
+    "rightFeedback": ["feedbackCardList", "pending/submitted filter", "shareFbAdd", "shareFbSubmit"],
+    "bottombar": ["expiry"],
+    "overlay": ["selectionTooltip"]
+  },
+  "responsive": {
+    "mobile": "Single column content; TOC & feedback slide-in hidden overlays; selection tooltip stays; bottombar shows expiry.",
+    "tablet": "TOC (240px) + content + feedback drawer; grid auto-hides right on narrow viewport.",
+    "desktop": "TOC + content + feedback rail (380px); content width autosizes."
+  },
+  "interactionMap": {
+    "file selection": "open feedback tooltip (add todo / submit review)",
+    "shareFbSubmit": "submit pending selections to /share/{token}/feedback",
+    "shareFbAdd": "create empty pending card",
+    "toggleToc/toggleFeedback": "slide panels in/out",
+    "relative markdown link": "rewrite to preview.html (authenticated, internal)",
+    "relative image": "rewrite to /share/{token}/asset"
+  },
+  "states": ["empty", "loading", "error", "expired", "populated"],
+  "timestamp": "2026-09-08T00:00:00Z"
+}

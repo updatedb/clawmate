@@ -321,12 +321,6 @@ def _bounded_int(value: object, default: int, low: int, high: int) -> int:
         return default
 
 
-def _parse_bool(value: object) -> bool:
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "on"}
-    return bool(value)
-
-
 def _parse_search_config(raw: dict) -> SearchConfig:
     """Parse search section from config dict."""
     sc = raw.get("content") or {}

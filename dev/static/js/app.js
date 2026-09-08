@@ -56,7 +56,6 @@ let sidebarParentDir = "";
 let sidebarEntries = [];
 
 const els = {
-  breadcrumb: document.getElementById("breadcrumb"),
   dirList: document.getElementById("dirList"),
   hamburgerBtn: document.getElementById("hamburgerBtn"),
   sidebarOverlay: document.getElementById("sidebarOverlay"),
@@ -86,7 +85,6 @@ const els = {
   pageInfo: document.getElementById("pageInfo"),
   loadMoreBtn: document.getElementById("loadMoreBtn"),
   rootSelect: document.getElementById("rootSelect"),
-  batchDownloadBtn: document.getElementById("batchDownloadBtn"),
   // Multi-select
   multiSelectToggle: document.getElementById("multiSelectToggle"),
   btnCreate: document.getElementById("btnCreate"),
@@ -432,13 +430,12 @@ function renderBreadcrumbContainer(container) {
 }
 
 function renderBreadcrumbs() {
-  renderBreadcrumbContainer(els.breadcrumb);
   if (els.currentPath) {
     els.currentPath.classList.add("breadcrumb");
     renderBreadcrumbContainer(els.currentPath);
   }
   // Add action buttons after breadcrumb
-  var container = els.currentPath || els.breadcrumb;
+  var container = els.currentPath;
   if (!container) return;
   // Remove existing action buttons
   var existing = container.querySelectorAll('.breadcrumb-copy,.breadcrumb-refresh');
@@ -697,7 +694,6 @@ function batchMoveSelected() {
 
   openDirPicker(`选择目标目录 — 移动 ${paths.length} 个文件`);
   dirPickerCallback = async function (destDir) {
-    if (!destDir) return;
     updateStatus(`正在移动 ${paths.length} 个文件...`);
     let moved = 0;
     let failed = 0;
@@ -969,7 +965,6 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
         addItem('move', '移动到...', function () {
           openDirPicker('选择目标目录 — ' + entry.name);
           dirPickerCallback = function (destDir) {
-            if (!destDir) return;
             authFetch('/api/clawmate/move', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -1901,6 +1896,9 @@ els.hamburgerBtn && els.hamburgerBtn.addEventListener("click", () => {
   if (!els.sidebar) return;
   const isHidden = els.sidebar.classList.contains('hidden');
   if (isHidden) {
+    // Mutual exclusion: opening the sidebar closes the open right panels first
+    if (_isProjectPanelOpen()) _setProjectPanelOpen(false);
+    if (window.Agent && typeof window.Agent.isOpen === 'function' && window.Agent.isOpen()) window.Agent.close();
     els.sidebar.classList.remove('hidden');
   } else {
     els.sidebar.classList.add('hidden');
@@ -1908,16 +1906,34 @@ els.hamburgerBtn && els.hamburgerBtn.addEventListener("click", () => {
   if (els.sidebarOverlay) {
     els.sidebarOverlay.style.display = isHidden ? 'block' : 'none';
   }
-  // Sync sidebar toggle button state
-  const btn = document.getElementById('btnToggleSidebar');
-  if (btn) btn.classList.toggle('active', isHidden);
+  // Sync button active/aria + content grid (mutual exclusion + content-first)
+  syncIndexPanelOpen();
 });
 els.sidebarOverlay && els.sidebarOverlay.addEventListener("click", () => {
   els.sidebar && els.sidebar.classList.add('hidden');
   if (els.sidebarOverlay) els.sidebarOverlay.style.display = "none";
-  // Sync sidebar toggle button state
-  const btn = document.getElementById("btnToggleSidebar");
-  if (btn) btn.classList.remove("active");
+  syncIndexPanelOpen();
+});
+// Drawer scrim: tap outside an open project/agent drawer closes it (tablet).
+const indexDrawerScrim = document.getElementById('indexDrawerScrim');
+indexDrawerScrim && indexDrawerScrim.addEventListener('click', () => {
+  if (_isProjectPanelOpen()) _setProjectPanelOpen(false);
+  if (window.Agent && typeof window.Agent.isOpen === 'function' && window.Agent.isOpen()) window.Agent.close();
+  syncIndexPanelOpen();
+});
+// Escape dismisses an open project/agent drawer (keyboard accessibility, QA #1).
+// Defensive: never hijack Escape while the command palette, a modal, or the agent
+// terminal/chat input owns it — those handle Escape themselves.
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Escape') return;
+  var pal = document.getElementById('clawmateCommandPalette');
+  if (pal && pal.style.display === 'flex') return;
+  var modal = document.getElementById('contentMatchModal');
+  if (modal && modal.style.display === 'flex') return;
+  var ae = document.activeElement;
+  if (ae && (ae.closest('.xterm') || ae.closest('#agentChatInput'))) return;
+  if (_isProjectPanelOpen()) { _setProjectPanelOpen(false); return; }
+  if (window.Agent && typeof window.Agent.isOpen === 'function' && window.Agent.isOpen()) { window.Agent.close(); syncIndexPanelOpen(); }
 });
 els.filterType.addEventListener("change", (e) => setFilterType(e.target.value));
 els.sortTime && els.sortTime.addEventListener("click", () => handleSortPill(els.sortTime));
@@ -1951,6 +1967,7 @@ if (btnToggleSidebar) {
       if (agentPanel && !agentPanel.classList.contains('hidden')) {
         if (window.Agent) window.Agent.close();
       }
+      if (_isProjectPanelOpen()) _setProjectPanelOpen(false);
       // Toggle overlay — uses .hidden class consistent with preview panels
       const isHidden = sidebar.classList.contains('hidden');
       if (isHidden) {
@@ -1974,10 +1991,13 @@ if (btnToggleSidebar) {
       // Toggle with slide animation
       const isHidden = sidebar.classList.contains("hidden");
       if (isHidden) {
+        // Mutual exclusion: opening the sidebar closes the open right panels first
+        if (_isProjectPanelOpen()) _setProjectPanelOpen(false);
+        if (window.Agent && typeof window.Agent.isOpen === 'function' && window.Agent.isOpen()) window.Agent.close();
         // ── Open: slide from left ──
         sidebar.style.display = 'flex';           // override global .hidden display:none
         // Expand grid column directly while sidebar is still "hidden"
-        // (bypass _updateContentGrid which would keep column at 0px)
+        // (bypass updateIndexGrid, which keeps the column at 0px until hidden is removed)
         var _contentEl = document.querySelector('.content');
         var gridParts = (_contentEl.style.gridTemplateColumns || '240px 1fr 0px 0px').split(' ');
         gridParts[0] = '240px';
@@ -1994,20 +2014,96 @@ if (btnToggleSidebar) {
         // Grid stays expanded during slide-out; collapse after animation
         setTimeout(function () {
           sidebar.style.display = '';             // let global .hidden handle display
-          _updateContentGrid();                   // grid column → 0px
+          updateIndexGrid();                   // grid column → 0px
         }, 300);
       }
     }
-    syncSidebarBtn();
+    syncIndexPanelOpen();
   });
 }
 
-// Update content grid columns when sidebar/agent panel change
-function _updateContentGrid() {
-  // Delegate to the xterm 6 Agent facade for consistent grid management
-  if (window.Agent && window.Agent.updateGrid) {
+// Single width-aware grid updater for the index page (mirrors preview updateGridColumns,
+// and consolidates the former _updateContentGrid() + _applyContentFirst()). It is the ONE
+// writer of `.content` grid-template-columns:
+//   • Desktop (>1240): side-by-side — sidebar col1 (240), content col2 (1fr), project col3
+//     (420) or the agent col3 resize handle (5px) + col4 (resizable agent width).
+//   • Tablet (769-1240): an open project/agent panel becomes a bounded overlay drawer (see
+//     style.css), so col3/col4 stay 0 — content keeps full width behind the drawer.
+//   • Mobile (≤768): owned by the media query (grid forced to 0px 1fr 0px 0px).
+// The agent's resizable col4 is delegated to terminal.js's Agent.updateGrid() (kept intact),
+// then overridden here for the tablet-drawer case and the project col3. Cannot be simplified
+// to a single hard-coded width because the agent panel is user-resizable (terminal.js).
+function updateIndexGrid() {
+  var vw = window.innerWidth;
+  var el = document.querySelector('.content');
+  if (!el) return;
+  // terminal.js owns the resizable agent col4 (+ col1 sidebar): lay it out first.
+  if (window.Agent && typeof window.Agent.updateGrid === 'function') {
     window.Agent.updateGrid();
   }
+  var pp = document.getElementById('projectPanel');
+  var ap = document.getElementById('agentPanel');
+  var projectOpen = !!(pp && !pp.classList.contains('hidden'));
+  var agentOpen = !!(ap && !ap.classList.contains('hidden'));
+  var panelOpen = projectOpen || agentOpen;
+  var sidebar = els.sidebar;
+  var sidebarHidden = sidebar && (sidebar.classList.contains('hidden') || sidebar.classList.contains('responsive-hidden') || getComputedStyle(sidebar).display === 'none');
+  var lW = sidebarHidden ? '0px' : '240px';
+  var lWpx = sidebarHidden ? 0 : 240;
+  // Tablet: an open right panel is a bounded overlay drawer → keep col3/col4=0 so content
+  // stays full-width behind it. Content-first: also collapse the sidebar if it alone would
+  // leave less content than a single panel (Rule 1b/4).
+  if (panelOpen && vw <= 1240) {
+    var col1 = lWpx >= vw ? '0px' : lW;
+    el.style.gridTemplateColumns = col1 + ' 1fr 0px 0px';
+    var h = document.getElementById('agentResizeHandle');
+    if (h) h.classList.add('hidden');
+    return;
+  }
+  // Desktop: no open panel → content is full width between the sidebar and nothing else.
+  if (!panelOpen) {
+    el.style.gridTemplateColumns = lW + ' 1fr 0px 0px';
+    var h2 = document.getElementById('agentResizeHandle');
+    if (h2) h2.classList.add('hidden');
+    return;
+  }
+  // Desktop side-by-side: project col3 open (agent closed). The agent-open case was already
+  // laid out by Agent.updateGrid() above (sidebar col + col4). Only project needs col3.
+  if (projectOpen) {
+    var gridParts = (el.style.gridTemplateColumns || '240px 1fr 0px 0px').split(' ');
+    gridParts[0] = lW; gridParts[1] = '1fr'; gridParts[2] = '420px'; gridParts[3] = '0px';
+    el.style.gridTemplateColumns = gridParts.join(' ');
+    var h3 = document.getElementById('agentResizeHandle');
+    if (h3) h3.classList.add('hidden');
+  }
+  // (agentOpen + desktop: left as set by Agent.updateGrid() — sidebar col + agent col4.)
+}
+
+window.addEventListener('resize', updateIndexGrid);
+
+// Panel open-state syncer for the index page (mirrors preview _syncPanelOpenClass).
+// Keeps the three toggles' active/aria-expanded in sync with the actual open state and
+// applies the layout after a panel change. Each panel is an independent toggle, so
+// "sidebar + project both active" is a legitimate state (Dir col1 + project col3, no
+// overlap). Buttons read the real rendered visibility, so CSS-driven suppressions kept
+// in sync even when no `hidden` class is set.
+function syncIndexPanelOpen() {
+  // Read the sidebar's actual rendered visibility (not just the `hidden` class) so
+  // the button reflects CSS-driven suppression (e.g. agent-open content-first) without
+  // the project panel forcing the Dir sidebar closed — dir + project coexist (col1+col3).
+  var sidebarOpen = els.sidebar && getComputedStyle(els.sidebar).display !== 'none' && !els.sidebar.classList.contains('hidden');
+  var projectOpen = !!(projectPanel && !projectPanel.classList.contains('hidden'));
+  var agentOpen = !!(window.Agent && typeof window.Agent.isOpen === 'function' && window.Agent.isOpen());
+  var btnS = document.getElementById('btnToggleSidebar');
+  if (btnS) { btnS.classList.toggle('active', sidebarOpen); btnS.setAttribute('aria-expanded', String(sidebarOpen)); }
+  var btnP = document.getElementById('btnProjectPanel');
+  if (btnP) { btnP.classList.toggle('active', projectOpen); btnP.setAttribute('aria-expanded', String(projectOpen)); }
+  var btnA = document.getElementById('btnToggleAgent');
+  if (btnA) { btnA.classList.toggle('active', agentOpen); btnA.setAttribute('aria-expanded', String(agentOpen)); }
+  // project-open drives the project col3 grid lane (and the tablet drawer scrim); it no
+  // longer suppresses the Dir sidebar — that suppression is agent-open content-first only.
+  document.body.classList.toggle('project-open', projectOpen);
+  updateIndexGrid();
 }
 
 // Theme toggle
@@ -2032,17 +2128,18 @@ btnToggleAgent && btnToggleAgent.addEventListener("click", function () {
         if (els.sidebar && !els.sidebar.classList.contains('hidden')) {
           els.sidebar.classList.add('hidden');
           syncSidebarBtn();
-          _updateContentGrid();
+          updateIndexGrid();
         }
       }
     }
     window.Agent.toggle();
     if (window.Agent.isOpen()) {
-      btnToggleAgent.classList.add("active");
       window.Agent.focus();
-    } else {
-      btnToggleAgent.classList.remove("active");
     }
+    // Sync panel buttons + re-apply the content grid right after the agent toggles:
+    // terminal.js's syncMainAgentPanelLayout sets col4 to the desktop width even on
+    // tablet, but updateIndexGrid() intentionally keeps col3/col4=0 there (bounded drawer).
+    syncIndexPanelOpen();
   }
 });
 
@@ -2074,11 +2171,8 @@ function _setProjectPanelOpen(open) {
   }
   projectPanel.classList.toggle('hidden', !open);
   projectPanel.setAttribute('aria-hidden', String(!open));
-  if (btnProjectPanel) {
-    btnProjectPanel.classList.toggle('active', open);
-    btnProjectPanel.setAttribute('aria-expanded', String(open));
-  }
   if (open) refreshProjectPanel(); else _stopProjectRunPolling();
+  syncIndexPanelOpen();   // grid col3 (project) + content-first + button/aria sync
 }
 function _stopProjectRunPolling() {
   if (_projectRunPollTimer) { clearTimeout(_projectRunPollTimer); _projectRunPollTimer = null; }
@@ -2185,9 +2279,9 @@ function renderProjectPanel() {
   html += '<section class="project-panel-section"><b>推荐任务</b><p class="project-panel-hint">来自项目配置；规则提示不作为可执行任务。</p><ul>';
   html += recs.map(r => '<li><span><strong>' + _esc(r.label) + '</strong><small>频率 ' + (r.frequency || 0) + ' · ' + (r.estimated_minutes != null ? _esc(String(r.estimated_minutes)) + ' 分钟' : '时长未知') + '</small></span><button class="project-panel-action" data-project-task="' + _esc(r.id) + '">执行</button></li>').join('') || '<li>暂无可执行推荐任务</li>';
   html += '</ul></section><section class="project-panel-section"><b>CLAWLIST</b><ul>';
-  html += projectTasks.filter(item => !item.completed).map(item => '<li><span class="project-panel-check">☐</span><span>' + _esc(item.task) + '</span><button class="project-panel-action" data-clawlist-task="' + _esc(item.task) + '">完成</button></li>').join('') || '<li>暂无未完成任务</li>';
+  html += projectTasks.filter(item => !item.completed).map(item => '<li class="claw-row"><span class="claw-check" aria-hidden="true"></span><span class="claw-text">' + _esc(item.task) + '</span><button class="project-panel-action" data-clawlist-task="' + _esc(item.task) + '">完成</button></li>').join('') || '<li>暂无未完成任务</li>';
   const done = projectTasks.filter(item => item.completed);
-  if (done.length) html += '<details><summary>已完成（' + done.length + '）</summary>' + done.map(item => '<li><span class="project-panel-check">☑</span><span>' + _esc(item.task) + '</span></li>').join('') + '</details>';
+  if (done.length) html += '<details><summary>已完成（' + done.length + '）</summary>' + done.map(item => '<li class="claw-row claw-done"><span class="claw-check" aria-hidden="true"></span><span class="claw-text">' + _esc(item.task) + '</span></li>').join('') + '</details>';
   html += '</ul></section>';
   projectPanelBody.innerHTML = html;
   projectPanelBody.querySelectorAll('[data-project-action]').forEach(btn => btn.onclick = () => {
@@ -2398,12 +2492,6 @@ els.batchMoveBtn && els.batchMoveBtn.addEventListener("click", batchMoveSelected
 els.batchDownloadBtn2 && els.batchDownloadBtn2.addEventListener("click", batchDownloadSelected);
 els.batchClearBtn && els.batchClearBtn.addEventListener("click", batchClear);
 
-
-// Batch download button (pagination bar)
-els.batchDownloadBtn && els.batchDownloadBtn.addEventListener("click", () => {
-  if (!state.rootId) { updateStatus("请先选择根目录"); return; }
-  triggerBatchDownload(buildBatchDownloadLink(state.dir), state.dir || "root");
-});
 
 // ===== Feedback Detail Modal =====
 function showFeedbackDetailModal(item, statusIcon) {
@@ -2927,6 +3015,7 @@ let _responsiveViewActive = false;
 
 function applyResponsiveView() {
   const small = window.innerWidth < RESPONSIVE_BREAKPOINT;
+  _syncMobileSidebarVisibility();
   if (small && !_responsiveViewActive) {
     _responsiveViewActive = true;
     if (state.view === "grid") setView("list");
@@ -2935,6 +3024,14 @@ function applyResponsiveView() {
   }
   // Sync sidebar button with actual sidebar visibility
   syncSidebarBtn();
+}
+
+// Content is the entry point on small screens.  The directory tree remains
+// available from its existing toggle, but must not cover the first view.
+function _syncMobileSidebarVisibility() {
+  if (window.innerWidth >= RESPONSIVE_BREAKPOINT || !els.sidebar) return;
+  els.sidebar.classList.add("hidden");
+  if (els.sidebarOverlay) els.sidebarOverlay.style.display = "none";
 }
 
 function syncSidebarBtn() {
@@ -2959,6 +3056,7 @@ if (window.matchMedia) {
 
 // Run on load and on resize (debounced)
 applyResponsiveView();
+window.addEventListener('resize', _syncMobileSidebarVisibility);
 let _resizeTimer;
 window.addEventListener("resize", () => {
   clearTimeout(_resizeTimer);

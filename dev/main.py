@@ -17,7 +17,7 @@ import os
 import sys
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -255,7 +255,7 @@ if __name__ == "__main__":
     port = int(os.environ.get("CLAWMATE_PORT", cfg.port))
     max_upload = int(os.environ.get("CLAWMATE_MAX_UPLOAD_MB", cfg.max_upload_mb))
     print(f"[clawmate] Starting on http://0.0.0.0:{port}")
-    print(f"[clawmate] Web UI at /clawmate/")
+    print("[clawmate] Web UI at /clawmate/")
     print(f"[clawmate] Config: {CONFIG_PATH}")
     print(f"[clawmate] ONLYOFFICE API JS: {ONLYOFFICE_API_JS_URL}")
     print(f"[clawmate] Max upload: {max_upload}MB")
@@ -263,17 +263,17 @@ if __name__ == "__main__":
     # 认证状态
     _auth_enabled = is_auth_enabled(load_cfg())
     if not _auth_enabled:
-        print(f"[clawmate] ⚠️  认证未配置（auth.password_hash 为空），任何人都可访问")
-        print(f"[clawmate] ⚠️  请运行: python3 main.py --set-password")
+        print("[clawmate] ⚠️  认证未配置（auth.password_hash 为空），任何人都可访问")
+        print("[clawmate] ⚠️  请运行: python3 main.py --set-password")
     else:
-        print(f"[clawmate] Auth: ENABLED")
+        print("[clawmate] Auth: ENABLED")
 
     # webhook wake 状态
     if cfg.openclaw.hook_token:
         print(f"[clawmate] Webhook wake: ENABLED  (wake -> {cfg.openclaw.gateway_url}/hooks/agent)")
-        print(f"[clawmate]   config source: config.json -> openclaw.hook_token")
+        print("[clawmate]   config source: config.json -> openclaw.hook_token")
     else:
-        print(f"[clawmate] Webhook wake: DISABLED  (openclaw.hook_token empty, fallback to cron only)", file=sys.stderr)
+        print("[clawmate] Webhook wake: DISABLED  (openclaw.hook_token empty, fallback to cron only)", file=sys.stderr)
 
     # Increase multipart upload size limit (default 1MB)
     from starlette.formparsers import MultiPartParser

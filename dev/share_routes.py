@@ -15,7 +15,7 @@ import os
 import secrets
 import time
 import hashlib
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from pathlib import Path
 def _fmt_expiry(ts: int) -> str:
     return datetime.fromtimestamp(ts, tz=timezone.utc).astimezone().strftime("%m-%d %H:%M")

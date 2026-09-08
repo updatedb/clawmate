@@ -17,6 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./css/style.css" />
+  <link rel="stylesheet" href="./css/command-palette.css" />
   <link rel="stylesheet" href="./vendor/github-markdown-dark.min.css" id="github-markdown-css" />
   <link rel="stylesheet" href="./dist/terminal.css" />
 </head>
@@ -51,6 +52,9 @@
         <button id="btnProjectPanel" class="topbar-btn" title="项目面板" style="display:none">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect width="14" height="14" x="5" y="5" rx="1"/></svg>
         </button>
+        <button id="btnCommandPalette" class="topbar-btn" title="命令面板 (Ctrl+K)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="8" x="3" y="3" rx="1"/><rect width="8" height="8" x="13" y="13" rx="1"/><path d="M11 7h2M12 6v2M7 11v2M6 12h2"/></svg>
+        </button>
         <button id="themeToggle" class="topbar-btn" title="切换主题">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
         </button>
@@ -67,6 +71,7 @@
         <ul id="dirList" class="dir-list"></ul>
       </aside>
       <div class="sidebar-overlay" id="sidebarOverlay"></div>
+      <div class="drawer-scrim" id="indexDrawerScrim" aria-hidden="true"></div>
       <main class="main">
         <div class="toolbar">
           <div class="toolbar-top">
@@ -135,7 +140,7 @@
         </div>
       </main>
       <aside id="projectPanel" class="project-panel hidden" aria-label="项目面板" aria-hidden="true">
-        <div class="project-panel-header"><strong>项目面板</strong><span id="projectPanelSummary"></span><button id="btnCloseProjectPanel" class="project-panel-close" type="button" title="关闭项目面板" aria-label="关闭项目面板">✕</button></div>
+        <div class="project-panel-header"><strong>项目面板</strong><span id="projectPanelSummary"></span><button id="btnCloseProjectPanel" class="panel-close-btn" type="button" title="关闭项目面板" aria-label="关闭项目面板"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></div>
         <div id="projectPanelBody" class="project-panel-body">加载项目概况…</div>
       </aside>
       <div id="agentResizeHandle" class="agent-resize-handle hidden"></div>
@@ -149,7 +154,7 @@
           <span class="agent-panel-title" id="agentPanelTitle">Agent</span>
           <button id="btnAgentHistory" class="agent-panel-btn" type="button" title="历史会话"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 7v5l3 2"></path></svg><span class="agent-panel-btn-label">历史会话</span></button>
           <button id="btnNewAgentSession" class="agent-panel-btn" type="button" title="新建会话"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg><span class="agent-panel-btn-label">新会话</span></button>
-          <button id="btnCloseAgent" class="agent-panel-close" title="关闭 Agent"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          <button id="btnCloseAgent" class="panel-close-btn" title="关闭 Agent"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
         </div>
         <div id="AgentToolbar" class="agent-toolbar" role="toolbar" aria-label="终端工具栏">
           <span id="AgentStatus" class="agent-status" aria-live="polite">未连接</span>
@@ -221,6 +226,7 @@
   <script src="./js/project-panel.js" defer></script>
   <script src="./js/utils.js" defer></script>
   <script src="./js/app.js" defer></script>
+  <script src="./js/command-palette.js" defer></script>
   <!-- Service Worker registration for PWA -->
   <script>
     if ('serviceWorker' in navigator) {
@@ -268,6 +274,18 @@
         <button id="dirPickerCancel" class="btn btn-secondary">取消</button>
         <button id="dirPickerConfirm" class="btn btn-primary">确定</button>
       </div>
+    </div>
+  </div>
+  <!-- Command palette (Ctrl/Cmd+K) -->
+  <div id="clawmateCommandPalette" class="cp-overlay" role="dialog" aria-modal="true" aria-label="命令面板" style="display:none;">
+    <div class="cp-box">
+      <div class="cp-input-wrap">
+        <span class="cp-input-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+        <input type="search" class="cp-input" id="cpInput" placeholder="搜索根目录、目录或文件…" autocomplete="off" spellcheck="false" aria-label="命令面板搜索" />
+        <span class="cp-input-hint">↑↓ · Enter · Esc</span>
+      </div>
+      <div class="cp-list" id="cpList" role="listbox" aria-label="命令面板结果"></div>
+      <div class="cp-footer"><span><b>Ctrl+K</b> 打开 · <b>Enter</b> 跳转 · <b>Esc</b> 关闭</span></div>
     </div>
   </div>
 </body>

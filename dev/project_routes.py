@@ -29,17 +29,11 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from service import safe_path, find_project_marker
-from config import load as load_cfg
+from config import load as load_cfg, ProjectConfig
 from project_llm import extract as _llm_extract
 
 router = APIRouter()
 logger = logging.getLogger("clawmate.project")
-
-# Default Git author used when a directory is converted into a project.
-# Preferred values come from config.json (project.git_user_email / .git_user_name).
-_DEFAULT_EMAIL = "updatedb@qq.com"
-_DEFAULT_NAME = "OpenClaw"
-
 
 def _git_identity() -> tuple[str, str]:
     """Resolve the project Git author from config, falling back to defaults."""
@@ -48,7 +42,8 @@ def _git_identity() -> tuple[str, str]:
         return cfg.project.git_user_email, cfg.project.git_user_name
     except Exception:
         logger.warning("[project] config unavailable; using default git identity")
-        return _DEFAULT_EMAIL, _DEFAULT_NAME
+        default = ProjectConfig()
+        return default.git_user_email, default.git_user_name
 
 
 _PROJECT_NOTE_TEMPLATE = """# {name} 产品笔记
@@ -225,7 +220,6 @@ async def project_convert(request: Request):
 
     root = str(body.get("root", "")).strip()
     path = str(body.get("path", "")).strip()
-    ptype = str(body.get("type", "")).strip()
 
     if not root:
         raise HTTPException(status_code=422, detail="Missing root")
@@ -787,7 +781,6 @@ def _recommendations_for(target: Path) -> list[dict]:
     """
     cfg = _read_project_json(target)
     ptype = str(cfg.get("type") or "generic").lower()
-    name = target.name
     recs: list[dict] = []
 
     for r in _project_task_catalog(target):

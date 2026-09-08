@@ -16,22 +16,22 @@ import json
 import logging
 import os
 import pty
-import signal
 import struct
 import termios
 import time
 import uuid
 import re as _re
-from collections import defaultdict, deque
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 from types import SimpleNamespace
 from urllib.parse import urlparse, urlunparse
 
 import websockets
 
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from starlette.websockets import WebSocketState
 
@@ -56,10 +56,6 @@ logger = logging.getLogger("clawmate.agent")
 
 # Max output buffer per session (keep last ~200KB of terminal output for replay)
 _MAX_BUFFER_ENTRIES = 200  # ~200 chunks ≈ ~800KB with typical 4KB reads
-# Idle timeout: kill session after N seconds with no WebSocket attached
-_IDLE_TIMEOUT_SECONDS = 600  # 10 minutes
-# Max session lifetime (even with active connections)
-_MAX_SESSION_LIFETIME = 24 * 3600  # 24 hours
 
 
 
@@ -98,21 +94,6 @@ def _apply_backspace(s: str) -> str:
         else:
             buf.append(c)
     return ''.join(buf)
-
-
-def _clean_input_for_history(raw: str) -> str:
-    """Clean terminal input for session history display.
-
-    Like _clean_terminal_input but preserves \\n so multi-line paste
-    and inline line breaks appear naturally in the history log.
-    """
-    s = _strip_ansi_escapes(raw)
-    # Normalise \r\n → \n; drop standalone \r
-    s = s.replace('\r\n', '\n').replace('\r', '')
-    # Keep printable, tab, and newline
-    s = ''.join(c for c in s if c >= ' ' or c in '\t' or c == '\n')
-    # Process backspace (DEL = \x7f)
-    return _apply_backspace(s).strip()
 
 
 def _append_v2_history_input(buffer: str, raw: str) -> tuple[str, bool]:
@@ -435,30 +416,6 @@ def _extract_known_file_path(text: str) -> str:
     return _normalize_known_file_path(line)
 
 
-def _write_hidden_pty(sess, text: str):
-    """Write to PTY with local echo temporarily disabled."""
-    if not text or sess.master_fd is None:
-        return
-    try:
-        attrs = termios.tcgetattr(sess.master_fd)
-    except Exception:
-        attrs = None
-    try:
-        if attrs is not None:
-            noecho = list(attrs)
-            noecho[3] &= ~termios.ECHO
-            termios.tcsetattr(sess.master_fd, termios.TCSANOW, noecho)
-        os.write(sess.master_fd, text.encode())
-    except (OSError, BlockingIOError):
-        pass
-    finally:
-        if attrs is not None:
-            try:
-                termios.tcsetattr(sess.master_fd, termios.TCSANOW, attrs)
-            except Exception:
-                pass
-
-
 async def _expire_v2_sessions() -> int:
     """Run the v2 manager's idle/lifetime expiry sweep, if initialized."""
     manager = _terminal_v2_manager
@@ -778,68 +735,6 @@ def _find_codex_binary() -> str:
         os.path.expanduser("~/.npm-global/bin/codex"),
         os.path.expanduser("~/.local/bin/codex"),
     ])
-
-
-def spawn_background_agent(
-    message: str,
-    cwd: str,
-    backend: str = "claude",
-    extra_env: dict[str, str] | None = None,
-) -> bool:
-    """Spawn a one-shot non-interactive agent process for feedback execution.
-
-    Uses ``claude -p <message>`` / ``codex -p <message>`` (non-interactive).
-    Runs in a daemon thread; fire-and-forget — the process communicates
-    results back via the batch-update HTTP API embedded in *message*.
-
-    Returns True if the process started, False if the binary was not found.
-    """
-    import subprocess
-    import threading
-
-    try:
-        if backend == "codex":
-            binary = _find_codex_binary()
-        else:
-            binary = _find_claude_binary()
-    except RuntimeError:
-        logger.warning(
-            "[bg-agent] %s binary not found, cannot spawn background process", backend
-        )
-        return False
-
-    env = os.environ.copy()
-    if backend == "claude":
-        env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
-    if extra_env:
-        env.update(extra_env)
-
-    if backend == "claude":
-        # --dangerously-skip-permissions 必须在 -p 之前，否则会被 -p 当作 prompt 参数吞掉
-        args = [binary, "--dangerously-skip-permissions", "-p", message]
-    else:
-        args = [binary, "-p", message]
-
-    def _run():
-        try:
-            proc = subprocess.Popen(
-                args,
-                cwd=cwd,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                env=env,
-                start_new_session=True,
-            )
-            logger.info(
-                "[bg-agent] spawned pid=%d backend=%s cwd=%s msg_len=%d",
-                proc.pid, backend, cwd, len(message),
-            )
-        except Exception as e:
-            logger.warning("[bg-agent] spawn failed: %s", e)
-
-    threading.Thread(target=_run, daemon=True).start()
-    return True
 
 
 # --- PTY agent backends (Claude, Codex) ---

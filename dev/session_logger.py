@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import time
 import typing
@@ -108,11 +107,6 @@ class SessionLogger:
             self._chat_fd.write(json.dumps(t, ensure_ascii=False) + "\n")
         self._chat_fd.flush()
 
-    def flush(self):
-        """Force-flush file handle."""
-        if self._chat_fd:
-            self._chat_fd.flush()
-
     def close(self):
         """Close .chat.jsonl handle and update index.
 
@@ -168,25 +162,6 @@ class SessionLogger:
             self._chat_fd.close()
             self._chat_fd = None
 
-    @property
-    def session_dir(self) -> Path:
-        """Alias for ``self.log_dir``."""
-        return self.log_dir
-
-    def count_turns(self) -> int:
-        """Count recorded user instructions so far."""
-        if not self._chat_fd:
-            return 0
-        try:
-            with open(self.log_dir / f"{self.session_id}.chat.jsonl") as f:
-                turns = [json.loads(line) for line in f if line.strip()]
-            return sum(1 for turn in turns if turn.get("role") == "user")
-        except FileNotFoundError:
-            return 0
-        except json.JSONDecodeError:
-            return 0
-
-
 # ── SessionIndex ──
 
 class SessionIndex:
@@ -216,23 +191,6 @@ class SessionIndex:
         return SessionIndex._sync_load(Path(log_dir))
 
     @staticmethod
-    def save(log_dir: str | Path, sessions: list[dict]):
-        """Synchronous write — prefer the async instance method when possible."""
-        SessionIndex._sync_save(Path(log_dir), sessions)
-
-    @staticmethod
-    def add(log_dir: str | Path, entry: dict):
-        """Synchronous add — prefer the async instance method when possible."""
-        sessions = SessionIndex._sync_load(Path(log_dir))
-        for s in sessions:
-            if s.get("id") == entry.get("id"):
-                s.update(entry)
-                SessionIndex._sync_save(Path(log_dir), sessions)
-                return
-        sessions.append(entry)
-        SessionIndex._sync_save(Path(log_dir), sessions)
-
-    @staticmethod
     def update(log_dir: str | Path, session_id: str, updates: dict):
         """Synchronous update — prefer the async instance method when possible."""
         sessions = SessionIndex._sync_load(Path(log_dir))
@@ -241,51 +199,6 @@ class SessionIndex:
                 s.update(updates)
                 break
         SessionIndex._sync_save(Path(log_dir), sessions)
-
-    @staticmethod
-    def remove(log_dir: str | Path, session_id: str):
-        """Synchronous remove — prefer the async instance method when possible."""
-        sessions = SessionIndex._sync_load(Path(log_dir))
-        sessions = [s for s in sessions if s.get("id") != session_id]
-        SessionIndex._sync_save(Path(log_dir), sessions)
-
-    @staticmethod
-    def reap(log_dir: str | Path, ttl_days: int,
-             active_keys: set[str] | None = None) -> int:
-        """Synchronous reap — prefer the async instance method when possible.
-
-        *active_keys*: a set of session keys that are currently running.
-        Sessions whose key is in this set are never reaped.
-        When *active_keys* is None, no sessions are protected (use with care).
-        """
-        log_dir = Path(log_dir)
-        idx = SessionIndex.for_dir(log_dir)
-        sessions = SessionIndex._sync_load(log_dir)
-        now = time.time()
-        cutoff = now - ttl_days * 86400
-        kept = []
-        removed = 0
-        for s in sessions:
-            if active_keys is not None and s.get("key", "") in active_keys:
-                kept.append(s)
-                continue
-            if s.get("last_active", 0) < cutoff:
-                sid = s.get("id", "")
-                if sid:
-                    for ext in _SESSION_LOG_EXTS:
-                        p = log_dir / f"{sid}{ext}"
-                        if p.exists():
-                            p.unlink()
-                removed += 1
-            else:
-                kept.append(s)
-        if removed:
-            SessionIndex._sync_save(log_dir, kept)
-        return removed
-
-    @staticmethod
-    def _index_path(log_dir: Path) -> Path:
-        return log_dir / "index.json"
 
     @staticmethod
     def _sync_load(log_dir: Path) -> list[dict]:

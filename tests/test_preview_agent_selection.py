@@ -42,7 +42,9 @@ def test_preview_selection_handler_reuses_single_range_binding():
 def test_preview_mermaid_success_path_does_not_reference_undefined_error():
     js = PREVIEW_JS.read_text(encoding="utf-8")
 
-    assert "} catch (err) {\n      var errMsg = err &&" in js
+    # Per-block mermaid render (was a single catch-this block): each block catches its
+    # own err and defensively guards `err && ...` so an undefined err never leaks.
+    assert "} catch (err) {\n        var errMsg = err &&" in js
 
 
 def test_mermaid_inline_zoom_controls_do_not_trigger_pan_or_double_click_reset():

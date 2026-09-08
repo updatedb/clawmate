@@ -120,7 +120,7 @@ def test_main_project_panel_is_switchable_and_auto_opens_once_per_session_projec
     assert "if (_projectPanelContext === key) return;" in js
     assert "_setProjectPanelOpen(firstVisit);" in js
     assert 'if (_isProjectPanelOpen()) _setProjectPanelOpen(false);' in js
-    assert ".project-panel { display: flex; flex-direction: column; overflow: hidden; position: fixed;" in css
+    assert "#projectPanel { grid-column: 3; min-width: 0; }" in css
     assert "_setProjectPanelOpen(!_isProjectPanelOpen())" in js
     assert "现在要处理" in js
     assert "正在执行" in js

@@ -4,19 +4,16 @@ import logging
 import ipaddress
 
 from fastapi import APIRouter, Query, HTTPException, Request
-from fastapi.responses import JSONResponse, FileResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from urllib.parse import quote, unquote_to_bytes
-import base64
 import hashlib
 import hmac
 import json
 import os
-import re
 import time
 import zipfile
 import httpx
 import jwt as pyjwt
-from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from service import (
@@ -252,14 +249,6 @@ async def clawmate_list_navigation(root: str = "", path: str = ""):
 _PREVIEW_TOKEN_SECRET = os.environ.get("CLAWMATE_PREVIEW_TOKEN_SECRET", "")
 if not _PREVIEW_TOKEN_SECRET:
     print("[clawmate] WARNING: CLAWMATE_PREVIEW_TOKEN_SECRET not set — preview token verification will fail", flush=True)
-
-
-def generate_preview_token(root_id: str, rel_path: str) -> str:
-    """Generate a time-limited HMAC-signed preview token for root_id:rel_path."""
-    expires = int(time.time()) + _PREVIEW_TOKEN_TTL_SECONDS
-    msg = f"{root_id}:{rel_path}:{expires}"
-    sig = hmac.new(_PREVIEW_TOKEN_SECRET.encode(), msg.encode(), hashlib.sha256).hexdigest()
-    return f"{expires}:{sig}"
 
 
 def verify_preview_token(root_id: str, rel_path: str, token: str) -> bool:
@@ -548,13 +537,18 @@ async def clawmate_move(request: Request):
         body = {}
     root_id = str(body.get("root") or request.query_params.get("root", "")).strip()
     rel_path = str(body.get("path") or request.query_params.get("path", "")).strip()
-    dest_dir = str(body.get("dest") or request.query_params.get("dest", "")).strip()
+    # An explicit empty destination is the root directory.  Only reject a
+    # missing destination field, so file-manager and preview moves can target
+    # the configured root.
+    dest_value = body.get("dest")
+    if dest_value is None:
+        dest_value = request.query_params.get("dest")
+    if dest_value is None:
+        raise HTTPException(status_code=422, detail="Missing dest directory")
+    dest_dir = str(dest_value).strip()
 
     if not root_id or not rel_path:
         raise HTTPException(status_code=422, detail="Missing root/path")
-    if not dest_dir:
-        raise HTTPException(status_code=422, detail="Missing dest directory")
-
     try:
         result = move_file(root_id, rel_path, dest_dir)
     except FileNotFoundError as e:
@@ -1011,13 +1005,6 @@ async def clawmate_onlyoffice_callback(request: Request, token: str = ""):
     return JSONResponse(content={"error": 0})
 # ── Auth endpoints ─────────────────────────────────────────────────────────────
 
-def _get_client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
-
-
 def _request_is_https(request: Request) -> bool:
     """判断请求是否通过 HTTPS 访问（支持反向代理）。"""
     forwarded_proto = request.headers.get("x-forwarded-proto", "")
@@ -1045,11 +1032,11 @@ async def auth_login(request: Request):
     """Verify credentials, issue session, set session cookie."""
     from auth import (
         is_auth_enabled, check_ip_lockout, record_failure, clear_failures,
-        create_session, get_session_from_cookie, verify_password,
-        load_auth_config, get_session_ttl,
+        create_session, verify_password,
+        get_session_ttl, get_client_ip,
     )
 
-    client_ip = _get_client_ip(request)
+    client_ip = get_client_ip(request)
 
     try:
         body = await request.json()
@@ -1111,7 +1098,7 @@ async def auth_login(request: Request):
 @router.post("/api/clawmate/auth/logout")
 async def auth_logout(request: Request):
     """Clear session and cookie."""
-    from auth import get_session, delete_session, get_session_from_cookie
+    from auth import delete_session, get_session_from_cookie
 
     sid = get_session_from_cookie(request)
     if sid:
@@ -1138,8 +1125,8 @@ async def auth_status(request: Request):
 @router.post("/api/clawmate/auth/change-password")
 async def auth_change_password(request: Request):
     """Change password for logged-in user."""
-    from auth import get_session, delete_session, get_session_from_cookie
-    from auth import verify_password, hash_password, load_auth_config
+    from auth import get_session, get_session_from_cookie
+    from auth import verify_password, hash_password
 
     sid = get_session_from_cookie(request)
     if not sid:

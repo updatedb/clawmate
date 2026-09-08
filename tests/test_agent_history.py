@@ -369,8 +369,6 @@ async def test_session_list_filters_by_date(tmp_path, monkeypatch):
     """``/sessions?date=YYYY-MM-DD`` returns only sessions with that date."""
     sess_dir = tmp_path / ".clawmate" / "sessions"
     sess_dir.mkdir(parents=True)
-    import time
-    today = time.strftime("%Y-%m-%d")
     # Create two sessions with explicit timestamps
     index = {
         "version": 1,

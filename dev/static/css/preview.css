@@ -83,7 +83,9 @@
       pointer-events: none;
     }
     .preview-left-header {
-      padding: 12px 16px 8px;
+      padding: 0 16px;
+      height: 40px;
+      box-sizing: border-box;
       border-bottom: 1px solid var(--border-color);
       flex-shrink: 0;
       font-size: 12px;
@@ -172,7 +174,9 @@
       pointer-events: none;
     }
     .preview-right-header {
-      padding: 12px 16px 8px;
+      padding: 0 16px;
+      height: 40px;
+      box-sizing: border-box;
       border-bottom: 1px solid var(--border-color);
       flex-shrink: 0;
       font-size: 12px;
@@ -185,18 +189,6 @@
       justify-content: space-between;
     }
     .preview-right-header span { flex: 1; }
-    .panel-close-btn {
-      background: none;
-      border: none;
-      font-size: 15px;
-      cursor: pointer;
-      color: var(--text-muted);
-      padding: 2px 6px;
-      border-radius: 4px;
-      line-height: 1;
-      flex-shrink: 0;
-    }
-    .panel-close-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
     .preview-right-body {
       flex: 1;
       overflow: hidden;
@@ -476,6 +468,9 @@
     .preview-bottom-btn:hover { background: var(--bg-secondary); border-color: var(--text-muted); }
     .preview-bottom-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
     .preview-bottom-btn.danger:hover { background: rgba(220,38,38,0.3); border-color: rgba(220,38,38,0.5); }
+    /* In-flight async action (e.g. 执行反馈): dim + accent so the busy state reads clearly */
+    .preview-bottom-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .preview-bottom-btn.loading:disabled { border-color: var(--accent); color: var(--accent); opacity: 0.75; cursor: progress; }
 
     /* ── Review panel: 3-row layout (title+actions / filter / list) ── */
     .preview-right-header {
@@ -504,21 +499,11 @@
     }
     /* first card top spacing inside the scrollable body */
     .preview-right-body > .review-card:first-child { margin-top: 10px; }
-    .review-card-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
     .review-card-content { font-size: 12px; white-space: pre-wrap; word-break: break-word; background: var(--bg-code); border-radius: 4px; padding: 6px 8px; line-height: 1.5; }
     .review-card-note { font-size: 12px; color: var(--text-secondary); margin: 6px 0 2px; }
     .review-card-note strong { color: var(--text-primary); }
-    .review-card-status { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
     .fb-card-actions { flex-wrap: wrap; }
     .fb-card-actions .preview-bottom-btn { height: 26px; padding: 0 9px; font-size: 11px; }
-    .review-refine-row { margin-top: 8px; }
-    .review-refine-row textarea {
-      width: 100%; box-sizing: border-box; border: 1px solid var(--border-color);
-      border-radius: 6px; background: var(--bg-code); color: var(--text-primary);
-      padding: 6px 8px; font-family: inherit; font-size: 12px; resize: vertical; min-height: 48px;
-    }
-    .review-refine-row .refine-actions { display: flex; gap: 6px; margin-top: 6px; }
-    .review-refine-hint { font-size: 11px; color: var(--text-muted); margin-top: 4px; line-height: 1.5; }
 
     .preview-bottom-divider { width: 1px; height: 20px; background: transparent; margin: 0 4px; flex-shrink: 0; }
     .preview-btn-group { display: flex; align-items: center; gap: 4px; }
@@ -540,16 +525,6 @@
       font-size: 13px;
       transition: opacity 0.3s;
       pointer-events: none;
-    }
-
-    /* Content area title */
-    .preview-doc-title {
-      font-size: 1.5em;
-      font-weight: 700;
-      color: var(--text-primary);
-      margin: 0 0 20px;
-      padding-bottom: 12px;
-      border-bottom: 2px solid var(--border-color);
     }
 
     /* Loading / error states */
@@ -878,17 +853,6 @@
       resize: none;
       font-family: monospace;
     }
-    .fb-input-select {
-      flex: 1;
-      padding: 6px 10px;
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      background: var(--bg-code);
-      color: var(--text-primary);
-      font-size: 12px;
-      box-sizing: border-box;
-    }
-    .fb-input-select:focus { outline: none; border-color: var(--accent); }
     .fb-input-actions {
       display: flex;
       gap: 8px;
@@ -971,11 +935,6 @@
       text-decoration-color: var(--accent, #0d9488);
       text-decoration-thickness: 2px;
       text-underline-offset: 2px;
-    }
-    .preview-hl-fallback {
-      text-decoration: underline;
-      text-decoration-color: var(--accent, #0d9488);
-      text-decoration-thickness: 2px;
     }
 
     /* ===== Plain text / code edit mode ===== */
@@ -1214,6 +1173,8 @@
 
     /* ===== Mobile Responsive (≤768px) ===== */
     @media (max-width: 768px) {
+      .preview-left.responsive-hidden { display: none !important; }
+
       /* Topbar: back button + centered truncated filename */
       .preview-app > .topbar { gap: 6px; padding: 0 8px; }
       .preview-app > .topbar .brand { font-size: 0; flex: none; }
@@ -1222,6 +1183,11 @@
       }
       .preview-topbar-title { font-size: 13px; text-align: center; }
       .topbar-btn { width: 30px; height: 30px; font-size: 13px; }
+      .preview-app > .topbar #btnProjectPanel,
+      .preview-app > .topbar #themeToggle,
+      .preview-app > .topbar #btnLogout { display: none; }
+      .preview-app > .topbar #btnMoreMenu { display: flex; }
+      .preview-app > .topbar #versionPill { display: none !important; }
 
       /* Single column: keep grid 0px 1fr 0px, sidebars as fixed overlays */
       .preview-three-col {
@@ -1477,25 +1443,6 @@
       translate: 100%;
       pointer-events: none;
     }
-    .preview-agent-panel-header {
-      padding: 12px 16px 8px;
-      border-bottom: 1px solid var(--border-color);
-      flex-shrink: 0;
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
-    .preview-agent-panel-header .agent-panel-root {
-      font-size: 11px; color: var(--text-muted); white-space: nowrap;
-      overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0;
-      text-transform: none; font-weight: 400; letter-spacing: 0;
-    }
     .preview-agent-panel-header .agent-backend-select {
       font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 6px;
       background: var(--bg-tertiary); color: var(--text-primary);
@@ -1546,6 +1493,82 @@
         box-shadow: 0 4px 24px rgba(0,0,0,0.25);
       }
       .preview-agent-panel .agent-chat-input { font-size: 16px; }
+    }
+
+    /* ── Scrim for narrow-screen right/agent drawers (inert until a drawer is open) ── */
+    .preview-drawer-scrim {
+      position: fixed; inset: 0; z-index: 6;
+      background: rgba(15, 23, 42, 0.35);
+      opacity: 0; pointer-events: none;
+      transition: opacity var(--duration-base) var(--ease-out);
+    }
+
+    /* ── Mobile "more" menu (承接被隐藏的 主题/退出/项目面板) ──
+       #btnMoreMenu is desktop-only (hidden) and shown on mobile via the ≤768
+       media query below; the dropdown is anchored to the top-right. */
+    @media (min-width: 769px) {
+      .preview-app > .topbar #btnMoreMenu { display: none; }
+    }
+    .preview-more-menu {
+      position: fixed; top: 52px; right: 10px; z-index: 120;
+      min-width: 168px;
+      background: var(--bg-secondary); color: var(--text-primary);
+      border: 1px solid var(--border-color); border-radius: var(--radius-md);
+      box-shadow: var(--shadow-modal);
+      display: flex; flex-direction: column; padding: 6px;
+    }
+    .preview-more-menu[hidden] { display: none; }
+    .preview-more-item {
+      display: flex; align-items: center; gap: 8px;
+      width: 100%; text-align: left; background: none; border: none;
+      padding: 9px 10px; border-radius: var(--radius-sm);
+      font: 400 13px/1 var(--font-ui); color: var(--text-primary);
+      cursor: pointer; transition: background var(--duration-fast) var(--ease-out);
+    }
+    .preview-more-item svg { flex: 0 0 16px; }
+    .preview-more-item:hover,
+    .preview-more-item:focus-visible { background: var(--bg-tertiary); outline: none; }
+
+    /* Tablet (769-1240): right panels become bounded overlay drawers — content stays visible.
+       updateGridColumns() keeps col4=0 at this width (content-first); the fixed overlay shows
+       the panel above the full-width content, with a dismissible scrim. */
+    @media (min-width: 769px) and (max-width: 1240px) {
+      .preview-right:not(.hidden),
+      .preview-agent-panel:not(.hidden),
+      .project-panel:not(.hidden) {
+        position: fixed;
+        top: 0; bottom: 0; right: 0;
+        z-index: 7;
+        display: flex;
+        flex-direction: column;
+        width: min(420px, 86vw) !important;
+        max-width: 86vw;
+        padding: 48px 0 0 0;
+        border-width: 1px !important;
+        border-style: solid;
+        border-color: var(--border-color);
+        border-left-style: solid;
+        overflow-y: auto;
+        pointer-events: auto;
+        box-shadow: var(--shadow-card-h);
+      }
+      .preview-right:not(.hidden) { border-right-width: 0; }
+      .preview-agent-panel:not(.hidden) { border-right-width: 0; }
+      .project-panel:not(.hidden) { border-right-width: 0; }
+
+      /* The agent terminal stays a bounded drawer on tablet with a fixed 525px
+         width (comfortable for the terminal, ≥ desktop min 420). Only mobile
+         (≤768) makes it full-screen. */
+      .preview-agent-panel:not(.hidden) {
+        width: 525px !important;
+        max-width: 525px;
+      }
+
+      body:has(.preview-right:not(.hidden)) .preview-drawer-scrim,
+      body:has(.preview-agent-panel:not(.hidden)) .preview-drawer-scrim,
+      body:has(.project-panel:not(.hidden)) .preview-drawer-scrim {
+        opacity: 1; pointer-events: auto;
+      }
     }
 
 /* ── Version pill (topbar) ── */
@@ -1691,12 +1714,6 @@
   gap: 8px;
   align-items: center;
   margin-top: 2px;
-}
-.version-commit-author {
-  max-width: 100px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* ── Version diff pane (right) ── */

@@ -143,3 +143,47 @@ def test_bad_audit_line_does_not_block_status_or_task_audit(review_project):
         f.write("not-json\n")
     store.update_item("root", "project", created[0]["id"], "approved")
     assert '"event":"status_approved"' in audit_path.read_text(encoding="utf-8")
+
+
+def test_wake_review_task_runs_agent_wake_off_thread(review_project, monkeypatch):
+    """wake_review_task must not hold the /review/execute HTTP response open on the
+    synchronous gateway POST.  It validates the task, then spawns the agent wake on
+    a background thread so the items (already reserved as in_progress) re-render
+    immediately."""
+    import threading
+    import task_runner
+
+    created = store.create_items("root", "project", "project/note.md", [{"text": "selected text", "note": "x"}])
+    item_id = created[0]["id"]
+    store.review_items("root", "project", [item_id], "approved")
+    task = store.create_execution_task("root", "project", [item_id])
+    assert task["status"] == "in_progress"
+
+    state = {"called": threading.Event(), "thread_id": None}
+
+    def fake_wake(root_id, **kwargs):
+        state["thread_id"] = threading.current_thread().ident
+        state["called"].set()
+
+    monkeypatch.setattr(task_runner, "_wake_agent_for_root", fake_wake)
+    caller_thread = threading.current_thread().ident
+    task_runner.wake_review_task("root", "project", task["id"])
+
+    # The wake runs on a different thread (never synchronously in the caller),
+    # and it does eventually invoke the underlying agent wake.
+    assert state["thread_id"] != caller_thread
+    assert state["called"].wait(timeout=3)
+
+
+def test_wake_review_task_requires_in_progress(review_project):
+    import task_runner
+
+    created = store.create_items("root", "project", "project/note.md", [{"text": "selected text", "note": "x"}])
+    item_id = created[0]["id"]
+    store.review_items("root", "project", [item_id], "approved")
+    plan = store.create_execution_plan("root", "project", [item_id])
+    store.confirm_execution_plan("root", "project", plan["id"])
+    # A confirmed (but not yet reserved in_progress) task must be rejected; only
+    # an in_progress reservation may wake an agent.
+    with pytest.raises(ValueError, match="not executing"):
+        task_runner.wake_review_task("root", "project", plan["id"])

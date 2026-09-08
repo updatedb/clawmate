@@ -12,11 +12,6 @@ from collections.abc import Callable
 _clients: dict[str, Callable[[str, float], str | dict | list | None]] = {}
 
 
-def register_client(backend: str, client: Callable[[str, float], str | dict | list | None]) -> None:
-    """Register a trusted in-process backend adapter (also useful for tests)."""
-    _clients[backend.lower()] = client
-
-
 def build_prompt(project_type: str, documents: dict[str, str], template: str) -> str:
     corpus = "\n\n".join(f"## {name}\n{text}" for name, text in documents.items())
     return (

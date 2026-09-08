@@ -61,8 +61,27 @@
         <button class="topbar-btn" id="btnLogout" title="退出登录">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
         </button>
+        <button class="topbar-btn topbar-btn-more" id="btnMoreMenu" title="更多" aria-haspopup="true" aria-expanded="false">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+        </button>
       </div>
     </header>
+
+    <!-- 更多菜单:移动端承接 主题/退出登录/项目面板(这些按钮在移动端被隐藏) -->
+    <div class="preview-more-menu" id="previewMoreMenu" role="menu" hidden>
+      <button class="preview-more-item" type="button" data-more="project" role="menuitem">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect width="14" height="14" x="5" y="5" rx="1"/></svg>
+        <span>项目面板</span>
+      </button>
+      <button class="preview-more-item" type="button" data-more="theme" role="menuitem">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+        <span>切换主题</span>
+      </button>
+      <button class="preview-more-item" type="button" data-more="logout" role="menuitem">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+        <span>退出登录</span>
+      </button>
+    </div>
 
     <!-- Three-column body -->
     <div class="preview-three-col">
@@ -93,7 +112,7 @@
             <button class="agent-panel-btn" id="btnReviewAdd" type="button" title="添加反馈"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span class="agent-panel-btn-label">添加反馈</span></button>
             <button class="agent-panel-btn" id="btnReviewSubmit" type="button" title="提交评审"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg><span class="agent-panel-btn-label">提交评审</span></button>
             <button class="agent-panel-btn" id="btnReviewExec" type="button" title="执行反馈"><svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="6 3 20 12 6 21"/></svg><span class="agent-panel-btn-label">执行反馈</span></button>
-            <button class="agent-panel-btn" id="btnCloseRight" type="button" title="关闭面板"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+            <button class="panel-close-btn" id="btnCloseRight" type="button" title="关闭面板"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
           </div>
         </div>
         <div class="preview-right-filter" id="previewFilterBar"></div>
@@ -113,7 +132,7 @@
           <span class="agent-panel-title" id="previewAgentTitle">Agent</span>
           <button id="previewBtnAgentHistory" class="agent-panel-btn" type="button" title="历史会话"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 7v5l3 2"></path></svg><span class="agent-panel-btn-label">历史会话</span></button>
           <button class="agent-panel-btn" id="previewBtnNewAgentSession" title="新建会话"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg><span class="agent-panel-btn-label">新会话</span></button>
-          <button class="agent-panel-close" id="previewBtnCloseAgent" title="关闭 Agent"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          <button class="panel-close-btn" id="previewBtnCloseAgent" title="关闭 Agent"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
         </div>
         <div id="previewAgentToolbar" class="agent-toolbar" role="toolbar" aria-label="终端工具栏">
           <span id="previewAgentStatus" class="agent-status" aria-live="polite">未连接</span>
@@ -230,6 +249,9 @@
     </div>
   </div>
 
+  <!-- Preview drawer scrim (tap to dismiss an open right/agent drawer on narrow screens) -->
+  <div class="preview-drawer-scrim" id="previewDrawerScrim" aria-hidden="true"></div>
+
   <!-- Version history modal -->
   <div id="versionModal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.45);align-items:center;justify-content:center;">
     <div class="version-modal-dialog">
@@ -266,9 +288,7 @@
     </div>
   </div>
 
-  <!-- PDF.js for outline extraction -->
-  <script src="/clawmate/pdfjs/pdf.min.js" defer></script>
-  <!-- Vendor scripts (KaTeX/Mermaid loaded conditionally) -->
+  <!-- Vendor scripts (PDF.js, KaTeX, Mermaid and terminal load on demand) -->
   <script src="./vendor/purify.min.js" defer></script>
   <script src="./vendor/markdown-it.min.js" defer></script>
   <script src="./vendor/markdown-it-container.min.js" defer></script>
@@ -276,10 +296,10 @@
   <script src="./vendor/markdown-it-footnote.min.js" defer></script>
   <script src="./vendor/markdown-it-task-lists.min.js" defer></script>
   <script src="./vendor/highlight.min.js" defer></script>
-  <script src="./dist/terminal.js" defer></script>
   <script src="./js/icons.js" defer></script>
   <script src="./js/topbar.js" defer></script>
   <script src="./js/file-watch.js" defer></script>
+  <script src="./js/project-panel.js" defer></script>
   <script src="./js/utils.js" defer></script>
   <script src="./js/preview-common.js" defer></script>
   <script src="./js/bpmn-preview.js?v=20260727-bpmn-file" defer></script>

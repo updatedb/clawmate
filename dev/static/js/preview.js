@@ -190,17 +190,24 @@
   }
 
   // ============ Dynamic vendor loading ============
+  var _scriptLoads = Object.create(null);
+
   function loadScript(src) {
-    return new Promise(function(resolve, reject) {
+    if (_scriptLoads[src]) return _scriptLoads[src];
+    _scriptLoads[src] = new Promise(function(resolve, reject) {
       var s = document.createElement('script');
       s.src = src;
       s.onload = resolve;
-      s.onerror = reject;
+      s.onerror = function(error) {
+        delete _scriptLoads[src];
+        reject(error);
+      };
       document.head.appendChild(s);
     });
+    return _scriptLoads[src];
   }
 
-  var _mermaidLoaded = false, _katexLoaded = false;
+  var _mermaidLoaded = false, _katexLoaded = false, _pdfJsLoaded = false, _terminalLoaded = false;
 
   async function ensureMermaid() {
     if (_mermaidLoaded) return;
@@ -219,6 +226,18 @@
     await loadScript('./vendor/katex.min.js');
     await loadScript('./vendor/auto-render.min.js');
     _katexLoaded = true;
+  }
+
+  async function ensurePdfJs() {
+    if (_pdfJsLoaded || window.pdfjsLib) { _pdfJsLoaded = true; return; }
+    await loadScript('/clawmate/pdfjs/pdf.min.js');
+    _pdfJsLoaded = true;
+  }
+
+  async function ensureTerminal() {
+    if (_terminalLoaded || window.Agent) { _terminalLoaded = true; return; }
+    await loadScript('./dist/terminal.js');
+    _terminalLoaded = true;
   }
 
   // ============ Markdown Renderer Setup ============
@@ -381,68 +400,66 @@
       return;
     }
 
-    try {
-      var resolvedTheme = window._topbarResolvedTheme ? window._topbarResolvedTheme() : 'light';
-      var mermaidTheme = resolvedTheme === 'dark' ? 'dark' : 'default';
+    var resolvedTheme = window._topbarResolvedTheme ? window._topbarResolvedTheme() : 'light';
+    var mermaidTheme = resolvedTheme === 'dark' ? 'dark' : 'default';
 
-      var mermaidConfig = {
-        startOnLoad: false,
-        securityLevel: 'strict',
-        fontFamily: 'ui-monospace, SF Mono, Cascadia Code, Consolas, monospace',
-        maxWidth: 800,
-        theme: mermaidTheme
+    var mermaidConfig = {
+      startOnLoad: false,
+      securityLevel: 'strict',
+      fontFamily: 'ui-monospace, SF Mono, Cascadia Code, Consolas, monospace',
+      maxWidth: 800,
+      theme: mermaidTheme
+    };
+    if (mermaidTheme === 'dark') {
+      mermaidConfig.themeVariables = {
+        nodeTextColor: '#f0f6fc',
+        primaryTextColor: '#f0f6fc',
+        titleColor: '#f0f6fc',
       };
-      if (mermaidTheme === 'dark') {
-        mermaidConfig.themeVariables = {
-          nodeTextColor: '#f0f6fc',
-          primaryTextColor: '#f0f6fc',
-          titleColor: '#f0f6fc',
-        };
-      }
-      window.mermaid.initialize(mermaidConfig);
-
-      // Restore stored code into each .mermaid block before calling mermaid.run()
-      for (var i = 0; i < blocks.length; i++) {
-        var b = blocks[i];
-        var id = b.getAttribute('data-mermaid-id');
-        if (id == null || !mermaidStore[id]) {
-          b.classList.add('mermaid-error');
-          b.textContent = '\u26a0\ufe0f \u56fe\u8868\u6570\u636e\u4e22\u5931\uff08id=' + (id || 'null') + '\uff09';
-          continue;
-        }
-        b.textContent = mermaidStore[id];
-      }
-
-      // DEBUG:  Calling mermaid.run() with scope=' + scopeClass + ', store has ' + mermaidStore.length + ' entries');
-      await window.mermaid.run({ querySelector: '.' + scopeClass + ' .mermaid' });
-      // DEBUG:  mermaid.run() completed successfully');
-
-      // Setup zoom for each rendered SVG
-      await new Promise(r => setTimeout(r, 100));
-      for (var i = 0; i < blocks.length; i++) {
-        var svg = blocks[i].querySelector('svg');
-        if (svg) setupMermaidZoomDesktop(svg);
-      }
-
-      // Fix quadrantChart NaN% colors (Mermaid v11 bug)
-      for (var i = 0; i < blocks.length; i++) {
-        blocks[i].querySelectorAll('[fill*="NaN%"], [stroke*="NaN%"]').forEach(function(el) {
-          var fill = el.getAttribute('fill') || '';
-          var stroke = el.getAttribute('stroke') || '';
-          if (fill.indexOf('NaN%') !== -1) el.setAttribute('fill', fill.replace(/hsl\([^)]*NaN%[^)]*\)/g, resolvedTheme === 'dark' ? '#58a6ff' : '#4f46e5'));
-          if (stroke.indexOf('NaN%') !== -1) el.setAttribute('stroke', stroke.replace(/hsl\([^)]*NaN%[^)]*\)/g, resolvedTheme === 'dark' ? '#58a6ff' : '#4f46e5'));
-        });
-      }
-    } catch (err) {
-      var errMsg = err && (err.message || err.str || String(err));
-      console.error('[ClawMate] Mermaid \u6e32\u67d3\u5931\u8d25:', errMsg, err);
-      for (var i = 0; i < blocks.length; i++) {
-        blocks[i].classList.add('mermaid-error');
-        blocks[i].textContent = '\u26a0\ufe0f Mermaid \u6e32\u67d3\u5931\u8d25 \u2014 ' + errMsg + '\n\n\u2193 \u539f\u6587\u5185\u5bb9\u89c1\u4e0b\u65b9\u6e90\u7801\u6a21\u5f0f';
-      }
-    } finally {
-      div.classList.remove(scopeClass);
     }
+    window.mermaid.initialize(mermaidConfig);
+
+    // Per-block render: a single failed block is marked on its own, the rest
+    // still render.  Isolation so one syntax error cannot cascade to every block.
+    for (var i = 0; i < blocks.length; i++) {
+      var b = blocks[i];
+      var id = b.getAttribute('data-mermaid-id');
+      var code = (id != null && mermaidStore[id]) ? mermaidStore[id] : b.textContent;
+      if (!code) {
+        b.classList.add('mermaid-error');
+        b.textContent = '\u26a0\ufe0f \u56fe\u8868\u6570\u636e\u4e22\u5931\uff08id=' + (id || 'null') + '\uff09';
+        continue;
+      }
+      b.textContent = code;
+      try {
+        var result = await window.mermaid.render('mmd-' + scopeClass + '-' + i, code);
+        b.innerHTML = result.svg;
+      } catch (err) {
+        var errMsg = err && (err.message || err.str || String(err));
+        console.error('[ClawMate] Mermaid \u6e32\u67d3\u5931\u8d25 (block ' + i + '):', errMsg, err);
+        b.classList.add('mermaid-error');
+        b.textContent = '\u26a0\ufe0f Mermaid \u6e32\u67d3\u5931\u8d25 \u2014 ' + errMsg + '\n\n\u2193 \u539f\u6587\u5185\u5bb9\u89c1\u4e0b\u65b9\u6e90\u7801\u6a21\u5f0f';
+      }
+    }
+
+    // Setup zoom for each rendered SVG (only blocks that actually rendered)
+    await new Promise(r => setTimeout(r, 100));
+    for (var i = 0; i < blocks.length; i++) {
+      var svg = blocks[i].querySelector('svg');
+      if (svg) setupMermaidZoomDesktop(svg);
+    }
+
+    // Fix quadrantChart NaN% colors (Mermaid v11 bug)
+    for (var i = 0; i < blocks.length; i++) {
+      blocks[i].querySelectorAll('[fill*="NaN%"], [stroke*="NaN%"]').forEach(function(el) {
+        var fill = el.getAttribute('fill') || '';
+        var stroke = el.getAttribute('stroke') || '';
+        if (fill.indexOf('NaN%') !== -1) el.setAttribute('fill', fill.replace(/hsl\([^)]*NaN%[^)]*\)/g, resolvedTheme === 'dark' ? '#58a6ff' : '#4f46e5'));
+        if (stroke.indexOf('NaN%') !== -1) el.setAttribute('stroke', stroke.replace(/hsl\([^)]*NaN%[^)]*\)/g, resolvedTheme === 'dark' ? '#58a6ff' : '#4f46e5'));
+      });
+    }
+
+    div.classList.remove(scopeClass);
   }
 
   // ── Mermaid resize handles ──
@@ -1276,11 +1293,8 @@
    *  Falls back to page-number list when no outline exists. */
   async function fetchPdfOutline(rawUrl) {
     var tocBody = document.getElementById('tocBody');
-    if (typeof pdfjsLib === 'undefined') {
-      tocBody.innerHTML = '<div class="preview-toc-empty">PDF.js 未加载</div>';
-      return;
-    }
     try {
+      await ensurePdfJs();
       pdfjsLib.GlobalWorkerOptions.workerSrc = '/clawmate/pdfjs/pdf.worker.min.js';
       var pdf = await pdfjsLib.getDocument({
         url: rawUrl,
@@ -1993,36 +2007,6 @@
     updateMarkdownDynamicButtons();
   }
 
-  function applyMarkdownModeView() {
-    const mdDiv = document.getElementById('markdownRenderedDiv');
-    const srcPre = document.getElementById('sourceRawPre');
-    const htmlIframe = document.getElementById('htmlIframe');
-    if (!mdDiv && !srcPre && !htmlIframe) return;
-    var wrapper = document.querySelector('.code-with-lines');
-    if (isRawMode) {
-      if (mdDiv) mdDiv.style.display = 'none';
-      if (htmlIframe) htmlIframe.style.display = 'none';
-      if (wrapper) {
-        wrapper.style.display = '';
-        if (srcPre) {
-          _updateSourcePre(srcPre, rawContent);
-          updateCodeLineNumbers(wrapper, rawContent);
-        }
-      } else if (srcPre) {
-        srcPre.style.display = '';
-        _updateSourcePre(srcPre, rawContent);
-      }
-    } else {
-      if (mdDiv) mdDiv.style.display = '';
-      if (htmlIframe) htmlIframe.style.display = '';
-      if (wrapper) {
-        wrapper.style.display = 'none';
-      } else if (srcPre) {
-        srcPre.style.display = 'none';
-      }
-    }
-  }
-
   // Toggle right (feedback) panel
   document.getElementById('btnToggleRight').addEventListener('click', () => {
     if (rightSidebar.classList.contains('hidden')) {
@@ -2657,11 +2641,11 @@
         let html;
         let mermaidStore = [];
         let bpmnStore = [];
-        // Conditional load heavy vendors only when content needs them
-        var loadPromises = [];
-        if (content.indexOf('```mermaid') !== -1) loadPromises.push(ensureMermaid());
-        if (content.indexOf('$') !== -1) loadPromises.push(ensureKatex());
-        if (loadPromises.length) await Promise.all(loadPromises);
+        // Defer optional renderers until the text is visible.  Mermaid is a
+        // multi-megabyte bundle, so awaiting it here makes an otherwise ready
+        // Markdown document look stalled.
+        var needsMermaid = content.indexOf('```mermaid') !== -1;
+        var needsKatex = content.indexOf('$') !== -1;
         try {
           const result = createMarkdownRenderer(filePath, refreshToken);
           const md = result.md;
@@ -2703,6 +2687,20 @@
         }
         // Add line numbers to code blocks in rendered markdown
         addLineNumbersToRenderedCodeBlocks(mdDiv);
+
+        // The document is usable before optional diagrams and formulae finish
+        // loading.  Render those enhancements below without holding the page
+        // loading state open.
+        removeLoading();
+        updateMarkdownDynamicButtons();
+        var enhancementLoads = [];
+        if (needsMermaid) enhancementLoads.push(ensureMermaid());
+        if (needsKatex) enhancementLoads.push(ensureKatex());
+        if (enhancementLoads.length) {
+          try { await Promise.all(enhancementLoads); } catch (e) {
+            console.warn('[ClawMate] Markdown enhancement failed to load:', e);
+          }
+        }
 
         if (window.renderMathInElement) {
           try {
@@ -2921,15 +2919,32 @@
     var lHidden = !isLeftSidebarVisible();
     const rHidden = rightSidebar.classList.contains('hidden');
     const agentHidden = agentPanel ? agentPanel.classList.contains('hidden') : true;
+    const projectOpen = Boolean(document.getElementById('previewProjectPanel'));
     const lW = lHidden ? '0px' : '240px';
-    if (rHidden && agentHidden) {
+    const panelOpen = !rHidden || !agentHidden || projectOpen;
+    var vw = window.innerWidth;
+    var lWpx = lHidden ? 0 : 240;
+    // Content-first (Rule 1a) + Rule 4: when the right panel (feedback/agent) would
+    // leave too little content — or left+right together exceed the screen — collapse
+    // the right panel first, then the sidebar, keeping content priority.
+    // Narrow screens (≤1240) make the open panel a bounded overlay drawer (see CSS)
+    // and keep col3/col4 at 0 so content stays full-width behind the drawer.
+    if (panelOpen && vw <= 1240) {
+      const col1 = lWpx >= vw ? '0px' : lW;
+      threeCol.style.gridTemplateColumns = `${col1} 1fr 0px 0px`;
+      if (resizeHandle) resizeHandle.classList.add('hidden');
+      return;
+    }
+    if (!panelOpen) {
       threeCol.style.gridTemplateColumns = `${lW} 1fr 0px 0px`;
       if (resizeHandle) resizeHandle.classList.add('hidden');
     } else {
-      // Both the feedback and Agent panels use the same draggable boundary.
-      if (resizeHandle) resizeHandle.classList.remove('hidden');
-      var panelW = !agentHidden ? getAgentPanelWidth() : rightPanelWidth;
-      threeCol.style.gridTemplateColumns = `${lW} 1fr 5px ${panelW}px`;
+      // The feedback and Agent panels share the draggable boundary (col3). The
+      // project panel is a fixed-width column, so it doesn't show the handle.
+      if (resizeHandle) resizeHandle.classList.toggle('hidden', projectOpen);
+      var panelW = projectOpen ? 420 : (!agentHidden ? getAgentPanelWidth() : rightPanelWidth);
+      var handleCol = projectOpen ? '0px' : '5px';
+      threeCol.style.gridTemplateColumns = `${lW} 1fr ${handleCol} ${panelW}px`;
     }
   }
 
@@ -2956,9 +2971,10 @@
   function syncResponsiveOutlineVisibility() {
     var rightOpen = rightSidebar && !rightSidebar.classList.contains('hidden');
     var agentOpen = agentPanel && !agentPanel.classList.contains('hidden');
+    var projectOpen = Boolean(document.getElementById('previewProjectPanel'));
     var shouldHide = !outlineForcedOpen && (
       window.innerWidth <= 768 ||
-      (window.innerWidth <= 1500 && (rightOpen || agentOpen))
+      (window.innerWidth <= 1500 && (rightOpen || agentOpen || projectOpen))
     );
     leftSidebar.classList.toggle('responsive-hidden', shouldHide);
     syncOutlineToggleState();
@@ -2996,6 +3012,9 @@
     if (!rightSidebar.classList.contains('hidden')) return;
     console.log('[ClawMate] openRightSidebar called. Stack:', new Error().stack);
     clearTimeout(_rightCloseTimer);
+    // Mutual exclusion: opening feedback closes the project panel right column
+    var pp = document.getElementById('previewProjectPanel');
+    if (pp) pp.remove();
     // Snap agent panel closed instantly (no transition) to avoid overlap flicker
     if (agentPanel && !agentPanel.classList.contains('hidden')) {
       agentPanel.style.transition = 'none';
@@ -3081,13 +3100,25 @@
   function _syncPanelOpenClass() {
     var rightOpen = rightSidebar && !rightSidebar.classList.contains('hidden');
     var agentOpen = agentPanel && !agentPanel.classList.contains('hidden');
+    var pp = document.getElementById('previewProjectPanel');
+    var projectOpen = Boolean(pp);
+    // Mutual exclusion: the project panel (previewProjectPanel right column) yields
+    // to the feedback/agent right panels — only one right column may be open.
+    if (pp && (rightOpen || agentOpen)) { pp.remove(); projectOpen = false; updateGridColumns(); }
     // 防御：如果两个都 open，强制关掉 agent（feedback 优先）
     if (rightOpen && agentOpen) {
       console.warn('[ClawMate] _syncPanelOpenClass: both panels open, forcing agent closed. Stack:', new Error().stack);
       agentPanel.classList.add('hidden');
       agentOpen = false;
     }
-    document.body.classList.toggle('preview-panel-open', rightOpen || agentOpen);
+    // Buttons: only the open panel's toggle shows active/aria-expanded (mutually exclusive).
+    var bt = document.getElementById('btnToggleRight');
+    if (bt) { bt.classList.toggle('active', rightOpen); bt.setAttribute('aria-expanded', String(rightOpen)); }
+    var ba = document.getElementById('btnToggleAgent');
+    if (ba) { ba.classList.toggle('active', agentOpen); ba.setAttribute('aria-expanded', String(agentOpen)); }
+    var bp = document.getElementById('btnProjectPanel');
+    if (bp) { bp.classList.toggle('active', projectOpen); bp.setAttribute('aria-expanded', String(projectOpen)); }
+    document.body.classList.toggle('preview-panel-open', rightOpen || agentOpen || projectOpen);
     syncResponsiveOutlineVisibility();
   }
 
@@ -3103,6 +3134,39 @@
     window.matchMedia('(max-width: 768px)').addEventListener('change', function (e) {
       if (!e.matches) outlineForcedOpen = false;
       syncResponsiveOutlineVisibility();
+    });
+  }
+  window.addEventListener('resize', syncResponsiveOutlineVisibility);
+  // The shared project panel (project-panel.js) dispatches this when it opens/closes
+  // the preview project drawer, so the grid + mutually-exclusive buttons stay in sync.
+  window.addEventListener('previewPanelChange', function () {
+    updateGridColumns();
+    _syncPanelOpenClass();
+  });
+  syncResponsiveOutlineVisibility();
+
+  // ── Mobile "more" menu (承接被隐藏的 主题/退出/项目面板) ──
+  var _moreMenuBtn = document.getElementById('btnMoreMenu');
+  var _moreMenu = document.getElementById('previewMoreMenu');
+  function _moreMenuSetOpen(open) {
+    if (_moreMenu) _moreMenu.hidden = !open;
+    if (_moreMenuBtn) { _moreMenuBtn.setAttribute('aria-expanded', String(open)); _moreMenuBtn.classList.toggle('active', open); }
+  }
+  if (_moreMenuBtn) {
+    _moreMenuBtn.addEventListener('click', function (e) { e.stopPropagation(); _moreMenuSetOpen(_moreMenu.hidden); });
+  }
+  if (_moreMenu) {
+    _moreMenu.addEventListener('click', function (e) {
+      var item = e.target && e.target.closest ? e.target.closest('.preview-more-item') : null;
+      if (item) {
+        var targetId = { theme: 'themeToggle', project: 'btnProjectPanel', logout: 'btnLogout' }[item.getAttribute('data-more')];
+        if (targetId) { var b = document.getElementById(targetId); if (b) b.click(); }
+        _moreMenuSetOpen(false);
+      }
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') _moreMenuSetOpen(false); });
+    document.addEventListener('click', function (e) {
+      if (!_moreMenu.hidden && !_moreMenu.contains(e.target)) _moreMenuSetOpen(false);
     });
   }
 
@@ -4087,13 +4151,6 @@
     // Office docs open in edit mode by default; no manual toggle needed
   }
 
-  function reloadOfficeIframe() {
-    const iframe = document.getElementById('officeIframe');
-    if (!iframe) return;
-          var ooTheme = document.documentElement.getAttribute('data-theme') || 'light';
-      iframe.src = './onlyoffice.html?root=' + encodeURIComponent(rootId) + '&path=' + encodeURIComponent(filePath) + '&mode=' + encodeURIComponent(onlyofficeMode) + '&theme=' + ooTheme;
-  }
-
   function renderOfficePdfFeedbackPanel() {
     const body = document.getElementById('feedbackBody');
     var savedScrollTop = body.scrollTop;
@@ -4279,48 +4336,6 @@
       fetchVersionInfo();
     });
   }
-
-  // Project panel (需求 4) — preview surface
-  var btnProjectPanelPreview = document.getElementById('btnProjectPanel');
-  var _projPanelEl = null;
-  function _esc2(v) { var d = document.createElement('div'); d.textContent = String(v || ''); return d.innerHTML; }
-  function _closeProjectPanel2() { if (_projPanelEl) { _projPanelEl.remove(); _projPanelEl = null; } }
-  function _showProjectBtn2() { if (btnProjectPanelPreview) { btnProjectPanelPreview.style.display = project ? '' : 'none'; } }
-  async function _toggleProjectPanel2() {
-    if (_projPanelEl) { _closeProjectPanel2(); return; }
-    if (!project) { return; }
-    var overlay = document.createElement('div');
-    overlay.className = 'project-panel-overlay';
-    overlay.style.position = 'fixed'; overlay.style.top = '64px'; overlay.style.right = '16px';
-    overlay.style.width = '360px'; overlay.style.maxHeight = '70vh'; overlay.style.overflow = 'auto';
-    overlay.style.background = 'var(--bg,#fff)'; overlay.style.border = '1px solid var(--border-color,#ddd)';
-    overlay.style.borderRadius = '10px'; overlay.style.padding = '16px'; overlay.style.zIndex = '1200';
-    overlay.style.boxShadow = '0 8px 30px rgba(0,0,0,.18)';
-    overlay.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><strong>项目面板</strong><button class="project-panel-close" style="border:none;background:none;font-size:16px;cursor:pointer">✕</button></div><div class="project-panel-body">加载项目概况…</div>';
-    overlay.querySelector('.project-panel-close').addEventListener('click', _closeProjectPanel2);
-    document.body.appendChild(overlay);
-    _projPanelEl = overlay;
-    try {
-      var res = await fetch('/api/clawmate/project/' + encodeURIComponent(rootId) + '/' + encodeURIComponent(project) + '/overview');
-      var data = await res.json();
-      _renderProjectPanel2(overlay.querySelector('.project-panel-body'), data);
-    } catch (e) { overlay.querySelector('.project-panel-body').textContent = '加载项目概况失败'; }
-  }
-  function _renderProjectPanel2(body, data) {
-    if (!data || !data.ok) { body.textContent = '加载失败'; return; }
-    var todo = data.todo || {}, rv = data.review || {}, recs = data.recommendations || [];
-    var html = '<div style="margin-bottom:10px;color:var(--muted,#888)">' + _esc2(data.project) + ' · ' + _esc2(data.type_label || data.type || '') + '</div>';
-    html += '<div style="margin-bottom:10px"><div style="font-weight:600;margin-bottom:4px">待办 (' + (todo.total || 0) + ')</div>';
-    if (todo.items && todo.items.length) { html += '<ul style="margin:0;padding-left:18px">' + todo.items.slice(0, 10).map(function (i) { return '<li>' + _esc2(i) + '</li>'; }).join('') + '</ul>'; } else { html += '<div style="color:var(--muted,#888)">无未完成待办</div>'; }
-    html += '</div>';
-    html += '<div style="margin-bottom:10px"><div style="font-weight:600;margin-bottom:4px">评审</div><div>待评审 <b>' + (rv.pending_review || 0) + '</b> · 已评审(通过) <b>' + (rv.approved || 0) + '</b> · 已拒绝 <b>' + (rv.rejected || 0) + '</b> · 执行中 <b>' + (rv.in_progress || 0) + '</b> · 已执行 <b>' + (rv.executed || 0) + '</b></div></div>';
-    html += '<div><div style="font-weight:600;margin-bottom:4px">推荐任务</div>';
-    if (recs.length) { html += '<ul style="margin:0;padding-left:18px">' + recs.map(function (r) { return '<li>' + _esc2(r.label) + (r.detail ? ' <span style="color:var(--muted,#888)">· ' + _esc2(r.detail) + '</span>' : '') + '</li>'; }).join('') + '</ul>'; } else { html += '<div style="color:var(--muted,#888)">暂无推荐</div>'; }
-    html += '</div>';
-    body.innerHTML = html;
-  }
-  if (btnProjectPanelPreview) btnProjectPanelPreview.addEventListener('click', _toggleProjectPanel2);
-  _showProjectBtn2();
 
   /** Clear page title before print so browser header omits date/filename, restore after */
   function printWithoutHeaderFooter() {
@@ -4638,7 +4653,7 @@
         var res = await fetch('/api/clawmate/move', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ root: rootId, path: filePath, destDir: destDir }),
+          body: JSON.stringify({ root: rootId, path: filePath, dest: destDir }),
         });
         var data = await res.json();
         if (data.ok) {
@@ -5164,24 +5179,6 @@
     return match ? match[1] + '-' + match[2] + ' ' + match[3] + ':' + match[4] : value;
   }
 
-  function _appendEditablePosition(card, item, placeholder) {
-    var label = document.createElement('div');
-    label.className = 'fb-card-position';
-    label.textContent = _feedbackPositionLabel(item);
-    card.appendChild(label);
-    var input = document.createElement('input');
-    input.type = 'text'; input.className = 'fb-card-position-edit';
-    input.value = _feedbackPosition(item); input.placeholder = placeholder;
-    input.title = '位置（可编辑）';
-    input.addEventListener('input', function() {
-      item.position = input.value;
-      label.textContent = _feedbackPositionLabel(item);
-    });
-    input.addEventListener('click', function(e) { e.stopPropagation(); });
-    card.appendChild(input);
-    return input;
-  }
-
   // Keep action and locator as adjacent metadata across pending, completed and
   // review cards. The header reserves its trailing slot for the status pill.
   function _appendFeedbackMeta(card, item, positionClass, positionText, showAction) {
@@ -5474,8 +5471,10 @@
     submit.addEventListener('click', function(e){
       e.stopPropagation();
       if (submit.disabled) return;
-      if (!item.text || !item.text.trim()) { showToastSafe('请填写选中内容'); return; }
-      if (!item.note || !item.note.trim()) { showToastSafe('请填写建议'); return; }
+      const missing = (window.ClawMateFeedbackPanel && window.ClawMateFeedbackPanel.validateSubmission)
+        ? window.ClawMateFeedbackPanel.validateSubmission([item], { requireAction: false })
+        : ((!item.text || !item.text.trim()) ? '请填写选中内容' : (!item.note || !item.note.trim()) ? '请填写建议' : null);
+      if (missing) { showToastSafe(missing); return; }
       if (!item.action) { item.action = 'modify'; item.scope = 'document'; }
       submit.disabled = true; submit.textContent = '...';
       submitSingleItem(item).finally(function(){ submit.disabled = false; submit.textContent = '提交评审'; });
@@ -6115,14 +6114,6 @@
     if (window.getSelection) window.getSelection().removeAllRanges();
   }
 
-  function findContentBody(node) {
-    while (node && node !== document.body) {
-      if (node.id === 'contentBody') return node;
-      node = node.parentElement;
-    }
-    return null;
-  }
-
   function buildSelectionPosition(range, selText) {
     if (!range || !selText) return '';
     return getFeedbackSelectionPosition({
@@ -6467,6 +6458,18 @@
   var _lastPstSelection = null;
   var _taskTemplates = [];
 
+  // Shared required-field rule for a 浮窗 draft (选中内容 + 建议). The action is
+  // checked via _lastPstTag above, so requireAction stays off here. Returns a
+  // "请填写..." message or an empty string when the draft is complete.
+  function _feedbackDraftError(text, note) {
+    if (window.ClawMateFeedbackPanel && window.ClawMateFeedbackPanel.validateSubmission) {
+      return window.ClawMateFeedbackPanel.validateSubmission([{ text: text, note: note }], { requireAction: false }) || '';
+    }
+    if (!String(text || '').trim()) return '请填写选中内容';
+    if (!String(note || '').trim()) return '请填写建议';
+    return '';
+  }
+
   // Restore the 提交评审 label without removing the svg icon. The button
   // contains an svg + text node; replace the trailing text node only.
   function _resetPstSendLabel(btn) {
@@ -6543,6 +6546,15 @@
       rawPosition = posVal;
     }
 
+    // 浮窗「加入待办」同样要求填充建议（占位符标记为必填）。
+    const draftMissing = _feedbackDraftError(currentSelText, note);
+    if (draftMissing) {
+      st.textContent = '⚠️ ' + draftMissing;
+      st.className = 'pst-status pst-status-warn';
+      document.getElementById('pstNote').focus();
+      return;
+    }
+
     var _itemAction = 'other', _itemScope = 'document';
     var _mapEntry = _lastPstSelection || _resolvePstAction(_lastPstTag) || _resolvePstAction(note);
     if (_mapEntry) {
@@ -6589,6 +6601,15 @@
       return;
     }
     if (!currentSelText) return;
+
+    // 浮窗「提交评审」补齐对应的必填校验（选中内容 + 建议），与 share 浮窗一致。
+    const sendMissing = _feedbackDraftError(currentSelText, note);
+    if (sendMissing) {
+      st.textContent = '⚠️ ' + sendMissing;
+      st.className = 'pst-status pst-status-warn';
+      document.getElementById('pstNote').focus();
+      return;
+    }
 
     btn.disabled = true;
     btn.textContent = '⏳ ...';
@@ -7150,8 +7171,8 @@
           rightSidebar.style.transition = '';
           rightSidebar.style.display = ''; // let CSS display:none take effect now (inline flex from closeRightSidebar is no longer needed)
         }
-        // The same-origin terminal bundle and Agent facade are loaded with the page.
-        _fetchAgentConfig().then(function() {
+        // Load the xterm runtime only when the Agent panel is opened.
+        Promise.all([ensureTerminal(), _fetchAgentConfig()]).then(function() {
           agentPanel.style.display = 'flex';     // override any stale display:none from previous close
           agentPanel.classList.remove('hidden');
           agentPanel.style.display = '';         // let CSS take over
@@ -7189,6 +7210,11 @@
             var fileCtx = filePath ? { path: filePath } : null;
             window.Agent.open(rootId, agentDir, fileCtx);
             if (window.Agent.focus) window.Agent.focus();
+            // Agent.open() 首次打开会经 applyPreviewPanelWidth() 把 col4 写回桌面宽度
+            // (≥420,默认约 460/存值 750),在窄屏会挤掉内容。这里按当前视口重跑一次
+            // 网格:平板(≤1240)回到内容优先(col4=0,面板为有界浮窗),桌面维持并排。
+            updateGridColumns();
+            _syncPanelOpenClass();
           }
         }).catch(function(err) {
           console.error('[agent-panel] Failed to load:', err);
@@ -7207,6 +7233,28 @@
       }
     });
   }
+
+    // Tap the narrow-screen drawer scrim to dismiss an open feedback/agent drawer.
+    var previewDrawerScrim = document.getElementById('previewDrawerScrim');
+    if (previewDrawerScrim) {
+      previewDrawerScrim.addEventListener('click', function () {
+        // Close whichever right drawer is open: project → close button, feedback → sidebar, agent → agent.
+        var pPanel = document.getElementById('previewProjectPanel');
+        if (pPanel) {
+          var pClose = pPanel.querySelector('.panel-close-btn');
+          if (pClose) pClose.click();
+        }
+        if (rightSidebar && !rightSidebar.classList.contains('hidden')) closeRightSidebar();
+        if (agentPanel && !agentPanel.classList.contains('hidden')) {
+          agentPanel.classList.add('hidden');
+          agentPanel.style.display = 'none';
+          if (btnToggleAgent) btnToggleAgent.classList.remove('active');
+          updateGridColumns();
+          _syncPanelOpenClass();
+          if (window.Agent) window.Agent.close();
+        }
+      });
+    }
 
   // ── Internal review queue ─────────────────────────────────────────
   // Logged-in preview exposes the complete review flow.  Suggestions are
@@ -7450,7 +7498,26 @@
     var act = function(label, fn, danger) {
       var b = document.createElement('button');
       b.className = 'preview-bottom-btn' + (danger ? ' danger' : '');
-      b.textContent = label; b.addEventListener('click', fn); actions.appendChild(b);
+      b.textContent = label;
+      b.addEventListener('click', function(ev) {
+        ev.stopPropagation();
+        if (b.disabled) return;
+        // Mark the in-flight action so the user gets immediate feedback; the
+        // backend reserves items as in_progress during the same request.
+        b.disabled = true;
+        b.classList.add('loading');
+        var saved = b.textContent;
+        b.textContent = '⏳ 执行中...';
+        Promise.resolve(fn()).catch(function(e) {
+          showToastSafe('❌ ' + ((e && e.message) || '操作失败'));
+        }).finally(function() {
+          b.disabled = false;
+          b.classList.remove('loading');
+          // If the action re-rendered the panel the button is detached; leave it.
+          if (b.isConnected) b.textContent = saved;
+        });
+      });
+      actions.appendChild(b);
     };
 
     if (item.status === 'pending_review') {
@@ -7510,6 +7577,10 @@
     var project = _reviewProject();
     if (!project) { showToastSafe('当前文件不属于项目'); return; }
     // One request reserves all approved feedback; task_runner wakes one agent.
+    // Show a busy state on the toolbar button while the reserve request is in
+    // flight; the backend sets items to in_progress and the panel re-renders.
+    var b = btnReviewExec, savedLabel = '';
+    if (b) { savedLabel = b.textContent; b.disabled = true; b.classList.add('loading'); b.textContent = '⏳ 执行中...'; }
     try {
       var listUrl = '/api/clawmate/feedback/list?root=' + encodeURIComponent(rootId) + '&project=' + encodeURIComponent(project);
       if (filePath) listUrl += '&file=' + encodeURIComponent(filePath);
@@ -7522,6 +7593,12 @@
       renderReviewPanel();
     } catch (err) {
       showToastSafe('❌ ' + err.message);
+    } finally {
+      if (b) {
+        b.disabled = false;
+        b.classList.remove('loading');
+        if (b.isConnected && savedLabel) b.textContent = savedLabel;
+      }
     }
   });
 

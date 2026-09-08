@@ -29,6 +29,24 @@
         scope: item.scope || 'document', task_id: item.task_id || '', position: position(item)};
     })};
   }
+  // Shared required-field rule for a submission/draft item set. Returns the
+  // first missing-field message (「请填写选中内容」/「请填写建议」/「请选择操作类型」)
+  // or null when every item is complete. Callers whose card path supplies an
+  // action default (pending cards) pass requireAction:false so they don't force
+  // the user to pick one; the share/review 浮窗 both reuse this rule.
+  function validateSubmission(items, options) {
+    options = options || {};
+    var requireAction = options.requireAction !== false;
+    items = (items || []).slice();
+    if (!items.length) return null;
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i] || {};
+      if (!String(item.text || item.content || '').trim()) return '请填写选中内容';
+      if (!String(item.note || '').trim()) return '请填写建议';
+      if (requireAction && !String(item.action || '').trim()) return '请选择操作类型';
+    }
+    return null;
+  }
   function stop(event) { if (event) event.stopPropagation(); }
   function editableText(item, key, placeholder, rows, persist) {
     var input = document.createElement('textarea');
@@ -72,5 +90,5 @@
     return card;
   }
 
-  global.ClawMateFeedbackPanel = {position: position, time: time, actions: actions, selectionPosition: selectionPosition, submissionPayload: submissionPayload, buildCard: buildCard};
+  global.ClawMateFeedbackPanel = {position: position, time: time, actions: actions, selectionPosition: selectionPosition, submissionPayload: submissionPayload, validateSubmission: validateSubmission, buildCard: buildCard};
 })(window);

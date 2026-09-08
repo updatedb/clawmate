@@ -1,4 +1,5 @@
 /* ── ClawMate Login Page Styles ─────────────────────────────────────────── */
+@import url('./tokens.css');
 
 *, *::before, *::after {
   box-sizing: border-box;
@@ -7,23 +8,6 @@
 }
 
 :root {
-  --bg-primary: #0f172a;
-  --bg-card: #1e293b;
-  --bg-input: #0f172a;
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --border-color: #334155;
-  --border-focus: #14b8a6;
-  --accent: #14b8a6;
-  --accent-hover: #0d9488;
-  --danger: #ef4444;
-  --danger-bg: #2d1515;
-  --danger-border: #7f1d1d;
-  --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --shadow: 0 8px 32px rgba(0,0,0,0.4);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
@@ -55,7 +39,7 @@ body {
   padding-bottom: calc(20px + var(--safe-bottom));
   padding-left: calc(20px + var(--safe-left));
   padding-right: calc(20px + var(--safe-right));
-  background: radial-gradient(ellipse at 50% 30%, #1a2540 0%, var(--bg-primary) 70%);
+  background: radial-gradient(ellipse at 50% 30%, var(--bg-tertiary) 0%, var(--bg-primary) 70%);
   position: relative;
   overflow: hidden;
 }
@@ -74,10 +58,10 @@ body {
   z-index: 1;
   width: 100%;
   max-width: 380px;
-  background: var(--bg-card);
+  background: var(--card-bg);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-modal);
   padding: 36px 32px;
 }
 
@@ -134,7 +118,7 @@ body {
 .form-group input {
   width: 100%;
   padding: 11px 14px;
-  background: var(--bg-input);
+  background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
@@ -153,7 +137,7 @@ body {
 }
 
 .form-group input:focus {
-  border-color: var(--border-focus);
+  border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.25);
 }
 
@@ -251,30 +235,4 @@ body {
 
 @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
   .login-bg::before { opacity: 0.3; }
-}
-
-/* Light mode via system preference */
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg-primary: #f8fafc;
-    --bg-card: #ffffff;
-    --bg-input: #f8fafc;
-    --text-primary: #0f172a;
-    --text-secondary: #475569;
-    --text-muted: #94a3b8;
-    --border-color: #e2e8f0;
-    --border-focus: #0d9488;
-    --accent: #0d9488;
-    --accent-hover: #0f766e;
-    --danger: #dc2626;
-    --danger-bg: #fef2f2;
-    --danger-border: #fecaca;
-    --shadow: 0 8px 32px rgba(0,0,0,0.08);
-  }
-  .login-bg {
-    background: radial-gradient(ellipse at 50% 30%, #f1f5f9 0%, var(--bg-primary) 70%);
-  }
-  .login-bg::before {
-    background: repeating-conic-gradient(rgba(13,148,136,0.04) 0% 25%, transparent 0% 50%) 50% / 60px 60px;
-  }
 }

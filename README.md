@@ -238,13 +238,6 @@ flowchart LR
 
 > 分享链接只绑定一个文件。外部评审人只能维护其“待提交／已提交”卡片；同一张提交后的卡会出现在项目成员的“待评审”过滤器中，但分享页不提供评审或执行操作。
 
-**反馈闭环**：
-
-```
-待提交 → 提交评审 → 待评审 → 评审通过 → 已评审 → 执行反馈 → 执行中 → 已执行／执行失败
-                              └────────────→ 评审拒绝／取消 → 已拒绝／已取消
-```
-
 连续选中多个位置统一提交，反馈 timeline 全程可追溯，修改完成后可重新评审进入下一轮迭代。
 
 ### 6. 按文件类型 AI 扩展
@@ -270,8 +263,6 @@ flowchart LR
 | `/clawmate init [root] <project>` | 项目初始化 |
 | `/clawmate plan [root] <project>` | 规划/更新项目计划 |
 | `/clawmate list [root_id]` | 列出 root 下所有项目 |
-| `/clawmate feed [status] [project]` | 查询 feedback 列表 |
-| `/clawmate do [#ID]` | 批量处理待办反馈 |
 | `/clawmate project <projectname>` | 切换会话到指定项目 |
 
 > 📖 完整命令参数见 [skills/clawmate/SKILL.md](skills/clawmate/SKILL.md)
@@ -362,39 +353,13 @@ openclaw gateway restart
 
 ## 配置参考
 
-```json
-{
-  "roots": [
-    {
-      "id": "example",
-      "label": "示例目录",
-      "dir": "/data/example",
-      "agent_id": "main"
-    }
-  ],
-  "defaultRootId": "example",
-  "port": 5533,
-  "public_base_url": "http://clawmate.lan:5533",
-  "agent": {
-    "backend": "claude",
-    "max_sessions": 10,
-    "env": {}
-  },
-  "openclaw": {
-    "gateway_url": "http://127.0.0.1:18789",
-    "hook_token": ""
-  },
-  "onlyoffice": {
-    "api_js_url": "http://onlyoffice.lan/web-apps/apps/api/documents/api.js",
-    "mode": "edit"
-  },
-  "auth": {
-    "username": "admin",
-    "password_hash": "",
-    "session_ttl_minutes": 480
-  }
-}
+直接使用脱敏的 [config.example.json](config.example.json) 作为配置参考和起始文件：
+
+```bash
+cp config.example.json config.json
 ```
+
+其中所有路径均为示例路径，令牌、密钥与密码哈希均为空或安全占位值。部署前只需在本地 `config.json` 中填写实际目录、服务地址和凭据；请勿提交该文件。
 
 ### 认证
 

@@ -12,10 +12,8 @@ Routes:
 
 from __future__ import annotations
 
-import json
 import logging
-import os
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 
 
 logger = logging.getLogger("clawmate.feedback")
@@ -30,17 +28,11 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from feedback_schema import FEEDBACK_STATUSES
-from config import load as config
 from store import (
-    update_item, list_items, batch_update_items, create_items, review_items,
-    create_execution_plan, confirm_execution_plan, execution_task,
-    create_execution_task, record_execution_result, delete_item,
+    CST, update_item, list_items, batch_update_items, create_items, review_items,
+    create_execution_plan, confirm_execution_plan, create_execution_task, record_execution_result, delete_item,
 )
 from service import resolve_root
-
-# ── 常量 ────────────────────────────────────────────────────────────
-
-CST = timezone(timedelta(hours=8))
 
 router = APIRouter()
 
@@ -345,7 +337,7 @@ async def feedback_update(request: Request):
         raise HTTPException(status_code=409, detail="Use the review decision/plan endpoints for review state transitions")
 
     try:
-        item = update_item(root_id, project, feedback_id, new_status, result=result_text)
+        update_item(root_id, project, feedback_id, new_status, result=result_text)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=".feedback.json not found")
     except LookupError:

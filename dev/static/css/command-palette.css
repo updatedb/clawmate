@@ -1,0 +1,123 @@
+/* Command palette (Ctrl/Cmd+K) — keyboard-first navigation for the file manager.
+   Self-contained; consumes the same design tokens as style.css so it inherits
+   light/dark themes automatically. */
+
+.cp-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;                     /* above .modal-overlay (10000) */
+  background: rgba(0, 0, 0, 0.45);
+  display: none;                      /* toggled via style.display='flex' */
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  animation: modalFadeIn var(--duration-base) var(--ease-out);
+}
+
+.cp-box {
+  width: min(560px, calc(100vw - 28px));
+  max-height: 68vh;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-modal);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalSlideUp var(--duration-base) var(--ease-out);
+}
+
+.cp-input-wrap {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+.cp-input-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  display: inline-flex;
+}
+.cp-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-lg);
+  min-width: 0;
+  padding: 0;
+}
+.cp-input::placeholder { color: var(--text-muted); }
+.cp-input-hint {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs, 11px);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  background: var(--bg-tertiary);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cp-box, .cp-overlay { animation: none; }
+}
+
+.cp-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px;
+}
+.cp-group-label {
+  font-size: var(--font-size-xs, 11px);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 12px 4px;
+}
+.cp-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-primary);
+}
+.cp-item .cp-ico { flex-shrink: 0; color: var(--text-muted); display: inline-flex; }
+.cp-item .cp-label { flex: 1; font-size: var(--font-size-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-item .cp-kind {
+  flex-shrink: 0;
+  font-size: var(--font-size-xs, 11px);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  background: var(--bg-tertiary);
+}
+.cp-item.active { background: var(--accent); color: #fff; }
+.cp-item.active .cp-ico,
+.cp-item.active .cp-kind { color: #fff; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.12); }
+.cp-item:hover:not(.active) { background: var(--bg-tertiary); }
+.cp-empty {
+  padding: 22px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+.cp-footer {
+  flex-shrink: 0;
+  display: flex;
+  gap: 14px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: var(--font-size-xs, 11px);
+  font-family: var(--font-mono);
+}
+.cp-footer b { color: var(--text-primary); font-weight: 600; }

@@ -28,9 +28,6 @@ from starlette.responses import JSONResponse, PlainTextResponse, RedirectRespons
 
 logger = logging.getLogger("clawmate.auth")
 
-# ── Config keys (read from shared config dict injected by main.py) ────────────
-AUTH_CONFIG_KEY = "auth"
-
 # ── Session store ─────────────────────────────────────────────────────────────
 # session_id -> {"user": str, "created_at": float, "last_active": float}
 _sessions: dict[str, dict] = {}
@@ -132,6 +129,14 @@ async def delete_session(sid: str) -> None:
 
 def get_session_from_cookie(request: Request) -> Optional[str]:
     return request.cookies.get("clawmate_session")
+
+
+def get_client_ip(request: Request) -> str:
+    """Resolve the caller IP, honoring reverse-proxy ``x-forwarded-for``."""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
 
 # ── IP-level brute-force guard ───────────────────────────────────────────────
@@ -359,11 +364,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
     def _get_client_ip(self, request: Request) -> str:
-        # Support reverse proxy headers
-        forwarded = request.headers.get("x-forwarded-for", "")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
-        return request.client.host if request.client else "unknown"
+        # Rely on the shared module helper for reverse-proxy aware resolution.
+        return get_client_ip(request)
 
     def _is_api_route(self, path: str) -> bool:
         return path.startswith("/api/")

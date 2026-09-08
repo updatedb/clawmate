@@ -1,0 +1,31 @@
+{
+  "screen": "preview",
+  "selectedLayout": "A",
+  "layoutApproach": "Three-column reading: left TOC/outline (collapsible) + center content (per-type renderer) + right rail. The right column hosts the feedback/review panel and the agent panel as MUTUALLY EXCLUSIVE (one occupancy). Bottom action rail carries file ops (location=return-to-manager, export, download, rename, move, extract, share, delete).",
+  "regions": ["topbar", "tocLeft", "contentCenter", "rightRail", "bottombar"],
+  "components": {
+    "topbar": ["back", "brand", "docTitle", "copyFilename", "refreshContent", "versionPill", "toggleToc", "toggleFeedback", "toggleAgent", "projectPanel", "themeToggle", "logout"],
+    "tocLeft": ["outline", "tocEmpty"],
+    "contentCenter": ["markdownBody", "image", "audio", "video", "pdf", "onlyoffice", "htmlIframe", "plainText", "bpmn", "subtitlePanel"],
+    "rightRail": ["feedbackPanel", "agentPanel"],
+    "bottombar": ["btnPath(位置)", "btnPdf(导出)", "btnDownload", "btnRename", "btnMove", "btnExtract", "btnShare", "btnDelete", "mediaDynamic", "editGroup"]
+  },
+  "responsive": {
+    "mobile": "Content-first single column; TOC and feedback hide as slide-in overlays; feedback via floating button + bottom panel; btnPath/back visible; 4-col collapses to 1.",
+    "tablet": "TOC (240px) + content; feedback/agent as slide-in drawer; bottombar scrolls horizontally.",
+    "desktop": "3-4 column; feedback and agent share single right column exclusively; bottombar full width."
+  },
+  "interactionMap": {
+    "file selection": "open feedback tooltip (add todo / submit review)",
+    "btnPath(位置)": "jump to file directory in File Manager (return entry)",
+    "btnShare": "open share-create → copy token URL",
+    "btnRename/Move/Delete": "invoke dir-picker / rename / delete",
+    "feedbackCard": "editable pending card / read-only submitted card",
+    "btnReviewAdd": "create empty pending feedback card",
+    "btnReviewSubmit": "submit pending selections to backend",
+    "btnReviewExec": "reserve approved feedback + wake agent",
+    "agentPanel": "open terminal/chat, exclusive with feedback panel"
+  },
+  "states": ["empty", "loading", "error", "populated", "missingFile"],
+  "timestamp": "2026-09-08T00:00:00Z"
+}

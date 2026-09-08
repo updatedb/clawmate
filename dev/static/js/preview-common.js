@@ -196,26 +196,6 @@
 
   // SRT 解析/序列化函数因桌面端与后端格式有差异，保留在各端专属脚本中。
 
-  // ── 行号计算（从文本偏移量）─────────────────────────────────────
-  global.getLineNumbersFromRange = function(text, startOffset, endOffset) {
-    if (!text) return { startLine: 1, endLine: 1 };
-    const lines = text.split('\n');
-    let charCount = 0;
-    let startLine = 1, endLine = 1;
-    for (let i = 0; i < lines.length; i++) {
-      const lineLen = lines[i].length + 1; // +1 for newline
-      if (startOffset >= charCount && startOffset < charCount + lineLen) {
-        startLine = i + 1;
-      }
-      if (endOffset >= charCount && endOffset < charCount + lineLen) {
-        endLine = i + 1;
-        break;
-      }
-      charCount += lineLen;
-    }
-    return { startLine, endLine };
-  };
-
   // ── 代码大纲解析（函数/类定义索引）──────────────────────────────
   global.parseCodeOutline = function(content, ext) {
     var lines = content.split('\n');
@@ -313,18 +293,6 @@
         }
       }
     }
-    return items;
-  };
-
-  // ── 从渲染后的 Markdown DOM 提取标题大纲 ──────────────────────────
-  global.buildHeadingTOC = function(container) {
-    var headings = container.querySelectorAll('h1, h2, h3, h4');
-    var items = [];
-    headings.forEach(function(h, i) {
-      if (!h.id) h.id = 'heading-' + i;
-      var level = parseInt(h.tagName[1]);
-      items.push({ id: h.id, text: h.textContent, level: level, element: h });
-    });
     return items;
   };
 

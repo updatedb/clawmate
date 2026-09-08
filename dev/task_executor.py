@@ -24,7 +24,6 @@ CLI_BACKENDS = frozenset({"claude", "codex"})
 
 _ACTIVE_PROCESSES: dict[str, subprocess.Popen] = {}
 _ACTIVE_LOCK = threading.Lock()
-_TERMINAL = frozenset({"succeeded", "failed", "cancelled"})
 
 
 @dataclass(frozen=True)

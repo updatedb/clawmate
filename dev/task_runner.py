@@ -10,17 +10,17 @@ Routes:
 from __future__ import annotations
 
 import logging
-import shlex
-from datetime import datetime, timezone, timedelta
+import threading
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from config import load_task_templates, TaskTemplate
+from store import CST
 
 router = APIRouter()
 logger = logging.getLogger("clawmate.task")
-CST = timezone(timedelta(hours=8))
 
 
 def _get_template(task_id: str) -> TaskTemplate | None:
@@ -39,13 +39,25 @@ def _render_prompt_text(text: str, variables: dict) -> str:
 
 
 def wake_review_task(root_id: str, project: str, review_task_id: str) -> None:
-    """Wake one agent for one server-reserved review task (possibly many files)."""
+    """Wake one agent for one server-reserved review task (possibly many files).
+
+    Runs in a background thread so the /review/execute HTTP response is not held
+    open on the gateway round-trip (the gateway POST has a 10s timeout).  The
+    caller has already reserved the items as ``in_progress`` via
+    ``create_execution_task``, so the endpoint returns immediately and the panel
+    re-renders the executing state at once; the agent wake happens off-thread.
+    """
     from store import execution_task
     task = execution_task(root_id, project, review_task_id)
     if task.get("status") != "in_progress":
         raise ValueError("review task is not executing")
-    _wake_agent_for_root(root_id, project=project, include_in_progress=True,
-                         review_task_id=review_task_id)
+    threading.Thread(
+        target=_wake_agent_for_root,
+        args=(root_id,),
+        kwargs={"project": project, "include_in_progress": True, "review_task_id": review_task_id},
+        name="clawmate-review-wake",
+        daemon=True,
+    ).start()
 
 
 @router.post("/api/clawmate/task/run", response_class=JSONResponse)
@@ -111,11 +123,10 @@ async def task_run(request: Request):
     from config import load as _cfg
     try:
         _cfg().root_dir(root_id)
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(status_code=404, detail=f"Root not found: {root_id}")
 
     # 校验 file_path 合法性（文件必须存在）
-    from pathlib import Path as _Path
     full_path = _cfg().root_dir(root_id).expanduser().resolve() / file_path.lstrip("/")
     # 禁止路径遍历
     try:
@@ -217,7 +228,7 @@ async def task_run(request: Request):
 import time as time_module
 
 from config import load as _config
-from store import list_items, scan_all
+from store import list_items
 from pathlib import Path
 
 
@@ -341,16 +352,16 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "", includ
             _desc = _action_desc(task_id, item.get("action", "other"))
             lines.append(f"   操作：{_desc}")
             lines.append("")
-        lines.append(f"步骤：")
-        lines.append(f"0. 【效率优先】position 已标注目标位置（Section xxx / Line xxx），先用 grep 定位 position 得到行号范围，仅读取该范围内的内容匹配 content，避免全文件读取")
+        lines.append("步骤：")
+        lines.append("0. 【效率优先】position 已标注目标位置（Section xxx / Line xxx），先用 grep 定位 position 得到行号范围，仅读取该范围内的内容匹配 content，避免全文件读取")
         lines.append("1. 同一文件/同一位置的 feedback 必须一起重新定位、合并并判断冲突；anchor 是提示，不得因文本次数或版本变化直接拒绝。")
         lines.append("2. 逐条处理；无法安全执行的反馈填 needs_attention 或 failed，不得影响其它反馈。")
-        lines.append(f"")
-        lines.append(f"⚠️ 安全约束：")
-        lines.append(f"- 所有操作只在本地文件系统完成（不访问远程目录 / 远程系统）")
+        lines.append("")
+        lines.append("⚠️ 安全约束：")
+        lines.append("- 所有操作只在本地文件系统完成（不访问远程目录 / 远程系统）")
         lines.append(f"- 所有操作基于 {root_id} 指向的目录；file 已给出绝对路径（已验证存在），scope=project 时 project 必须存在，不存在直接标记 status=failed")
-        lines.append(f"- 禁止创建或删除任何文件/目录（包括临时文件）")
-        lines.append(f"- 禁止修改配置文件和项目配置（config.json, config.example.json, .gitignore 等）")
+        lines.append("- 禁止创建或删除任何文件/目录（包括临时文件）")
+        lines.append("- 禁止修改配置文件和项目配置（config.json, config.example.json, .gitignore 等）")
         if review_task_id:
             lines.append(f"- 此为内部执行任务 task_id={review_task_id}；完成后必须向 {callback_url} POST JSON（仅本机 loopback；不附带或索取任何凭据）。")
             lines.append("- JSON 必须含 root、project、task_id、success(boolean)、summary(string)、diff(string)、artifacts(array)、checks(array)、outcomes(array)。")
@@ -386,8 +397,8 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "", includ
 async def cron_tick():
     """cron 入口：扫所有 root 下各 project 的 pending feedback，逐 project 唤醒 agent。
 
-    scan_all() 只统计 pending 总数，但 _wake_agent_for_root() 需要 project 参数
-    才能读到正确的 project 级 .clawmate/feedback.json。这里走逐 project 扫描。
+    按 project 级 .clawmate/feedback.json 逐 project 扫描，让
+    _wake_agent_for_root() 拿到正确的 project 参数。
     """
     cfg = _config()
     total_pending = 0

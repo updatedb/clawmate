@@ -1,0 +1,33 @@
+{
+  "screen": "file-manager",
+  "selectedLayout": "A",
+  "layoutApproach": "Persistent left sidebar (root/dir tree) + content grid (gallery/list toggle) + topbar search + right drawers (project/agent, mutually exclusive). Command palette (Ctrl/Cmd+K) added as a navigation accelerator overlay on top of the sidebar, not a replacement.",
+  "regions": ["topbar", "sidebar", "toolbar", "main", "rightDrawers", "batchBar"],
+  "components": {
+    "topbar": ["brand", "filenameSearch", "fileSearch", "contentSearch", "toggleSidebar", "toggleAgent", "toggleProjectPanel", "themeToggle", "logout"],
+    "sidebar": ["rootSelect", "dirTree"],
+    "toolbar": ["breadcrumbPath", "filterType", "sortPills", "multiSelect", "create/upload", "viewToggle"],
+    "main": ["gallery", "list", "emptyState", "emptySearch", "status", "pagination/infiniteScroll"],
+    "rightDrawers": ["projectPanel", "agentPanel"],
+    "batchBar": ["batchDelete", "batchMove", "batchDownload", "selectAll", "clear"],
+    "overlay": ["commandPalette"]
+  },
+  "responsive": {
+    "mobile": "Sidebar becomes hamburger overlay; drawers slide in from right; batch bar becomes bottom sheet; gallery single column.",
+    "tablet": "Sidebar collapsible to icon rail (root select + dir tree); main grid 2-3 columns with infinite scroll.",
+    "desktop": "Full sidebar (root select + dir tree), gallery/list toggle, up to 6-8 column grid with virtualization, right drawers exclusive."
+  },
+  "interactionMap": {
+    "fileItem click": "open preview.html?root=&file=",
+    "searchInput": "live filter filename",
+    "fileSearchBtn/contentSearchBtn": "global recursive filename / ripgrep content search",
+    "dirTreeItem click": "navigate directory, update breadcrumb",
+    "sortPill": "re-sort list in place",
+    "multiSelect": "reveal batchBar",
+    "commandPalette": "type-to-navigate roots/dirs/files/search (Ctrl/Cmd+K)",
+    "projectPanel toggle": "open project overview drawer (exclusive)",
+    "agentPanel toggle": "open agent terminal drawer (exclusive)"
+  },
+  "states": ["empty", "loading", "error", "populated"],
+  "timestamp": "2026-09-08T00:00:00Z"
+}

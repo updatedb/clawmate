@@ -75,15 +75,6 @@
     });
   }
 
-  // ── Agent toggle placeholder ──
-  // Each page wires its own agent panel open/close.
-  // This module just ensures the toggle button exists and hands off to
-  // page-specific Agent facade caller via a global hook.
-  window._topbarToggleAgent = function () {
-    var btn = document.getElementById('btnToggleAgent');
-    if (btn) btn.click();
-  };
-
   // ── Theme helpers (for page-specific use like Mermaid theme) ──
   window._topbarResolvedTheme = function () {
     if (currentTheme === 'auto') {
@@ -91,5 +82,4 @@
     }
     return currentTheme;
   };
-  window._topbarGetTheme = function () { return currentTheme; };
 })();

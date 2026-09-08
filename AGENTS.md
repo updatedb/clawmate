@@ -16,6 +16,19 @@ ClawMate is a FastAPI service with a framework-free frontend. Backend modules li
 
 Use four-space indentation and type annotations for new Python code. Follow existing module boundaries: route modules handle HTTP concerns, while reusable filesystem or business logic belongs in services or stores. Name Python functions and files with `snake_case`, classes with `PascalCase`, and tests `test_<behavior>`. Frontend code uses vanilla JavaScript and CSS; preserve the local formatting and reuse tokens from `dev/static/css/tokens.css`. No repository-wide formatter or linter is currently enforced, so keep diffs focused and consistent with neighboring code.
 
+## Frontend Panel Layout Conventions
+
+Side panels (TOC/大纲, feedback/review 反馈/评审, Agent 终端, project 项目面板) share a single layout model across `preview.html`, `share-view.html`, and `index.html`:
+
+- Each page is a CSS grid: `<left panel> <main 1fr> <right panels...>`. The main content always occupies the `1fr` column.
+- Every grid item must declare an explicit `grid-column` (never rely on auto-placement) — otherwise the main column collapses when a sibling panel is hidden.
+- Panels **push** content: their grid column expands from `0px` to their width when open (grid reflow), rather than floating over it. No `position: fixed`/overlay panels except a mobile-only fallback.
+- A single grid-update function drives `grid-template-columns` from the current open/closed state of each panel.
+- **Mutual exclusion**: only one right-side panel (feedback / agent / project) is open at a time — opening one closes the others.
+- Close buttons use the shared `.panel-close-btn` (a 14px SVG "✕"); panel headers have uniform `height: 40px; box-sizing: border-box; align-items: center`.
+
+Any new side panel must follow this same pattern: grid-column push + explicit `grid-column` + mutual exclusion + `.panel-close-btn` + 40px header.
+
 ## Testing Guidelines
 
 Tests use `pytest`, FastAPI `TestClient`, `tmp_path`, and `monkeypatch`. Add regression coverage for behavior changes, especially route responses, session handling, filesystem boundaries, and frontend layout contracts. Keep tests deterministic and isolated from real user data. There is no coverage threshold; prioritize meaningful assertions for changed paths.

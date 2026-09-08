@@ -3,7 +3,7 @@ Unit tests for store.py — FeedbackStore 核心 CRUD + 并发安全。
 
 Usage:
     cd /home/openclaw/webprojects/clawmate
-    python -m pytest test/test_store.py -v
+    python -m pytest tests/test_store.py -v
 """
 
 from __future__ import annotations
@@ -216,7 +216,7 @@ class TestConcurrentWriteSafety:
                 sels = [{"text": f"concurrent-{batch_id}-{i}", "note": f"batch{batch_id}"}
                         for i in range(10)]
                 r = create_items(_mock_config["root_id"], _mock_config["project"],
-                                 f"concurrent.md", sels)
+                                 "concurrent.md", sels)
                 results.extend(r)
             except Exception as e:
                 errors.append(e)

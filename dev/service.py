@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
 import mimetypes
-import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -29,6 +27,19 @@ ARCHIVE_EXTENSIONS = {
 
 # Compound extensions that indicate archive even when suffix doesn't match directly
 _ARCHIVE_COMPOUND_SUFFIXES = (".tar.gz", ".tar.bz2", ".tar.xz", ".tgz", ".tbz2", ".txz")
+
+
+def _tar_mode(name_lower: str, suffix: str) -> str:
+    """Pick a ``tarfile.open`` mode from the filename's compression hint."""
+    if name_lower.endswith((".gz", ".tgz")):
+        return "r:gz"
+    if name_lower.endswith((".bz2", ".tbz2")):
+        return "r:bz2"
+    if name_lower.endswith((".xz", ".txz")):
+        return "r:xz"
+    if suffix in (".tar",):
+        return "r"
+    return "r:*"  # auto-detect
 
 
 def _normalize_rel_path(rel_path: str) -> str:
@@ -243,17 +254,7 @@ def list_archive(path: Path) -> Dict:
         import tarfile
         try:
             # Determine compression mode from filename
-            mode = "r"
-            if name_lower.endswith((".gz", ".tgz")):
-                mode = "r:gz"
-            elif name_lower.endswith((".bz2", ".tbz2")):
-                mode = "r:bz2"
-            elif name_lower.endswith((".xz", ".txz")):
-                mode = "r:xz"
-            elif suffix in (".tar",):
-                mode = "r"
-            else:
-                mode = "r:*"  # auto-detect
+            mode = _tar_mode(name_lower, suffix)
 
             with tarfile.open(path, mode) as tf:
                 for member in tf.getmembers():
@@ -615,7 +616,6 @@ def extract_archive(root_id: str, rel_path: str, dest_dir: str) -> Dict:
     Returns:
         {ok: True, destPath: "dest_dir", count: N}
     """
-    import shutil
     root_path, source, safe_src = safe_path(root_id, rel_path)
     _, dest_dir_path, safe_dest = safe_path(root_id, dest_dir)
 
@@ -644,17 +644,7 @@ def extract_archive(root_id: str, rel_path: str, dest_dir: str) -> Dict:
     elif suffix in (".tar", ".gz", ".bz2", ".xz") or name_lower.endswith((".tar.gz", ".tar.bz2", ".tar.xz", ".tgz", ".tbz2", ".txz")):
         import tarfile
         try:
-            mode = "r"
-            if name_lower.endswith((".gz", ".tgz")):
-                mode = "r:gz"
-            elif name_lower.endswith((".bz2", ".tbz2")):
-                mode = "r:bz2"
-            elif name_lower.endswith((".xz", ".txz")):
-                mode = "r:xz"
-            elif suffix in (".tar",):
-                mode = "r"
-            else:
-                mode = "r:*"
+            mode = _tar_mode(name_lower, suffix)
 
             with tarfile.open(source, mode) as tf:
                 tf.extractall(dest_dir_path)

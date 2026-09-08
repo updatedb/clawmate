@@ -66,7 +66,7 @@ def validate_html(content: str) -> tuple[bool, str]:
         parser = html5lib.HTMLParser(strict=True)
         parser.parse(content)
         return True, ""
-    except ParseError as e:
+    except ParseError:
         # html5lib strict is too strict for real-world HTML fragments
         # (e.g. no DOCTYPE triggers "Expected DOCTYPE")
         # Fall through to balance check instead of rejecting

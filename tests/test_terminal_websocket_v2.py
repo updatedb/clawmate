@@ -248,7 +248,6 @@ async def test_v2_input_buffering_records_one_instruction_per_idle_window(monkey
     ])
 
     # Patch SessionLogger to capture record_user calls
-    original_get = agent_routes._v2_loggers.get
     agent_routes._v2_loggers.clear()
 
     async def run():
