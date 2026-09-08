@@ -615,9 +615,14 @@ def _schedule_auto_discover(target: Path) -> None:
 
 
 def _project_task_catalog(target: Path) -> list[dict]:
-    """Return compatible recommended tasks, preferring persisted task records."""
+    """Return compatible recommended tasks, preferring persisted task records.
+
+    Records whose id is in ``dismissed_recommendations`` are skipped — including
+    the built-in defaults, so a dismissed default never resurrects."""
     cfg = _read_project_json(target)
+    dismissed = set(cfg.get("dismissed_recommendations") or [])
     raw = cfg.get("recommended_tasks") or cfg.get("recommendations") or []
+    known: set[str] = set()
     tasks: list[dict] = []
     for item in raw:
         if not isinstance(item, dict) or not str(item.get("label", "")).strip():
@@ -628,16 +633,32 @@ def _project_task_catalog(target: Path) -> list[dict]:
         task["frequency"] = int(task.get("frequency") or 0)
         if task.get("estimated_minutes") is not None:
             task["estimated_minutes"] = max(0, int(task["estimated_minutes"]))
+        known.add(task["id"])
+        if task["id"] in dismissed:
+            continue
         tasks.append(task)
-    known = {task["id"] for task in tasks}
     defaults = [
         {"id": "commit_version", "label": "提交版本", "kind": "commit", "prompt": "检查项目当前改动；仅提交与本次项目工作直接相关、且已完成自检的文件。", "frequency": 0},
         {"id": "maintain_project_docs", "label": "维护项目文档", "kind": "documentation", "prompt": "阅读 PROJECT_NOTE.md 和 CLAWLIST.md，依据当前项目实际进展更新必要文档，不要编造事实。", "frequency": 0},
     ]
     if str(cfg.get("type", "")).lower() == "meeting":
         defaults.append({"id": "update_meeting_info", "label": "更新会议信息", "kind": "meeting", "prompt": "更新项目中的会议纪要、日程或行动项；只写入已知会议事实。", "frequency": 0})
-    tasks.extend(task for task in defaults if task["id"] not in known)
+    tasks.extend(task for task in defaults if task["id"] not in known and task["id"] not in dismissed)
     return tasks
+
+
+def _merge_codex_recommendations(target: Path, new_tasks: list[dict]) -> list[dict]:
+    """Replace prior codex-sourced records with fresh ones, respecting dismissal."""
+    cfg = _read_project_json(target)
+    existing = cfg.get("recommended_tasks") if isinstance(cfg.get("recommended_tasks"), list) else []
+    dismissed = set(cfg.get("dismissed_recommendations") or [])
+    preserved = [t for t in existing if t.get("source") != "codex" and t.get("id") not in dismissed]
+    kept = {t["id"] for t in preserved}
+    merged = preserved + [t for t in new_tasks if t["id"] not in dismissed and t["id"] not in kept]
+    cfg["recommended_tasks"] = merged
+    cfg["dismissed_recommendations"] = sorted(dismissed)
+    _write_project_json(target, cfg)
+    return merged
 
 
 def update_project_after_commit(target: Path, commit_subject: str, changed_file: str) -> dict:

@@ -3,12 +3,23 @@ import sys
 import tempfile
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "dev"))
 
 from types import SimpleNamespace
 from config import set_config_path, clear_config_cache, load as load_cfg
 from task_executor import TaskExecutor
-from project_routes import _extract_codex_tasks
+from project_routes import _extract_codex_tasks, _project_task_catalog, _merge_codex_recommendations
+import project_routes as PR
+
+
+@pytest.fixture()
+def _rec_proj(tmp_path):
+    d = tmp_path / "proj"
+    (d / ".clawmate").mkdir(parents=True)
+    (d / ".clawmate" / "project.json").write_text("{}", encoding="utf-8")
+    return d
 
 
 def _write_cfg(agent: dict) -> Path:
@@ -109,3 +120,33 @@ def test_extract_codex_tasks_skips_invalid_and_raises_when_empty():
     import pytest as _p
     with _p.raises(ValueError):
         _extract_codex_tasks("no json here")
+
+
+def test_catalog_filters_dismissed(_rec_proj):
+    cfg = PR._read_project_json(_rec_proj)
+    cfg["recommended_tasks"] = [
+        {"id": "commit_version", "label": "提交版本", "source": "project_json"},
+        {"id": "zap", "label": "删除我", "source": "discover"},
+    ]
+    cfg["dismissed_recommendations"] = ["commit_version", "zap"]
+    PR._write_project_json(_rec_proj, cfg)
+    ids = [t["id"] for t in _project_task_catalog(_rec_proj)]
+    assert "zap" not in ids
+    assert "commit_version" not in ids  # 默认任务也被 dismissed 压制,不复活
+
+
+def test_merge_codex_replaces_old_codex(_rec_proj):
+    cfg = PR._read_project_json(_rec_proj)
+    cfg["recommended_tasks"] = [
+        {"id": "a", "label": "旧codex", "source": "codex"},
+        {"id": "b", "label": "保留", "source": "project_json"},
+    ]
+    PR._write_project_json(_rec_proj, cfg)
+    merged = _merge_codex_recommendations(_rec_proj, [
+        {"id": "a", "label": "新codex", "prompt": "p", "source": "codex"},
+        {"id": "c", "label": "新增", "prompt": "p", "source": "codex"},
+    ])
+    ids = [t["id"] for t in merged]
+    assert ids == ["b", "a", "c"]
+    assert merged[1]["label"] == "新codex"
+    assert "dismissed_recommendations" in PR._read_project_json(_rec_proj)
