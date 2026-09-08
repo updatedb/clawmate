@@ -46,6 +46,14 @@ def _git_identity() -> tuple[str, str]:
         return default.git_user_email, default.git_user_name
 
 
+_CODEK_ANALYZE_PROMPT = (
+    "你是项目分析助手。用 sumi/superpower/productmanager 等技能深入分析当前项目（仅限当前目录），"
+    "识别最值得交给 Agent 执行的下一步任务。只输出一个 JSON 数组，不要解释文字。每项字段："
+    "id(短 kebab)、label(中文短标题)、prompt(给执行 Agent 的完整指令)、kind(plan|maintenance|documentation|meeting|research)、"
+    "frequency(0)。只基于项目真实状态与文档，不要编造。"
+)
+
+
 _PROJECT_NOTE_TEMPLATE = """# {name} 产品笔记
 
 ## 当前焦点（≤ 20 行，每次会话首先阅读）
@@ -987,6 +995,30 @@ async def project_recommendation_delete(root: str, project: str, task_id: str):
     cfg["dismissed_recommendations"] = sorted(dismissed)
     _write_project_json(target, cfg)
     return JSONResponse(content={"ok": True, "task_id": task_id})
+
+
+@router.post("/api/clawmate/project/{root}/{project}/recommendations/analyze")
+async def project_recommendations_analyze(root: str, project: str):
+    """Generate recommendations by analyzing the project with the project-panel backend."""
+    try:
+        target = _project_target(root, project)
+    except (ValueError, PermissionError):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Project not found")
+    from task_executor import TaskExecutor
+    cfg = load_cfg()
+    result = TaskExecutor(cfg).run_summary_analysis(_CODEK_ANALYZE_PROMPT, cwd=str(target), timeout_seconds=90)
+    if not result.get("ok"):
+        return JSONResponse(status_code=502, content={"ok": False, "detail": result.get("error") or "codex 分析失败"})
+    try:
+        new_tasks = _extract_codex_tasks(result.get("output") or "")
+    except (ValueError, json.JSONDecodeError) as exc:
+        return JSONResponse(status_code=422, content={"ok": False, "detail": f"无法解析 codex 输出：{exc}"})
+    if not new_tasks:
+        return JSONResponse(content={"ok": True, "recommended_tasks": _project_task_catalog(target), "detail": "codex 未返回可执行任务"})
+    merged = _merge_codex_recommendations(target, new_tasks)
+    return JSONResponse(content={"ok": True, "recommended_tasks": merged})
 
 
 @router.post("/api/clawmate/project/{root}/{project}/clawlist/complete")

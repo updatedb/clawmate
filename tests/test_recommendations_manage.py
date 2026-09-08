@@ -182,3 +182,49 @@ def test_recommendation_delete_idempotent(_rec_proj, monkeypatch):
     res = _client().post("/api/clawmate/project/r/proj/recommendations/missing/delete")
     assert res.status_code == 200
     assert res.json()["ok"] is True
+
+
+class _FakeExecutor:
+    def __init__(self, result): self._result = result
+    def run_summary_analysis(self, message, cwd, timeout_seconds=90): return self._result
+
+
+def test_recommendations_analyze_success(_rec_proj, monkeypatch):
+    import project_routes as PR
+    import task_executor as TE
+    monkeypatch.setattr(auth, "is_auth_enabled", lambda config=None: False)
+    monkeypatch.setattr(PR, "_project_target", lambda root, project: _rec_proj)
+    monkeypatch.setattr(TE, "TaskExecutor", lambda cfg: _FakeExecutor(
+        {"ok": True, "backend": "codex", "output": '[{"label":"做甲","id":"a"}]', "error": "", "code": 0}))
+    monkeypatch.setattr(PR, "load_cfg", lambda: SimpleNamespace())
+    res = _client().post("/api/clawmate/project/r/proj/recommendations/analyze")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["ok"] is True
+    ids = [t["id"] for t in data["recommended_tasks"]]
+    assert "a" in ids
+
+
+def test_recommendations_analyze_failure(_rec_proj, monkeypatch):
+    import project_routes as PR
+    import task_executor as TE
+    monkeypatch.setattr(auth, "is_auth_enabled", lambda config=None: False)
+    monkeypatch.setattr(PR, "_project_target", lambda root, project: _rec_proj)
+    monkeypatch.setattr(TE, "TaskExecutor", lambda cfg: _FakeExecutor(
+        {"ok": False, "backend": "", "output": "", "error": "codex: timeout", "code": -1}))
+    monkeypatch.setattr(PR, "load_cfg", lambda: SimpleNamespace())
+    res = _client().post("/api/clawmate/project/r/proj/recommendations/analyze")
+    assert res.status_code == 502
+    assert res.json()["ok"] is False
+
+
+def test_recommendations_analyze_unparseable(_rec_proj, monkeypatch):
+    import project_routes as PR
+    import task_executor as TE
+    monkeypatch.setattr(auth, "is_auth_enabled", lambda config=None: False)
+    monkeypatch.setattr(PR, "_project_target", lambda root, project: _rec_proj)
+    monkeypatch.setattr(TE, "TaskExecutor", lambda cfg: _FakeExecutor(
+        {"ok": True, "backend": "codex", "output": "garbage no json", "error": "", "code": 0}))
+    monkeypatch.setattr(PR, "load_cfg", lambda: SimpleNamespace())
+    res = _client().post("/api/clawmate/project/r/proj/recommendations/analyze")
+    assert res.status_code == 422
