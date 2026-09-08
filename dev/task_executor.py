@@ -133,6 +133,42 @@ class TaskExecutor:
         except (httpx.HTTPError, ValueError):
             return self._receipt(task_run_id, requested, "openclaw", reason="Gateway request failed")
 
+    def run_summary_analysis(self, message: str, cwd: str, timeout_seconds: int = 90) -> dict:
+        """Run the project-panel backend in pipe mode and return its captured output.
+
+        Only CLI backends (codex/claude) support buffered analysis; a gateway
+        backend (openclaw) has no local process to capture, so it is skipped.
+        'auto' resolves codex first, then claude — never a gateway.
+        """
+        requested = str(self.cfg.agent.project_backend).strip().lower()
+        candidates = ("codex", "claude") if requested == "auto" else (requested,)
+        failures = []
+        for backend in candidates:
+            if backend not in CLI_BACKENDS:
+                continue
+            binary = self._cli_binary(backend)
+            if not binary:
+                failures.append(f"{backend}: CLI unavailable")
+                continue
+            env = os.environ.copy()
+            env.update(self.cfg.agent.env or {})
+            if backend == "claude":
+                env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
+            args = [binary, "-p", message]
+            try:
+                proc = subprocess.run(args, cwd=cwd, capture_output=True, text=True,
+                                      timeout=timeout_seconds, env=env, start_new_session=True)
+            except subprocess.TimeoutExpired:
+                failures.append(f"{backend}: timeout")
+                continue
+            except OSError:
+                failures.append(f"{backend}: could not start")
+                continue
+            return {"ok": proc.returncode == 0, "backend": backend,
+                    "output": proc.stdout, "error": proc.stderr, "code": proc.returncode}
+        return {"ok": False, "backend": "", "output": "",
+                "error": "; ".join(failures) or "No CLI backend available", "code": -1}
+
 
 def _runs_path(project_dir: Path) -> Path:
     return project_dir / ".clawmate" / "task-runs.jsonl"
