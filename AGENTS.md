@@ -61,6 +61,21 @@ Tests use `pytest`, FastAPI `TestClient`, `tmp_path`, and `monkeypatch`. Add reg
 
 Recent history commonly uses concise Conventional Commit prefixes such as `feat:`, `fix:`, `refactor:`, and `style:`; use an imperative, narrowly scoped subject. Pull requests should explain the problem and solution, list validation performed, link relevant issues, and include screenshots or recordings for visible UI changes. Call out configuration, migration, or deployment impacts explicitly.
 
+## Release & Push Rule (docs-first)
+
+Before **publishing to GitHub** (a push that updates `main` or a release tag), first complete project-documentation maintenance:
+
+1. **CHANGELOG.md** — add a `## vX.Y (YYYY-MM-DD)` entry dated today that summarizes the changes being pushed. This is the enforcee signal.
+2. **README.md** — update only if user-facing behavior/features changed.
+3. **AGENTS.md** — update only if repo conventions/contracts changed.
+
+This file (AGENTS.md) is read by all agents (Claude reads CLAUDE.md/this file; **Codex reads AGENTS.md**), so the rule is visible to every agent that pushes.
+
+The repo ships a **git pre-push hook** (`.githooks/pre-push`, activated via `git config core.hooksPath .githooks`) that **enforces** it for any push — by Claude, Codex, or a human CLI — by aborting a `main`/tag push whose newest commit is dated after the newest CHANGELOG entry. Feature / PR branch pushes are exempt (iterative, not a release).
+
+- Install on a fresh clone: `git config core.hooksPath .githooks`
+- Bypass: `git push --no-verify` (git-native, not a setting toggle)
+
 ## Security & Configuration Tips
 
 Do not commit `config.json`, credentials, tokens, password hashes, or real filesystem paths. Use `config.example.json` for safe examples and environment variables for deployment overrides.

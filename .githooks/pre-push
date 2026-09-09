@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Pre-push rule: require project docs to be maintained BEFORE publishing to GitHub.
+#
+# Gates pushes that update `main` or a release tag (the "publish" actions). Feature / PR
+# branches are exempt — they are iterative, not a release. A push is aborted when the
+# commits being pushed are newer than the newest `## vX.Y (date)` entry in CHANGELOG.md,
+# i.e. when CHANGELOG / project docs have not been updated to cover the work.
+#
+# Bypass: `git push --no-verify` (git-native; not a settings toggle).
+set -uo pipefail
+
+GIT=/usr/bin/git
+z40=0000000000000000000000000000000000000000
+fail=0
+
+while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$z40" ] && continue          # branch deletion
+
+  # Only gate release/publish targets: main or tags. Skip feature branches (PR workflow).
+  case "$remote_ref" in
+    refs/heads/main|refs/tags/*|refs/heads/master) ;;
+    *) continue ;;
+  esac
+
+  # Most recent commit date (YYYY-MM-DD) among the commits being pushed.
+  range="${remote_sha}..${local_sha}"
+  newest=$("$GIT" log -1 --format=%cs "$range" 2>/dev/null || "$GIT" log -1 --format=%cs)
+
+  # Newest `## vX.Y (YYYY-MM-DD)` entry date in CHANGELOG.md.
+  latest=$(grep -m1 -oE '## v[0-9]+\.[0-9]+ \([0-9]{4}-[0-9]{2}-[0-9]{2}\)' CHANGELOG.md 2>/dev/null \
+             | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}')
+
+  if [ -z "$latest" ]; then
+    echo "⚠️  发布规则：CHANGELOG.md 缺少版本条目。推送前请先维护项目文档（CHANGELOG / README / AGENTS）。" >&2
+    fail=1
+  elif [ -n "$newest" ] && [ "$newest" \> "$latest" ]; then
+    echo "⚠️  发布规则：待推送提交日期($newest) 晚于 CHANGELOG 最新条目($latest)。" >&2
+    echo "   请先更新 CHANGELOG.md 及项目文档，再重新 push（或 git push --no-verify 绕过）。" >&2
+    fail=1
+  fi
+done
+
+exit "$fail"
