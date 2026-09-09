@@ -41,6 +41,8 @@
       min-width: 0;
     }
     .topbar-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+    /* When the TOC (btnDir/btnToc) panel is open, hide its nav toggle in the topbar. */
+    body.share-toc-open .topbar #btnToggleToc { display: none; }
 
     /* ── Three-column (desktop) ── */
     .share-three-col {
@@ -228,23 +230,6 @@
 </head>
 <body>
   <div class="share-app">
-    <!-- Topbar -->
-    <header class="topbar">
-      <span class="brand"><img src="./asset/clawmate-logo.png" alt="" width="28" height="28" style="flex-shrink:0;" />ClawMate</span>
-      <span class="share-title" id="shareTitle">📄 加载中...</span>
-      <div class="topbar-actions">
-        <button class="topbar-btn" id="btnToggleToc" title="切换大纲" aria-label="切换大纲">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
-        </button>
-        <button class="topbar-btn" id="btnShareFeedback" title="打开反馈" aria-pressed="false" aria-label="反馈">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        </button>
-        <button class="topbar-btn" id="themeToggle" title="切换主题" aria-label="切换主题">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
-        </button>
-      </div>
-    </header>
-
     <!-- Three-column -->
     <div class="share-three-col" id="shareThreeCol">
       <aside class="share-left hidden" id="shareLeft">
@@ -253,11 +238,28 @@
           <div class="share-toc-empty">非 Markdown，无大纲</div>
         </nav>
       </aside>
-      <main class="share-center">
-        <div class="share-center-body" id="contentBody">
-          <div class="share-loading" role="status">加载中...</div>
-        </div>
-      </main>
+      <div class="content-col">
+        <header class="topbar">
+          <span class="brand"><img src="./asset/clawmate-logo.png" alt="" width="28" height="28" style="flex-shrink:0;" />ClawMate</span>
+          <span class="share-title" id="shareTitle">📄 加载中...</span>
+          <div class="topbar-actions">
+            <button class="topbar-btn" id="btnToggleToc" title="切换大纲" aria-label="切换大纲">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
+            </button>
+            <button class="topbar-btn" id="btnShareFeedback" title="打开反馈" aria-pressed="false" aria-label="反馈">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </button>
+            <button class="topbar-btn" id="themeToggle" title="切换主题" aria-label="切换主题">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+            </button>
+          </div>
+        </header>
+        <main class="share-center">
+          <div class="share-center-body" id="contentBody">
+            <div class="share-loading" role="status">加载中...</div>
+          </div>
+        </main>
+      </div>
       <aside class="share-right preview-right-col hidden" id="shareRight" aria-label="反馈面板">
         <div class="preview-right-header">
           <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> 反馈</span>
@@ -388,6 +390,7 @@
       shareLeft.classList.add('hidden');
       updateGrid();
       tocBtn.classList.remove('active');
+      document.body.classList.remove('share-toc-open');
     }
     function openToc() {
       if (!shareLeft.classList.contains('hidden') && !_tocTransitioning) return;
@@ -402,6 +405,7 @@
       shareLeft.classList.remove('hidden');       // slide-in: -100% → 0
       shareLeft.style.display = '';
       tocBtn.classList.add('active');
+      document.body.classList.add('share-toc-open');
     }
     function closeToc() {
       if (shareLeft.classList.contains('hidden') && !_tocTransitioning) return;
@@ -410,6 +414,7 @@
       _tocTransitioning = true;
       shareLeft.classList.add('hidden');          // slide-out: 0 → -100%
       tocBtn.classList.remove('active');
+      document.body.classList.remove('share-toc-open');
       updateGrid();                               // collapse col1 immediately (not only on transitionend)
     }
 

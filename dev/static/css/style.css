@@ -291,6 +291,14 @@ button svg, .btn svg, a svg {
   flex: 1; min-height: 0; overflow: hidden; width: 100%;
   transition: grid-template-columns var(--duration-slow) var(--ease-out);
 }
+/* Content column wrapper: binds the topbar to the content area and lets side
+   panels span full page height. Shared by index / share (and later preview). No
+   container-type (would create a stacking context and trap the topbar under the
+   tablet/mobile drawers). */
+.content-col {
+  grid-column: 2; min-width: 0;
+  display: flex; flex-direction: column; overflow: hidden;
+}
 .sidebar {
   background: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
