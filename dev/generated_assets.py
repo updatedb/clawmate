@@ -39,6 +39,10 @@ class GeneratedAssetTask:
     backend: str
     operator: str
     created_at: str
+    intent: dict[str, object]
+    regions: list[dict[str, object]]
+    parent_task_id: str = ""
+    parent_candidate_id: str = ""
 
     def request_payload(self) -> dict:
         source = ""
@@ -57,6 +61,10 @@ class GeneratedAssetTask:
             "backend": self.backend,
             "operator": self.operator,
             "created_at": self.created_at,
+            "intent": self.intent,
+            "regions": self.regions,
+            "parent_task_id": self.parent_task_id,
+            "parent_candidate_id": self.parent_candidate_id,
         }
 
 
@@ -92,11 +100,14 @@ class GeneratedAssetService:
     def create_task(
         self, *, source_path: Path | None, prompt: str, purpose: str, topic: str,
         width: int, height: int, candidate_count: int, backend: str, operator: str,
+        intent: dict | None = None, regions: list | None = None,
+        parent_task_id: str = "", parent_candidate_id: str = "",
     ) -> GeneratedAssetTask:
         prompt = str(prompt or "").strip()
+        normalized_intent = self._normalize_intent(intent, prompt)
         topic = self._safe_topic(topic)
         backend = str(backend or "").strip().lower()
-        if not prompt:
+        if not prompt and not normalized_intent["overall_requirements"]:
             raise ValueError("prompt is required")
         if len(prompt) > 8000:
             raise ValueError("prompt is too long")
@@ -106,21 +117,28 @@ class GeneratedAssetService:
             raise ValueError("image dimensions must be between 64 and 4096")
         if backend not in _BACKENDS:
             raise ValueError("unsupported backend")
-        source = self._validated_source(source_path)
         task_id = uuid.uuid4().hex
+        source = self._validated_source(source_path)
+        if intent is None and source is None:
+            normalized_intent["mode"] = "create_from_reference"
         base_dir = source.parent if source else self.project_dir
         candidate_dir = base_dir / "candidates" / task_id
         metadata_dir = self.project_dir / ".clawmate" / "generated-tasks" / task_id
+        self._validate_task_input(source, normalized_intent)
         task = GeneratedAssetTask(
             id=task_id, project_dir=self.project_dir, source_path=source,
             candidate_dir=candidate_dir, metadata_dir=metadata_dir, prompt=prompt,
             purpose=str(purpose or "").strip()[:500], topic=topic, width=int(width),
             height=int(height), candidate_count=int(candidate_count), backend=backend,
             operator=str(operator or "").strip()[:200], created_at=_now(),
+            intent=normalized_intent, regions=[], parent_task_id=str(parent_task_id or "")[:120],
+            parent_candidate_id=str(parent_candidate_id or "")[:120],
         )
         metadata_dir.mkdir(parents=True, exist_ok=False)
         try:
             candidate_dir.mkdir(parents=True, exist_ok=False)
+            stored_regions = self._store_regions(metadata_dir, regions or [])
+            task = GeneratedAssetTask(**{**asdict(task), "regions": stored_regions})
             self._write_json_atomic(metadata_dir / "request.json", task.request_payload())
         except Exception:
             shutil.rmtree(metadata_dir, ignore_errors=True)
@@ -148,6 +166,10 @@ class GeneratedAssetService:
             width=int(payload.get("width") or 0), height=int(payload.get("height") or 0),
             candidate_count=int(payload.get("candidate_count") or 0), backend=str(payload.get("backend") or ""),
             operator=str(payload.get("operator") or ""), created_at=str(payload.get("created_at") or ""),
+            intent=self._normalize_intent(payload.get("intent"), str(payload.get("prompt") or "")),
+            regions=list(payload.get("regions") or []),
+            parent_task_id=str(payload.get("parent_task_id") or "")[:120],
+            parent_candidate_id=str(payload.get("parent_candidate_id") or "")[:120],
         )
 
     def read_result(self, task_id: str) -> GeneratedAssetResult:
@@ -204,6 +226,58 @@ class GeneratedAssetService:
         if not source.is_file() or source.suffix.lower() not in _IMAGE_EXTENSIONS:
             raise ValueError("source image is invalid")
         return source
+
+    @staticmethod
+    def _normalize_intent(intent: object, prompt: str) -> dict[str, object]:
+        raw = intent if isinstance(intent, dict) else {}
+        mode = str(raw.get("mode") or "edit_source_image")
+        if mode not in {"edit_source_image", "create_from_reference"}:
+            raise ValueError("task mode is invalid")
+        return {
+            "mode": mode,
+            "artifact_type": str(raw.get("artifact_type") or "")[:120],
+            "visual_style": str(raw.get("visual_style") or "")[:120],
+            "use_case": str(raw.get("use_case") or "")[:120],
+            "overall_requirements": str(raw.get("overall_requirements") or prompt or "").strip()[:8000],
+        }
+
+    def _validate_task_input(self, source: Path | None, intent: dict[str, object]) -> None:
+        if intent["mode"] == "edit_source_image" and source is None:
+            raise ValueError("source image is required for edit mode")
+
+    def _store_regions(self, metadata_dir: Path, regions: list) -> list[dict[str, object]]:
+        stored: list[dict[str, object]] = []
+        seen: set[str] = set()
+        mask_dir = metadata_dir / "masks"
+        for raw in regions:
+            if not isinstance(raw, dict):
+                raise ValueError("region is invalid")
+            region_id = str(raw.get("id") or "")[:120]
+            if not region_id or region_id in seen:
+                raise ValueError("region id is invalid")
+            seen.add(region_id)
+            order = int(raw.get("order") or 0)
+            if order < 1:
+                raise ValueError("region order is invalid")
+            action = str(raw.get("action") or "")[:80]
+            description = str(raw.get("description") or "").strip()[:2000]
+            if not action or (action == "replace_locally" and not description):
+                raise ValueError("region description is required")
+            value = str(raw.get("mask_path") or "")
+            try:
+                source = self._project_path(value)
+            except ValueError as exc:
+                raise ValueError("region mask is outside project") from exc
+            if not source.is_file() or source.suffix.lower() not in _IMAGE_EXTENSIONS:
+                raise ValueError("region mask is invalid")
+            mask_dir.mkdir(parents=True, exist_ok=True)
+            target = mask_dir / (region_id + source.suffix.lower())
+            shutil.copy2(source, target)
+            stored.append({"id": region_id, "name": str(raw.get("name") or region_id)[:200],
+                           "mask_path": target.relative_to(self.project_dir).as_posix(),
+                           "action": action, "description": description,
+                           "enabled": raw.get("enabled") is not False, "order": order})
+        return sorted(stored, key=lambda item: int(item["order"]))
 
     def _validated_candidate(self, task: GeneratedAssetTask, row: object) -> GeneratedAssetCandidate:
         if not isinstance(row, dict):

@@ -61,6 +61,39 @@ def test_create_task_rejects_more_than_four_candidates(tmp_path: Path):
         )
 
 
+def test_create_task_persists_intent_and_copies_project_mask(tmp_path: Path):
+    project = _project(tmp_path)
+    source = project / "art" / "source.png"
+    mask = project / "art" / "mask.png"
+    source.parent.mkdir()
+    source.write_bytes(PNG_1X1)
+    mask.write_bytes(PNG_1X1)
+
+    task = GeneratedAssetService(project).create_task(
+        source_path=source, prompt="", purpose="", topic="cockpit", width=1920,
+        height=720, candidate_count=1, backend="codex", operator="tester",
+        intent={"mode": "edit_source_image", "overall_requirements": "keep warnings"},
+        regions=[{"id": "risk", "mask_path": "art/mask.png", "action": "overlay_risk_zone",
+                  "description": "amber", "enabled": True, "order": 1}],
+    )
+
+    payload = json.loads((task.metadata_dir / "request.json").read_text(encoding="utf-8"))
+    assert payload["intent"]["mode"] == "edit_source_image"
+    assert payload["regions"][0]["mask_path"].startswith(".clawmate/generated-tasks/")
+    assert (project / payload["regions"][0]["mask_path"]).is_file()
+
+
+def test_create_task_rejects_mask_outside_project(tmp_path: Path):
+    with pytest.raises(ValueError, match="mask"):
+        GeneratedAssetService(_project(tmp_path)).create_task(
+            source_path=None, prompt="new cover", purpose="cover", topic="cover",
+            width=1024, height=1024, candidate_count=1, backend="codex", operator="admin",
+            intent={"mode": "create_from_reference"},
+            regions=[{"id": "risk", "mask_path": "/tmp/outside.png", "action": "recolor",
+                      "description": "blue", "enabled": True, "order": 1}],
+        )
+
+
 def test_result_rejects_candidate_outside_server_created_directory(tmp_path: Path):
     service = GeneratedAssetService(_project(tmp_path))
     task = service.create_task(
