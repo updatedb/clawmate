@@ -156,6 +156,23 @@ def test_create_route_uses_configured_agent_backend(tmp_path: Path, monkeypatch)
     assert "result.json" in launched["message"]
 
 
+def test_create_route_returns_image_task_intent(tmp_path: Path, monkeypatch):
+    project = _project(tmp_path)
+    monkeypatch.setattr(generated_asset_routes, "safe_path", lambda root, path: (tmp_path, project, "project"))
+    monkeypatch.setattr(generated_asset_routes, "load_cfg", lambda: type("Cfg", (), {"agent": type("Agent", (), {"backend": "codex"})()})())
+    monkeypatch.setattr(generated_asset_routes, "TaskExecutor", lambda cfg: type("Executor", (), {"launch": lambda self, **kwargs: type("Receipt", (), {"status": "running", "payload": lambda self: {}})()})())
+    app = FastAPI()
+    app.include_router(generated_asset_routes.router)
+    response = TestClient(app).post("/api/clawmate/generated-assets/demo/project/tasks", json={
+        "prompt": "draft dashboard", "purpose": "", "topic": "ui", "width": 1024,
+        "height": 768, "candidate_count": 1,
+        "intent": {"mode": "create_from_reference", "artifact_type": "wireframe"},
+        "regions": [],
+    })
+    assert response.status_code == 201
+    assert response.json()["task"]["intent"]["artifact_type"] == "wireframe"
+
+
 def test_stage_mask_returns_project_relative_path(tmp_path: Path, monkeypatch):
     project = _project(tmp_path)
     monkeypatch.setattr(generated_asset_routes, "safe_path", lambda root, path: (tmp_path, project, "project"))

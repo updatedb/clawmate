@@ -84,7 +84,9 @@ async def create_task(root: str, project: str, request: Request):
             source_path=_source(project_dir, body.get("source_path")), prompt=body.get("prompt"),
             purpose=body.get("purpose"), topic=body.get("topic"), width=body.get("width"),
             height=body.get("height"), candidate_count=body.get("candidate_count"),
-            backend=cfg.agent.backend, operator="clawmate-user",
+            backend=cfg.agent.backend, operator="clawmate-user", intent=body.get("intent"),
+            regions=body.get("regions"), parent_task_id=body.get("parent_task_id", ""),
+            parent_candidate_id=body.get("parent_candidate_id", ""),
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
