@@ -2149,7 +2149,6 @@ btnToggleAgent && btnToggleAgent.addEventListener("click", function () {
 const btnProjectPanel = document.getElementById("btnProjectPanel");
 const projectPanel = document.getElementById("projectPanel");
 const projectPanelBody = document.getElementById("projectPanelBody");
-const projectPanelSummary = document.getElementById("projectPanelSummary");
 const btnCloseProjectPanel = document.getElementById("btnCloseProjectPanel");
 let _projectOverview = null;
 let _projectPanelContext = null;
@@ -2272,7 +2271,6 @@ function renderProjectPanel() {
   const recs = (data.recommendations || []).filter(r => r.source === 'project_json');
   const actions = data.actions || [], projectTasks = data.project_tasks || [];
   const runs = data.runs || {active: [], recent: []}, summary = data.status || {};
-  if (projectPanelSummary) projectPanelSummary.textContent = data.status_summary || data.project || '';
   let html = '<div class="project-status-bar"><span>更新于 ' + _esc((summary.refreshed_at || '').replace('T', ' ').slice(0, 16)) + '</span><span data-project-status>执行中 ' + (summary.running || 0) + ' · 待处理 ' + (summary.pending || 0) + ' · 失败 ' + (summary.failed || 0) + '</span></div>';
   html += '<section class="project-panel-section"><b>现在要处理</b><div class="project-actions">' + (actions.slice(0, 3).map(item => '<div class="project-panel-signal"><span>' + _esc(item.label) + '</span><button class="project-panel-action" data-project-action="' + _esc(item.id) + '" title="来源：' + _esc(item.source) + '">' + _esc(item.action) + '</button></div>').join('') || '<p class="project-panel-hint">暂无条件行动</p>') + '</div></section>';
   html += '<section class="project-panel-section"><b>' + (runs.active.length ? '正在执行' : '最近执行') + '</b><div class="project-runs" data-project-runs>' + ((runs.active.length ? runs.active : runs.recent).slice(0, 3).map(run => _projectRunCard(run, runs.active.includes(run))).join('') || '<p class="project-panel-hint">暂无执行记录</p>') + '</div></section>';
@@ -2313,7 +2311,6 @@ function renderProjectPanel() {
 // surrounding directory-side panel/open-once behaviour local to this surface.
 const _sharedProjectPanel = window.ClawMateProjectPanel && window.ClawMateProjectPanel.mount({
   body: projectPanelBody,
-  summary: projectPanelSummary,
   getContext: () => ({root: state.rootId, project: state.project}),
   fetch: authFetch,
   isOpen: _isProjectPanelOpen,

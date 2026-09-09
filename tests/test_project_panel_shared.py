@@ -44,6 +44,16 @@ def test_directory_and_preview_mount_the_same_complete_project_panel_renderer():
     assert "window.open" not in panel
 
 
+def test_project_summary_is_a_conditional_body_section_not_header_chrome():
+    root = Path(__file__).resolve().parents[1]
+    index = (root / "dev/static/index.html").read_text(encoding="utf-8")
+    panel = (root / "dev/static/js/project-panel.js").read_text(encoding="utf-8")
+    assert 'id="projectPanelSummary"' not in index
+    assert 'id="projectPanelSummary"' not in panel
+    assert "项目摘要" in panel
+    assert "data.status_summary ?" in panel
+
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
