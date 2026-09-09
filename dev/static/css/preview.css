@@ -1130,7 +1130,6 @@
       min-width: 0;
       display: inline-flex;
       align-items: center;
-      justify-content: center;
       gap: 2px;
       height: 34px;
     }
