@@ -2207,6 +2207,7 @@ function _scheduleProjectRunPolling() {
 }
 function _updateProjectPanelBtn() {
   const active = Boolean(state.project && state.rootId);
+  if (active) recordProjectUse(state.rootId, state.project);
   if (btnProjectPanel) btnProjectPanel.style.display = active ? '' : 'none';
   if (!active) { _projectPanelContext = null; _setProjectPanelOpen(false); return; }
   // sessionStorage is reset at login/page-session boundaries. A project opens

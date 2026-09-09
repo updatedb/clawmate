@@ -41,3 +41,8 @@ def test_palette_projects_only_and_mru():
     assert "data-cp-search" in src          # 绑定 chip 点击
     assert ".cp-card" in src                # 卡片渲染
     assert "_pushSearchActions" not in src  # 搜索项不再是列表 item
+
+def test_project_panel_open_records_mru():
+    src = _read("dev/static/js/app.js")
+    # 在项目面板打开/激活路径里必须调用 recordProjectUse
+    assert "recordProjectUse(state.rootId, state.project)" in src
