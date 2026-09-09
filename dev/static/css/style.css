@@ -1359,7 +1359,7 @@ pre:hover .code-copy-btn,
 .preview-feedback-panel-body {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -2947,7 +2947,7 @@ pre:hover .code-copy-btn,
 /* Push the close button to the far right even when #projectPanelSummary is capped (max-width). */
 .project-panel-header .panel-close-btn { margin-left: auto; }
 .project-panel-header #projectPanelSummary { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; color: var(--text-secondary); }
-.project-panel-body { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; padding: 10px 12px; overflow-y: auto; font-size: 12px; }
+.project-panel-body { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; padding: 8px 12px; overflow-y: auto; font-size: 12px; }
 .project-panel-section { min-width: 0; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 7px; background: var(--bg-primary); }
 .project-panel-hint { margin: 4px 0; color: var(--text-secondary); font-size: 11px; line-height: 1.4; }
 .project-panel-section li > span:nth-child(2) { flex: 1; min-width: 0; }
