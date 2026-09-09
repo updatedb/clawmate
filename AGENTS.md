@@ -25,9 +25,9 @@ Side panels (TOC/大纲, feedback/review 反馈/评审, Agent 终端, project �
 - Panels **push** content: their grid column expands from `0px` to their width when open (grid reflow), rather than floating over it. No `position: fixed`/overlay panels except a mobile-only fallback.
 - A single grid-update function drives `grid-template-columns` from the current open/closed state of each panel.
 - **Mutual exclusion**: only one right-side panel (feedback / agent / project) is open at a time — opening one closes the others.
-- Close buttons use the shared `.panel-close-btn` (a 14px SVG "✕"); panel headers have uniform `height: 40px; box-sizing: border-box; align-items: center`.
+- Close buttons use the shared `.panel-close-btn` (a 14px SVG "✕"); panel headers have uniform `height: 48px; box-sizing: border-box; align-items: center` and a plain title (13px/600/text-primary).
 
-Any new side panel must follow this same pattern: grid-column push + explicit `grid-column` + mutual exclusion + `.panel-close-btn` + 40px header.
+Any new side panel must follow this same pattern: grid-column push + explicit `grid-column` + mutual exclusion + `.panel-close-btn` + 48px header.
 
 ## Testing Guidelines
 

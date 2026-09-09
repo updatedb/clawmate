@@ -88,18 +88,16 @@
       pointer-events: none;
     }
     .preview-left-header {
-      padding: 0 16px;
+      padding: 0 12px;
       height: 48px;
       box-sizing: border-box;
       flex-shrink: 0;
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
     }
     .preview-left-header span { flex: 1; }
     .preview-left-body {
@@ -178,18 +176,16 @@
       pointer-events: none;
     }
     .preview-right-header {
-      padding: 0 16px;
+      padding: 0 12px;
       height: 48px;
       box-sizing: border-box;
       flex-shrink: 0;
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
     }
     .preview-right-header span { flex: 1; }
     .preview-right-body {
@@ -1827,7 +1823,7 @@
 #previewImageAssetsPanel { grid-column: 4; min-width: 0; }
 .preview-image-assets-panel { display:flex; flex-direction:column; overflow:hidden; background:var(--bg-secondary); border-left:1px solid var(--border-color); }
 .preview-image-assets-panel.hidden { display:none; }
-.preview-image-assets-header { height:40px; box-sizing:border-box; display:flex; align-items:center; justify-content:space-between; padding:0 12px; border-bottom:none; font-weight:600; }
+.preview-image-assets-header { height:48px; box-sizing:border-box; display:flex; align-items:center; justify-content:space-between; padding:0 12px; border-bottom:none; font-weight:600; font-size:13px; }
 .preview-image-assets-body { padding:14px; overflow:auto; display:grid; gap:12px; }
 .preview-image-assets-body label { display:grid; gap:5px; font-size:12px; color:var(--text-secondary); }
 .preview-image-assets-body input, .preview-image-assets-body textarea { font:inherit; padding:8px; color:var(--text-primary); background:var(--bg-primary); border:1px solid var(--border-color); border-radius:6px; }

@@ -420,7 +420,7 @@ body.content-narrow .content-col > .topbar { gap: 8px; }
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 14px;
+  padding: 0 12px;
   height: 48px;
   box-sizing: border-box;
   flex-shrink: 0;
@@ -1346,7 +1346,9 @@ pre:hover .code-copy-btn,
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 0 12px;
+  height: 48px;
+  box-sizing: border-box;
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
   font-weight: 600;
