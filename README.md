@@ -2,7 +2,7 @@
   <img src="dev/static/asset/clawmate-logo.png" alt="ClawMate" width="80" />
 </p>
 
-# ClawMateAA
+# ClawMate
 
 > 远程文件管理 · Agent 终端 · 预览反馈闭环 · 多后端协作
 
