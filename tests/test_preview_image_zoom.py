@@ -13,7 +13,8 @@ def test_image_preview_toolbar_exposes_ten_percent_zoom_controls():
     assert 'id="imageZoomLevel"' in source
     assert 'id="imageZoomIn"' in source
     assert "function setupImageZoomToolbar()" in source
-    assert "dyn.querySelectorAll('.sort-pill').forEach" in source
+    assert "dyn.querySelectorAll('.image-sort-btn').forEach" in source
+    assert "btn.className = 'preview-bottom-btn image-sort-btn';" in source
 
 
 def test_image_preview_toolbar_uses_compact_zoom_labels_and_toggle_edit_state():

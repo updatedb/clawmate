@@ -2369,7 +2369,7 @@
   function buildImageSortPills() {
     const dyn = document.getElementById('bottombarDynamic');
     if (!dyn) return;
-    dyn.querySelectorAll('.sort-pill').forEach(function(pill) { pill.remove(); });
+    dyn.querySelectorAll('.image-sort-btn').forEach(function(pill) { pill.remove(); });
 
     const pills = [
       { key: 'time', desc: '↓ 最新', asc: '↑ 最早' },
@@ -2379,7 +2379,7 @@
 
     pills.forEach(function(p) {
       const btn = document.createElement('button');
-      btn.className = 'sort-pill';
+      btn.className = 'preview-bottom-btn image-sort-btn';
       btn.dataset.key = p.key;
       if (imgSortKey === p.key) {
         btn.classList.add('active');
@@ -2406,7 +2406,7 @@
   }
 
   function updateImageSortPills() {
-    const pills = document.querySelectorAll('#bottombarDynamic .sort-pill');
+    const pills = document.querySelectorAll('#bottombarDynamic .image-sort-btn');
     const labels = {
       time: { desc: '↓ 最新', asc: '↑ 最早' },
       name: { desc: '↓ Z→A', asc: '↑ A→Z' },
