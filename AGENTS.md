@@ -29,6 +29,30 @@ Side panels (TOC/大纲, feedback/review 反馈/评审, Agent 终端, project �
 
 Any new side panel must follow this same pattern: grid-column push + explicit `grid-column` + mutual exclusion + `.panel-close-btn` + 48px header.
 
+## Frontend Naming & CSS Conventions
+
+Conventions for new frontend code. Existing code was not migrated wholesale (high churn / risk); apply these when writing new markup/JS/CSS or touching existing lines.
+
+### Element IDs (camelCase, type-suffix driven)
+
+- **Button**: `btn<Action><Object>` — always the `btn` prefix. `btnToggleSidebar` / `btnCloseAgent` / `btnCopyFilename`.
+  - Action verbs: Toggle / Open / Close / Copy / Refresh / Search / Clear / New / Add / Delete / Move / Rename / Download / Share / Select / Back / Submit / Cancel / Confirm.
+- **Panel**: `<Area>Panel` (index/shared unprefixed; `preview<Area>Panel`, `share<Area>Panel` for the preview/share pages). `projectPanel` / `agentPanel` / `previewAgentPanel` / `tocPanel` / `feedbackPanel`.
+- **Panel body**: `<Area>PanelBody`. `projectPanelBody` / `tocPanelBody`.
+- **List**: `<Area>List`. `dirList` / `cardList` / `cpList`.
+- **Column**: kebab CSS class `.content-col`; as an ID use `<area>Col` (avoid camel `shareThreeCol`).
+- **Select**: `<Area>Select`. `rootSelect` / `agentBackendSelect`.
+- **Wrap / Modal / Input / Status / Menu**: `<Area>` + `Wrap` / `Modal` / `Input` / `Status` / `Menu`. `pathTitleWrap` / `versionModal` / `agentChatInput` / `indexMoreMenu`.
+
+### CSS classes (kebab-case + surface prefix + BEM-lite)
+
+- **Block**: kebab-case noun — `agent-panel`, `project-card`, `preview-left`, `share-right`, `cp-box`, `fb-card`.
+- **Surface prefix** for cross-page shared components: `preview-`, `share-`, `cp-`, `fb-`, `agent-`, `pst-`, `cmd-`. **Unprefixed = index/shared** (`topbar`, `content-col`, `dir-list`, `panel-close-btn`).
+- **Element** (child of a block): flat kebab `block-element` — `project-panel-header`, `cp-card-name`, `agent-history-item-title`.
+- **State classes**: `.active`, `.hidden`, `.is-selected`.
+- **Sizing/tiers**: always via design tokens (`--btn-h-lg/h/sm`, `--radius-*`, `--bg-*`); no magic numbers. Button height tiers: 34 (`--btn-h-lg`) icons / 30 (`--btn-h`) standard / 26 (`--btn-h-sm`) compact.
+- `:root`-level tokens live in `dev/static/css/tokens.css`; surfaces must not define their own hardcoded sizes/colors if a token exists.
+
 ## Testing Guidelines
 
 Tests use `pytest`, FastAPI `TestClient`, `tmp_path`, and `monkeypatch`. Add regression coverage for behavior changes, especially route responses, session handling, filesystem boundaries, and frontend layout contracts. Keep tests deterministic and isolated from real user data. There is no coverage threshold; prioritize meaningful assertions for changed paths.
