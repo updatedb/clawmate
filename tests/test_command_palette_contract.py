@@ -21,3 +21,15 @@ def test_mru_helpers_in_app_js():
     assert "function recordProjectUse(rootId, name)" in src
     assert "function projectUseAt(rootId, name)" in src
     assert "clawmate.recentProjects" in src
+
+def test_palette_search_chips_and_cards():
+    html = _read("dev/static/index.html")
+    css = _read("dev/static/css/command-palette.css")
+    assert "cp-chips" in html
+    assert "data-cp-search" in html
+    assert "文件搜索" in html
+    assert "内容搜索" in html
+    assert ".cp-chips" in css
+    assert ".cp-chip" in css
+    assert ".cp-card" in css
+    assert "grid-template-columns: repeat(auto-fill" in css
