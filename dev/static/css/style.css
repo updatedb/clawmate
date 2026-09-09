@@ -371,6 +371,7 @@ body.content-narrow .content-col > .topbar { gap: 8px; }
 .breadcrumb-copy {
   flex-shrink: 0;
   width: 28px; height: 28px;
+  vertical-align: middle;             /* center 28px icon-button against the 14px breadcrumb text */
   display: inline-flex; align-items: center; justify-content: center;
   background: none; border: none; border-radius: 4px;
   color: var(--text-secondary);
