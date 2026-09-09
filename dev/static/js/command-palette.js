@@ -54,8 +54,9 @@
 
   function mruRecord(name, rootId) { if (typeof recordProjectUse === "function") recordProjectUse(rootId, name); }
 
-  function relTime(ms) {
-    if (typeof ms !== "number" || ms <= 0) return "—";
+  function relTime(v) {
+    if (typeof v !== "number" || v <= 0) return "—";
+    var ms = v < 1e12 ? v * 1000 : v;   // entry.mtime is epoch seconds; mruAt is ms
     var diff = Date.now() - ms;
     if (diff < 60000) return "刚刚";
     if (diff < 3600000) return Math.floor(diff / 60000) + " 分钟前";
