@@ -13,3 +13,9 @@ def test_center_title_wraps():
     preview = _read("dev/static/css/preview.css")
     j = preview.rindex(".preview-topbar-title-wrap {")
     assert "justify-content: center" in preview[j:j + 240]
+
+def test_mru_helpers_in_app_js():
+    src = _read("dev/static/js/app.js")
+    assert "function recordProjectUse(rootId, name)" in src
+    assert "function projectUseAt(rootId, name)" in src
+    assert "clawmate.recentProjects" in src

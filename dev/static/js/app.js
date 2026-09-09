@@ -3716,4 +3716,20 @@ if (els.contentMatchModal) {
   });
 }
 
+// ── Recent-projects MRU (shared with the command palette) ──
+const CP_MRU_KEY = "clawmate.recentProjects";
+function recordProjectUse(rootId, name) {
+  if (!rootId || !name) return;
+  let map = {};
+  try { map = JSON.parse(localStorage.getItem(CP_MRU_KEY)) || {}; } catch (_) {}
+  map[rootId + "/" + name] = Date.now();
+  try { localStorage.setItem(CP_MRU_KEY, JSON.stringify(map)); } catch (_) {}
+}
+function projectUseAt(rootId, name) {
+  try {
+    const v = JSON.parse(localStorage.getItem(CP_MRU_KEY))?.[rootId + "/" + name];
+    return typeof v === "number" ? v : -1;
+  } catch (_) { return -1; }
+}
+
 init();
