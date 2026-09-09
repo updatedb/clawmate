@@ -2658,7 +2658,8 @@ pre:hover .code-copy-btn,
 /* ── Date-axis bar ── */
 .agent-history-date-axis {
   display: flex; align-items: center; gap: 2px;
-  padding: 4px 6px;
+  min-height: 34px;
+  padding: 4px 8px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   overflow: hidden;
@@ -2697,6 +2698,14 @@ pre:hover .code-copy-btn,
 .agent-history-date-btn.active {
   background: var(--accent); color: var(--accent-text, #fff);
   font-weight: 600; border-color: var(--accent);
+}
+/* Match the agent-toolbar date-axis bar height to the terminal toolbar at every
+   breakpoint: 34px on desktop, 38px on mobile (mirrors .agent-toolbar). */
+@media (max-width: 768px) {
+  .agent-history-date-axis {
+    min-height: 38px;
+    padding: 5px 8px;
+  }
 }
 
 /* Scrollable history list wrapper — between search bar and pagination */
