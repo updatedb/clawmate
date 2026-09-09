@@ -48,34 +48,33 @@
   function close() { var e = el(); if (e) e.style.display = "none"; }
   function toggle() { if (isOpen()) close(); else open(); }
 
-  // ── hint items (roots + projects across all roots) ───────────────
-  // Selecting a root switches to that root (dir panel + content reload).
-  // Selecting a project switches to its root (if needed) and navigates into
-  // the project dir, so both the dir panel and the directory content follow.
-  function populateHints() {
-    items = [];
-    activeIndex = 0;
-    // File / content search actions, pinned at the top of the default palette
-    // view. Activating one runs the search with the palette's own input value;
-    // the results render in the index.
-    _pushSearchActions();
-    // Default list = projects only (no root rows). Projects are fetched across
-    // all roots and selecting one jumps to it (switchProject switches root as
-    // needed).
-    loadProjectsForLayout();   // async: append projects, then re-render
+  // ── hint items (projects across all roots) ───────────────────────
+  // The palette shows only project cards. Selecting one jumps to it
+  // (switchProject switches root as needed) and records MRU usage.
+
+  function mruRecord(name, rootId) { if (typeof recordProjectUse === "function") recordProjectUse(rootId, name); }
+
+  function relTime(ms) {
+    if (typeof ms !== "number" || ms <= 0) return "—";
+    var diff = Date.now() - ms;
+    if (diff < 60000) return "刚刚";
+    if (diff < 3600000) return Math.floor(diff / 60000) + " 分钟前";
+    if (diff < 86400000) return Math.floor(diff / 3600000) + " 小时前";
+    return Math.floor(diff / 86400000) + " 天前";
   }
 
-  // Launch the index search from the palette: run the search with the palette's
-  // own input value and close. 文件搜索 = filename search, 内容搜索 = ripgrep search.
-  function _pushSearchActions() {
-    items.push({ type:"action", label:"文件搜索", sub:"按文件名递归搜索", icon:"file",
-      activate:function(){ var q=inputEl()?inputEl().value:""; if(typeof fileSearch==="function") fileSearch(q); close(); } });
-    items.push({ type:"action", label:"内容搜索", sub:"用 ripgrep 搜索内容", icon:"file",
-      activate:function(){ var q=inputEl()?inputEl().value:""; if(typeof contentSearch==="function") contentSearch(q); close(); } });
+  function projSort(a, b) {
+    var am = a.mruAt >= 0 ? 0 : 1, bm = b.mruAt >= 0 ? 0 : 1;
+    if (am !== bm) return am - bm;                       // 用过的排前
+    var at = (am === 0 ? a.mruAt : a.mtime) - (bm === 0 ? b.mruAt : b.mtime);
+    if (at !== 0) return at > 0 ? -1 : 1;                // 时间新→旧
+    return a.name.localeCompare(b.name);
   }
+
+  function populateHints() { items = []; activeIndex = 0; loadProjectsForLayout(); }
 
   // Fetch each root's projects (dirs with a .clawmate/ marker) via the existing
-  // list endpoint and append them to the palette items.
+  // list endpoint, attach their MRU timestamp, sort, and render.
   function loadProjectsForLayout() {
     getRoots().forEach(function (r) {
       safeAuthFetch(
@@ -85,16 +84,16 @@
           if (!data || !Array.isArray(data.entries)) return;
           data.entries.filter(function (e) { return e && e.is_dir && e.name && e.name.charAt(0) !== "."; })
             .forEach(function (e) {
+              var mruAt = typeof projectUseAt === "function" ? projectUseAt(r.id, e.name) : -1;
               items.push({
-                type: "project",
-                label: e.name,
-                sub: r.id + " / " + e.name,
-                icon: "folder",
+                type: "project", root: r.id, name: e.name,
+                label: e.name, mtime: e.mtime || 0, mruAt: mruAt, icon: "folder",
                 activate: function () { switchProject(e.name, r.id); close(); },
               });
             });
+          items.sort(projSort);
           render(inputEl() ? inputEl().value : "");
-        }).catch(function () { /* ignore network errors — keep roots only */ });
+        }).catch(function () { /* ignore network errors */ });
     });
   }
 
@@ -103,6 +102,7 @@
   function switchProject(name, rootId) {
     if (rootId && rootId !== currentRoot()) safeSelectRoot(rootId);
     safeLoadDir(name);
+    mruRecord(name, rootId);
   }
 
   // ── rendering ────────────────────────────────────────────────────
@@ -110,30 +110,26 @@
     var list = listEl();
     if (!list) return;
     var q = (query || "").trim().toLowerCase();
-    var shown = items.filter(function (it) { return it.type === "action" || it.label.toLowerCase().indexOf(q) !== -1; });
+    var shown = items.filter(function (it) { return it.label.toLowerCase().indexOf(q) !== -1; });
     if (activeIndex >= shown.length) activeIndex = Math.max(0, shown.length - 1);
-
-    if (!shown.length) {
-      list.innerHTML = '<div class="cp-empty">没有匹配项</div>';
-      return;
-    }
-    var groupLabel = currentRoot() ? "根目录 · " + (currentDir() || "根") : "根目录";
-    var html = '<div class="cp-group-label">' + escapeHtml(groupLabel) + "</div>";
-    shown.forEach(function (it, idx) {
-      html +=
-        '<div class="cp-item' + (idx === activeIndex ? " active" : "") +
+    if (!shown.length) { list.innerHTML = '<div class="cp-empty">没有匹配项目</div>'; return; }
+    var html = shown.map(function (it, idx) {
+      var when = relTime(it.mruAt >= 0 ? it.mruAt : it.mtime);
+      return '<div class="cp-card' + (idx === activeIndex ? " active" : "") +
         '" data-index="' + idx + '" role="option" aria-selected="' + (idx === activeIndex) + '">' +
-        '<span class="cp-ico">' + iconFor(it.icon) + "</span>" +
-        '<span class="cp-label">' + escapeHtml(it.label) + "</span>" +
-        '<span class="cp-kind">' + it.type + "</span></div>";
-    });
+        '<span class="cp-card-ico">' + iconFor(it.icon) + "</span>" +
+        '<span class="cp-card-body">' +
+        '<span class="cp-card-name">' + escapeHtml(it.label) + "</span>" +
+        '<span class="cp-card-root">' + escapeHtml(it.root) + "</span>" +
+        '<span class="cp-card-when">最近使用 · ' + when + "</span>" +
+        "</span></div>";
+    }).join("");
     list.innerHTML = html;
   }
 
   function setActive(index) {
-    var list = listEl();
-    if (!list) return;
-    var shown = list.querySelectorAll(".cp-item");
+    var list = listEl(); if (!list) return;
+    var shown = list.querySelectorAll(".cp-card");
     if (index < 0 || index >= shown.length) return;
     activeIndex = index;
     shown.forEach(function (n, i) {
@@ -147,7 +143,7 @@
     // Recompute the visible list exactly as render() does so the click index
     // and Enter index always agree with what's on screen.
     var query = inputEl() ? inputEl().value : "";
-    var shown = items.filter(function (it) { return it.type === "action" || it.label.toLowerCase().indexOf(query.trim().toLowerCase()) !== -1; });
+    var shown = items.filter(function (it) { return it.label.toLowerCase().indexOf(query.trim().toLowerCase()) !== -1; });
     var it = shown[activeIndex];
     if (it && typeof it.activate === "function") it.activate();
   }
@@ -201,13 +197,13 @@
     var list = listEl();
     if (list) {
       list.addEventListener("click", function (ev) {
-        var node = ev.target && ev.target.closest ? ev.target.closest(".cp-item") : null;
+        var node = ev.target && ev.target.closest ? ev.target.closest(".cp-card") : null;
         if (!node) return;
         activeIndex = parseInt(node.getAttribute("data-index"), 10) || 0;
         activateCurrent();
       });
       list.addEventListener("mousemove", function (ev) {
-        var node = ev.target && ev.target.closest ? ev.target.closest(".cp-item") : null;
+        var node = ev.target && ev.target.closest ? ev.target.closest(".cp-card") : null;
         if (!node) return;
         var idx = parseInt(node.getAttribute("data-index"), 10);
         if (!isNaN(idx) && idx !== activeIndex) setActive(idx);
@@ -227,9 +223,25 @@
     });
   }
 
+  // ── search chips ─────────────────────────────────────────────────
+  // .cp-chip buttons run the palette input value through the index search.
+  function bindSearchChips() {
+    var chips = document.querySelectorAll("#cpChips .cp-chip");
+    Array.prototype.forEach.call(chips, function (chip) {
+      chip.addEventListener("click", function () {
+        var q = inputEl() ? inputEl().value : "";
+        var kind = chip.getAttribute("data-cp-search");
+        if (kind === "content" && typeof contentSearch === "function") contentSearch(q);
+        else if (typeof fileSearch === "function") fileSearch(q);
+        close();
+      });
+    });
+  }
+
   function init() {
     if (!document.getElementById(PALETTE_ID)) return;
     bindEvents();
+    bindSearchChips();
     var btn = document.getElementById("btnCommandPalette");
     if (btn) btn.addEventListener("click", toggle);
   }

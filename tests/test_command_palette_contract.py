@@ -33,3 +33,11 @@ def test_palette_search_chips_and_cards():
     assert ".cp-chip" in css
     assert ".cp-card" in css
     assert "grid-template-columns: repeat(auto-fill" in css
+
+def test_palette_projects_only_and_mru():
+    src = _read("dev/static/js/command-palette.js")
+    assert "projectUseAt" in src
+    assert "recordProjectUse" in src
+    assert "data-cp-search" in src          # 绑定 chip 点击
+    assert ".cp-card" in src                # 卡片渲染
+    assert "_pushSearchActions" not in src  # 搜索项不再是列表 item
