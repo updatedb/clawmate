@@ -251,8 +251,9 @@ button svg, .btn svg, a svg {
 
 /* ===== Layout ===== */
 .app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-.topbar { display: flex; justify-content: flex-start; align-items: center; padding: 0 20px; height: 48px; background: var(--bg-secondary); color: var(--text-primary); gap: 16px; flex-shrink: 0; z-index: 10; border-bottom: none; }
+.topbar { display: flex; justify-content: flex-start; align-items: center; padding: 0 20px; height: 48px; background: var(--bg-secondary); color: var(--text-primary); gap: 8px; flex-shrink: 0; z-index: 10; border-bottom: none; }
 .brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; letter-spacing: -0.3px; font-size: 0; flex-shrink: 0; line-height: 1; height: 34px; }
+.brand img { width: var(--btn-h-sm); height: var(--btn-h-sm); flex-shrink: 0; }  /* 26px logo, single source */
 /* Current-path breadcrumb moved up into the topbar (mirrors preview's title wrap). */
 .path-title-wrap { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 4px; height: 34px; }
 
@@ -345,7 +346,7 @@ body.content-narrow .content-col > .topbar { gap: 8px; }
 .sidebar-header { flex-shrink: 0; display: flex; align-items: center; gap: 6px; padding: 0 12px; height: 48px; box-sizing: border-box; border-bottom: none; }
 /* Command-palette button while it sits inside the sidebar header. */
 .sidebar-header .topbar-btn { color: var(--text-primary); background: transparent; border-color: var(--border-color); }
-.sidebar-header #rootSelect { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--accent); background: var(--accent-light); color: var(--text-primary); outline: none; cursor: pointer; }
+.sidebar-header #rootSelect { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; padding: 6px 10px; height: var(--btn-h-lg); border-radius: var(--radius-sm); border: 1px solid var(--accent); background: var(--accent-light); color: var(--text-primary); outline: none; cursor: pointer; }
 .sidebar-header #rootSelect:focus { border-color: var(--accent-hover); box-shadow: 0 0 0 2px var(--focus-ring); }
 .sidebar-header .panel-close-btn { margin-left: auto; }
 .dir-list { flex: 1; overflow-y: auto; padding: 0 14px 14px; list-style: none; margin: 0; }
