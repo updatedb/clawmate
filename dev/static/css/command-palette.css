@@ -32,7 +32,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 14px;
+  padding: 8px 14px;
   border-bottom: 1px solid var(--border-color);
 }
 .cp-input-icon {
@@ -48,6 +48,7 @@
   color: var(--text-primary);
   font-family: var(--font-ui);
   font-size: var(--font-size-lg);
+  height: var(--btn-h);                /* 30px — standard control tier */
   min-width: 0;
   padding: 0;
 }
@@ -77,7 +78,9 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
-  padding: 5px 12px;
+  height: var(--btn-h);                /* 30px — standard label-button tier */
+  padding: 0 12px;
+  display: inline-flex; align-items: center; justify-content: center;
   font: 500 12px/1 var(--font-ui);
   cursor: pointer;
   transition: background var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
