@@ -154,7 +154,9 @@ class TaskExecutor:
             env.update(self.cfg.agent.env or {})
             if backend == "claude":
                 env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
-            args = [binary, "-p", message]
+                args = [binary, "--dangerously-skip-permissions", "-p", message]
+            else:
+                args = [binary, "-p", message]
             try:
                 proc = subprocess.run(args, cwd=cwd, capture_output=True, text=True,
                                       timeout=timeout_seconds, env=env, start_new_session=True)

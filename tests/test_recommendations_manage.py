@@ -103,6 +103,26 @@ def test_run_summary_analysis_non_cli_backend_fails(monkeypatch):
     assert res["ok"] is False
 
 
+def test_run_summary_analysis_claude_uses_skip_permissions(monkeypatch):
+    class FakeCfg:
+        class Agent:
+            project_backend = "claude"
+            env = {}
+        agent = Agent()
+    captured = {}
+    import subprocess
+    def fake_binary(backend):
+        return "claude" if backend == "claude" else None
+    def fake_run(args, **kw):
+        captured["args"] = args
+        return SimpleNamespace(returncode=0, stdout="[]", stderr="", code=0)
+    monkeypatch.setattr(TaskExecutor, "_cli_binary", lambda self, b: fake_binary(b))
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    res = TaskExecutor(FakeCfg()).run_summary_analysis("hi", cwd=".")
+    assert res["ok"] is True
+    assert captured["args"] == ["claude", "--dangerously-skip-permissions", "-p", "hi"]
+
+
 def test_extract_codex_tasks_parses_clean_json():
     out = '[{"id":"a","label":"甲","prompt":"做甲","kind":"plan","frequency":0}]'
     tasks = _extract_codex_tasks(out)
