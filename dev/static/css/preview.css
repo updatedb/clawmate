@@ -486,7 +486,7 @@
       display: flex; align-items: center; gap: 6px;
       flex-shrink: 0; white-space: nowrap;
     }
-    .preview-right-actions .agent-panel-btn { height: 28px; padding: 0 9px; font-size: 12px; }
+    .preview-right-actions .agent-panel-btn { height: var(--btn-h); padding: 0 9px; font-size: 12px; }
     .preview-right-actions .agent-panel-btn svg { width: 13px; height: 13px; }
     .preview-right-actions .agent-panel-btn.hidden { display: none; }
     .preview-right-filter {
@@ -1229,7 +1229,7 @@
       /* Bottombar: hide file-action buttons, keep nav + share + dynamic */
       #btnPath, #btnPdf, #btnDownload, #btnRename, #btnDelete { display: none; }
       .preview-bottombar { gap: 6px; padding: 0 8px; height: 40px; }
-      .preview-bottom-btn { font-size: 11px; padding: 0 8px; height: 28px; }
+      .preview-bottom-btn { font-size: 11px; padding: 0 8px; height: var(--btn-h); }
       .preview-bottom-divider { margin: 0 2px; }
       .preview-btn-group { gap: 2px; }
 

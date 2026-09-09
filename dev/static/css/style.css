@@ -370,8 +370,8 @@ body.content-narrow .content-col > .topbar { gap: 8px; }
 .breadcrumb-sep { color: var(--text-muted); }
 .breadcrumb-copy {
   flex-shrink: 0;
-  width: 28px; height: 28px;
-  vertical-align: middle;             /* center 28px icon-button against the 14px breadcrumb text */
+  width: var(--btn-h-lg); height: var(--btn-h-lg);   /* 34px — topbar icon tier */
+  vertical-align: middle;             /* center the icon-button against the 14px breadcrumb text */
   display: inline-flex; align-items: center; justify-content: center;
   background: none; border: none; border-radius: 4px;
   color: var(--text-secondary);
@@ -994,6 +994,7 @@ body.multiselect .list-item { grid-template-columns: 26px 1fr max-content max-co
   .topbar { justify-content: flex-start; }
   .topbar-actions { gap: 4px; margin-left: auto; }
   .topbar-btn { width: 30px; height: 30px; font-size: 13px; }
+  .topbar .breadcrumb-copy, .topbar .breadcrumb-refresh { width: 30px; height: 30px; }
 
   /* Sidebar: collapse when hidden, full-width fixed overlay when open (matches preview) */
   .sidebar-overlay { display: none; }
@@ -1033,16 +1034,16 @@ body.multiselect .list-item { grid-template-columns: 26px 1fr max-content max-co
   /* Toolbar bottom */
   .toolbar-bottom { flex-direction: row; gap: 6px; align-items: center; }
   .tb-left { gap: 4px; flex-wrap: wrap; flex: 1; }
-  .tb-left label { font-size: 11px; padding: 0 2px; height: 28px; }
-  .tb-left select, .tb-left button { font-size: 11px; padding: 0 6px; height: 28px; }
+  .tb-left label { font-size: 11px; padding: 0 2px; height: var(--btn-h); }
+  .tb-left select, .tb-left button { font-size: 11px; padding: 0 6px; height: var(--btn-h); }
   /* Hide category filter on mobile */
   .tb-left label#filterLabel,
   .tb-left #filterType { display: none; }
   .tb-left button#multiSelectToggle { display: none; }
   /* Sort pills: compact */
-  .sort-pill { font-size: 11px; padding: 0 8px; height: 28px; }
+  .sort-pill { font-size: 11px; padding: 0 8px; height: var(--btn-h); }
   .tb-right { align-self: flex-end; }
-  .tb-right button { font-size: 11px; padding: 0 8px; height: 28px; }
+  .tb-right button { font-size: 11px; padding: 0 8px; height: var(--btn-h); }
   /* Hide sort label on mobile */
   .tb-left label[for] { display: none; }
 
@@ -1143,7 +1144,7 @@ body.multiselect .list-item { grid-template-columns: 26px 1fr max-content max-co
 
   /* Toolbar: more compact */
   .tb-left label { font-size: 10px; }
-  .sort-pill { font-size: 10px; padding: 0 6px; height: 26px; }
+  .sort-pill { font-size: 10px; padding: 0 6px; height: var(--btn-h-sm); }
 
   /* Main scroll */
   .main-scroll { padding: 6px 6px 12px; }
