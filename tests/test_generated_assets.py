@@ -154,3 +154,20 @@ def test_create_route_uses_configured_agent_backend(tmp_path: Path, monkeypatch)
     assert response.status_code == 201
     assert launched["backend"] == "codex"
     assert "result.json" in launched["message"]
+
+
+def test_stage_mask_returns_project_relative_path(tmp_path: Path, monkeypatch):
+    project = _project(tmp_path)
+    monkeypatch.setattr(generated_asset_routes, "safe_path", lambda root, path: (tmp_path, project, "project"))
+    app = FastAPI()
+    app.include_router(generated_asset_routes.router)
+
+    response = TestClient(app).post(
+        "/api/clawmate/generated-assets/demo/project/masks",
+        files={"mask": ("mask.png", PNG_1X1, "image/png")},
+    )
+
+    assert response.status_code == 201
+    path = response.json()["mask_path"]
+    assert path.startswith(".clawmate/generated-tasks/staged-masks/")
+    assert (project / path).is_file()

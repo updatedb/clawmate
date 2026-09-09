@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+import uuid
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from config import load as load_cfg
@@ -13,6 +14,8 @@ from task_executor import TaskExecutor
 
 
 router = APIRouter()
+_MASK_TYPES = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}
+_MAX_MASK_BYTES = 8 * 1024 * 1024
 
 
 def _project(root: str, project: str) -> Path:
@@ -49,6 +52,22 @@ def _agent_instruction(task) -> str:
         "result.json 必须是 {\"candidates\":[{\"id\":\"...\",\"file\":\"filename.png\",\"summary\":\"...\"}]}。"
         "不得覆盖源图，不得使用 Base64，不得自行采用或移动候选图。"
     )
+
+
+@router.post("/api/clawmate/generated-assets/{root}/{project}/masks", status_code=201)
+async def stage_mask(root: str, project: str, mask: UploadFile = File(...)):
+    suffix = _MASK_TYPES.get(str(mask.content_type or "").lower())
+    if suffix is None:
+        raise HTTPException(status_code=422, detail="mask must be a PNG, JPEG, or WebP image")
+    content = await mask.read(_MAX_MASK_BYTES + 1)
+    if not content or len(content) > _MAX_MASK_BYTES:
+        raise HTTPException(status_code=422, detail="mask must be between 1 byte and 8 MiB")
+    project_dir = _project(root, project)
+    target_dir = project_dir / ".clawmate" / "generated-tasks" / "staged-masks"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / (uuid.uuid4().hex + suffix)
+    target.write_bytes(content)
+    return {"mask_path": target.relative_to(project_dir).as_posix()}
 
 
 @router.post("/api/clawmate/generated-assets/{root}/{project}/tasks", status_code=201)
