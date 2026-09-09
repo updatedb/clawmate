@@ -295,6 +295,10 @@
         <input type="search" class="cp-input" id="cpInput" placeholder="搜索根目录、目录或文件…" autocomplete="off" spellcheck="false" aria-label="命令面板搜索" />
         <span class="cp-input-hint">↑↓ · Enter · Esc</span>
       </div>
+      <div class="cp-chips" id="cpChips" role="group" aria-label="搜索">
+        <button class="cp-chip" type="button" data-cp-search="filename">文件搜索</button>
+        <button class="cp-chip" type="button" data-cp-search="content">内容搜索</button>
+      </div>
       <div class="cp-list" id="cpList" role="listbox" aria-label="命令面板结果"></div>
       <div class="cp-footer"><span><b>Ctrl+K</b> 打开 · <b>Enter</b> 跳转 · <b>Esc</b> 关闭</span></div>
     </div>
