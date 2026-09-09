@@ -25,9 +25,25 @@ def test_edge_surfaces_consume_shared_tokens_and_recoverable_share_copy():
 
 
 def test_mobile_preview_prioritizes_document_context_over_secondary_tools():
+    # Secondary tools (project / theme / logout) fold into the shared mobile more-menu.
+    # The fold rules live in the shared stylesheet, scoped by :has(#btnMoreMenu) so the
+    # share page (no such button) is unaffected; preview keeps its document-first behavior.
+    style_css = (ROOT / "dev" / "static" / "css" / "style.css").read_text(encoding="utf-8")
     preview_css = (ROOT / "dev" / "static" / "css" / "preview.css").read_text(encoding="utf-8")
 
-    assert ".preview-app > .topbar #btnProjectPanel," in preview_css
-    assert ".preview-app > .topbar #themeToggle," in preview_css
-    assert ".preview-app > .topbar #btnLogout { display: none; }" in preview_css
+    assert ".content-col > .topbar:has(#btnMoreMenu) #btnProjectPanel," in style_css
+    assert ".content-col > .topbar:has(#btnMoreMenu) #themeToggle," in style_css
+    assert ".content-col > .topbar:has(#btnMoreMenu) #btnLogout," in style_css
     assert ".preview-left.responsive-hidden { display: none !important; }" in preview_css
+
+
+def test_index_and_preview_left_panels_reclaim_content_width_when_slide_out_starts():
+    """Guard the close ordering: the grid reflow must begin with the slide-out."""
+    app_js = (ROOT / "dev" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    preview_js = (ROOT / "dev" / "static" / "js" / "preview.js").read_text(encoding="utf-8")
+
+    index_close = app_js[app_js.index("const btnCloseSidebar"):app_js.index("// Single width-aware grid updater")]
+    preview_close = preview_js[preview_js.index("function closeLeftSidebar() {"):preview_js.index("function openRightSidebar() {")]
+
+    assert index_close.index("updateIndexGrid();") < index_close.index("setTimeout(function ()")
+    assert preview_close.index("updateGridColumns();") < preview_close.index("_leftCloseTimer = setTimeout")

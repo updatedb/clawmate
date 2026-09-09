@@ -82,4 +82,48 @@
     }
     return currentTheme;
   };
+
+  // ── Mobile "more" menu (index + preview) ──
+  // Folds the topbar action buttons (theme / logout / project / agent) into a
+  // dropdown on mobile. Each item's `data-more` is the TARGET button id, so clicking
+  // dispatches a native click and the page-specific handlers (theme cycle, logout,
+  // agent toggle, project panel) run unchanged. Share has no #btnMoreMenu — skipped.
+  (function initMoreMenu() {
+    var btn = document.getElementById('btnMoreMenu');
+    var menu = document.querySelector('.more-menu');
+    if (!btn || !menu) return;
+    // Only show an item when its feature is actually available on the page — mirrored
+    // from the corresponding topbar action button. An item is hidden when its target
+    // button is gated off with an inline `display:none` (e.g. the project panel only
+    // exists inside a project directory) — NOT when it is merely CSS-folded on mobile,
+    // which leaves the inline style empty.
+    function _syncItems() {
+      Array.prototype.forEach.call(menu.querySelectorAll('.more-item'), function (item) {
+        var id = item.getAttribute('data-more');
+        var target = id ? document.getElementById(id) : null;
+        var off = !target || target.style.display === 'none';
+        item.style.display = off ? 'none' : '';
+      });
+    }
+    function setOpen(open) {
+      menu.hidden = !open;
+      btn.setAttribute('aria-expanded', String(open));
+      btn.classList.toggle('active', open);
+      if (open) _syncItems();
+    }
+    btn.addEventListener('click', function (e) { e.stopPropagation(); setOpen(menu.hidden); });
+    menu.addEventListener('click', function (e) {
+      var item = e.target.closest ? e.target.closest('.more-item') : null;
+      if (item) {
+        var id = item.getAttribute('data-more');
+        var b = id && document.getElementById(id);
+        if (b) b.click();
+        setOpen(false);
+      }
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setOpen(false); });
+    document.addEventListener('click', function (e) {
+      if (!menu.hidden && !menu.contains(e.target)) setOpen(false);
+    });
+  })();
 })();

@@ -1188,10 +1188,6 @@
       }
       .preview-topbar-title { font-size: 13px; text-align: center; }
       .topbar-btn { width: 30px; height: 30px; font-size: 13px; }
-      .preview-app > .topbar #btnProjectPanel,
-      .preview-app > .topbar #themeToggle,
-      .preview-app > .topbar #btnLogout { display: none; }
-      .preview-app > .topbar #btnMoreMenu { display: flex; }
       .preview-app > .topbar #versionPill { display: none !important; }
 
       /* Single column: keep grid 0px 1fr 0px, sidebars as fixed overlays */
@@ -1448,12 +1444,6 @@
       translate: 100%;
       pointer-events: none;
     }
-    .preview-agent-panel-header .agent-backend-select {
-      font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 6px;
-      background: var(--bg-tertiary); color: var(--text-primary);
-      border: 1px solid var(--border-color); cursor: pointer;
-      font-family: inherit;
-    }
     /* xterm container inside agent panel — same styling as main page */
     #previewXtermContainer.xterm-container {
       flex: 1;
@@ -1507,32 +1497,6 @@
       opacity: 0; pointer-events: none;
       transition: opacity var(--duration-base) var(--ease-out);
     }
-
-    /* ── Mobile "more" menu (承接被隐藏的 主题/退出/项目面板) ──
-       #btnMoreMenu is desktop-only (hidden) and shown on mobile via the ≤768
-       media query below; the dropdown is anchored to the top-right. */
-    @media (min-width: 769px) {
-      .preview-app > .topbar #btnMoreMenu { display: none; }
-    }
-    .preview-more-menu {
-      position: fixed; top: 52px; right: 10px; z-index: 120;
-      min-width: 168px;
-      background: var(--bg-secondary); color: var(--text-primary);
-      border: 1px solid var(--border-color); border-radius: var(--radius-md);
-      box-shadow: var(--shadow-modal);
-      display: flex; flex-direction: column; padding: 6px;
-    }
-    .preview-more-menu[hidden] { display: none; }
-    .preview-more-item {
-      display: flex; align-items: center; gap: 8px;
-      width: 100%; text-align: left; background: none; border: none;
-      padding: 9px 10px; border-radius: var(--radius-sm);
-      font: 400 13px/1 var(--font-ui); color: var(--text-primary);
-      cursor: pointer; transition: background var(--duration-fast) var(--ease-out);
-    }
-    .preview-more-item svg { flex: 0 0 16px; }
-    .preview-more-item:hover,
-    .preview-more-item:focus-visible { background: var(--bg-tertiary); outline: none; }
 
     /* Tablet (769-1240): right panels become bounded overlay drawers — content stays visible.
        updateGridColumns() keeps col4=0 at this width (content-first); the fixed overlay shows

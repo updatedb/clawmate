@@ -120,8 +120,11 @@ def test_agent_search_controls_use_compact_30px_layout_and_history_filters_only_
     css = (ROOT / "dev" / "static" / "css" / "style.css").read_text(encoding="utf-8")
     source = (ROOT / "dev" / "frontend" / "terminal" / "agent-panel-adapter.ts").read_text(encoding="utf-8")
 
-    assert "width: 84px; flex: 0 0 84px; height: 30px" in css
-    assert "appearance: none; width: 84px; max-width: 84px; height: 30px" in css
+    # The agent backend select is shared by the panel header + history filter (one
+    # `.agent-backend-select` rule). Width was widened to 108px so backend names
+    # ("OpenClaw", "claude") aren't clipped; the compact 30px height is unchanged.
+    assert "width: 108px; max-width: 108px; height: 30px" in css
+    assert "appearance: none; width: 108px; max-width: 108px; height: 30px" in css
     assert ".search-input {\n  width: 100%;\n  height: 30px;" in css
     assert 'value="openclaw">OpenClaw' not in source
 

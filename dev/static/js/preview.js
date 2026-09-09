@@ -3055,9 +3055,10 @@
     leftSidebar.style.display = 'flex';         // override global .hidden
     leftSidebar.classList.add('hidden');        // slide-out: 0 → -100%
     syncOutlineToggleState();
+    // Reclaim the content column while the outline slides out.
+    updateGridColumns();
     _leftCloseTimer = setTimeout(function () {
       leftSidebar.style.display = '';           // let global .hidden take over
-      updateGridColumns();                      // grid column → 0px
     }, 300);
   }
 
@@ -3201,31 +3202,6 @@
     _syncPanelOpenClass();
   });
   syncResponsiveOutlineVisibility();
-
-  // ── Mobile "more" menu (承接被隐藏的 主题/退出/项目面板) ──
-  var _moreMenuBtn = document.getElementById('btnMoreMenu');
-  var _moreMenu = document.getElementById('previewMoreMenu');
-  function _moreMenuSetOpen(open) {
-    if (_moreMenu) _moreMenu.hidden = !open;
-    if (_moreMenuBtn) { _moreMenuBtn.setAttribute('aria-expanded', String(open)); _moreMenuBtn.classList.toggle('active', open); }
-  }
-  if (_moreMenuBtn) {
-    _moreMenuBtn.addEventListener('click', function (e) { e.stopPropagation(); _moreMenuSetOpen(_moreMenu.hidden); });
-  }
-  if (_moreMenu) {
-    _moreMenu.addEventListener('click', function (e) {
-      var item = e.target && e.target.closest ? e.target.closest('.preview-more-item') : null;
-      if (item) {
-        var targetId = { theme: 'themeToggle', project: 'btnProjectPanel', logout: 'btnLogout' }[item.getAttribute('data-more')];
-        if (targetId) { var b = document.getElementById(targetId); if (b) b.click(); }
-        _moreMenuSetOpen(false);
-      }
-    });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') _moreMenuSetOpen(false); });
-    document.addEventListener('click', function (e) {
-      if (!_moreMenu.hidden && !_moreMenu.contains(e.target)) _moreMenuSetOpen(false);
-    });
-  }
 
   // ============ Image / Media Mode Toolbar Setup ============
   function setupMediaToolbar() {

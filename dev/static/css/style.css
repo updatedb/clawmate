@@ -269,6 +269,37 @@ button svg, .btn svg, a svg {
   border-color: var(--accent);
   color: #fff;
 }
+/* Mobile "more" menu: folds the topbar action buttons (Agent / project / theme /
+   logout) into a dropdown on index + preview. Shared by both pages; the fold rules
+   are scoped by :has(#btnMoreMenu) so the share page (which has no such button) is
+   never affected. The trigger button is hidden on desktop, revealed only on mobile. */
+.topbar-btn-more { display: none; }
+.more-menu {
+  position: fixed; top: 52px; right: 10px; z-index: 120;
+  min-width: 168px;
+  background: var(--bg-secondary); color: var(--text-primary);
+  border: 1px solid var(--border-color); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+  display: flex; flex-direction: column; padding: 6px;
+}
+.more-menu[hidden] { display: none; }
+.more-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; text-align: left; background: none; border: none;
+  padding: 9px 10px; border-radius: var(--radius-sm);
+  font: 400 13px/1 var(--font-ui); color: var(--text-primary);
+  cursor: pointer; transition: background var(--duration-fast) var(--ease-out);
+}
+.more-item svg { flex: 0 0 16px; }
+.more-item:hover, .more-item:focus-visible { background: var(--bg-tertiary); outline: none; }
+@media (max-width: 768px) {
+  .content-col > .topbar:has(#btnMoreMenu) #btnMoreMenu { display: flex; }
+  .content-col > .topbar:has(#btnMoreMenu) #btnProjectPanel,
+  .content-col > .topbar:has(#btnMoreMenu) #themeToggle,
+  .content-col > .topbar:has(#btnMoreMenu) #btnLogout,
+  .content-col > .topbar:has(#btnMoreMenu) #btnToggleAgent { display: none; }
+}
+
 /* Nav toggles (btnDir / btnToc): sit at the far-left of the topbar (before the
    brand) and auto-hide while their panel is open — the button carries `.active`
    exactly when its panel is visible. */
@@ -399,7 +430,7 @@ body.content-narrow .content-col > .topbar { gap: 8px; }
 .agent-panel-header svg { width: 14px; height: 14px; }
 .agent-panel-title { font-size: 13px; font-weight: 600; color: var(--text-primary); white-space: nowrap; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .agent-backend-select {
-  appearance: none; width: 84px; max-width: 84px; height: 30px;
+  appearance: none; width: 108px; max-width: 108px; height: 30px; flex-shrink: 0;
   padding: 0 14px; padding-right: 28px; border-radius: var(--radius-sm);
   background: var(--bg-secondary); color: var(--text-primary);
   border: 1px solid var(--border-color); cursor: pointer; outline: none;
@@ -619,7 +650,7 @@ body.content-narrow .content-col > .topbar { gap: 8px; }
     flex-wrap: wrap;
   }
   .agent-panel-title { font-size: 11px; }
-  .agent-backend-select { font-size: 10px; max-width: 70px; }
+  .agent-backend-select { font-size: 10px; max-width: 108px; }
   .search-input { height: 24px; font-size: 11px; }
   /* Ensure chat messages don't force horizontal scroll */
   .agent-chat-msg { max-width: 85%; word-break: break-word; }
@@ -850,7 +881,7 @@ body.content-narrow .content-col > .topbar { gap: 8px; }
 }
 
 /* ===== Entry Group Headers ===== */
-.entry-group-header { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 0 4px; margin-top: 8px; grid-column: 1 / -1; border-bottom: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent); }
+.entry-group-header { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 0 6px; margin-top: 8px; grid-column: 1 / -1; border-bottom: none; background: linear-gradient(to right, var(--border-color) 0%, transparent 66%) left bottom / 100% 1px no-repeat; }
 .entry-group-header:first-child { margin-top: 0; }
 
 /* ===== List View ===== */
@@ -2727,6 +2758,15 @@ pre:hover .code-copy-btn,
 .agent-history-overlay:not(.hidden) {
   transform: translateX(0);
 }
+/* On tablet/mobile the agent panel is a fixed overlay with `padding-top: 48px` so its
+   own content clears the page topbar. The absolutely-positioned history overlay ignores
+   that padding (it spans the panel's padding box), so offset its top to start below the
+   topbar — otherwise the 48px `agent-history-list-header` renders behind it. Shared by
+   the index (`agent-panel`) and preview (`preview-agent-panel`) agent panels. */
+@media (max-width: 1240px) {
+  .agent-panel .agent-history-overlay,
+  .preview-agent-panel .agent-history-overlay { top: 48px; }
+}
 .agent-history-overlay-header {
   display: flex; align-items: center;
   padding: 0; height: 48px; flex-shrink: 0;
@@ -2780,16 +2820,6 @@ pre:hover .code-copy-btn,
   display: flex; align-items: center; flex: 1; min-width: 0; gap: 5px;
   padding: 0; border: 0; background: transparent;
 }
-.agent-history-controls select {
-  width: 84px; flex: 0 0 84px; height: 30px; padding: 0 10px; padding-right: 24px;
-  border: 1px solid var(--border-color); border-radius: 6px;
-  background: var(--bg-tertiary); color: var(--text-primary); cursor: pointer;
-  font: 400 12px/1 Arial, sans-serif; outline: none;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 10px center;
-}
-.agent-history-controls select:focus { outline: none; border-color: var(--accent); }
 .agent-history-pagination {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   min-height: 36px; padding: 5px 7px; border-top: 1px solid var(--border-color);
@@ -3018,10 +3048,11 @@ pre:hover .code-copy-btn,
 .project-panel-action, .project-panel-review { border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); border-radius: var(--btn-radius); cursor: pointer; padding: 3px 7px; font: inherit; height: var(--btn-h-sm); }
 .project-panel-action:hover, .project-panel-review:hover { border-color: var(--accent); color: var(--accent); }
 @media (max-width: 768px) {
-  .project-panel { grid-column: auto; position: fixed; top: 0; width: 100vw; z-index: 30; }
+  .project-panel { grid-column: auto; position: fixed; top: 0; bottom: 0; right: 0; width: 100vw; z-index: 8; padding: 48px 0 0 0; }
   /* Mobile: full-screen floating panels reveal a tap-to-dismiss scrim behind them.
      The panel spans the viewport, so the scrim is a low-z backdrop that stays behind
-     the panels (z 8/30) and the topbar (z 13); it never intercepts panel/topbar taps. */
+     the panels (z 8) but below the topbar (z 10) — the 48px top padding keeps panel
+     content below the topbar, which stays visible and tappable on top of the panel. */
   body:has(.project-panel:not(.hidden)) .drawer-scrim,
   body:has(.agent-panel:not(.hidden)) .drawer-scrim {
     opacity: 1; pointer-events: auto;

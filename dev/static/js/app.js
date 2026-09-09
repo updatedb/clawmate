@@ -2001,10 +2001,10 @@ if (btnToggleSidebar) {
         sidebar.style.display = 'flex';           // override global .hidden display:none
         sidebar.classList.add('hidden');          // slide-out: translateX(0) → translateX(-100%)
         btnToggleSidebar.classList.remove('active');
-        // Grid stays expanded during slide-out; collapse after animation
+        // Reclaim the content column while the sidebar slides out.
+        updateIndexGrid();
         setTimeout(function () {
           sidebar.style.display = '';             // let global .hidden handle display
-          updateIndexGrid();                   // grid column → 0px
         }, 300);
       }
     }
@@ -2027,9 +2027,10 @@ if (btnCloseSidebar && typeof els !== 'undefined') {
       sidebar.style.display = 'flex';
       sidebar.classList.add('hidden');
       btnToggleSidebar.classList.remove('active');
+      // Reclaim the content column while the sidebar slides out.
+      updateIndexGrid();
       setTimeout(function () {
         sidebar.style.display = '';
-        updateIndexGrid();
       }, 300);
     }
   });
