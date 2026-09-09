@@ -56,7 +56,7 @@
 
     /* Preview narrow-content guard: the preview topbar has a title + copy/refresh
        buttons that can overflow when the content column narrows. */
-    body.content-narrow .content-col > .topbar .preview-topbar-title-wrap { max-width: 240px; justify-content: center; }
+    body.content-narrow .content-col > .topbar .preview-topbar-title-wrap { max-width: 240px; }
     body.content-narrow .content-col > .topbar .version-pill { display: none; }
 
     /* Preview resize handle */

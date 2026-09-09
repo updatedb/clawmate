@@ -11,5 +11,5 @@ def test_center_title_wraps():
     assert "justify-content: center" in style[i:i + 220]
 
     preview = _read("dev/static/css/preview.css")
-    j = preview.index(".preview-topbar-title-wrap {")
+    j = preview.rindex(".preview-topbar-title-wrap {")
     assert "justify-content: center" in preview[j:j + 240]
