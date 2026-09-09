@@ -31,8 +31,8 @@
     .topbar {
       display: flex; align-items: center;
       padding: 0 16px; height: 48px; gap: 12px;
-      background: var(--brand-bg); color: var(--brand-text);
-      flex-shrink: 0; z-index: 10; border-bottom: 1px solid var(--border-color);
+      background: var(--bg-secondary); color: var(--text-primary);
+      flex-shrink: 0; z-index: 10; border-bottom: none;
     }
     .topbar .brand { font-weight: 700; font-size: var(--font-size-lg); flex-shrink: 0; line-height: 1; height: 34px; display: inline-flex; align-items: center; gap: 8px; }
     .topbar .share-title {
@@ -58,7 +58,7 @@
     }
     .share-left.hidden { translate: -100%; pointer-events: none; }
     .share-left-header {
-      padding: 0 16px; height: 48px; box-sizing: border-box; border-bottom: 1px solid var(--border-color);
+      padding: 0 16px; height: 48px; box-sizing: border-box; border-bottom: none;
       flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--text-secondary);
       text-transform: uppercase; letter-spacing: 0.5px;
       display: flex; align-items: center; justify-content: space-between;

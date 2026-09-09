@@ -3067,6 +3067,23 @@ function syncSidebarBtn() {
   }
 }
 
+// Command-palette button follows the dir panel: inside the sidebar header (before
+// #rootSelect) when the panel is open, else left of #btnToggleSidebar in the topbar.
+(function () {
+  var btn = document.getElementById('btnCommandPalette');
+  var sb = document.getElementById('sidebar');
+  var rootSel = document.getElementById('rootSelect');
+  if (!btn || !sb || !rootSel) return;
+  var place = function () {
+    var target = (!sb.classList.contains('hidden')) ? rootSel : document.getElementById('btnToggleSidebar');
+    if (!target) return;
+    if (btn.nextElementSibling === target) return;   // already in place
+    target.parentNode.insertBefore(btn, target);
+  };
+  if (window.MutationObserver) new MutationObserver(place).observe(sb, { attributes: true, attributeFilter: ['class'] });
+  place();
+})();
+
 // Watch for CSS-driven sidebar auto-hide (agent-open mode)
 if (window.matchMedia) {
   window.matchMedia('(max-width: 1500px)').addEventListener('change', function () {
