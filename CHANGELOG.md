@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.53 (2026-09-10)
+### 命令面板项目化（index，Ctrl/Cmd+K）
+- 项目优先：默认只显示**项目卡片**（平铺，不按 root 分组），按**最近使用**降序（localStorage 记录优先、项目目录 `mtime` 兜底）。
+- 输入即按名称过滤；点卡片跳转项目并记录 MRU、关闭面板。
+- "文件搜索 / 内容搜索"作为输入框下**固定 chip 行**；点击执行搜索、关闭面板、结果在 index 展示。
+- MRU 共享：`recordProjectUse`/`projectUseAt`（`clawmate.recentProjects`），面板打开与跳转均记录。
+- 契约测试 `tests/test_command_palette_contract.py`（5 例）。
+
+### 面板与顶栏统一（token 化）
+- 面板头统一为 **48px / padding 0 12px / 普通标题（13px/600/text-primary）**；preview 大纲/反馈头去掉大写 label 风格；image-assets 头 40→48；agent 头 padding 14→12。
+- 面板/顶栏按钮高度归入 **34/30/26** 三档 token（`--btn-h-lg/h/sm`），**清除 28px 离群值**：面包屑 copy/refresh→34、移动端 toolbar/preview 按钮→30、≤480 sort-pill 保持 26。
+- 所有关闭按钮统一为 `.panel-close-btn` + 14px SVG ✕（image-assets 曾用文本"✕"）。
+- 面板正文 padding 统一 `8px 12px`（project/大纲/反馈/image-assets）；内容驱动的 preview-right(flex) 与 agent 终端（满出血）保留例外。
+- 顶栏：logo 26px（CSS 单一来源）· rootSelect 34px · 内部 gap 16→8，左边缘 padding 20 保留；面包屑 copy/refresh 按钮与文本垂直居中（`vertical-align: middle`）。
+- 移动端 index/preview 顶栏动作折叠进 **more-menu**（⋯），菜单项随功能可用性动态显示（如非项目目录不显示"项目面板"）。
+
+### 修复
+- 移动端 project panel 不再遮挡 topbar（`z-index 30→8`，`padding-top:48px`，与 agent 面板一致）。
+- Agent 面板 backend 选择器宽度 84→108（避免"OpenClaw"被截断），preview 选择器统一；历史面板（mobile/tablet）header 不再被顶栏遮挡（overlay `top:48px`）。
+
+### 约定与文档
+- AGENTS.md 新增「Frontend Naming & CSS Conventions」（ID：`btn<Action><Object>`/`<Area>Panel/List/Select...`；CSS：kebab + 面前缀 + BEM-lite；尺寸走 token）。存量代码不整体迁移，作为**以后统一标准**。
+- AGENTS.md 面板头契约更新为"48px + 普通标题"。
+- 新增设计 spec/plan：`docs/superpowers/specs|plans/2026-09-09-command-palette-projects-{design|implementation}.md`。
+
 ## v1.52 (2026-09-06)
 ### 目录自动监听刷新 + 会话级变更标记
 - **后端（watchdog/inotify，事件驱动）**：新增 `dev/fs_watch.py` 文件监听服务，按客户端订阅的 `root+dir` 用 watchdog（Linux 底层 inotify）**非递归**监听「当前打开的目录」本身（1 个 inotify watch，与目录条目数量无关，不逐文件扫描）；引用计数（无客户端即停）、快速连续事件 debounce（0.4s，落在 300-500ms）；正常运行时**零轮询**，仅事件驱动。新增依赖 `watchdog`。
