@@ -16,6 +16,17 @@ def test_image_preview_toolbar_exposes_ten_percent_zoom_controls():
     assert "dyn.querySelectorAll('.sort-pill').forEach" in source
 
 
+def test_image_preview_toolbar_uses_compact_zoom_labels_and_toggle_edit_state():
+    source = PREVIEW_JS.read_text(encoding="utf-8")
+
+    assert 'id="imageZoomOut" title="缩小图片">−</button>' in source
+    assert 'id="imageZoomIn" title="放大图片">+</button>' in source
+    assert 'id="btnEditImage" title="编辑图片" aria-pressed="false">编辑</button>' in source
+    assert "function toggleImageAssets()" in source
+    assert "button.classList.toggle('active', isOpen);" in source
+    assert "button.setAttribute('aria-pressed', String(isOpen));" in source
+
+
 def test_image_preview_zoom_is_bounded_and_preserved_on_navigation():
     source = PREVIEW_JS.read_text(encoding="utf-8")
 

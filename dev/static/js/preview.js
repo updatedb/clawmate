@@ -2081,10 +2081,10 @@
   function setupImageZoomToolbar() {
     var dyn = document.getElementById('bottombarDynamic');
     if (!dyn) return;
-    dyn.innerHTML = '<button class="preview-bottom-btn" id="imageZoomOut" title="缩小图片">− 缩小</button>' +
+    dyn.innerHTML = '<button class="preview-bottom-btn" id="imageZoomOut" title="缩小图片">−</button>' +
       '<span id="imageZoomLevel" aria-live="polite">100%</span>' +
-      '<button class="preview-bottom-btn" id="imageZoomIn" title="放大图片">+ 放大</button>' +
-      '<button class="preview-bottom-btn" id="btnEditImage" title="创建受控生成资产">编辑图片</button>';
+      '<button class="preview-bottom-btn" id="imageZoomIn" title="放大图片">+</button>' +
+      '<button class="preview-bottom-btn" id="btnEditImage" title="编辑图片" aria-pressed="false">编辑</button>';
     document.getElementById('imageZoomOut').addEventListener('click', function() {
       imageZoomScale = Math.max(IMAGE_ZOOM_MIN, imageZoomScale - IMAGE_ZOOM_STEP);
       applyImageZoom();
@@ -2093,7 +2093,14 @@
       imageZoomScale = Math.min(IMAGE_ZOOM_MAX, imageZoomScale + IMAGE_ZOOM_STEP);
       applyImageZoom();
     });
-    document.getElementById('btnEditImage').addEventListener('click', openImageAssets);
+    document.getElementById('btnEditImage').addEventListener('click', toggleImageAssets);
+  }
+
+  function setImageEditActive(isOpen) {
+    var button = document.getElementById('btnEditImage');
+    if (!button) return;
+    button.classList.toggle('active', isOpen);
+    button.setAttribute('aria-pressed', String(isOpen));
   }
 
   function loadImageAssetsPanel() {
@@ -2107,6 +2114,17 @@
     });
   }
 
+  function toggleImageAssets() {
+    var existing = document.getElementById('previewImageAssetsPanel');
+    if (existing && !existing.classList.contains('hidden')) {
+      existing.classList.add('hidden');
+      updateGridColumns();
+      _syncPanelOpenClass();
+      return;
+    }
+    openImageAssets();
+  }
+
   function openImageAssets() {
     if (!isImageMode) return;
     var panel = document.getElementById('previewImageAssetsPanel');
@@ -2118,10 +2136,11 @@
     loadImageAssetsPanel().then(function() {
       var controller = window.ClawMateImageAssetsPanel.mount({
         getContext: function() { return {root: rootId, project: project, file: filePath}; },
-        onClose: function() { updateGridColumns(); _syncPanelOpenClass(); }
+        onClose: function() { updateGridColumns(); _syncPanelOpenClass(); setImageEditActive(false); }
       });
       if (window.ClawMatePanels) window.ClawMatePanels.install('preview', {imageAssets: {controller: controller}});
       controller.open();
+      setImageEditActive(true);
       threeCol.style.gridTemplateColumns = (isLeftSidebarVisible() ? '240px' : '0px') + ' 1fr 0px 420px';
       document.body.classList.add('preview-panel-open');
     }).catch(function() { showToast('生成资产面板加载失败', 3000); });
@@ -3155,6 +3174,7 @@
     if (ba) { ba.classList.toggle('active', agentOpen); ba.setAttribute('aria-expanded', String(agentOpen)); }
     var bp = document.getElementById('btnProjectPanel');
     if (bp) { bp.classList.toggle('active', projectOpen); bp.setAttribute('aria-expanded', String(projectOpen)); }
+    setImageEditActive(imageAssetsOpen);
     document.body.classList.toggle('preview-panel-open', rightOpen || agentOpen || projectOpen || imageAssetsOpen);
     syncResponsiveOutlineVisibility();
   }
