@@ -41,8 +41,6 @@
       min-width: 0;
     }
     .topbar-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
-    /* When the TOC (btnDir/btnToc) panel is open, hide its nav toggle in the topbar. */
-    body.share-toc-open .topbar #btnToggleToc { display: none; }
 
     /* ── Three-column (desktop) ── */
     .share-three-col {
@@ -60,7 +58,7 @@
     }
     .share-left.hidden { translate: -100%; pointer-events: none; }
     .share-left-header {
-      padding: 0 16px; height: 40px; box-sizing: border-box; border-bottom: 1px solid var(--border-color);
+      padding: 0 16px; height: 48px; box-sizing: border-box; border-bottom: 1px solid var(--border-color);
       flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--text-secondary);
       text-transform: uppercase; letter-spacing: 0.5px;
       display: flex; align-items: center; justify-content: space-between;
@@ -132,7 +130,7 @@
      * defined here; everything else is shared with the review panel. */
     .share-right {
       grid-column: 3;
-      background: var(--bg-primary); color: var(--text-primary);
+      background: var(--bg-secondary); color: var(--text-primary);
       border-left: 1px solid var(--border-color);
       display: flex; flex-direction: column;
       overflow: hidden;
@@ -240,12 +238,12 @@
       </aside>
       <div class="content-col">
         <header class="topbar">
+          <button class="topbar-btn" id="btnToggleToc" title="切换大纲" aria-label="切换大纲">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
+          </button>
           <span class="brand"><img src="./asset/clawmate-logo.png" alt="" width="28" height="28" style="flex-shrink:0;" />ClawMate</span>
           <span class="share-title" id="shareTitle">📄 加载中...</span>
           <div class="topbar-actions">
-            <button class="topbar-btn" id="btnToggleToc" title="切换大纲" aria-label="切换大纲">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
-            </button>
             <button class="topbar-btn" id="btnShareFeedback" title="打开反馈" aria-pressed="false" aria-label="反馈">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
             </button>
@@ -390,7 +388,6 @@
       shareLeft.classList.add('hidden');
       updateGrid();
       tocBtn.classList.remove('active');
-      document.body.classList.remove('share-toc-open');
     }
     function openToc() {
       if (!shareLeft.classList.contains('hidden') && !_tocTransitioning) return;
@@ -405,7 +402,6 @@
       shareLeft.classList.remove('hidden');       // slide-in: -100% → 0
       shareLeft.style.display = '';
       tocBtn.classList.add('active');
-      document.body.classList.add('share-toc-open');
     }
     function closeToc() {
       if (shareLeft.classList.contains('hidden') && !_tocTransitioning) return;
@@ -414,7 +410,6 @@
       _tocTransitioning = true;
       shareLeft.classList.add('hidden');          // slide-out: 0 → -100%
       tocBtn.classList.remove('active');
-      document.body.classList.remove('share-toc-open');
       updateGrid();                               // collapse col1 immediately (not only on transitionend)
     }
 

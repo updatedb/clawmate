@@ -106,7 +106,7 @@ def test_main_page_loads(page: Page):
     check(page.locator("#dirList").is_visible(), "目录列表可见")
 
     # Toolbar elements
-    check(page.locator("#searchInput").is_visible(), "搜索框可见")
+    check(page.locator("#btnCommandPalette").is_visible(), "命令面板按钮可见")
     check(page.locator("#themeToggle").is_visible(), "主题切换按钮可见")
     check(page.locator("#viewGrid").is_visible(), "画廊视图按钮可见")
     check(page.locator("#viewList").is_visible(), "列表视图按钮可见")
@@ -223,14 +223,21 @@ def test_file_preview(page: Page):
 
 
 def test_search(page: Page):
-    """搜索功能"""
-    print("\n── 6. 搜索功能 ──")
+    """搜索功能（通过命令面板）"""
+    print("\n── 6. 搜索功能（命令面板）──")
     page.goto(f"{CLAWMATE_URL}/")
     page.wait_for_timeout(800)
 
-    # Enter search query
-    page.locator("#searchInput").fill(".")
-    page.locator("#searchBtn").click()
+    # Open command palette
+    page.locator("#btnCommandPalette").click()
+    page.wait_for_timeout(400)
+
+    # Set the query term in the palette input
+    page.locator("#cpInput").fill(".")
+    page.wait_for_timeout(300)
+
+    # Select 文件搜索 (file search) — always present as an action item
+    page.locator(".cp-item", has_text="文件搜索").first.click()
     page.wait_for_timeout(800)
 
     # Should show search results or empty state
@@ -240,12 +247,8 @@ def test_search(page: Page):
     )
     check(any_result, "搜索结果显示或空搜索提示")
 
-    # Clear search
-    clear = page.locator("#clearSearchBtn")
-    if clear.is_visible():
-        clear.click()
-        page.wait_for_timeout(500)
-        check(True, "清除搜索恢复正常视图")
+    # Selecting a search action closes the palette
+    check(not page.locator("#clawmateCommandPalette").is_visible(), "选择搜索项后命令面板关闭")
 
 
 def test_mobile_responsive(page: Page):
@@ -255,9 +258,9 @@ def test_mobile_responsive(page: Page):
     page.goto(f"{CLAWMATE_URL}/")
     page.wait_for_timeout(800)
 
-    # On mobile, sidebar should auto-hide (grid column 0), search should be visible
-    search_visible = page.locator("#searchInput").is_visible()
-    check(search_visible, "移动端搜索框可见")
+    # On mobile, sidebar should auto-hide (grid column 0), command palette button visible
+    palette_btn_visible = page.locator("#btnCommandPalette").is_visible()
+    check(palette_btn_visible, "移动端命令面板按钮可见")
 
     # Main content should be visible
     main_visible = page.locator(".main").is_visible()

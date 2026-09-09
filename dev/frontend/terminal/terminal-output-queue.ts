@@ -24,55 +24,46 @@ export class TerminalOutputQueue {
 
   constructor(private readonly options: TerminalOutputQueueOptions) {}
 
-  enqueue(sequence: number, data: Uint8Array): void {
+  enqueue(sequence: number, data: Uint8Array): boolean {
     if (this.queuedBytes + data.byteLength > this.options.maxBytes) {
-      throw new Error('Terminal output queue is full');
+      return false;
     }
     this.pending.push({ sequence, data });
     this.queuedBytes += data.byteLength;
     this.flush();
+    return true;
+  }
+
+  discard(): void {
+    this.pending.length = 0;
+    this.queuedBytes = 0;
+    this.replayBoundary = null;
   }
 
   private flush(): void {
     if (this.writing || this.pending.length === 0) return;
 
-    if (this.replayBoundary !== null) {
-      const replayBoundary = this.replayBoundary;
-      const replayCount = this.pending.filter((item) => item.sequence <= replayBoundary).length;
-      if (replayCount === 0) {
-        this.replayBoundary = null;
-      } else {
-        if (this.pending[replayCount - 1].sequence < replayBoundary) return;
-        this.writing = true;
-        const replayItems = this.pending.splice(0, replayCount);
-        const replayBytes = replayItems.reduce((total, item) => total + item.data.byteLength, 0);
-        const replayData = new Uint8Array(replayBytes);
-        let offset = 0;
-        for (const item of replayItems) {
-          replayData.set(item.data, offset);
-          offset += item.data.byteLength;
-        }
-        this.options.write(replayData, () => {
-          this.queuedBytes -= replayBytes;
-          this.writing = false;
-          this.replayBoundary = null;
-          this.options.acknowledge(replayItems[replayItems.length - 1].sequence);
-          this.options.outputRendered?.();
-          this.options.replayComplete?.(replayItems[replayItems.length - 1].sequence);
-          this.flush();
-        });
-        return;
-      }
-    }
-
     this.writing = true;
     const item = this.pending[0];
+    if (this.replayBoundary !== null && item.sequence > this.replayBoundary) {
+      this.replayBoundary = null;
+    }
+    const completesReplay = this.replayBoundary !== null && item.sequence >= this.replayBoundary;
     this.options.write(item.data, () => {
+      if (this.pending[0] !== item) {
+        this.writing = false;
+        this.flush();
+        return;
+      }
       this.pending.shift();
       this.queuedBytes -= item.data.byteLength;
       this.writing = false;
       this.options.acknowledge(item.sequence);
       this.options.outputRendered?.();
+      if (completesReplay) {
+        this.replayBoundary = null;
+        this.options.replayComplete?.(item.sequence);
+      }
       this.flush();
     });
   }

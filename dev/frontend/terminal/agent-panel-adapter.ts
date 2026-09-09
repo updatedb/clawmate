@@ -274,6 +274,9 @@ export class AgentPanelAdapter {
   private panelWidth = this.readPanelWidth();
   private resizeObserver: ResizeObserver | null = null;
   private terminalFitRetry: ReturnType<typeof setTimeout> | null = null;
+  private terminalFitFrame: number | null = null;
+  private terminalFitTarget: HTMLElement | null = null;
+  private terminalFitKeepBottom = false;
   private historyQuery = '';
   private historyBackend = '';
   private historyOffset = 0;
@@ -622,7 +625,10 @@ export class AgentPanelAdapter {
       if (event.data instanceof ArrayBuffer) {
         const frame = new Uint8Array(event.data);
         const sequence = Number(new DataView(frame.buffer, frame.byteOffset, frame.byteLength).getBigUint64(0));
-        this.output?.enqueue(sequence + frame.byteLength - 8, frame.slice(8));
+        const endSequence = sequence + frame.byteLength - 8;
+        if (this.output?.enqueue(endSequence, frame.slice(8)) === false) {
+          this.recoverTerminalOutputOverflow(endSequence);
+        }
       } else if (typeof event.data === 'string') {
         try {
           const msg = JSON.parse(event.data);
@@ -720,8 +726,9 @@ export class AgentPanelAdapter {
       const oldFontSize = this.terminal.options.fontSize || 14;
       const newFontSize = Math.max(10, Math.min(MAX_TERMINAL_FONT_SIZE, oldFontSize + delta));
       this.terminal.options.fontSize = newFontSize;
-      this.setPanelWidth(scaleAgentPanelWidth(this.panelWidth, oldFontSize, newFontSize));
-      this.refreshTerminalLayout();
+      const wasAtBottom = this.isTerminalAtBottom();
+      this.setPanelWidth(scaleAgentPanelWidth(this.panelWidth, oldFontSize, newFontSize), true, undefined, false);
+      this.refreshTerminalLayout(wasAtBottom);
     };
     const fontDown = document.getElementById(id('AgentFontDown'));
     if (fontDown) fontDown.onclick = () => adjustFont(-1);
@@ -744,14 +751,14 @@ export class AgentPanelAdapter {
     return Math.max(420, Math.min(max, window.innerWidth * 0.46));
   }
 
-  private setPanelWidth(width: number, enforceReadableMinimum = true, bounds?: { min: number; max: number }): void {
+  private setPanelWidth(width: number, enforceReadableMinimum = true, bounds?: { min: number; max: number }, refresh = true): void {
     const b = bounds ?? getAgentPanelWidthBounds(this.terminal?.options.fontSize || 14);
     const min = enforceReadableMinimum ? b.min : 420;
     this.panelWidth = Math.round(Math.max(min, Math.min(b.max, width)));
     localStorage.setItem('clawmate.agentPanelWidth', String(this.panelWidth));
     if (this.config?.domPrefix === 'preview') this.applyPreviewPanelWidth();
     else syncMainAgentPanelLayout(this.isOpen(), this.panelWidth);
-    this.refreshTerminalLayout();
+    if (refresh) this.refreshTerminalLayout();
   }
 
   private applyPreviewPanelWidth(): void {
@@ -1407,6 +1414,10 @@ export class AgentPanelAdapter {
 
   private disposeTerminal(): void {
     this.clearTerminalFitRetry();
+    if (this.terminalFitFrame !== null) cancelAnimationFrame(this.terminalFitFrame);
+    this.terminalFitFrame = null;
+    this.terminalFitTarget = null;
+    this.terminalFitKeepBottom = false;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.terminal?.dispose();
@@ -1428,18 +1439,27 @@ export class AgentPanelAdapter {
     this.resizeObserver.observe(target);
   }
 
-  private scheduleTerminalFit(host?: HTMLElement): void {
+  private scheduleTerminalFit(host?: HTMLElement, preserveBottom = false): void {
     if (!this.fit) return;
     const target = host || document.getElementById(this.config?.domPrefix === 'preview' ? 'previewXtermContainer' : 'xtermContainer');
     if (!target) return;
+    this.terminalFitTarget = target;
+    if (preserveBottom && this.isTerminalAtBottom()) this.terminalFitKeepBottom = true;
+    if (this.terminalFitFrame !== null) return;
     const fit = () => {
-      const rect = target.getBoundingClientRect();
+      this.terminalFitFrame = null;
+      const activeTarget = this.terminalFitTarget;
+      if (!activeTarget) return;
+      const rect = activeTarget.getBoundingClientRect();
       if (rect.width > 80 && rect.height > 80) {
         this.clearTerminalFitRetry();
         this.fit?.fit();
-        // Output may have reached xterm while its host was hidden.  Force the
-        // renderer to paint the buffer after the preview panel gets a size.
+        // Output may have reached xterm while its host was hidden. Repaint the
+        // whole viewport only after fit has updated both rows and columns.
         this.terminal?.refresh(0, Math.max(0, (this.terminal.rows || 1) - 1));
+        if (this.terminalFitKeepBottom) this.terminal?.scrollToBottom();
+        this.terminalFitTarget = null;
+        this.terminalFitKeepBottom = false;
         return;
       }
       // Preview opens the panel and its grid column in separate layout steps.
@@ -1448,11 +1468,21 @@ export class AgentPanelAdapter {
       if (this.terminalFitRetry === null) {
         this.terminalFitRetry = setTimeout(() => {
           this.terminalFitRetry = null;
-          this.scheduleTerminalFit(target);
+          this.scheduleTerminalFit(activeTarget);
         }, 80);
       }
     };
-    requestAnimationFrame(() => requestAnimationFrame(fit));
+    let firstFrameRan = false;
+    const firstFrame = requestAnimationFrame(() => {
+      firstFrameRan = true;
+      let secondFrameRan = false;
+      const secondFrame = requestAnimationFrame(() => {
+        secondFrameRan = true;
+        fit();
+      });
+      if (!secondFrameRan) this.terminalFitFrame = secondFrame;
+    });
+    if (!firstFrameRan) this.terminalFitFrame = firstFrame;
   }
 
   private clearTerminalFitRetry(): void {
@@ -1462,11 +1492,13 @@ export class AgentPanelAdapter {
     }
   }
 
-  private refreshTerminalLayout(): void {
-    this.scheduleTerminalFit();
-    if (this.terminal) {
-      this.terminal.refresh(0, Math.max(0, (this.terminal.rows || 1) - 1));
-    }
+  private refreshTerminalLayout(preserveBottom = false): void {
+    this.scheduleTerminalFit(undefined, preserveBottom);
+  }
+
+  private isTerminalAtBottom(): boolean {
+    const buffer = this.terminal?.buffer.active;
+    return !!buffer && buffer.viewportY >= buffer.baseY;
   }
 
   private syncFontToPanelWidth(): void {
@@ -1475,21 +1507,21 @@ export class AgentPanelAdapter {
     const next = getFontSizeForAgentPanelWidth(this.panelWidth);
     const bounds = getAgentPanelWidthBounds(next);
     const readableWidth = Math.round(Math.max(bounds.min, Math.min(bounds.max, this.panelWidth)));
-    if (readableWidth !== this.panelWidth) this.setPanelWidth(readableWidth, false, bounds);
-    if (current === next) return;
-    this.terminal.options.fontSize = next;
-    this.refreshTerminalLayout();
+    if (readableWidth !== this.panelWidth) this.setPanelWidth(readableWidth, false, bounds, false);
+    if (current !== next) this.terminal.options.fontSize = next;
+    this.refreshTerminalLayout(this.isTerminalAtBottom());
   }
 
   private resizePanelToPointer(width: number): void {
     const nextFontSize = getFontSizeForAgentPanelWidth(width);
     const bounds = getAgentPanelWidthBounds(nextFontSize);
     const nextWidth = Math.round(Math.max(bounds.min, Math.min(bounds.max, width)));
-    this.setPanelWidth(nextWidth, false, bounds);
+    const wasAtBottom = this.isTerminalAtBottom();
+    this.setPanelWidth(nextWidth, false, bounds, false);
     if (this.terminal && (this.terminal.options.fontSize || 14) !== nextFontSize) {
       this.terminal.options.fontSize = nextFontSize;
-      this.refreshTerminalLayout();
     }
+    this.refreshTerminalLayout(wasAtBottom);
   }
 
   private startFreshSession(): void {
@@ -1518,6 +1550,18 @@ export class AgentPanelAdapter {
     this.socket?.close();
     this.socket = null;
     openFreshSession();
+  }
+
+  private recoverTerminalOutputOverflow(sequence: number): void {
+    // Preserve the process/session and resume after this unrenderable frame.
+    // A queue overflow is browser render backpressure, not a reason to replace
+    // the agent conversation or terminate a running terminal.
+    this.output?.discard();
+    this.lastOutputAck = Math.max(this.lastOutputAck, sequence);
+    this.sendControl({ type: 'output_ack', sequence: this.lastOutputAck });
+    this.setStatus('输出过多，已跳过部分历史输出，正在重连…');
+    this.logConnectionTrace('终端输出队列已满，已确认跳过该帧并重连', { sequence }, undefined, 'warn');
+    this.socket?.close();
   }
 
   private sendControl(message: Record<string, unknown>): void {

@@ -107,14 +107,14 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  height: 25px;
+  height: var(--btn-h);
   padding: 0 7px;
   border: 1px solid transparent;
-  border-radius: 5px;
+  border-radius: var(--btn-radius);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  font: 500 11px/1 Arial, sans-serif;
+  font: 500 var(--btn-font)/1 Arial, sans-serif;
 }
 .agent-toolbar-actions .agent-toolbar-btn svg {
   width: 14px;
@@ -169,7 +169,7 @@
     padding-bottom: env(safe-area-inset-bottom);
   }
   .agent-panel-v2 .agent-toolbar { min-height: 38px; padding: 5px 8px; }
-  .agent-panel-v2 .agent-toolbar-btn { height: 28px; padding: 0 6px; }
+  .agent-panel-v2 .agent-toolbar-btn { height: var(--btn-h); padding: 0 6px; }
   .agent-toolbar-actions .agent-btn-label { display: none; }
 }
 

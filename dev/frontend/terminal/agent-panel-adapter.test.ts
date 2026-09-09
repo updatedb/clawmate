@@ -264,6 +264,28 @@ describe('main agent panel layout', () => {
     vi.unstubAllGlobals();
   });
 
+  it('acknowledges truncated terminal output and closes the recoverable connection', () => {
+    class FakeWebSocket {
+      static OPEN = 1;
+      readyState = FakeWebSocket.OPEN;
+      send = vi.fn();
+      close = vi.fn();
+    }
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+    document.body.innerHTML = '<span id="AgentStatus"></span>';
+    const adapter = new AgentPanelAdapter();
+    adapter.init({ backend: 'codex', wsUrl: 'ws://test', rootId: 'root', dir: 'project' });
+    const socket = new FakeWebSocket();
+    (adapter as any).socket = socket;
+
+    (adapter as any).recoverTerminalOutputOverflow(42);
+
+    expect(socket.send).toHaveBeenCalledWith(JSON.stringify({ v: 2, type: 'output_ack', sequence: 42 }));
+    expect(socket.close).toHaveBeenCalledOnce();
+    expect(document.getElementById('AgentStatus')?.textContent).toContain('已跳过');
+    vi.unstubAllGlobals();
+  });
+
   it('logs elapsed connection phases through the connected state', () => {
     class FakeWebSocket {
       static OPEN = 1;
@@ -360,6 +382,65 @@ describe('main agent panel layout', () => {
     visible = true;
     retry?.();
     expect(fit).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
+  });
+
+  it('coalesces terminal geometry updates into one fit and viewport refresh', () => {
+    const adapter = new AgentPanelAdapter();
+    const fit = vi.fn();
+    const refresh = vi.fn();
+    const scrollToBottom = vi.fn();
+    const frames: FrameRequestCallback[] = [];
+    const host = document.createElement('div');
+    host.id = 'xtermContainer';
+    document.body.append(host);
+    vi.spyOn(host, 'getBoundingClientRect').mockReturnValue({ width: 600, height: 480 } as DOMRect);
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    (adapter as any).fit = { fit };
+    (adapter as any).terminal = {
+      rows: 24,
+      buffer: { active: { viewportY: 12, baseY: 12 } },
+      refresh,
+      scrollToBottom,
+    };
+
+    (adapter as any).refreshTerminalLayout(true);
+    (adapter as any).refreshTerminalLayout(true);
+    expect(frames).toHaveLength(1);
+
+    frames.shift()?.(0);
+    frames.shift()?.(0);
+    expect(fit).toHaveBeenCalledOnce();
+    expect(refresh).toHaveBeenCalledWith(0, 23);
+    expect(scrollToBottom).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
+  });
+
+  it('does not move a scrolled terminal to the bottom after a geometry update', () => {
+    const adapter = new AgentPanelAdapter();
+    const scrollToBottom = vi.fn();
+    const host = document.createElement('div');
+    host.id = 'xtermContainer';
+    document.body.append(host);
+    vi.spyOn(host, 'getBoundingClientRect').mockReturnValue({ width: 600, height: 480 } as DOMRect);
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    (adapter as any).fit = { fit: vi.fn() };
+    (adapter as any).terminal = {
+      rows: 24,
+      buffer: { active: { viewportY: 11, baseY: 12 } },
+      refresh: vi.fn(),
+      scrollToBottom,
+    };
+
+    (adapter as any).refreshTerminalLayout(true);
+
+    expect(scrollToBottom).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
 

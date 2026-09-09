@@ -19,7 +19,7 @@
     function render(data) {
       candidates.innerHTML = (data.candidates || []).map(function (item) {
         var url = '/api/clawmate/preview?root=' + encodeURIComponent(context().root) + '&path=' + encodeURIComponent(item.path);
-        return '<article class="image-assets-candidate"><img src="' + url + '" alt="候选图"><div><b>候选 ' + esc(item.id) + '</b><p>' + esc(item.summary) + '</p><button type="button" data-adopt="' + esc(item.id) + '">采用</button></div></article>';
+        return '<article class="image-assets-candidate"><img src="' + url + '" alt="候选图"><div><b>候选 ' + esc(item.id) + '</b><p>' + esc(item.summary) + '</p><button type="button" class="project-panel-action" data-adopt="' + esc(item.id) + '">采用</button></div></article>';
       }).join('');
       candidates.querySelectorAll('[data-adopt]').forEach(function (button) {
         button.onclick = async function () {

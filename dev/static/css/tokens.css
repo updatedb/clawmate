@@ -32,6 +32,12 @@
   --btn-bg:         #f8fafc;
   --btn-text:       #334155;
   --btn-border:     #e2e8f0;
+  /* Button sizing — unified 3-tier scale (icon / label / compact). */
+  --btn-h-lg:       34px;      /* icon buttons (topbar) */
+  --btn-h:          30px;      /* standard label buttons */
+  --btn-h-sm:       26px;      /* compact icon / action buttons */
+  --btn-radius:     var(--radius-sm);
+  --btn-font:       12px;      /* label button font-size */
 
   /* ── Cards ── */
   --card-bg:        #ffffff;

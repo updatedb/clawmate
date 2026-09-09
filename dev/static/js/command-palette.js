@@ -55,18 +55,23 @@
   function populateHints() {
     items = [];
     activeIndex = 0;
-    var currentRootId = currentRoot();
-    getRoots().forEach(function (r) {
-      var selected = r.id === currentRootId;
-      items.push({
-        type: "root",
-        label: (r.label || r.id) + (selected ? " · 当前" : ""),
-        sub: r.id,
-        icon: "home",
-        activate: function () { safeSelectRoot(r.id); safeLoadDir(""); close(); },
-      });
-    });
+    // File / content search actions, pinned at the top of the default palette
+    // view. Activating one runs the search with the palette's own input value;
+    // the results render in the index.
+    _pushSearchActions();
+    // Default list = projects only (no root rows). Projects are fetched across
+    // all roots and selecting one jumps to it (switchProject switches root as
+    // needed).
     loadProjectsForLayout();   // async: append projects, then re-render
+  }
+
+  // Launch the index search from the palette: run the search with the palette's
+  // own input value and close. 文件搜索 = filename search, 内容搜索 = ripgrep search.
+  function _pushSearchActions() {
+    items.push({ type:"action", label:"文件搜索", sub:"按文件名递归搜索", icon:"file",
+      activate:function(){ var q=inputEl()?inputEl().value:""; if(typeof fileSearch==="function") fileSearch(q); close(); } });
+    items.push({ type:"action", label:"内容搜索", sub:"用 ripgrep 搜索内容", icon:"file",
+      activate:function(){ var q=inputEl()?inputEl().value:""; if(typeof contentSearch==="function") contentSearch(q); close(); } });
   }
 
   // Fetch each root's projects (dirs with a .clawmate/ marker) via the existing
@@ -105,7 +110,7 @@
     var list = listEl();
     if (!list) return;
     var q = (query || "").trim().toLowerCase();
-    var shown = query ? items.filter(function (it) { return it.label.toLowerCase().indexOf(q) !== -1; }) : items;
+    var shown = items.filter(function (it) { return it.type === "action" || it.label.toLowerCase().indexOf(q) !== -1; });
     if (activeIndex >= shown.length) activeIndex = Math.max(0, shown.length - 1);
 
     if (!shown.length) {
@@ -142,7 +147,7 @@
     // Recompute the visible list exactly as render() does so the click index
     // and Enter index always agree with what's on screen.
     var query = inputEl() ? inputEl().value : "";
-    var shown = query ? items.filter(function (it) { return it.label.toLowerCase().indexOf(query.trim().toLowerCase()) !== -1; }) : items;
+    var shown = items.filter(function (it) { return it.type === "action" || it.label.toLowerCase().indexOf(query.trim().toLowerCase()) !== -1; });
     var it = shown[activeIndex];
     if (it && typeof it.activate === "function") it.activate();
   }

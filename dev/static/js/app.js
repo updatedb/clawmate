@@ -1605,7 +1605,6 @@ async function loadDir(dir) {
   }
   state.searchResults = null;
   state.searchQuery = "";
-  els.searchInput.value = "";
   state.page = 1;
   state.loadingMore = false;
   _hideContentResults();
@@ -1716,12 +1715,12 @@ function teardownInfiniteScroll() {
   if (_scrollObserver) { _scrollObserver.disconnect(); _scrollObserver = null; }
 }
 
-async function fileSearch() {
+async function fileSearch(query) {
   if (!state.rootId) {
     updateStatus("请先选择根目录");
     return;
   }
-  const q = els.searchInput.value.trim();
+  const q = (query != null ? String(query) : (typeof els !== "undefined" && els.searchInput ? els.searchInput.value : "")).trim();
   if (!q) return;
   updateStatus("搜索中...");
   _hideContentResults();
@@ -1743,9 +1742,7 @@ async function fileSearch() {
 function clearSearch() {
   state.searchResults = null;
   state.searchQuery = "";
-  els.searchInput.value = "";
   state.page = 1;
-  els.searchInput.value = "";
   render();
 }
 
@@ -1855,12 +1852,6 @@ async function loadConfig() {
 })();
 
 // ===== Event Listeners =====
-els.fileSearchBtn && els.fileSearchBtn.addEventListener("click", fileSearch);
-els.contentSearchBtn && els.contentSearchBtn.addEventListener("click", contentSearch);
-els.clearSearchBtn && els.clearSearchBtn.addEventListener("click", clearSearch);
-els.searchInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") fileSearch();
-});
 if (els.rootSelect) {
   els.rootSelect.addEventListener("change", (e) => {
     if (!selectRoot(e.target.value)) {
@@ -1872,7 +1863,6 @@ if (els.rootSelect) {
     state.page = 1;
     state.searchResults = null;
     state.searchQuery = "";
-    els.searchInput.value = "";
     _initAgent();
     // Reset multi-select state on root change
     if (state.multiSelectEnabled) {
@@ -2022,6 +2012,29 @@ if (btnToggleSidebar) {
   });
 }
 
+// Sidebar close button (btnDir panel header) — mirrors the toggle's close path so
+// that hiding #btnToggleSidebar while the dir panel is open stays closable.
+const btnCloseSidebar = document.getElementById("btnCloseSidebar");
+if (btnCloseSidebar && typeof els !== 'undefined') {
+  btnCloseSidebar.addEventListener("click", function () {
+    const sidebar = els.sidebar;
+    if (!sidebar || sidebar.classList.contains('hidden')) return;
+    if (window.innerWidth < 768) {
+      sidebar.classList.add('hidden');
+      btnToggleSidebar.classList.remove('active');
+      if (els.sidebarOverlay) els.sidebarOverlay.style.display = 'none';
+    } else {
+      sidebar.style.display = 'flex';
+      sidebar.classList.add('hidden');
+      btnToggleSidebar.classList.remove('active');
+      setTimeout(function () {
+        sidebar.style.display = '';
+        updateIndexGrid();
+      }, 300);
+    }
+  });
+}
+
 // Single width-aware grid updater for the index page (mirrors preview updateGridColumns,
 // and consolidates the former _updateContentGrid() + _applyContentFirst()). It is the ONE
 // writer of `.content` grid-template-columns:
@@ -2080,6 +2093,16 @@ function updateIndexGrid() {
 }
 
 window.addEventListener('resize', updateIndexGrid);
+
+// Narrow-content guard for the index topbar: when the content column narrows below
+// 600px (agent/project panel open), toggle body.content-narrow so the topbar stays on
+// one 48px row (see style.css). Observes .content-col, which the .app grid resizes.
+var _contentCol = document.querySelector('.content-col');
+if (_contentCol && window.ResizeObserver) {
+  new ResizeObserver(function (entries) {
+    document.body.classList.toggle('content-narrow', entries[0].contentRect.width < 600);
+  }).observe(_contentCol);
+}
 
 // Panel open-state syncer for the index page (mirrors preview _syncPanelOpenClass).
 // Keeps the three toggles' active/aria-expanded in sync with the actual open state and
@@ -3328,9 +3351,9 @@ document.addEventListener('click', function (e) {
 
 // ===== Unified Search — 文件名 + ripgrep 内容搜索 =====
 
-async function contentSearch() {
+async function contentSearch(query) {
   if (!state.rootId) { updateStatus('请先选择根目录'); return; }
-  var q = els.searchInput.value.trim();
+  var q = (query != null ? String(query) : (typeof els !== "undefined" && els.searchInput ? els.searchInput.value : "")).trim();
   if (!q) return;
 
   updateStatus('搜索中...');

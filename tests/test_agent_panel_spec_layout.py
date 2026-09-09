@@ -19,30 +19,27 @@ def test_agent_panel_has_terminal_toolbar_and_status_contract():
 
 
 def test_topbar_exposes_separate_file_and_content_search_actions():
-    html = INDEX_HTML.read_text(encoding="utf-8")
     source = APP_JS.read_text(encoding="utf-8")
 
-    assert 'id="fileSearchBtn"' in html
-    assert 'id="contentSearchBtn"' in html
-    assert "async function fileSearch()" in source
-    assert "async function contentSearch()" in source
+    assert "async function fileSearch(query)" in source
+    assert "async function contentSearch(query)" in source
 
 
-def test_topbar_search_bindings_tolerate_a_stale_page_shell():
+def test_topbar_search_bindings_no_longer_reference_deleted_controls():
     source = APP_JS.read_text(encoding="utf-8")
 
-    assert 'els.fileSearchBtn && els.fileSearchBtn.addEventListener("click", fileSearch);' in source
-    assert 'els.contentSearchBtn && els.contentSearchBtn.addEventListener("click", contentSearch);' in source
-    assert 'els.clearSearchBtn && els.clearSearchBtn.addEventListener("click", clearSearch);' in source
+    assert 'els.fileSearchBtn && els.fileSearchBtn.addEventListener("click", fileSearch);' not in source
+    assert 'els.contentSearchBtn && els.contentSearchBtn.addEventListener("click", contentSearch);' not in source
+    assert 'els.clearSearchBtn && els.clearSearchBtn.addEventListener("click", clearSearch);' not in source
+    assert 'els.searchInput.addEventListener("keydown"' not in source
 
 
-def test_mobile_topbar_hides_file_and_content_search_text_at_768px_breakpoint():
+def test_mobile_topbar_no_longer_references_file_and_content_search_buttons():
     css = (ROOT / "dev" / "static" / "css" / "style.css").read_text(
         encoding="utf-8"
     )
-    mobile_css = css[css.index("@media (max-width: 768px)"):css.index("@media (max-width: 480px)")]
 
-    assert "#fileSearchBtn span, #contentSearchBtn span { display: none; }" in mobile_css
+    assert "#fileSearchBtn span, #contentSearchBtn span" not in css
 
 
 def test_terminal_panel_width_uses_same_responsive_track_as_grid():
@@ -144,7 +141,7 @@ def test_terminal_toolbar_actions_have_compact_icon_contract():
     css = (ROOT / "dev" / "frontend" / "terminal" / "terminal.css").read_text(
         encoding="utf-8"
     )
-    assert "font: 500 11px/1 Arial, sans-serif" in css
+    assert "font: 500 var(--btn-font)/1 Arial, sans-serif" in css
     assert ".agent-toolbar-actions .agent-toolbar-btn svg" in css
     for path in (INDEX_HTML, PREVIEW_HTML):
         html = path.read_text(encoding="utf-8")

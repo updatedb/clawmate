@@ -54,6 +54,11 @@
       width: 100%;
     }
 
+    /* Preview narrow-content guard: the preview topbar has a title + copy/refresh
+       buttons that can overflow when the content column narrows. */
+    body.content-narrow .content-col > .topbar .preview-topbar-title-wrap { max-width: 240px; }
+    body.content-narrow .content-col > .topbar .version-pill { display: none; }
+
     /* Preview resize handle */
     .preview-resize-handle {
       width: 5px; cursor: col-resize; flex-shrink: 0;
@@ -84,7 +89,7 @@
     }
     .preview-left-header {
       padding: 0 16px;
-      height: 40px;
+      height: 48px;
       box-sizing: border-box;
       border-bottom: 1px solid var(--border-color);
       flex-shrink: 0;
@@ -175,7 +180,7 @@
     }
     .preview-right-header {
       padding: 0 16px;
-      height: 40px;
+      height: 48px;
       box-sizing: border-box;
       border-bottom: 1px solid var(--border-color);
       flex-shrink: 0;
@@ -261,10 +266,10 @@
     }
     .fb-card .fb-btn-delete {
       position: static;
-      width: 22px; height: 22px;
+      width: var(--btn-h-sm); height: var(--btn-h-sm);
       display: inline-flex; align-items: center; justify-content: center;
       padding: 0;
-      border-radius: var(--radius-sm);
+      border-radius: var(--btn-radius);
       border: none;
       background: transparent;
       cursor: pointer;
@@ -282,13 +287,13 @@
       display: inline-flex; align-items: center; justify-content: center;
       flex: 1;
       padding: 5px 12px;
-      border-radius: var(--radius-sm);
+      border-radius: var(--btn-radius);
       cursor: pointer;
-      font-size: 12px;
+      font-size: var(--btn-font);
       font-weight: 500;
       font-family: inherit;
       white-space: nowrap;
-      height: 30px;
+      height: var(--btn-h);
       box-sizing: border-box;
     }
     .fb-btn-submit {
@@ -448,14 +453,14 @@
       border-top: 1px solid var(--border-color);
     }
     .preview-bottom-btn {
-      height: 36px;
+      height: var(--btn-h);
       padding: 0 12px;
-      border-radius: var(--radius-sm);
+      border-radius: var(--btn-radius);
       border: 1px solid var(--brand-btn-border, var(--border-color));
       background: var(--brand-btn-hover, var(--bg-tertiary));
       color: var(--brand-text);
       cursor: pointer;
-      font-size: 12px;
+      font-size: var(--btn-font);
       font-weight: 500;
       text-decoration: none;
       display: inline-flex;
@@ -491,7 +496,7 @@
       border-bottom: 1px solid var(--border-color);
       flex-shrink: 0; flex-wrap: nowrap; overflow-x: auto;
     }
-    .preview-right-filter .preview-bottom-btn { height: 28px; padding: 0 9px; font-size: 11px; flex-shrink: 0; }
+    .preview-right-filter .preview-bottom-btn { height: var(--btn-h); padding: 0 10px; font-size: var(--btn-font); flex-shrink: 0; }
     .review-card {
       border: 1px solid var(--border-color); border-radius: 8px;
       margin-bottom: 10px; padding: 10px;
@@ -503,7 +508,7 @@
     .review-card-note { font-size: 12px; color: var(--text-secondary); margin: 6px 0 2px; }
     .review-card-note strong { color: var(--text-primary); }
     .fb-card-actions { flex-wrap: wrap; }
-    .fb-card-actions .preview-bottom-btn { height: 26px; padding: 0 9px; font-size: 11px; }
+    .fb-card-actions .preview-bottom-btn { height: var(--btn-h); padding: 0 10px; font-size: var(--btn-font); }
 
     .preview-bottom-divider { width: 1px; height: 20px; background: transparent; margin: 0 4px; flex-shrink: 0; }
     .preview-btn-group { display: flex; align-items: center; gap: 4px; }
@@ -859,8 +864,9 @@
     }
     .fb-input-submit {
       flex: 1;
+      height: var(--btn-h);
       padding: 7px 10px;
-      border-radius: 6px;
+      border-radius: var(--btn-radius);
       border: 1px solid var(--accent);
       background: var(--accent);
       color: #fff;
@@ -872,8 +878,9 @@
     .fb-input-submit:disabled { opacity: 0.5; cursor: not-allowed; }
     .fb-input-cancel {
       flex: 1;
+      height: var(--btn-h);
       padding: 7px 10px;
-      border-radius: 6px;
+      border-radius: var(--btn-radius);
       border: 1px solid var(--border-color);
       background: var(--btn-bg);
       color: var(--btn-text);
@@ -1145,9 +1152,9 @@
     }
     .preview-copy-filename {
       flex-shrink: 0;
-      width: 28px; height: 28px;
+      width: var(--btn-h-sm); height: var(--btn-h-sm);
       display: inline-flex; align-items: center; justify-content: center;
-      background: none; border: none; border-radius: 4px;
+      background: none; border: none; border-radius: var(--btn-radius);
       color: var(--brand-text);
       opacity: 0.6;
       cursor: pointer;
@@ -1429,7 +1436,7 @@
     /* ===== Agent panel in preview grid (shares column 4 with feedback) ===== */
     .preview-agent-panel {
       border-left: 1px solid var(--border-color);
-      background: var(--bg-primary);
+      background: var(--bg-secondary);
       display: flex;
       flex-direction: column;
       overflow: hidden;
