@@ -159,18 +159,21 @@
 
 改 `dir` 时已引用该 root 的用户授权不受影响（引用的是 id）。
 
-### 目录浏览（要求管理员，懒加载）
+### 目录浏览（复用既有实现）
+
+**不新增浏览端点**。目录浏览复用已有的 `/api/clawmate/list`：
 
 ```
-GET /api/clawmate/settings/browse?path=helper&show_hidden=false
-→ { "path": "helper", "parent": "",
-    "dirs": [{"name": "3gpp", "path": "helper/3gpp", "hidden": false}],
-    "truncated": false }
+GET /api/clawmate/list?root=.&dir=helper&dirs_only=true&limit=500
+→ { "entries": [{"name": "3gpp", "path": "helper/3gpp", "is_dir": true, ...}],
+    "total": 1, "offset": 0, "limit": 500 }
 ```
 
-只列**子目录**、单层。`path` 解析后必须位于 `system_root_dir` 内，复用同一越界校验。`show_hidden=false` 时过滤 dot 目录。单层超过 500 项时截断并置 `truncated=true`。
+该端点已支持单层、`dirs_only=true` 只返回目录、`limit` 上限 1000，并已经过 `safe_path` → `cfg.root_dir()` 的授权校验。管理员以 `root="."` 浏览系统根，普通用户浏览其获授 root。`entries` 长度小于 `total` 即表示截断，无需额外字段；不存在的目录返回 404，越权返回 403。
 
-`path` 缺省或为 `""` 时表示系统根，此时 `parent` 为 `null`（无上一级可去）；其余情况下 `parent` 是当前路径的父路径相对值，`path` 为 `""` 时前端禁用「上一级」。不存在的目录返回 404。
+前端复用既有 `dirPickerModal` 与 `preview.js` 的 `openDirPicker()`——它已实现逐层展开树、逐层缓存、加载态与自动展开到当前目录，交互即设计所需。仅需扩展一处：把隐藏目录过滤从写死的跳过清单改为受「显示隐藏目录」开关控制的**纯前端**过滤（现有过滤为客户端行为，服务端从不过滤隐藏目录，本规格不改变这一点）。
+
+这一复用的净效果：删除原计划的 `/api/clawmate/settings/browse` 端点与一套新的选择器实现，整个应用共用同一个目录选择器。
 
 ### 用户管理（要求管理员）
 
@@ -196,7 +199,7 @@ GET /api/clawmate/settings/browse?path=helper&show_hidden=false
 
 列表显示 `label`、`dir`、`agent_id` 与「编辑」「删除」；底部「添加 Rootdir」。添加/编辑表单字段为 `id`（编辑时只读）、显示名、目录（带「浏览…」）、Agent。
 
-**目录选择器**（懒加载逐层下钻）：显示当前路径面包屑、「上一级」、当前层的子目录列表、「显示隐藏目录」开关，以及「选为 Rootdir 目录」。关键交互点是**选择动作作用于当前路径**，不必先钻进目标目录；隐藏目录开关只作用于当前层过滤。
+**目录选择器**：点击「浏览…」打开既有 `dirPickerModal`（`openDirPicker`），以 `root="."` 浏览系统根，逐层下钻并缓存各层。相对既有行为的唯一新增是「显示隐藏目录」开关，控制是否过滤 `.` 开头、`__pycache__` 与 `node_modules` 目录。选择动作作用于当前选中的目录，不必先钻进目标目录。
 
 ### Tab 2 · 用户管理
 
@@ -227,10 +230,10 @@ GET /api/clawmate/settings/browse?path=helper&show_hidden=false
 
 **路由与前端契约**：
 
-- 扩展 `tests/test_settings_routes.py` — root CRUD、`browse` 越界 403、引用冲突 422、单层截断。
-- 扩展 `tests/test_settings_frontend_contract.py` — 两个 tab、注册表复选框（不再有路径枚举的 `<select multiple>`）、`browse` 调用、隐藏目录开关。
+- 扩展 `tests/test_settings_routes.py` — root CRUD、引用冲突 422、越权访问未授权 root 403。
+- 扩展 `tests/test_settings_frontend_contract.py` — 两个 tab、注册表复选框（不再有路径枚举的 `<select multiple>`）、选择器复用 `dirPickerModal` 与 `/api/clawmate/list` 且 `dirs_only=true`、隐藏目录开关存在、且**不再存在** `/api/clawmate/settings/browse` 与全量目录枚举。
 - 补齐 `tests/test_e2e_browser.py` — 切换隐藏目录开关、选目录建 root、建用户勾授权、普通用户只看到获授 root、首次管理员改密流程。使用含 `projects`/`private`/`.hidden-dir` 的临时 system root，不依赖真实 home 目录。
 
-**性能门槛**：`browse` 断言响应目录项数不超过单层上限，且请求不触及更深层级，防止退化为全量 `rglob`。
+**性能门槛**：断言 `GET /api/clawmate/settings/users` 不再对 `system_root_dir` 做全量递归遍历——该端点在缺陷 5 下实测耗时 20.4 秒并产出 10.7 万个路径，改为返回注册表摘要后应为毫秒级且响应体不含目录枚举。目录浏览依赖既有的单层 `dirs_only` 端点，天然不会退化为全树扫描。
 
 **基线**：当前 `379 passed`（`PYTHONPATH=. dev/.venv/bin/python -m pytest tests/ -q`），全部须保持通过。
