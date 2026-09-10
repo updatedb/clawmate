@@ -6,10 +6,16 @@ what leaves the local operator untouched and what makes the two server-to-server
 paths (/review/result, /feedback/cron-tick) need no exemption entry -- both are
 taken by an earlier branch. Moving the gate up would silently 403 the executor
 callback, so the last test here pins that.
+
+The two agent websockets are the other half: BaseHTTPMiddleware never processes a
+`ws` scope, so no middleware placement covers them and each handler refuses on its
+own. Those tests live here too, and they pin both directions -- the admin is
+closed at handshake, and an ordinary account still reaches `ready` on the socket.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -27,6 +33,7 @@ import config  # noqa: E402
 import feedback_api  # noqa: E402
 import project_routes  # noqa: E402
 import routes  # noqa: E402
+from terminal_manager import TerminalManager  # noqa: E402
 
 # Non-loopback on purpose: the loopback bypass binds LocalAdmin and would never
 # reach the session branch this gate lives in.
@@ -160,15 +167,89 @@ def test_the_executor_result_callback_is_not_affected(client):
     assert "Invalid review result fields" in response.json()["detail"]
 
 
-def test_both_agent_websockets_close_an_admin_at_handshake(client, monkeypatch):
+def test_both_agent_websockets_close_an_admin_at_handshake(client):
     """Websockets bypass the middleware entirely, so each handler has to refuse
     on its own. 4403 rather than 4401: the caller authenticated fine, the
-    account role is what closed it."""
+    account role is what closed it.
+
+    No receive() on the socket: the close happens before accept(), so
+    WebSocketDisconnect comes out of `websocket_connect.__enter__` (starlette
+    calls _raise_on_close on the first server message). Reading a frame here
+    would instead park on WebSocketTestSession.receive() -- an unbounded
+    portal.call with no pytest timeout configured -- so a regression that drops
+    one gate would hang the file rather than fail it.
+    """
     from starlette.websockets import WebSocketDisconnect
 
     _login_admin(client)
     for path in ("/api/clawmate/agent/openclaw", "/api/clawmate/agent/terminal/v2"):
         with pytest.raises(WebSocketDisconnect) as excinfo:
-            with client.websocket_connect(path) as ws:
-                ws.receive_text()
+            with client.websocket_connect(path):
+                pass
         assert excinfo.value.code == 4403, path
+
+
+class _NeverEndingPty:
+    """PTY stand-in modelled on FakePty in tests/test_terminal_websocket_v2.py.
+
+    read() parks forever, which is what an interactive shell looks like to the
+    handler between keystrokes -- so the session reaches `ready` and then sits
+    idle instead of the fake process exiting under the test.
+    """
+
+    async def read(self, size: int) -> bytes:
+        await asyncio.Future()
+        return b""
+
+    async def write_all(self, data: bytes) -> None:
+        return None
+
+    async def resize(self, cols: int, rows: int) -> None:
+        return None
+
+    async def terminate(self) -> None:
+        return None
+
+
+@pytest.mark.timeout(30)
+def test_an_ordinary_account_reaches_ready_on_the_terminal_websocket(client, monkeypatch):
+    """The other direction of the same gate: it must not over-block.
+
+    A bare truthiness test (`if user:`) in place of `getattr(user, "is_admin", False)`
+    would 4403 every logged-in account -- both panels dead for ordinary users --
+    and the admin test above would still pass. Nothing else in the repo covers
+    that: tests/test_terminal_websocket_v2.py drives the handler with no cookies,
+    so websocket_user() answers None and the role check is never consulted.
+
+    `ready` is the assertion rather than "not 4403": it is emitted only from
+    inside the handler, after the hello parse, get_or_create and subscribe have
+    all succeeded, so routing, auth and the role check had to pass for it to
+    arrive. The timeout is deliberate -- without it a handler that accepts and
+    then stalls would hang on WebSocketTestSession.receive() instead of failing.
+    """
+    async def factory(request):
+        return _NeverEndingPty()
+
+    manager = TerminalManager(factory, replay_bytes=4096)
+    monkeypatch.setattr(agent_routes, "_terminal_v2_manager", manager)
+    # Same isolation as the protocol tests: without this the handler falls back
+    # to the user's HOME, which is not a fixture-owned directory.
+    monkeypatch.setattr(agent_routes, "resolve_session_cwd", lambda root, dir_: "/tmp/project")
+    _login_writer(client)
+
+    with client.websocket_connect("/api/clawmate/agent/terminal/v2") as ws:
+        ws.send_text(json.dumps({
+            "v": 2,
+            "type": "hello",
+            "id": "hello-1",
+            "client_id": "browser-1",
+            "root": "projects",
+            "dir": "app",
+            "backend": "claude",
+            "cols": 80,
+            "rows": 24,
+        }))
+        ready = ws.receive_json()
+
+    assert ready["type"] == "ready", ready
+    assert ready["session_id"], ready
