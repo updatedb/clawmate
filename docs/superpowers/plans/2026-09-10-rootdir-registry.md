@@ -1600,8 +1600,9 @@ Expected: unchanged from Task 3 — only the known `tests/test_settings_routes.p
 ### Task 5: Settings APIs — root CRUD, root_id grants, registry summaries
 
 **Files:**
-- Modify: `dev/settings_routes.py` (replace `_directory_choices` and the user routes)
-- Modify: `dev/routes.py:187-213` (no change needed — `/list` already supports `dirs_only`), `dev/routes.py:63-73` (config roots), `dev/routes.py:1136-1144` (`auth_me`)
+- Modify: `dev/settings_routes.py` (replace `_directory_choices` and the user routes; add registry validation for grant ids)
+- Modify: `dev/routes.py:63-73` (config roots), `dev/routes.py:1136-1144` (`auth_me`)
+- Modify: `dev/config.py:150-155` (`root_agent` must read the registry — completes defect 3)
 - Modify: `tests/test_settings_routes.py`
 - Test: extend `tests/test_settings_routes.py`
 
@@ -1980,7 +1981,37 @@ Keep `delete_user` as it is.
 
 - [ ] **Step 4: Update `dev/routes.py`**
 
-Replace the rooted-roots block in the config endpoint (lines 63–73). `service.get_roots()` now returns the correct list for both roles and the legacy branch, so the endpoint no longer needs its own branching and the `agent_id` hardcoding goes away:
+**Also align backend agent routing — this is the other half of defect 3.** `AppConfig.root_agent()` (`dev/config.py:150-155`) still scans the legacy `self.roots` array to map a root id to its `agent_id`, and that value is what `dev/task_runner.py:262` and `dev/task_executor.py:126` send to the gateway as `agentId`. So agent routing currently works **only by coincidence**, when a registry id happens to equal a legacy config id (`3gpp` → `helper` works; a root registered through the settings UI returns `"default"` silently, and `helper/3gpp`-style grants never matched). Fix it to consult the registry, keeping the legacy scan only for deployments without a system root:
+
+```python
+    def root_agent(self, root_id: str) -> str:
+        """返回指定 root 对应的 agent_id。"""
+        if self.system_root_dir:
+            from auth import get_root_registry
+            entry = get_root_registry().get(str(root_id))
+            return entry.agent_id if entry is not None else "default"
+        for r in self.roots:
+            if r.id == root_id:
+                return r.agent_id
+        return "default"
+```
+
+Cover it in `tests/test_settings_routes.py` — register a root whose id deliberately differs from its directory basename, grant it to a user, and assert both `/api/clawmate/config` and `config.root_agent(<that id>)` report the registered `agent_id` rather than `"default"`:
+
+```python
+def test_agent_routing_follows_the_registry_not_legacy_config(tmp_path: Path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    _login_admin(client)
+    created = client.post("/api/clawmate/settings/roots", json={
+        "label": "3GPP Meetings", "dir": "helper/3gpp", "agent_id": "helper"})
+    assert created.json()["id"] == "3gpp"
+
+    assert config.load().root_agent("3gpp") == "helper"
+```
+
+Add `(tmp_path / "helper" / "3gpp").mkdir(parents=True)` inside that test before `_client` is constructed if the fixture does not already create it.
+
+**Then** replace the rooted-roots block in the config endpoint (lines 63–73). `service.get_roots()` now returns the correct list for both roles and the legacy branch, so the endpoint no longer needs its own branching and the `agent_id` hardcoding goes away:
 
 ```python
     visible_roots, default_root = get_roots()
