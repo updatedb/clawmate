@@ -36,7 +36,7 @@ from fastapi.responses import JSONResponse
 from starlette.websockets import WebSocketState
 
 from config import load as load_cfg
-from service import find_project_marker
+from service import find_project_marker, registered_roots
 from session_logger import SessionLogger, SessionIndex, _SESSION_LOG_EXTS
 from session_history_service import SessionHistoryService
 from terminal_manager import PosixPtyAdapter, SessionRequest, TerminalManager
@@ -447,8 +447,12 @@ async def _idle_reaper():
         try:
             cfg = load_cfg()
             ttl = getattr(cfg.agent, "session_log_ttl_days", 30)
-            for root_cfg in cfg.roots:
-                rp = _resolve_root_dir(root_cfg.id)
+            # The registry, not the legacy cfg.roots array: this reaper is
+            # unattended, so it asks which roots exist rather than which a
+            # caller may open -- and the migration left cfg.roots empty, so the
+            # TTL sweep never ran.
+            for root in registered_roots():
+                rp = Path(root["dir"])
                 if rp and rp.is_dir():
                     root_sess_dir = rp / ".clawmate" / "sessions"
                     if root_sess_dir.is_dir():
@@ -508,15 +512,18 @@ async def _recover_orphaned_sessions():
     logger.info("recovery: scanning for orphaned sessions (no ended_at)...")
 
     try:
-        cfg = load_cfg()
+        # The registry, not the legacy cfg.roots array: the registry migration
+        # left that empty, so this recovery silently scanned nothing and every
+        # session orphaned by a restart stayed orphaned.
+        roots = registered_roots()
     except Exception:
-        logger.warning("recovery: cannot load config, skipping")
+        logger.warning("recovery: cannot load the root registry, skipping")
         return
 
     recovered_count = 0
 
-    for root_cfg in cfg.roots:
-        root_dir = Path(root_cfg.dir)
+    for root in roots:
+        root_dir = Path(root["dir"])
         if not root_dir.is_dir():
             continue
 
@@ -697,13 +704,16 @@ def _ensure_reaper():
 # --- helpers ---
 
 def _resolve_root_dir(root_id: str) -> Path | None:
-    """Resolve a root_id to an absolute directory path."""
+    """Resolve a root_id to an absolute directory path, or None."""
     if not root_id:
         return None
     try:
-        cfg = load_cfg()
-        return cfg.root_dir(root_id)
-    except (ValueError, Exception):
+        return load_cfg().root_dir(root_id)
+    except Exception as exc:
+        # Callers read None as "no such root" and fall back -- resolve_session_cwd
+        # drops to the user's HOME -- so swallowing this silently let a broken
+        # root resolution put a session somewhere else entirely.
+        logger.warning("cannot resolve root_id=%s: %s", root_id, exc)
         return None
 
 
@@ -1506,11 +1516,23 @@ def _collect_transcript(sess, log_dir: Path):
 
 # ── Session History APIs ──
 
-def _roots_for_session_query(cfg, root: str):
-    """Return config roots constrained by the optional root id."""
+def _roots_for_session_query(root: str):
+    """Return the roots whose session logs this caller may read, optionally
+    narrowed to one id.
+
+    Reads through get_roots() rather than `cfg.roots`: the registry migration
+    left that legacy array empty, so every session-history query matched nothing
+    at all. get_roots() also narrows to the caller's own grants, which the legacy
+    list never did. The system root is dropped -- it is a synthetic entry for an
+    administrator, not a place to scan for projects.
+    """
+    from root_auth import ROOT_ID_SYSTEM
+    from service import get_roots
+
+    roots = [r for r in get_roots()[0] if r["id"] != ROOT_ID_SYSTEM]
     if root:
-        return [r for r in cfg.roots if r.id == root]
-    return cfg.roots
+        return [r for r in roots if r["id"] == root]
+    return roots
 
 
 def _session_cwd_from_log_dir(log_dir: str | Path, session_id: str = "") -> str:
@@ -1672,11 +1694,10 @@ async def agent_session_list(
     results: list[dict] = []
     seen: set[str] = set()
 
-    cfg = load_cfg()
-    roots_to_check = _roots_for_session_query(cfg, root)
+    roots_to_check = _roots_for_session_query(root)
 
     for r in roots_to_check:
-        root_dir = Path(r.dir)
+        root_dir = Path(r["dir"])
         if not root_dir.is_dir():
             continue
         dirs_to_check = _projects_for_session_query(root_dir, project, dir)
@@ -1739,9 +1760,9 @@ async def agent_session_list(
 
                 results.append({
                     **s,
-                    "root": r.id,
+                    "root": r["id"],
                     "project": proj_name,
-                    "sessionKey": _history_session_key(s, r.id, proj_name),
+                    "sessionKey": _history_session_key(s, r["id"], proj_name),
                     "log_dir": str(sess_dir),
                     **stats,
                 })
@@ -1775,9 +1796,8 @@ async def agent_session_log(
     codex).  Collected turns are appended back to ``.chat.jsonl`` so
     subsequent views are fast.
     """
-    cfg = load_cfg()
-    for r in _roots_for_session_query(cfg, root):
-        root_dir = Path(r.dir)
+    for r in _roots_for_session_query(root):
+        root_dir = Path(r["dir"])
         if not root_dir.is_dir():
             continue
         projects_to_check = _projects_for_session_query(root_dir, project, dir)
@@ -1865,12 +1885,11 @@ async def agent_session_dates(
     """
     date_set: set[str] = set()
 
-    cfg = load_cfg()
-    roots_to_check = _roots_for_session_query(cfg, root)
+    roots_to_check = _roots_for_session_query(root)
     active_ids = _active_history_session_ids()
 
     for r in roots_to_check:
-        root_dir = Path(r.dir)
+        root_dir = Path(r["dir"])
         if not root_dir.is_dir():
             continue
         dirs_to_check = _projects_for_session_query(root_dir, "", dir)
@@ -1899,9 +1918,8 @@ async def agent_session_dates(
 @router.get("/api/clawmate/agent/sessions/{session_id}")
 async def agent_session_detail(session_id: str, root: str = "", project: str = "", dir: str = ""):
     """Return session metadata + chat.jsonl turn count."""
-    cfg = load_cfg()
-    for r in _roots_for_session_query(cfg, root):
-        root_dir = Path(r.dir)
+    for r in _roots_for_session_query(root):
+        root_dir = Path(r["dir"])
         if not root_dir.is_dir():
             continue
         projects_to_check = _projects_for_session_query(root_dir, project, dir)
@@ -1920,7 +1938,7 @@ async def agent_session_detail(session_id: str, root: str = "", project: str = "
             return JSONResponse({
                 "session_id": session_id,
                 "meta": meta,
-                "root": r.id,
+                "root": r["id"],
                 "project": proj_name,
                 **stats,
             })
@@ -1942,9 +1960,8 @@ async def agent_session_delete(session_id: str, root: str = "", project: str = "
             detail=f"Session {session_id} is currently active; kill it before deleting logs",
         )
 
-    cfg = load_cfg()
-    for r in _roots_for_session_query(cfg, root):
-        root_dir = Path(r.dir)
+    for r in _roots_for_session_query(root):
+        root_dir = Path(r["dir"])
         if not root_dir.is_dir():
             continue
         projects_to_check = _projects_for_session_query(root_dir, project, dir)

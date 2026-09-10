@@ -11,6 +11,7 @@ Components:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import contextvars
 import hmac
 import json
@@ -79,6 +80,22 @@ def bind_request_user(user):
 def release_request_user(handle) -> None:
     """Undo bind_request_user."""
     _request_user.reset(handle)
+
+
+@contextlib.contextmanager
+def request_user_scope(user):
+    """Bind `user` as the caller for the duration of the block.
+
+    Background work loses the request context: a plain threading.Thread does not
+    inherit the ContextVar, so current_request_user() reads None there and every
+    root-aware helper fails closed. Wrap such work in this scope -- with
+    local_admin_principal() it says the *server* is the caller.
+    """
+    handle = bind_request_user(user)
+    try:
+        yield user
+    finally:
+        release_request_user(handle)
 
 
 def _load_sessions() -> None:
@@ -312,7 +329,14 @@ _WHITELIST = frozenset([
     "/api/clawmate/auth/logout",
     "/api/clawmate/auth/status",
     "/api/clawmate/auth/change-password",
-    "/api/clawmate/onlyoffice/",
+    # ONLYOFFICE: the Document Server fetches the document and posts the save
+    # callback server-to-server, so those two carry no session cookie. They are
+    # authenticated by the HS256 token in the request, which already names the
+    # file. The rest of the prefix (/config, /script-url) is called by the app
+    # page and stays a session route -- /config takes root and path as plain
+    # query params, so exempting it would hand out an anonymous file reader.
+    "/api/clawmate/onlyoffice/file",
+    "/api/clawmate/onlyoffice/callback",
     "/clawmate/login.html",
     "/clawmate/share-view.html",
     "/clawmate/manifest.json",
@@ -323,7 +347,6 @@ _WHITELIST = frozenset([
 # Prefix-based whitelist (order matters — checked after exact match)
 # NOTE: /api/clawmate/feedback/ 不再白名单免登录，改用内部 token 或 localhost 鉴权。
 _WHITELIST_PREFIXES = (
-    "/api/clawmate/onlyoffice/",
     "/clawmate/static/",
     "/clawmate/css/",
     "/clawmate/vendor/",
@@ -456,7 +479,19 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 or path.startswith("/api/clawmate/task/")
                 or path == "/api/clawmate/review/result"):
             if verify_internal_token(request):
-                return await call_next(request)
+                # Same treatment as the loopback bypass above: the token
+                # authenticates the executor, so give it the server principal.
+                # Without one these routes resolved no root at all and answered
+                # 403 to a caller the token had already authorized.
+                principal = local_admin_principal()
+                request.state.session = {"user": principal.username, "is_admin": True,
+                                         "must_change_password": False, "user_id": ""}
+                request.state.user = principal
+                token = _request_user.set(principal)
+                try:
+                    return await call_next(request)
+                finally:
+                    _request_user.reset(token)
 
         # IP lockout check — pre-auth stage, username not yet known
         client_ip = self._get_client_ip(request)

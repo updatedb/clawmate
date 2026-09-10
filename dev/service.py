@@ -89,6 +89,48 @@ def _load_config() -> Dict:
     }
 
 
+def _registry_roots(registry) -> List[Dict]:
+    """Resolve every registered entry into a reportable root, in registry order.
+
+    An entry that resolve() rejects -- vanished, or (for a hand-edited registry)
+    escaping the system root -- is skipped rather than reported as a path the
+    read path would refuse: reads have to use the same boundary as authorization.
+    """
+    from root_registry import RootRegistryError
+
+    roots: List[Dict] = []
+    for entry in registry.list_all():
+        try:
+            directory = registry.resolve(entry.id)
+        except (LookupError, RootRegistryError):
+            continue
+        roots.append({"id": entry.id, "label": entry.label,
+                      "dir": str(directory), "agent_id": entry.agent_id})
+    return roots
+
+
+def registered_roots() -> List[Dict]:
+    """Every registered root, with no reference to the caller.
+
+    For server-internal work that has no request and therefore no principal:
+    cron, startup orphan recovery, the session TTL reaper, an unattended feedback
+    wake. Those paths used to iterate `cfg.roots`, which the registry migration
+    left empty, so they silently scanned nothing at all.
+
+    Request-facing code must keep using get_roots(), which narrows to the
+    caller's own grants. This is the server asking which roots exist -- not a
+    caller asking which it may open.
+    """
+    cfg = load_config()
+    if not cfg.system_root_dir:
+        # Legacy deployment: cfg.roots is the parsed absolute-path list.
+        return [{"id": r.id, "label": r.label, "dir": r.dir, "agent_id": r.agent_id}
+                for r in cfg.roots]
+    from auth import get_root_registry
+
+    return _registry_roots(get_root_registry())
+
+
 def get_roots() -> Tuple[List[Dict], str]:
     cfg = load_config()
     if cfg.system_root_dir:
@@ -102,33 +144,28 @@ def get_roots() -> Tuple[List[Dict], str]:
         if user is None:
             return [], ""
         registry = get_root_registry()
-        roots: List[Dict] = []
         if getattr(user, "is_admin", False):
             # Administrators always see the system root itself, whether or not
             # the registry is readable.
-            roots.append({"id": ROOT_ID_SYSTEM, "label": "系统根目录",
-                          "dir": str(cfg.system_root_dir), "agent_id": "default"})
-            candidates = [(entry.id, entry.label, entry.agent_id) for entry in registry.list_all()]
-        else:
-            # An id absent from the registry has no directory to report and
-            # authorize_root will reject it anyway. Omit it rather than
-            # synthesising a server-side path from the id.
-            candidates = []
-            for root_id in user.root_ids:
-                entry = registry.get(root_id)
-                if entry is not None:
-                    candidates.append((entry.id, entry.label, entry.agent_id))
-        for root_id, label, agent_id in candidates:
+            roots = [{"id": ROOT_ID_SYSTEM, "label": "系统根目录",
+                      "dir": str(cfg.system_root_dir), "agent_id": "default"},
+                     *_registry_roots(registry)]
+            return roots, (roots[0]["id"] if roots else "")
+        # An id absent from the registry has no directory to report and
+        # authorize_root will reject it anyway. Omit it rather than
+        # synthesising a server-side path from the id. The caller's own order is
+        # kept, because the first entry becomes the default root.
+        roots: List[Dict] = []
+        for root_id in user.root_ids:
+            entry = registry.get(root_id)
+            if entry is None:
+                continue
             try:
                 directory = registry.resolve(root_id)
             except (LookupError, RootRegistryError):
-                # Vanished, or (for a hand-edited registry) escaping the system
-                # root. Skip it rather than report a path that resolve() itself
-                # would reject -- the read path must use the same boundary as
-                # authorization.
                 continue
-            roots.append({"id": root_id, "label": label,
-                          "dir": str(directory), "agent_id": agent_id})
+            roots.append({"id": root_id, "label": entry.label,
+                          "dir": str(directory), "agent_id": entry.agent_id})
         return roots, (roots[0]["id"] if roots else "")
     # Legacy deployments without system_root_dir keep the absolute-path roots.
     data = _load_config()

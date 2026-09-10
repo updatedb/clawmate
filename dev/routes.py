@@ -8,7 +8,6 @@ from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from urllib.parse import quote, unquote_to_bytes
 import hashlib
 import hmac
-import json
 import os
 import time
 import zipfile
@@ -42,7 +41,7 @@ logger = logging.getLogger("clawmate.routes")
 # Feedback routes (extracted to feedback_api.py)
 router.include_router(feedback_router)
 
-from constants import CONFIG_PATH_ENV, ONLYOFFICE_JWT_SECRET_ENV
+from constants import ONLYOFFICE_JWT_SECRET_ENV
 
 
 @router.get("/api/clawmate/config", response_class=JSONResponse)
@@ -936,8 +935,14 @@ async def clawmate_onlyoffice_file(token: str = ""):
     if not root or not rel_path:
         raise HTTPException(status_code=403, detail="Invalid token")
 
+    # Server-to-server: the Document Server holds no session, so the signed token
+    # above is the whole capability and it already named this file. Resolve as
+    # the server for the same reason.
+    from auth import local_admin_principal, request_user_scope
+
     try:
-        _, target, _ = safe_path(root, rel_path)
+        with request_user_scope(local_admin_principal()):
+            _, target, _ = safe_path(root, rel_path)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Root not found")
     except PermissionError:
@@ -984,8 +989,13 @@ async def clawmate_onlyoffice_callback(request: Request, token: str = ""):
     if not download_url:
         return JSONResponse(content={"error": 1, "message": "Missing url in callback"}, status_code=400)
 
+    # Server-to-server, authenticated by the signed token above; resolve the
+    # path as the server so the write-back lands where the token said.
+    from auth import local_admin_principal, request_user_scope
+
     try:
-        _, target, _ = safe_path(root, rel_path)
+        with request_user_scope(local_admin_principal()):
+            _, target, _ = safe_path(root, rel_path)
     except FileNotFoundError:
         return JSONResponse(content={"error": 1, "message": "Root not found"}, status_code=404)
     except PermissionError:

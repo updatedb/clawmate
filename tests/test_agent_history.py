@@ -15,6 +15,30 @@ if str(DEV) not in sys.path:
     sys.path.insert(0, str(DEV))
 
 import agent_routes
+import service
+
+
+def _stub_roots(monkeypatch, tmp_path, *, root_id: str = "root"):
+    """Serve the session-history APIs exactly one root.
+
+    These tests used to stub only ``agent_routes.load_cfg`` and let the legacy
+    ``cfg.roots`` array carry the root. Once roots moved into the registry that
+    array is empty, so the stub was asserting a contract the app no longer
+    honours: the tests stayed green while every session-history query matched
+    nothing. The query reads from ``service.get_roots()`` now, so the stub feeds
+    that (and keeps the config stub, which other code in the path still reads).
+    """
+    monkeypatch.setattr(
+        agent_routes,
+        "load_cfg",
+        lambda: SimpleNamespace(roots=[SimpleNamespace(id=root_id, dir=str(tmp_path))]),
+    )
+    monkeypatch.setattr(
+        service,
+        "get_roots",
+        lambda: ([{"id": root_id, "label": root_id, "dir": str(tmp_path),
+                   "agent_id": "default"}], root_id),
+    )
 
 
 def test_find_codex_binary_prefers_path_before_legacy_candidate(tmp_path, monkeypatch):
@@ -93,11 +117,7 @@ async def test_session_list_filters_empty_chat_logs_and_returns_instruction_coun
         ],
     )
 
-    monkeypatch.setattr(
-        agent_routes,
-        "load_cfg",
-        lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
-    )
+    _stub_roots(monkeypatch, tmp_path)
 
     app = FastAPI()
     app.include_router(agent_routes.router)
@@ -127,11 +147,7 @@ async def test_session_list_excludes_active_v2_session(tmp_path, monkeypatch):
     (sess_dir / "index.json").write_text(json.dumps(index), encoding="utf-8")
     _write_session(sess_dir, "v2-active", [{"role": "user", "content": "still running", "ts": 20}])
     _write_session(sess_dir, "archived", [{"role": "user", "content": "done", "ts": 10}])
-    monkeypatch.setattr(
-        agent_routes,
-        "load_cfg",
-        lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
-    )
+    _stub_roots(monkeypatch, tmp_path)
 
     agent_routes._v2_loggers.clear()
     agent_routes._v2_loggers["terminal-1"] = SimpleNamespace(session_id="v2-active")
@@ -168,12 +184,7 @@ async def test_session_instruction_count_matches_detail_turns(tmp_path, monkeypa
         ],
     )
 
-    monkeypatch.setattr(
-        agent_routes,
-        "load_cfg",
-        lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
-    )
-
+    _stub_roots(monkeypatch, tmp_path)
 
     app = FastAPI()
     app.include_router(agent_routes.router)
@@ -275,12 +286,7 @@ async def test_session_log_assigns_turn_index_per_user_instruction(tmp_path, mon
         ],
     )
 
-    monkeypatch.setattr(
-        agent_routes,
-        "load_cfg",
-        lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
-    )
-
+    _stub_roots(monkeypatch, tmp_path)
 
     app = FastAPI()
     app.include_router(agent_routes.router)
@@ -311,11 +317,7 @@ async def test_session_dates_returns_sorted_dates(tmp_path, monkeypatch):
     _write_session(sess_dir, "s2", [{"role": "user", "content": "b", "ts": 2}])
     _write_session(sess_dir, "s3", [{"role": "user", "content": "c", "ts": 3}])
 
-    monkeypatch.setattr(
-        agent_routes,
-        "load_cfg",
-        lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
-    )
+    _stub_roots(monkeypatch, tmp_path)
 
     app = FastAPI()
     app.include_router(agent_routes.router)
@@ -344,11 +346,7 @@ async def test_session_dates_excludes_active_sessions(tmp_path, monkeypatch):
     _write_session(sess_dir, "active-sess", [{"role": "user", "content": "x", "ts": 1}])
     _write_session(sess_dir, "ended-sess", [{"role": "user", "content": "y", "ts": 2}])
 
-    monkeypatch.setattr(
-        agent_routes,
-        "load_cfg",
-        lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
-    )
+    _stub_roots(monkeypatch, tmp_path)
     # Simulate an active v2 session (excluded from dates)
     fake_active = SimpleNamespace()
     fake_active.session_id = "active-sess"
@@ -381,11 +379,7 @@ async def test_session_list_filters_by_date(tmp_path, monkeypatch):
     _write_session(sess_dir, "s1", [{"role": "user", "content": "a", "ts": 10}])
     _write_session(sess_dir, "s2", [{"role": "user", "content": "b", "ts": 20}])
 
-    monkeypatch.setattr(
-        agent_routes,
-        "load_cfg",
-        lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
-    )
+    _stub_roots(monkeypatch, tmp_path)
 
     app = FastAPI()
     app.include_router(agent_routes.router)
@@ -415,11 +409,7 @@ async def test_history_dates_and_filter_use_session_end_time(tmp_path, monkeypat
     }
     (sess_dir / "index.json").write_text(json.dumps(index), encoding="utf-8")
     _write_session(sess_dir, "crosses-midnight", [{"role": "user", "content": "done", "ts": datetime(2026, 7, 11, 0, 30).timestamp()}])
-    monkeypatch.setattr(
-        agent_routes,
-        "load_cfg",
-        lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
-    )
+    _stub_roots(monkeypatch, tmp_path)
 
     agent_routes._v2_loggers.clear()
     app = FastAPI()
@@ -459,12 +449,7 @@ async def test_session_list_returns_stored_session_key_when_present(tmp_path, mo
         ],
     )
 
-    monkeypatch.setattr(
-        agent_routes,
-        "load_cfg",
-        lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
-    )
-
+    _stub_roots(monkeypatch, tmp_path)
 
     app = FastAPI()
     app.include_router(agent_routes.router)
@@ -514,12 +499,7 @@ async def test_session_list_falls_back_to_derived_session_key(tmp_path, monkeypa
         ],
     )
 
-    monkeypatch.setattr(
-        agent_routes,
-        "load_cfg",
-        lambda: SimpleNamespace(roots=[SimpleNamespace(id="root", dir=str(tmp_path))]),
-    )
-
+    _stub_roots(monkeypatch, tmp_path)
 
     app = FastAPI()
     app.include_router(agent_routes.router)

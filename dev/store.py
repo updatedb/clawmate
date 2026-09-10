@@ -247,15 +247,12 @@ def project_abbr(project: str) -> str:
     """从 project 名生成 2 字符缩写。"""
     if not project:
         return "RT"  # 根级文件 fallback
-    # 先查 config.json 自定义缩写
-    try:
-        cfg = load_config()
-        raw = json.loads(Path(cfg.root_dir("webprojects")).read_bytes())
-    except Exception:
-        raw = {}
-    custom = (raw.get("projects") or {}).get(project, {}).get("abbr", "")
-    if len(custom) >= 2:
-        return custom[:2].upper()
+    # A custom-abbreviation lookup lived here: it read root_dir("webprojects") as
+    # JSON. root_dir() returns a *directory*, so read_bytes() raised
+    # IsADirectoryError into a bare except and the branch never once returned --
+    # nothing writes the {"projects": {name: {abbr}}} shape it looked for. It also
+    # pinned a hardcoded root id through the user-scoped root_dir(), which is what
+    # this function's caller had to be authorized for. Generated below instead.
     # 自动生成
     parts = re.split(r"[-_]", project)
     if len(parts) >= 2:
@@ -621,6 +618,44 @@ def create_execution_task(root_id: str, project: str, item_ids: list[str]) -> di
             item["updated"] = now
         _append_audit(data, "execution_task_created", item_ids=list(item_ids), task_id=task_id,
                       detail={"files": files})
+        _atomic_write(path, root_id, project, data["items"], data.get("last_id", 0), data)
+        return dict(task)
+
+
+def release_execution_task(root_id: str, project: str, task_id: str, reason: str) -> dict:
+    """Give back a reservation that never reached the executor.
+
+    A wake that skipped or failed to launch used to leave the reservation behind
+    for good: the items stayed ``in_progress`` and ``create_execution_task``
+    refuses to reserve an item that already carries an ``execution_task_id``, so
+    the panel spun forever and no endpoint could clear it. Releasing returns the
+    items to ``approved`` -- the state they held before the reserve -- records the
+    reason on them, and marks the task failed with that reason.
+    """
+    with _feedback_write_lock:
+        path = _get_feedback_path(root_id, project)
+        data = _read_feedback(path)
+        task = next((t for t in data.get("tasks", []) if t.get("id") == task_id), None)
+        if not task:
+            raise LookupError(f"Task {task_id} not found")
+        if task.get("status") != "in_progress":
+            raise ValueError("task is not reserved")
+        now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
+        task["status"] = "failed"
+        task["released_at"] = now
+        task["release_reason"] = reason
+        task.setdefault("result", {})
+        if isinstance(task["result"], dict):
+            task["result"]["summary"] = reason
+        released = set(task.get("item_ids", []))
+        for item in data["items"]:
+            if item.get("id") in released and item.get("status") == "in_progress":
+                item["status"] = "approved"
+                item["execution_task_id"] = ""
+                item["result"] = reason
+                item["updated"] = now
+        _append_audit(data, "execution_released", item_ids=sorted(released), task_id=task_id,
+                      detail={"reason": reason})
         _atomic_write(path, root_id, project, data["items"], data.get("last_id", 0), data)
         return dict(task)
 

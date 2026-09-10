@@ -51,13 +51,22 @@ def wake_review_task(root_id: str, project: str, review_task_id: str) -> None:
     task = execution_task(root_id, project, review_task_id)
     if task.get("status") != "in_progress":
         raise ValueError("review task is not executing")
-    threading.Thread(
-        target=_wake_agent_for_root,
-        args=(root_id,),
-        kwargs={"project": project, "include_in_progress": True, "review_task_id": review_task_id},
-        name="clawmate-review-wake",
-        daemon=True,
-    ).start()
+
+    def _run() -> None:
+        # A plain Thread does not inherit the request's ContextVar, so this wake
+        # used to run with no caller at all: resolving the root raised
+        # RootNotAuthorized inside _wake_agent_for_root, which swallows it -- so
+        # nothing was launched, nothing was recorded, and the task stayed
+        # reserved as in_progress forever. The server is the caller here: the
+        # authorization decision was made when the owner approved and executed
+        # this review.
+        from auth import local_admin_principal, request_user_scope
+
+        with request_user_scope(local_admin_principal()):
+            _wake_agent_for_root(root_id, project=project, include_in_progress=True,
+                                 review_task_id=review_task_id)
+
+    threading.Thread(target=_run, name="clawmate-review-wake", daemon=True).start()
 
 
 @router.post("/api/clawmate/task/run", response_class=JSONResponse)
@@ -250,8 +259,54 @@ _last_wake: dict[str, float] = {}
 _DEBOUNCE_SECONDS = 60
 
 
-def _wake_agent_for_root(root_id: str, project: str = "", file: str = "", include_in_progress: bool = False,
-                         review_task_id: str = "") -> None:
+def _release_reservation(root_id: str, project: str, review_task_id: str, reason: str) -> None:
+    """Give back a reservation this wake could not use.
+
+    Every path below that fails to reach the executor used to just return, which
+    left the review task reserved as ``in_progress`` for good: the items stayed
+    ``in_progress`` and ``create_execution_task`` refuses to reserve them again,
+    so the panel spun forever and nothing could be re-run. Releasing puts them
+    back to ``approved`` with the reason attached.
+    """
+    if not review_task_id:
+        return
+    try:
+        from auth import local_admin_principal, request_user_scope
+        from store import release_execution_task
+
+        # The reservation is being returned precisely because this caller had no
+        # principal -- and store resolves the root again on the way in, so the
+        # release has to supply one of its own or it would fail the same way.
+        with request_user_scope(local_admin_principal()):
+            release_execution_task(root_id, project, review_task_id, reason)
+        logger.warning("[task.wake] released %s: %s", review_task_id, reason)
+    except Exception:
+        logger.exception("[task.wake] could not release %s", review_task_id)
+
+
+def _wake_agent_for_root(root_id: str, project: str = "", file: str = "",
+                         include_in_progress: bool = False, review_task_id: str = "") -> None:
+    """Wake one agent, giving the review reservation back if the wake cannot run.
+
+    Anything escaping here used to kill the daemon thread silently and leave the
+    review task reserved as in_progress for good -- the panel spun forever and
+    nothing could re-run it. The guards inside cover the cases they know about;
+    this covers the rest, including a failed root resolution before them.
+    """
+    try:
+        _launch_wake(root_id, project=project, file=file,
+                     include_in_progress=include_in_progress, review_task_id=review_task_id)
+    except HTTPException:
+        # The request-scoped callers (/task/run, cron-tick) turn these into
+        # responses; only the unattended paths want a release.
+        raise
+    except Exception as exc:
+        logger.exception("[task.wake] %s failed for root=%s", review_task_id or "(no task)", root_id)
+        _release_reservation(root_id, project, review_task_id, f"wake failed: {exc}")
+
+
+def _launch_wake(root_id: str, project: str = "", file: str = "", include_in_progress: bool = False,
+                 review_task_id: str = "") -> None:
     """读取 config，直接 POST OpenClaw /hooks/agent（后台线程 fire-and-forget）。
 
     内联 message（不加载模板），防抖 60s 同 root 跳过。
@@ -269,6 +324,8 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "", includ
     last = _last_wake.get(root_id, 0.0)
     if now - last < _DEBOUNCE_SECONDS:
         logger.info("[task] wake skipped (debounced %ds): root_id=%s", int(now - last), root_id)
+        _release_reservation(root_id, project, review_task_id,
+                             f"wake debounced ({int(now - last)}s since the previous wake of {root_id})")
         return
     _last_wake[root_id] = now
 
@@ -325,10 +382,13 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "", includ
                 _bui(root_id, project, _failed_updates)
                 logger.warning("[task.wake] %d items marked failed", len(_failed_updates))
             if not _valid_items:
+                _release_reservation(root_id, project, review_task_id,
+                                     "every item failed pre-launch validation")
                 return
             items = _valid_items
         except Exception as e:
             logger.warning("[task.wake] validation error, items skipped: %s", e)
+            _release_reservation(root_id, project, review_task_id, f"pre-launch validation error: {e}")
             return
         lines = [f"ClawMate 反馈通知：root={root_id}  project={project}  有以下 {len(items)} 条待处理 feedback 需要你执行：", ""]
         for idx, item in enumerate(items):
@@ -386,9 +446,14 @@ def _wake_agent_for_root(root_id: str, project: str = "", file: str = "", includ
                         receipt.backend_actual, receipt.external_run_id)
         else:
             logger.warning("[task.wake] launch failed root=%s reason=%s", root_id, receipt.failure_reason)
+            # The executor never took the work, so the reservation is stale.
+            _release_reservation(root_id, project, review_task_id,
+                                 f"executor refused the launch: {receipt.failure_reason or 'unknown'}")
         return
 
     # Nothing to execute.  Do not wake an executor merely for an empty queue.
+    _release_reservation(root_id, project, review_task_id,
+                         "the reserved task matched no in_progress item")
     return
 
 # ── 路由 ─────────────────────────────────────────────────────────────
@@ -399,13 +464,19 @@ async def cron_tick():
 
     按 project 级 .clawmate/feedback.json 逐 project 扫描，让
     _wake_agent_for_root() 拿到正确的 project 参数。
+
+    The scan list comes from the registry, not from `cfg.roots`: the registry
+    migration left that legacy array empty, so this walked nothing at all and the
+    fallback never woke anyone.
     """
-    cfg = _config()
+    from service import registered_roots
+
     total_pending = 0
     total_woken = 0
     errors = 0
-    for root in cfg.roots:
-        root_dir = Path(root.dir).expanduser().resolve()
+    roots = registered_roots()
+    for root in roots:
+        root_dir = Path(root["dir"]).expanduser().resolve()
         if not root_dir.is_dir():
             continue
         for entry in sorted(root_dir.iterdir()):
@@ -416,15 +487,20 @@ async def cron_tick():
                 continue
             proj = entry.name
             try:
-                _, pending = list_items(root.id, proj, status="pending")
+                _, pending = list_items(root["id"], proj, status="pending")
             except (ValueError, FileNotFoundError):
+                continue
+            except PermissionError:
+                # A session-triggered scan walks every registered root, but only
+                # the caller's own are readable. cron itself arrives over loopback
+                # and carries the server's own principal, so nothing is skipped.
                 continue
             if pending > 0:
                 total_pending += pending
-                _wake_agent_for_root(root.id, project=proj)
+                _wake_agent_for_root(root["id"], project=proj)
                 total_woken += 1
     logger.info(
         "[cron-tick] pending=%d woken=%d roots=%d errors=%d",
-        total_pending, total_woken, len(cfg.roots), errors,
+        total_pending, total_woken, len(roots), errors,
     )
     return {"ok": True}
