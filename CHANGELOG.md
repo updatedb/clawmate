@@ -1,5 +1,46 @@
 # Changelog
 
+## v1.54 (2026-09-11)
+### 多用户 Rootdir 与授权（核心）
+- **Root 注册表**：根目录从 `config.json` 的 `roots` 数组迁出，落到私有 `roots.json`，条目为 `{id, label, dir, agent_id}`，`dir` 相对 `system_root_dir`。四个字段读取时**全部必填**——缺失或空白即拒绝加载，不再用 `label→id`、`dir→""`、`agent_id→"default"` 兜底（后者还会把显式 JSON `null` 强制成字符串 `"None"`）。新增 `dev/root_registry.py`。
+- **用户授权按 id 引用**：`users.json` 用 `root_ids` 引用注册表 id，不再存路径；读取授权时不再重新校验（原实现下一个失效目录会连累所有登录）。新增 `dev/user_store.py`。
+- **启动迁移**：新增 `dev/root_migration.py`，把旧 `roots` 一次性写入 `roots.json`（`dir` 改写为相对路径），旧账号的 `root_dirs` 改写为对应的 `root_ids`；改写 `users.json` 前先写出 `users.json.bak`。无法收纳于 `system_root_dir` 的路径、非法 `agent_id`、两个 root 共用同一目录，都会中止启动并打印问题路径。
+- **授权 fail-closed**：新增 `dev/root_auth.py` 作为唯一鉴权闸口；`RootNotAuthorized` 经统一异常处理器映射为 **403**——此前 `except ValueError` 捕不到新异常，优雅降级路径会退化成 500。
+- **客户端 IP 信任修复**：`get_client_ip` 不再无条件信任 `x-forwarded-for`。原实现下远端可自称 loopback 从而继承管理员身份（实测：未认证创建用户返回 201）。
+
+### 无人值守路径与分享
+- **未认证工作补 principal**：新增 `auth.request_user_scope()`；cron、启动孤儿恢复、会话 TTL 回收、会话历史改走 `service.registered_roots()`——注册后 legacy `cfg.roots` 为空，原扫描等于空转。
+- **唤醒失败归还预留**：唤醒发不出去时调用 `store.release_execution_task()`，条目退回 `approved` 可重跑，不再永久卡在 `in_progress`（即 FD-CM-0185）。
+- **读路径与分享路由**：preview / download / raw 回到普通会话路由；`/share/` 按能力拆分——铸造、列表、失效需会话，`/{token}/...` 保持匿名（token 即能力）。顺带堵住三个洞：`/active` 不再向匿名调用者返回全部共享清单、`/expire` 补授权校验、`share_asset` 改为相对共享文件自身目录解析（原来按 basename 比较，一处提到 `README.md` 会暴露该 root 下所有 `README.md`）。
+- **分享接收方 principal** 绑定覆盖整个 handler（原来只包住 `safe_path()`），分享链接的反馈提交不再 403。
+
+### 设置界面与目录选择器
+- 设置模态拆成 **Rootdir** / **用户** 两个 tab；用户授权改为注册表复选框，前端全程发送 `root_ids`（表单原来读 `root_dirs`，渲染即抛错、保存 422）。
+- 用户「编辑」改为就地填充表单（提交走 PATCH），取代原来的三个 `window.prompt`；空密码表示保持原密码。新增「取消编辑」。
+- 设置入口同时是顶栏控件与 more-menu 镜像；补 `[hidden]` 规则——`.topbar-btn` / `.more-item` 的 `display: flex` 原来压过 UA 的 `[hidden]`，普通用户仍能看到并点开设置齿轮（内部请求全部 403）。
+- 共享目录选择器新增**隐藏目录开关**；picker 抬到设置模态之上（两者同为 z-index 10000 的兄弟节点，DOM 顺序让设置盖住 picker 并吞掉点击）。
+
+### 移动端顶栏折叠契约
+- CSS-only 折叠 + more-menu 镜像补齐：preview 页找回 **Agent 终端**与**反馈面板**入口；`btnToggleRight` 更名 `btnToggleFeedback`（它打开的是反馈面板，与"第几个"无关）。
+- `test_topbar_more_menu` 改为从页面自身 `topbar-actions` 推导期望集，并与镜像、折叠规则一起断言，不再只取 CSS 与页面恰好都出现的 id。
+
+### 批量操作栏
+- bar 归属**多选模式**而非选中结果：toggle 打开即出现，且只有 toggle 能关闭；清空选中不关闭栏，三个文件操作按钮置灰。
+- 按钮改用 token（`--btn-h` 30px / `--btn-font` 12px / `--font-ui`；原为硬编码，实测 36.5px 高且落在 Arial）；批量删除启用一直未被应用的 `.danger` 样式。
+- 修正移动端规则的源顺序——原来写在基础规则之前被整体覆盖，手机上是 143px 两行栏 → 68px 单行；fixed 栏通过 `--batch-bar-h` 预留底部空间，最后一行卡片不再被永久遮住。
+
+### 修复
+- Service Worker 不再把 SSE 等流式响应写入缓存，缓存写入失败也不再让已成功的请求变成未处理的拒绝；`CACHE_VERSION` 提升以丢弃旧 app-shell 缓存。
+- 移动端（≤480px）反馈卡片头部不再溢出：id 让位给右侧 chrome。原预留 `calc(100% - 132px)` 少算了 3 个间隙（实需 143px），时间戳被截断、状态标签折行。
+- 项目面板关闭前把焦点交还 toggle，避免焦点留在 `aria-hidden` 子树；toggle 已折叠进 more-menu 时则直接丢弃焦点。
+- 面包屑复制绝对路径不再粘贴 `undefined`：`/api/clawmate/config` 与 `/auth/me` 恢复携带 `dir` 字段。
+
+### 测试与文档
+- 浏览器验收（`-m e2e`）恢复可跑：起临时实例（临时 system root、预置 `users.json`、随机端口、就绪轮询、自动清理）并驱动真实 Chromium 以**远程客户端**身份访问，覆盖 root CRUD 与「已被 N 位用户引用」提示、授权 422、picker 三条关闭路径、隐藏目录开关、设置入口对普通用户的可见性。19 项浏览器检查通过、无跳过。
+- 三个失效 smoke 测试修复：`test_search` 引用已删除的 `.cp-item` 标记；`test_file_preview` 等待 `networkidle`——常开的 EventSource 使其**必然超时**，其后的面板断言从未执行过；面板断言本身与实测不符（.txt 预览两个侧栏都隐藏）。
+- 新增 spec/plan：`docs/superpowers/specs|plans/2026-09-10-{multi-user-rootdir,rootdir-registry}-*.md`。
+- README 重述 Rootdir 注册表模型与隐藏目录开关；标语按 FD-CM-0185 改为五项能力。`.gitignore` 忽略 `roots.json` 与 `users.json.bak`（后者含同样的密码哈希）。
+
 ## v1.53 (2026-09-10)
 ### 命令面板项目化（index，Ctrl/Cmd+K）
 - 项目优先：默认只显示**项目卡片**（平铺，不按 root 分组），按**最近使用**降序（localStorage 记录优先、项目目录 `mtime` 兜底）。
