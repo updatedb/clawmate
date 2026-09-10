@@ -1,8 +1,45 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 STATIC = Path(__file__).resolve().parents[1] / "dev" / "static"
+
+
+def _strip_js_comments(source: str) -> str:
+    """Drop // line comments and /* */ blocks so an assertion cannot be
+    satisfied by explanatory prose that happens to quote the code.
+
+    Only whole-line // comments are dropped: `//` inside a string literal
+    (a URL, say) must stay, or the strip would truncate real code.
+    """
+    without_blocks = re.sub(r"/\*.*?\*/", "", source, flags=re.S)
+    return re.sub(r"(?m)^\s*//.*$", "", without_blocks)
+
+
+def _handler_body(source: str, anchor: str) -> str:
+    """Return the callback body registered by the addEventListener call that
+    follows `anchor`, bounded by brace matching.
+
+    Bounding is the point: `openDirPicker` is called from a dozen places in this
+    7000-line file, so only a call *inside* this handler proves the settings
+    browse button is wired to the picker. The brace count is naive about braces
+    inside string literals, which is acceptable here because the handler holds
+    no literal `{` or `}`.
+    """
+    start = source.index(anchor)
+    start = source.index("addEventListener", start)
+    open_brace = source.index("{", start)
+    depth = 0
+    for index in range(open_brace, len(source)):
+        char = source[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return source[open_brace:index + 1]
+    raise AssertionError(f"unbalanced braces in the handler after {anchor!r}")
 
 
 def test_index_declares_two_settings_tabs():
@@ -47,17 +84,24 @@ def test_settings_script_calls_registry_and_grant_endpoints():
 
 
 def test_root_browse_reuses_the_shared_directory_picker():
-    script = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
+    """A bare `"openDirPicker" in script` would prove nothing: the identifier
+    occurs a dozen times across the file. The call has to be inside the
+    settings browse handler."""
+    script = _strip_js_comments((STATIC / "js" / "app.js").read_text(encoding="utf-8"))
 
-    assert "openDirPicker" in script
+    assert "openDirPicker(" in _handler_body(script, "settingsRootBrowse"), \
+        "the settings browse button must call the shared directory picker"
     assert "/api/clawmate/settings/browse" not in script
 
 
 def test_root_browse_starts_at_the_system_root():
-    script = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
+    script = _strip_js_comments((STATIC / "js" / "app.js").read_text(encoding="utf-8"))
+    handler = _handler_body(script, "settingsRootBrowse")
 
-    assert "selectedDir: ''" in script
-    assert "rootId: '.'" in script
+    # In code, not in the explanatory comment above the call: without the empty
+    # string the picker seeds itself from the preview panel's current directory.
+    assert "selectedDir: ''" in handler
+    assert "rootId: '.'" in handler
 
 
 def test_settings_script_reports_failed_admin_requests():
@@ -85,7 +129,12 @@ def test_dir_picker_paints_above_the_settings_modal():
     css = (STATIC / "css" / "style.css").read_text(encoding="utf-8")
     html = (STATIC / "index.html").read_text(encoding="utf-8")
 
-    assert "#dirPickerModal" in css and "z-index: 10001" in css
+    # The selector must be bound to its value: `z-index: 10001` also appears in
+    # the mermaid and bpmn overlays, so a file-wide substring check stays green
+    # while the picker itself regresses to 9999 and the settings modal swallows
+    # its clicks.
+    assert re.search(r"#dirPickerModal\s*\{[^}]*z-index:\s*10001", css), \
+        "the picker must outrank .modal-overlay's 10000"
     assert html.index('id="dirPickerModal"') < html.index('id="settingsModal"'), \
         "if the picker is ever moved after the settings modal this rule is no longer needed"
 

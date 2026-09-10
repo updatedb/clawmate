@@ -3180,7 +3180,7 @@ async function initSettings() {
       text.textContent = user.username + (user.is_admin ? '（管理员）' : '') + ' · ' + (granted || '—');
       row.appendChild(text);
       var edit = document.createElement('button');
-      edit.type = 'button'; edit.dataset.settingsAction = 'edit'; edit.textContent = '编辑';
+      edit.type = 'button'; edit.textContent = '编辑';
       edit.addEventListener('click', async function () {
         var name = window.prompt('用户名', user.username);
         if (name === null) return;
@@ -3196,7 +3196,7 @@ async function initSettings() {
         } catch (_) {}
       });
       var remove = document.createElement('button');
-      remove.type = 'button'; remove.dataset.settingsAction = 'delete'; remove.textContent = '删除';
+      remove.type = 'button'; remove.textContent = '删除';
       remove.addEventListener('click', async function () {
         if (!window.confirm('删除用户 ' + user.username + '？')) return;
         try {

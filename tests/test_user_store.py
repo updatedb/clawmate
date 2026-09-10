@@ -86,5 +86,5 @@ def test_admin_accounts_keep_empty_root_ids(tmp_path: Path):
 def test_create_user_rejects_a_root_id_outside_the_allowed_charset(tmp_path: Path):
     store = UserStore(tmp_path / "users.json", tmp_path)
 
-    with pytest.raises(ValueError, match="Invalid root id"):
+    with pytest.raises(ValueError, match="root id 含非法字符"):
         store.create_user("writer", "writer-password", ["../outside"])

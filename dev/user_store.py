@@ -98,7 +98,7 @@ class UserStore:
     @staticmethod
     def hash_password(password: str) -> str:
         if len(password) < 4:
-            raise ValueError("Password must contain at least 4 characters")
+            raise ValueError("密码至少需要 4 个字符")
         return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
     @staticmethod
@@ -112,7 +112,7 @@ class UserStore:
     def _username(value: object) -> str:
         username = str(value).strip()
         if not username or len(username) > 64:
-            raise ValueError("Invalid username")
+            raise ValueError("用户名无效")
         return username
 
     @staticmethod
@@ -120,12 +120,12 @@ class UserStore:
         """Validate grant shape only. Existence is checked by the settings routes
         against the root registry, not here."""
         if not isinstance(values, list):
-            raise ValueError("root_ids must be a list")
+            raise ValueError("root_ids 必须是列表")
         result: list[str] = []
         for value in values:
             root_id = str(value).strip()
             if not _RID_RE.match(root_id):
-                raise ValueError("Invalid root id")
+                raise ValueError("root id 含非法字符")
             if root_id not in result:
                 result.append(root_id)
         return result
@@ -152,7 +152,7 @@ class UserStore:
         target = self._username(username)
         user = self.get_by_username(target)
         if user is None:
-            raise LookupError("User not found")
+            raise LookupError("用户不存在")
         return self.update_user(user.id, password=password)
 
     def get(self, user_id: str) -> UserRecord | None:
@@ -165,10 +165,10 @@ class UserStore:
         users = self._read()
         name = self._username(username)
         if any(user.username == name for user in users):
-            raise ValueError("Username already exists")
+            raise ValueError("用户名已存在")
         roots = self._root_ids(root_ids) if not is_admin else []
         if not is_admin and not roots:
-            raise ValueError("A regular user requires at least one root directory")
+            raise ValueError("普通用户至少需要一个授权 Rootdir")
         user = UserRecord(str(uuid.uuid4()), name, self.hash_password(password), is_admin, False, tuple(roots))
         self._write([*users, user])
         return user
@@ -178,14 +178,14 @@ class UserStore:
         users = self._read()
         index = next((i for i, user in enumerate(users) if user.id == user_id), None)
         if index is None:
-            raise LookupError("User not found")
+            raise LookupError("用户不存在")
         current = users[index]
         name = self._username(username) if username is not None else current.username
         if any(user.id != user_id and user.username == name for user in users):
-            raise ValueError("Username already exists")
+            raise ValueError("用户名已存在")
         admin = bool(is_admin) if is_admin is not None else current.is_admin
         if current.is_admin and not admin and sum(user.is_admin for user in users) == 1:
-            raise ValueError("At least one administrator is required")
+            raise ValueError("至少需要保留一位管理员")
         if admin:
             roots = []
         elif root_ids is not None:
@@ -193,7 +193,7 @@ class UserStore:
         else:
             roots = list(current.root_ids)
         if not admin and not roots:
-            raise ValueError("A regular user requires at least one root directory")
+            raise ValueError("普通用户至少需要一个授权 Rootdir")
         updated = UserRecord(current.id, name, self.hash_password(password) if password is not None else current.password_hash,
                              admin, False if password is not None else current.must_change_password, tuple(roots))
         users[index] = updated
@@ -207,9 +207,9 @@ class UserStore:
         users = self._read()
         target = next((user for user in users if user.id == user_id), None)
         if target is None:
-            raise LookupError("User not found")
+            raise LookupError("用户不存在")
         if target.id == actor_id:
-            raise ValueError("Current administrator cannot be deleted")
+            raise ValueError("不能删除当前登录的管理员账号")
         if target.is_admin and sum(user.is_admin for user in users) == 1:
-            raise ValueError("At least one administrator is required")
+            raise ValueError("至少需要保留一位管理员")
         self._write([user for user in users if user.id != user_id])

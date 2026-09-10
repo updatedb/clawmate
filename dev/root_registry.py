@@ -129,7 +129,7 @@ class RootRegistry:
         """
         entry = self.get(root_id)
         if entry is None:
-            raise LookupError("Root not found")
+            raise LookupError("Rootdir 不存在")
         resolved = (self.system_root_dir / entry.dir).resolve()
         if self.system_root_dir not in resolved.parents or not resolved.is_dir():
             raise RootRegistryError("Rootdir 目录不可用")
@@ -168,7 +168,7 @@ class RootRegistry:
         roots = self._read()
         index = next((i for i, entry in enumerate(roots) if entry.id == root_id), None)
         if index is None:
-            raise LookupError("Root not found")
+            raise LookupError("Rootdir 不存在")
         current = roots[index]
         new_dir = validate_root_dir(self.system_root_dir, dir) if dir is not None else current.dir
         if any(i != index and entry.dir == new_dir for i, entry in enumerate(roots)):
@@ -187,7 +187,7 @@ class RootRegistry:
         roots = self._read()
         target = next((entry for entry in roots if entry.id == root_id), None)
         if target is None:
-            raise LookupError("Root not found")
+            raise LookupError("Rootdir 不存在")
         if target.id in referenced_by:
             raise RootRegistryError("该 Rootdir 正被用户引用，无法删除")
         self._write([entry for entry in roots if entry.id != root_id])

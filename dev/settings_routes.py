@@ -31,7 +31,7 @@ def _validate_root_ids(root_ids: object) -> list[str]:
     keeps the registry free of user knowledge.
     """
     if not isinstance(root_ids, list):
-        raise HTTPException(status_code=422, detail="root_ids must be a list")
+        raise HTTPException(status_code=422, detail="root_ids 必须是列表")
     registry = _registry()
     result: list[str] = []
     for value in root_ids:
@@ -41,7 +41,7 @@ def _validate_root_ids(root_ids: object) -> list[str]:
         except RootRegistryError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         if entry is None:
-            raise HTTPException(status_code=422, detail=f"Unknown root id: {root_id}")
+            raise HTTPException(status_code=422, detail=f"未知的 root id: {root_id}")
         if root_id not in result:
             result.append(root_id)
     return result
@@ -139,7 +139,7 @@ async def update_user(user_id: str, request: Request):
     store = get_user_store()
     current = store.get(user_id)
     if current is None:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="用户不存在")
     body = await request.json()
     is_admin = body.get("is_admin")
     # Resolve the effective role before validating: promoting to admin discards
