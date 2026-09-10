@@ -4,7 +4,7 @@
 
 # ClawMate
 
-> 远程文件管理 · Agent 终端 · 预览反馈闭环 · 多后端协作
+> Agent 产出物管理 · Agent 项目管理 · 反馈评审闭环 · 多 Agent 后端协作 · 多类型文件预览
 
 <!-- ALL-CLAWMATE-BADGES:START -->
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -18,8 +18,6 @@ ClawMate 是面向多种 Agent 工具的**一站式工作流中台**，以产出
 4. **全格式文档预览与编辑能力** — 开箱支持 Markdown（Mermaid/KaTeX）、Office（ONLYOFFICE）、PDF、代码高亮、图片、音视频和压缩包，并为可编辑格式提供在线修改与保存回写能力。
 5. **Agent 及时交互反馈能力** — Agent 可自动识别当前项目；用户在预览页选中内容即可精确定位文件与上下文，反馈支持多任务延迟合并提交，并进入 `pending → in_progress → done/failed` 状态机；任务可直接注入活跃 PTY，或通过 webhook 唤醒 Agent。
 6. **Skill 连接人与 Agent 的桥梁** — 通过 `/clawmate` Skill 在 Agent 中生成可访问的 ClawMate 链接、自动切换 ClawMate 项目，并统一调用文件、项目和反馈能力。ClawMate 与 Agent 既能深度协同，也可完全独立工作，保留灵活的使用方式。
-
-在浏览器中，用户无需离开 ClawMate，即可完成从文件浏览、项目协作到 AI 执行和结果复核的完整闭环。
 
 ### 业务架构
 
@@ -393,16 +391,6 @@ cp config.example.json config.json
 ```
 
 `roots.json` 与 `users.json` 都是私有运行时数据（原子替换写入），不要提交或公开它们。管理员在页面“系统设置 → Rootdir 管理 / 用户管理”里维护 Rootdir 与授权；修改某个 Rootdir 的目录不会改变授权，因为授权引用的是 `id`。
-
-#### 从旧版升级
-
-旧版在 `config.json` 里用一个绝对路径的 `roots` 数组声明根目录。升级后首次启动会自动迁移：
-
-- 旧 `roots` 逐条写入 `roots.json`（`dir` 改写为相对系统根目录），旧账号中的 `root_dirs` 授权改写为对应的 `root_ids`；
-- 所有校验通过后才开始落盘，改写 `users.json` 之前会先写出 `users.json.bak`；
-- 只要有一个旧 root 无法收纳于 `system_root_dir` 之内（位于系统根目录之外、就是系统根目录本身、或与另一个 root 共用同一目录），服务会拒绝启动并打印出问题的那个路径。
-
-迁移完成后 `config.json` 里的 `roots` 键即被忽略，可以删除。
 
 #### 隐藏目录
 
