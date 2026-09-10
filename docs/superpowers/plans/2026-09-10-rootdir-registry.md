@@ -2883,10 +2883,27 @@ def test_regular_user_only_sees_granted_roots(page: "Page"):
 
 `login(page)` already exists in this file at line 73 — call it unchanged. These tests share the module-level `BASE_URL`/`USERNAME`/`PASSWORD` env contract and the `check(...)` helper. The test system root must contain `projects`, `private`, and `.hidden-dir`, and must not depend on the real home directory.
 
-- [ ] **Step 2: Verify the e2e tests skip cleanly without Playwright**
+- [ ] **Step 2: Stand up a real server for the browser tests, then run them**
+
+**A Playwright skip is not acceptable here.** Playwright is importable from `dev/.venv` and Chromium is installed (`~/.cache/ms-playwright/chromium-1228`), so these tests must actually execute. A skip may only be reported if you can show the browser is genuinely unavailable, and you must say so explicitly rather than letting a skip read as a pass.
+
+The existing harness (`tests/test_e2e_browser.py`) drives an **externally running** server from `CLAWMATE_BASE_URL` using `CLAWMATE_USERNAME`/`CLAWMATE_PASSWORD`, so the tests you added need a live instance to talk to. Stand one up against a throwaway configuration:
+
+1. Create a temp dir holding `config.json` (`system_root_dir` = that dir, plus a free `port` and an `auth` block) and a system root containing at least `projects/`, `private/` and a dot-directory such as `.hidden-dir/` for the toggle to reveal. Never point it at the real repository config, a real home directory, or the operator's live `users.json`.
+2. Pre-seed a `users.json` in that temp dir with an admin whose `must_change_password` is **false**, and an ordinary user holding one grant — otherwise the forced-change modal blocks every interaction and the tests measure nothing.
+3. Launch the app on the free port from that config (`CLAWMATE_CONFIG=<temp>/config.json`), wait for readiness by polling a real endpoint, and tear it down afterwards. Note that startup runs the one-time legacy migration; against a config with no legacy `roots` key it is a no-op, which is what you want.
+4. Point the browser tests at it via `CLAWMATE_BASE_URL`, `CLAWMATE_USERNAME` and `CLAWMATE_PASSWORD`.
 
 Run: `PYTHONPATH=. dev/.venv/bin/python -m pytest tests/test_e2e_browser.py -m e2e -q`
-Expected: SKIP with a clear message when Playwright or Chromium is unavailable; a Playwright environment skip must be reported as a skip, not as a pass.
+Expected: the browser tests **pass**. Report the count, and report separately anything that could not be exercised.
+
+The gaps carried in from the earlier tasks that only a browser can close, and which this run must therefore confirm:
+- authenticated root create / edit / delete, and the「已被 N 位用户引用」hint on a referenced root;
+- a grant POST from the tab, and the 422 message rendered in the error region;
+- the picker opening at the system root and filling the Rootdir input;
+- the picker's hidden-directory toggle adding and removing dot-directories **without emptying the tree**;
+- **all three close paths** (cancel, X, backdrop) leaving the main file browser's root unchanged — the silent-corruption case no headless test can catch;
+- the picker being visible and clickable above the open settings modal.
 
 - [ ] **Step 3: Document the new model**
 
