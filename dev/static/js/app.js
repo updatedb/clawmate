@@ -2236,6 +2236,15 @@ function _setProjectPanelOpen(open) {
   if (open && window.Agent && typeof window.Agent.isOpen === 'function' && window.Agent.isOpen()) {
     window.Agent.close();
   }
+  // Hiding a region that still holds focus strands focus inside an aria-hidden
+  // subtree -- Chrome blocks the attribute and warns. Hand focus back to the
+  // toggle that re-opens the panel before the region goes away. The toggle is
+  // itself display:none once it folds into the mobile more-menu (offsetWidth
+  // reads 0), so drop focus there rather than sending it to an invisible button.
+  if (!open && projectPanel.contains(document.activeElement)) {
+    if (btnProjectPanel && btnProjectPanel.offsetWidth > 0) btnProjectPanel.focus();
+    else if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  }
   projectPanel.classList.toggle('hidden', !open);
   projectPanel.setAttribute('aria-hidden', String(!open));
   if (open) refreshProjectPanel(); else _stopProjectRunPolling();

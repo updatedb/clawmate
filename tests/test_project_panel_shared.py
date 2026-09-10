@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 
@@ -71,3 +72,47 @@ def test_recommendation_controls_present():
         and "discover" in filter_line
         and "codex" in filter_line
     ), "recs filter must keep project_json, discover AND codex recommendations"
+
+
+def _strip_js_comments(source: str) -> str:
+    """Drop comments so an assertion cannot be satisfied by prose that quotes
+    the very call it is meant to prove is present."""
+    without_blocks = re.sub(r"/\*.*?\*/", "", source, flags=re.S)
+    return re.sub(r"(?m)^\s*//.*$", "", without_blocks)
+
+
+def _function_body(source: str, name: str) -> str:
+    """Return the brace-matched body of `function <name>`.
+
+    Bounding is the point: `classList.toggle` and `btnProjectPanel.focus()` both
+    appear in other functions, so only the order *inside this function* proves
+    the handoff runs before the panel is hidden.
+    """
+    open_brace = source.index("{", source.index("function " + name))
+    depth = 0
+    for index in range(open_brace, len(source)):
+        char = source[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return source[open_brace:index + 1]
+    raise AssertionError(f"unbalanced braces in {name}")
+
+
+def test_closing_the_panel_hands_focus_back_to_its_toggle():
+    """Hiding a region that still holds focus strands focus inside an
+    aria-hidden subtree, which Chrome blocks and warns about. The handoff has to
+    run *before* the class lands, and it cannot aim at a toggle that is itself
+    folded away on mobile.
+    """
+    app = (ROOT / "dev/static/js/app.js").read_text(encoding="utf-8")
+    body = _strip_js_comments(_function_body(app, "_setProjectPanelOpen"))
+
+    assert "projectPanel.contains(document.activeElement)" in body
+    assert "btnProjectPanel.focus()" in body
+    # The toggle reads offsetWidth 0 once it folds into the mobile more-menu.
+    assert "btnProjectPanel.offsetWidth > 0" in body
+    assert "document.activeElement.blur()" in body
+    assert body.index("btnProjectPanel.focus()") < body.index("classList.toggle('hidden'")
