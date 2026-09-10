@@ -1,4 +1,4 @@
-"""Private multi-user account storage and system-root grant validation."""
+"""Private multi-user account storage and grant-shape validation."""
 
 from __future__ import annotations
 
