@@ -1388,6 +1388,9 @@
     }
     .archive-entry {
       display: flex; align-items: center; position: relative;
+      /* The subtree container is a sibling in this row, so the row has to wrap
+         for it to reach a line of its own. See .archive-children below. */
+      flex-wrap: wrap;
       padding: 1px 20px 1px 12px; cursor: default;
       transition: background 0.1s;
     }
@@ -1410,7 +1413,13 @@
       flex-shrink: 0; width: 90px; text-align: right;
       color: var(--text-muted); font-size: 11px; margin-left: 8px;
     }
-    .archive-children { }
+    /* The subtree container is a child of .archive-entry, i.e. a sibling of the
+       name inside the row's flex context. Without a full-width basis it is
+       laid out *beside* the name, so every nesting level opens a new column to
+       the right instead of a new row -- measured: rows at the same depth landed
+       at different x, and depth 3 rendered left of depth 2. The indent itself
+       is computed in JS (padding-left = depth * 20 + 12) and was already right. */
+    .archive-children { flex-basis: 100%; }
     .archive-indent-guide {
       position: absolute; top: 0; bottom: 0; width: 1px;
       background: var(--border); opacity: 0.5; pointer-events: none;
