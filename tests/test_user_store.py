@@ -62,13 +62,6 @@ def test_admin_can_still_log_in_after_a_grant_target_disappears(tmp_path: Path):
     assert store.authenticate("admin", "password") is not None
 
 
-def test_create_user_rejects_a_root_outside_the_system_root(tmp_path: Path):
-    store = UserStore(tmp_path / "users.json", tmp_path)
-
-    with pytest.raises(ValueError, match="outside the system root"):
-        store.create_user("writer", "writer-password", [".."])
-
-
 def test_update_user_replaces_root_ids(tmp_path: Path):
     store = UserStore(tmp_path / "users.json", tmp_path)
     (tmp_path / "a").mkdir()

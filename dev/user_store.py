@@ -11,9 +11,9 @@ from pathlib import Path
 import bcrypt
 
 try:  # dev/ on sys.path (app runtime, bare `root_registry` imports)
-    from root_registry import RootRegistryError, atomic_write_json, validate_root_dir
+    from root_registry import atomic_write_json
 except ImportError:  # imported as `dev.user_store` (package-style tests)
-    from dev.root_registry import RootRegistryError, atomic_write_json, validate_root_dir
+    from dev.root_registry import atomic_write_json
 
 _RID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
@@ -117,7 +117,8 @@ class UserStore:
 
     @staticmethod
     def _root_ids(values: object) -> list[str]:
-        """Validate grant shape only. Existence is checked at write time."""
+        """Validate grant shape only. Existence is checked by the settings routes
+        against the root registry, not here."""
         if not isinstance(values, list):
             raise ValueError("root_ids must be a list")
         result: list[str] = []
@@ -125,18 +126,6 @@ class UserStore:
             root_id = str(value).strip()
             if not _RID_RE.match(root_id):
                 raise ValueError("Invalid root id")
-            if root_id not in result:
-                result.append(root_id)
-        return result
-
-    def _validate_grants(self, root_ids: list[str]) -> list[str]:
-        """Write-time validation: each id must name an existing system-root subdirectory."""
-        result: list[str] = []
-        for root_id in root_ids:
-            try:
-                validate_root_dir(self.system_root_dir, root_id)
-            except RootRegistryError as exc:
-                raise ValueError(str(exc)) from exc
             if root_id not in result:
                 result.append(root_id)
         return result
@@ -177,7 +166,7 @@ class UserStore:
         name = self._username(username)
         if any(user.username == name for user in users):
             raise ValueError("Username already exists")
-        roots = self._validate_grants(self._root_ids(root_ids)) if not is_admin else []
+        roots = self._root_ids(root_ids) if not is_admin else []
         if not is_admin and not roots:
             raise ValueError("A regular user requires at least one root directory")
         user = UserRecord(str(uuid.uuid4()), name, self.hash_password(password), is_admin, False, tuple(roots))
@@ -197,8 +186,12 @@ class UserStore:
         admin = bool(is_admin) if is_admin is not None else current.is_admin
         if current.is_admin and not admin and sum(user.is_admin for user in users) == 1:
             raise ValueError("At least one administrator is required")
-        roots = (self._validate_grants(self._root_ids(root_ids)) if root_ids is not None
-                 else ([] if admin else list(current.root_ids)))
+        if admin:
+            roots = []
+        elif root_ids is not None:
+            roots = self._root_ids(root_ids)
+        else:
+            roots = list(current.root_ids)
         if not admin and not roots:
             raise ValueError("A regular user requires at least one root directory")
         updated = UserRecord(current.id, name, self.hash_password(password) if password is not None else current.password_hash,
