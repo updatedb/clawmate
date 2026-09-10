@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.55 (2026-09-11)
+### 权限边界
+- 管理员账号不再参与内容工作：agent 终端、项目面板、反馈面板对其不可见且不可达。闸口位于 `AuthMiddleware.dispatch()` 的会话分支内、按四个 API 前缀拒绝；两条 agent WebSocket 因不经中间件而在握手处单独拒绝（关闭码 4403）。loopback 与内部 token 调用方在更早的分支返回，因此本机操作者与执行器回调（`/review/result`）不受影响——这也让闸口无需豁免表。
+- 前端隐藏三个顶栏入口（手机端 more-menu 镜像自动跟随），并抑制项目面板的首次访问自动展开。
+- 管理员保留系统设置与文件浏览、预览、下载、上传能力。管理员始终可见系统根目录：`service.get_roots()` 无条件把 `ROOT_ID_SYSTEM` 交给管理员，`root_ids` 对管理员不参与解析（`user_store` 创建/更新时即置空）。
+
 ## v1.54 (2026-09-11)
 ### 多用户 Rootdir 与授权（核心）
 - **Root 注册表**：根目录从 `config.json` 的 `roots` 数组迁出，落到私有 `roots.json`，条目为 `{id, label, dir, agent_id}`，`dir` 相对 `system_root_dir`。四个字段读取时**全部必填**——缺失或空白即拒绝加载，不再用 `label→id`、`dir→""`、`agent_id→"default"` 兜底（后者还会把显式 JSON `null` 强制成字符串 `"None"`）。新增 `dev/root_registry.py`。

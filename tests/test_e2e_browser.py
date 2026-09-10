@@ -59,7 +59,7 @@ import pytest
 pytestmark = pytest.mark.e2e
 
 if TYPE_CHECKING:
-    from playwright.sync_api import Page
+    from playwright.sync_api import BrowserContext, Page
 
 # ── Config ────────────────────────────────────────────────────────────
 BASE_URL = os.environ.get("CLAWMATE_BASE_URL", "http://localhost:5533")
@@ -807,6 +807,153 @@ def test_ordinary_user_does_not_render_the_settings_entry(browser):
               f"被授权 root 报告自己的绝对路径（{[root['dir'] for root in reported]}）")
         check(f"{E2E_SYSTEM_ROOT}/projects" not in body,
               "配置响应不包含未授权 root 的路径")
+    finally:
+        context.close()
+
+
+# ── Administrator content-panel boundary ───────────────────────────────
+#
+# Both checks below build their own context so they can pass
+# `service_workers="block"`. The service worker serves *static assets* as
+# silently as it serves routes, and the plan's first two attempts at this
+# boundary measured a cached, stale app.js that did not contain the change at
+# all. Only a service-worker-blocked run counts.
+
+CONTENT_PANEL_TOGGLES = ("btnToggleAgent", "btnProjectPanel", "btnToggleFeedback")
+
+
+def _content_panel_context(browser) -> BrowserContext:
+    """A remote-client context with service-worker registration blocked."""
+    return browser.new_context(service_workers="block",
+                               extra_http_headers=CLIENT_HEADERS or None)
+
+
+def _toggle_mirror(page: Page, toggle: str):
+    return page.locator(f'.more-item[data-more="{toggle}"]')
+
+
+def _wait_for_the_boundary(page: Page) -> None:
+    """Wait until topbar.js has answered the role probe and app.js applied it.
+
+    `isAdmin()` is set one microtask before `_applyAdminContentPanelBoundary()`'s
+    callback runs, and a poller observes state from a task, so seeing it true
+    means `hideContentPanelEntries()` and the gate flag have both been applied.
+    """
+    page.wait_for_function(
+        "() => window.ClawMateAdmin && window.ClawMateAdmin.isAdmin() === true",
+        timeout=15000)
+
+
+def test_an_admin_sees_no_content_panel_entries(browser):
+    """The inverse of the settings check: an admin keeps settings, loses the panels.
+
+    This is also the only thing that can see a loop which visits fewer entries
+    than it declares. tests/test_admin_panel_contract.py pins the three
+    CONTENT_PANEL_ENTRIES and how each is handled, but not the count --
+    `.slice(0, 1).forEach(` keeps it green while only the agent toggle gets
+    hidden. Only a per-entry browser assertion catches that.
+
+    Two pages are needed, because neither one can fail for all three entries:
+
+    * index.html declares the agent and project toggles. Its project toggle
+      carries an inline `display:none` that _updateProjectPanelBtn() clears only
+      once a *project* is loaded, so on a bare page it is hidden for a reason
+      that has nothing to do with the boundary. The check therefore runs on a
+      project directory, where `hidden` is the only thing keeping it off screen.
+    * index.html has no feedback toggle at all; preview.html declares all three,
+      so the third entry is checked there.
+    """
+    context = _content_panel_context(browser)
+    try:
+        page = context.new_page()
+        login(page)
+        _wait_for_app(page)
+        _wait_for_the_boundary(page)
+
+        page.goto(f"{CLAWMATE_URL}/?root=.&dir=projects")
+        page.wait_for_function("() => state.project === 'projects'", timeout=15000)
+        # A precondition, not decoration: it is what makes the project assertion
+        # below a test of the boundary rather than of an empty state.
+        check(page.evaluate(
+            "() => document.getElementById('btnProjectPanel').style.display") == "",
+            "前置：项目目录下 #btnProjectPanel 本会渲染")
+
+        for toggle in ("btnToggleAgent", "btnProjectPanel"):
+            check(page.locator(f"#{toggle}").is_hidden(), f"管理员看不到 #{toggle}")
+
+        # The more-menu mirrors the same gate; one left behind is a way back in
+        # on a phone.
+        page.set_viewport_size({"width": 375, "height": 812})
+        page.locator("#btnMoreMenu").click()
+        page.locator(".more-menu").wait_for(state="visible")
+        for toggle in ("btnToggleAgent", "btnProjectPanel"):
+            mirror = _toggle_mirror(page, toggle)
+            check(mirror.count() == 1, f"移动端菜单仍声明 {toggle}（供普通用户使用）")
+            check(mirror.is_hidden(), f"移动端菜单不提供 {toggle}")
+
+        # preview.html carries the third entry, which index.html does not have.
+        # There all three toggles are live-display: project-panel.js's
+        # mountPreview() clears #btnProjectPanel's inline display:none once the
+        # URL names a project, so `hidden` is the only gate on that page too.
+        page.set_viewport_size({"width": 1440, "height": 900})
+        page.goto(f"{CLAWMATE_URL}/preview.html?root=.&file=projects/readme.md")
+        page.locator("#btnToggleFeedback").wait_for(state="attached", timeout=15000)
+        _wait_for_the_boundary(page)
+        for toggle in CONTENT_PANEL_TOGGLES:
+            check(page.locator(f"#{toggle}").is_hidden(), f"预览页管理员看不到 #{toggle}")
+
+        page.set_viewport_size({"width": 375, "height": 812})
+        page.locator("#btnMoreMenu").click()
+        page.locator(".more-menu").wait_for(state="visible")
+        for toggle in CONTENT_PANEL_TOGGLES:
+            mirror = _toggle_mirror(page, toggle)
+            check(mirror.count() == 1, f"预览页移动端菜单仍声明 {toggle}（供普通用户使用）")
+            check(mirror.is_hidden(), f"预览页移动端菜单不提供 {toggle}")
+    finally:
+        context.close()
+
+
+def test_the_project_panel_does_not_auto_open_for_an_admin(browser):
+    """The auto-open guard's only other coverage is a source-text test, and that
+    test can be bypassed by appending an unguarded `_setProjectPanelOpen(firstVisit)`
+    behind the guarded line -- the regex still matches the first one. This is its
+    behavioural pin.
+
+    A bare "is #projectPanel hidden after login" assertion would be vacuous: the
+    panel is only meaningful once a *project* directory is loaded
+    (`state.project` non-empty), and `_updateProjectPanelBtn()` returns early
+    while it is empty, so on the default directory the panel is closed for an
+    unrelated reason. The navigation below therefore goes to a project
+    directory, and two preconditions make the assertion fail-able:
+
+    * `state.project` is set -- the wait below cannot return otherwise, so the
+      decision point was reached at all;
+    * the first-visit sessionStorage flag was written. _updateProjectPanelBtn()
+      writes it only on the branch that then decides whether to open, so its
+      presence rules out the early return that would have made this vacuous.
+
+    No seeded grant is needed: service.get_roots() hands *every* administrator
+    `ROOT_ID_SYSTEM` regardless of `root_ids` (which user_store keeps empty for
+    an admin), so `?root=.` is a root an admin really holds.
+    """
+    context = _content_panel_context(browser)
+    try:
+        page = context.new_page()
+        login(page)
+        _wait_for_app(page)
+        # The gate flag is read at the decision point, so it must already be set
+        # when the project directory loads; otherwise this would measure a race.
+        _wait_for_the_boundary(page)
+
+        page.goto(f"{CLAWMATE_URL}/?root=.&dir=projects")
+        page.wait_for_function("() => state.project === 'projects'", timeout=15000)
+        seen = page.evaluate(
+            "() => Object.keys(sessionStorage)"
+            ".filter(k => k.indexOf('clawmate.projectPanel.seen:') === 0)")
+        check(seen == ["clawmate.projectPanel.seen:.:projects"],
+              f"前置：项目面板走到了首次访问的自动展开分支（{seen}）")
+        check(page.locator("#projectPanel").is_hidden(),
+              "管理员进入项目目录时项目面板不自动展开")
     finally:
         context.close()
 
