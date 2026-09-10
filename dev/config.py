@@ -130,7 +130,7 @@ class ProjectConfig:
 
 @dataclass
 class AppConfig:
-    system_root_dir: Path = field(default_factory=Path)
+    system_root_dir: Path | None = None
     roots: list[RootEntry] = field(default_factory=list)
     default_root_id: str = ""
     port: int = 5533
@@ -269,7 +269,7 @@ def _parse_config(raw: dict) -> AppConfig:
 
     return AppConfig(
         system_root_dir=Path(str(raw.get("system_root_dir", ""))).expanduser().resolve()
-        if raw.get("system_root_dir") else Path(),
+        if raw.get("system_root_dir") else None,
         roots=roots,
         default_root_id=str(raw.get("defaultRootId", "")),
         port=int(env_port or raw.get("port", 5533)),

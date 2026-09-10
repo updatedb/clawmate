@@ -1032,7 +1032,7 @@ async def auth_login(request: Request):
     """Verify credentials, issue session, set session cookie."""
     from auth import (
         is_auth_enabled, check_ip_lockout, record_failure, clear_failures,
-        create_session, verify_password,
+        create_session, get_user_store,
         get_session_ttl, get_client_ip,
     )
 
@@ -1057,30 +1057,23 @@ async def auth_login(request: Request):
             status_code=429,
         )
 
-    config_path = Path(os.environ.get(CONFIG_PATH_ENV, "config.json"))
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        config = {}
-
-    if not is_auth_enabled(config):
+    if not is_auth_enabled():
         return JSONResponse({"error": "auth_not_configured", "detail": "认证未配置"}, status_code=503)
-
-    ac = config.get("auth") or {}
-    expected_user = ac.get("username", "admin")
-    stored_hash = ac.get("password_hash", "")
-
-    if username != expected_user or not verify_password(password, stored_hash):
+    try:
+        user = get_user_store().authenticate(username, password)
+    except RuntimeError:
+        return JSONResponse({"error": "server_error", "detail": "用户配置无效"}, status_code=500)
+    if user is None:
         record_failure(username, client_ip)
         return JSONResponse({"error": "invalid_credentials", "detail": "用户名或密码错误"}, status_code=401)
 
     # Success
     clear_failures(username, client_ip)
-    ttl = get_session_ttl(config)
-    sid, _ = await create_session(username, ttl)
+    ttl = get_session_ttl()
+    sid, _ = await create_session(user.username, ttl, user_id=user.id, is_admin=user.is_admin,
+                                  must_change_password=user.must_change_password)
 
-    response = JSONResponse({"ok": True, "username": username})
+    response = JSONResponse({"ok": True, "username": user.username, "must_change_password": user.must_change_password})
     # 根据请求协议或 public_base_url 决定是否设置 secure cookie
     _is_https = _request_is_https(request)
     response.set_cookie(
@@ -1119,14 +1112,26 @@ async def auth_status(request: Request):
     session = await get_session(sid)
     if not session:
         return JSONResponse({"logged_in": False})
-    return JSONResponse({"logged_in": True, "username": session.get("user", "")})
+    return JSONResponse({"logged_in": True, "username": session.get("user", ""),
+                         "is_admin": bool(session.get("is_admin")),
+                         "must_change_password": bool(session.get("must_change_password"))})
+
+
+@router.get("/api/clawmate/auth/me")
+async def auth_me(request: Request):
+    session = getattr(request.state, "session", None)
+    if not session:
+        return JSONResponse({"error": "unauthorized", "detail": "请先登录"}, status_code=401)
+    user = getattr(request.state, "user", None)
+    if user is None:
+        return JSONResponse({"error": "unauthorized", "detail": "用户不存在"}, status_code=401)
+    return JSONResponse({**user.public(), "must_change_password": bool(session.get("must_change_password"))})
 
 
 @router.post("/api/clawmate/auth/change-password")
 async def auth_change_password(request: Request):
     """Change password for logged-in user."""
-    from auth import get_session, get_session_from_cookie
-    from auth import verify_password, hash_password
+    from auth import get_session, get_session_from_cookie, clear_must_change_password, get_user_store
 
     sid = get_session_from_cookie(request)
     if not sid:
@@ -1141,34 +1146,22 @@ async def auth_change_password(request: Request):
         return JSONResponse({"error": "invalid_request"}, status_code=400)
 
     old_password = str(body.get("old_password", ""))
-    new_password = str(body.get("new_password", ""))
+    new_password = str(body.get("new_password", body.get("password", "")))
 
     if not new_password or len(new_password) < 4:
         return JSONResponse({"error": "invalid_request", "detail": "新密码至少4个字符"}, status_code=400)
 
-    config_path = Path(os.environ.get(CONFIG_PATH_ENV, "config.json"))
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return JSONResponse({"error": "server_error", "detail": "配置文件读取失败"}, status_code=500)
-
-    ac = config.get("auth") or {}
-    stored_hash = ac.get("password_hash", "")
-
-    # Verify old password if hash exists
-    if stored_hash and old_password and not verify_password(old_password, stored_hash):
+    store = get_user_store()
+    user = store.get(str(session.get("user_id", "")))
+    if user is None:
+        return JSONResponse({"error": "unauthorized", "detail": "用户不存在"}, status_code=401)
+    if old_password and not store.verify_password(old_password, user.password_hash):
         return JSONResponse({"error": "invalid_credentials", "detail": "原密码错误"}, status_code=401)
-
-    new_hash = hash_password(new_password)
-    if "auth" not in config:
-        config["auth"] = {}
-    config["auth"]["username"] = ac.get("username", "admin")
-    config["auth"]["password_hash"] = new_hash
-    config["auth"]["session_ttl_minutes"] = ac.get("session_ttl_minutes", 480)
-
-    with open(config_path, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2, ensure_ascii=False)
+    try:
+        store.change_password(user.id, new_password)
+    except ValueError as exc:
+        return JSONResponse({"error": "invalid_request", "detail": str(exc)}, status_code=400)
+    await clear_must_change_password(sid)
 
     return JSONResponse({"ok": True, "detail": "密码已更新"})
 

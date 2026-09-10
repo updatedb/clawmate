@@ -90,6 +90,22 @@ def _load_config() -> Dict:
 
 
 def get_roots() -> Tuple[List[Dict], str]:
+    cfg = load_config()
+    if cfg.system_root_dir:
+        try:
+            from auth import current_request_user
+            user = current_request_user()
+        except ImportError:
+            user = None
+        if user is not None:
+            if user.is_admin:
+                root = {"id": ".", "label": "系统根目录", "dir": str(cfg.system_root_dir)}
+                return [root], "."
+            roots = []
+            for root_id in user.root_dirs:
+                root_path = (cfg.system_root_dir / root_id).resolve()
+                roots.append({"id": root_id, "label": Path(root_id).name, "dir": str(root_path)})
+            return roots, roots[0]["id"] if roots else ""
     data = _load_config()
     roots: List[Dict] = []
     for item in data.get("roots", []) or []:

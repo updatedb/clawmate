@@ -11,9 +11,11 @@ Components:
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import hmac
 import json
 import logging
+import os
 import secrets
 import socket
 import time
@@ -33,6 +35,12 @@ logger = logging.getLogger("clawmate.auth")
 _sessions: dict[str, dict] = {}
 _sessions_lock = asyncio.Lock()
 _sessions_file = Path(__file__).parent / "sessions.json"
+_request_user: contextvars.ContextVar[object | None] = contextvars.ContextVar("clawmate_request_user", default=None)
+
+
+def current_request_user():
+    """Return the authenticated user for the current request, if any."""
+    return _request_user.get()
 
 
 def _load_sessions() -> None:
@@ -97,15 +105,25 @@ def verify_password(password: str, hashed: str) -> bool:
 
 
 # ── Session management ────────────────────────────────────────────────────────
-async def create_session(username: str, ttl_seconds: int = 28800) -> tuple[str, dict]:
+async def create_session(username: str, ttl_seconds: int = 28800, *, user_id: str = "",
+                         is_admin: bool = False, must_change_password: bool = False) -> tuple[str, dict]:
     """Create a new session, return (session_id, session_data)."""
     sid = _generate_session_id()
     now = time.time()
-    data = {"user": username, "created_at": now, "last_active": now, "ttl": ttl_seconds}
+    data = {"user": username, "user_id": user_id, "is_admin": is_admin,
+            "must_change_password": must_change_password, "created_at": now,
+            "last_active": now, "ttl": ttl_seconds}
     async with _sessions_lock:
         _sessions[sid] = data
     _save_sessions()
     return sid, data
+
+
+async def clear_must_change_password(sid: str) -> None:
+    async with _sessions_lock:
+        if sid in _sessions:
+            _sessions[sid]["must_change_password"] = False
+    _save_sessions()
 
 
 async def get_session(sid: str) -> Optional[dict]:
@@ -193,7 +211,18 @@ def is_auth_enabled(config: dict | None = None) -> bool:
     """Return True only when auth section exists with a non-empty password_hash."""
     from config import load as _cfg
     c = _cfg()
-    return bool(c.auth and c.auth.password_hash.strip())
+    return bool(c.system_root_dir or (c.auth and c.auth.password_hash.strip()))
+
+
+def get_user_store():
+    """Return the private account store for the configured system root."""
+    from config import load as _cfg
+    from user_store import UserStore
+    cfg = _cfg()
+    if not cfg.system_root_dir:
+        raise RuntimeError("system_root_dir is not configured")
+    config_path = Path(os.environ.get("CLAWMATE_CONFIG", "config.json"))
+    return UserStore(config_path.parent / "users.json", cfg.system_root_dir)
 
 
 def get_session_ttl(config: dict | None = None) -> int:
@@ -359,9 +388,24 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not session:
             return self._auth_failure_redirect(request, "会话已过期，请重新登录")
 
+        if session.get("must_change_password") and path not in {
+            "/api/clawmate/auth/me", "/api/clawmate/auth/change-password", "/api/clawmate/auth/logout",
+        }:
+            return JSONResponse({"error": "password_change_required", "detail": "请先修改初始密码"}, status_code=403)
+
         # Attach session user to request state
         request.state.session = session
-        return await call_next(request)
+        try:
+            user = get_user_store().get(str(session.get("user_id", "")))
+        except RuntimeError:
+            user = None
+        if user is not None:
+            request.state.user = user
+        token = _request_user.set(user)
+        try:
+            return await call_next(request)
+        finally:
+            _request_user.reset(token)
 
     def _get_client_ip(self, request: Request) -> str:
         # Rely on the shared module helper for reverse-proxy aware resolution.

@@ -1,13 +1,5 @@
 {
-  "roots": [
-    {
-      "id": "example",
-      "label": "示例目录",
-      "dir": "/data/example",
-      "agent_id": "main"
-    }
-  ],
-  "defaultRootId": "example",
+  "system_root_dir": "/data/mounted-workspace",
   "port": 5533,
   "public_base_url": "http://clawmate.lan:5533",
   "max_upload_mb": 100,

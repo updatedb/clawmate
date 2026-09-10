@@ -86,6 +86,15 @@ body { font-family: var(--font-ui); color: var(--text-primary); background: var(
   flex-shrink: 0;
 }
 
+.settings-modal-box { max-width: 640px; }
+.settings-modal-box section + section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color); }
+.settings-modal-box h3 { margin: 0 0 10px; font-size: var(--font-size-base); }
+.settings-form { display: grid; gap: 8px; }
+.settings-form input, .settings-form select { width: 100%; min-height: var(--btn-h); padding: 6px 8px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--text-primary); }
+.settings-form select { min-height: 92px; }
+.settings-help { margin: 0; color: var(--text-secondary); font-size: var(--font-size-sm); }
+.settings-user { display:flex; justify-content:space-between; gap:8px; padding:8px 0; border-bottom:1px solid var(--border-color); }
+
 
 
 /* ═══════════════════════════════════════════════════════

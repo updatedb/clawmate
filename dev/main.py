@@ -174,6 +174,7 @@ from version_routes import router as version_router  # noqa: E402
 from fs_routes import router as fs_router  # noqa: E402
 from project_routes import router as project_router  # noqa: E402
 from generated_asset_routes import router as generated_asset_router  # noqa: E402
+from settings_routes import router as settings_router  # noqa: E402
 
 app.include_router(clawmate_router)
 app.include_router(task_router)
@@ -185,6 +186,7 @@ app.include_router(version_router)
 app.include_router(fs_router)
 app.include_router(project_router)
 app.include_router(generated_asset_router)
+app.include_router(settings_router)
 
 # mount static files under /clawmate/
 if STATIC_DIR.exists() and STATIC_DIR.is_dir():

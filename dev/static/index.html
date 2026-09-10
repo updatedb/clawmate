@@ -33,6 +33,9 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect width="14" height="14" x="5" y="5" rx="1"/></svg>
         <span>项目面板</span>
       </button>
+      <button class="more-item" type="button" data-more="btnSettings" role="menuitem" hidden>
+        <span>系统设置</span>
+      </button>
       <button class="more-item" type="button" data-more="themeToggle" role="menuitem">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
         <span>切换主题</span>
@@ -73,6 +76,9 @@
         </button>
         <button id="btnProjectPanel" class="topbar-btn" title="项目面板" style="display:none">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect width="14" height="14" x="5" y="5" rx="1"/></svg>
+        </button>
+        <button id="btnSettings" class="topbar-btn" title="系统设置" hidden>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2 2-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.04 1.56V20h-2.82v-.08A1.7 1.7 0 0 0 10.96 18.36a1.7 1.7 0 0 0-1.88.34l-.06.06-2-2 .06-.06A1.7 1.7 0 0 0 7.42 14.7 1.7 1.7 0 0 0 5.86 13.66H5.78v-2.82h.08A1.7 1.7 0 0 0 7.42 9.8a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2-2 .06.06a1.7 1.7 0 0 0 1.88.34A1.7 1.7 0 0 0 12 4.7v-.08h2.82v.08a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 2 2-.06.06a1.7 1.7 0 0 0-.34 1.88 1.7 1.7 0 0 0 1.56 1.04h.08v2.82h-.08A1.7 1.7 0 0 0 19.4 15Z"/></svg>
         </button>
         <button id="themeToggle" class="topbar-btn" title="切换主题">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
@@ -286,6 +292,18 @@
         <button id="dirPickerConfirm" class="btn btn-primary">确定</button>
       </div>
     </div>
+  </div>
+  <div id="settingsModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="系统设置" style="display:none;">
+    <div class="modal-box settings-modal-box">
+      <div class="modal-header"><span class="modal-title">系统设置</span><button class="modal-close" id="settingsModalClose" title="关闭">✕</button></div>
+      <div class="modal-body">
+        <section data-settings-section="users"><h3>用户与密码</h3><div id="settingsUsers"></div><form id="settingsUserForm" class="settings-form"><input id="settingsUsername" placeholder="用户名" required><input id="settingsPassword" type="password" placeholder="初始密码" required><select id="settingsRootDirs" multiple aria-label="可访问 Rootdir"></select><button class="btn btn-primary" type="submit">创建用户</button></form></section>
+        <section data-settings-section="rootdirs"><h3>Rootdir 授权</h3><p class="settings-help">仅可选择系统根目录下已有的子目录；创建用户时可多选授权目录。</p></section>
+      </div>
+    </div>
+  </div>
+  <div id="passwordChangeModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="修改初始密码" style="display:none;">
+    <div class="modal-box"><div class="modal-header"><span class="modal-title">请修改初始密码</span></div><form id="passwordChangeForm" class="modal-body settings-form"><input id="passwordChangeInput" type="password" placeholder="新密码（至少 4 位）" required><button class="btn btn-primary" type="submit">保存新密码</button><p id="passwordChangeError" class="settings-help"></p></form></div>
   </div>
   <!-- Command palette (Ctrl/Cmd+K) -->
   <div id="clawmateCommandPalette" class="cp-overlay" role="dialog" aria-modal="true" aria-label="命令面板" style="display:none;">
