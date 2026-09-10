@@ -1454,7 +1454,18 @@ def _legacy_roots(config_path: Path) -> list[dict]:
 
 
 def _relative_to(system_root: Path, raw: str) -> str:
-    resolved = Path(str(raw)).expanduser().resolve()
+    """Resolve a legacy path and return it relative to the system root.
+
+    The two legacy sources use different shapes and BOTH must be accepted:
+    ``roots[].dir`` was absolute (e.g. /home/openclaw/helper/3gpp), while
+    ``root_dirs`` grants were relative to system_root_dir (e.g. "webprojects",
+    "helper/3gpp") because the old settings API offered
+    ``path.relative_to(system_root)`` choices and resolve_granted_root joined
+    them back onto the system root. A relative value must never be resolved
+    against the process working directory.
+    """
+    candidate = Path(str(raw).strip()).expanduser()
+    resolved = candidate.resolve() if candidate.is_absolute() else (system_root / candidate).resolve()
     if resolved != system_root and system_root not in resolved.parents:
         raise MigrationError(f"路径 {resolved} 无法收纳于 system_root_dir ({system_root})")
     if resolved == system_root:
