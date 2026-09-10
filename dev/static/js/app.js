@@ -3237,9 +3237,35 @@ var dirPickerCache = {};
 var dirPickerExpanded = {};
 var dirPickerLoading = {};
 var dirPickerSkipped = 0;
-var DIR_PICKER_SKIP_PREFIXES = ['.', '__pycache__', 'node_modules'];
+// Directories hidden from the picker unless the user opts in (see the
+// #dirPickerShowHidden checkbox in the picker footer).
+var DIR_PICKER_TOGGLE_PREFIXES = ['.', '__pycache__', 'node_modules'];
+// state.rootId in effect before a caller supplied its own; null when the open
+// picker did not override the root.
+var dirPickerRootIdBeforeOpen = null;
+// Title / options of the picker that is currently open, so the hidden-directory
+// toggle can reload the tree through openDirPicker (see initDirPicker).
+var dirPickerOpenTitle = '';
+var dirPickerOpenOpts = {};
 
 function initDirPicker() {
+  // The filter runs at fetch time, so flipping the toggle invalidates every
+  // cached level. Reload through openDirPicker instead of only re-rendering:
+  // the root row has no expand arrow, so a bare re-render from an empty cache
+  // would leave the tree showing nothing but the root.
+  var toggle = document.getElementById('dirPickerShowHidden');
+  if (toggle) {
+    toggle.addEventListener('change', function () {
+      dirPickerCache = {};
+      dirPickerSkipped = 0;
+      openDirPicker(dirPickerOpenTitle, {
+        rootId: dirPickerOpenOpts.rootId,
+        selectedDir: dirPickerSelectedDir,
+        onSelect: dirPickerOpenOpts.onSelect
+      });
+    });
+  }
+
   var closeBtn = document.getElementById('dirPickerClose');
   var cancelBtn = document.getElementById('dirPickerCancel');
   var confirmBtn = document.getElementById('dirPickerConfirm');
@@ -3262,6 +3288,18 @@ function closeDirPicker() {
   dirPickerCallback = null;
   dirPickerSelectedDir = '';
   dirPickerMode = '';
+  // Hand a caller-supplied root back to the main file browser, or closing the
+  // settings picker would leave it (and every later listing) on that root.
+  if (dirPickerRootIdBeforeOpen !== null) {
+    state.rootId = dirPickerRootIdBeforeOpen;
+    dirPickerRootIdBeforeOpen = null;
+  }
+  dirPickerOpenTitle = '';
+  dirPickerOpenOpts = {};
+  // The toggle is picker state too: every open starts from the documented
+  // default (hidden directories filtered) instead of remembering the switch.
+  var showHidden = document.getElementById('dirPickerShowHidden');
+  if (showHidden) showHidden.checked = false;
   // Reset lazy-load state
   dirPickerCache = {};
   dirPickerExpanded = {};
@@ -3278,23 +3316,57 @@ function confirmDirPicker() {
 
 /** Filter API entries to directories only, skipping hidden/cache dirs. */
 function _filterDirsForPicker(entries) {
+  var box = document.getElementById('dirPickerShowHidden');
+  var showHidden = !!(box && box.checked);
   var dirs = [];
   for (var i = 0; i < entries.length; i++) {
     if (!entries[i].is_dir) continue;
     var nm = entries[i].name;
-    var skip = false;
-    for (var s = 0; s < DIR_PICKER_SKIP_PREFIXES.length; s++) {
-      if (nm.indexOf(DIR_PICKER_SKIP_PREFIXES[s]) === 0) { skip = true; break; }
+    if (!showHidden) {
+      var skip = false;
+      for (var s = 0; s < DIR_PICKER_TOGGLE_PREFIXES.length; s++) {
+        if (nm.indexOf(DIR_PICKER_TOGGLE_PREFIXES[s]) === 0) { skip = true; break; }
+      }
+      if (skip) { dirPickerSkipped++; continue; }
     }
-    if (skip) { dirPickerSkipped++; continue; }
     dirs.push({name: nm, path: entries[i].path});
   }
   return dirs;
 }
 
-async function openDirPicker(title) {
-  dirPickerMode = 'move';
-  dirPickerSelectedDir = state.dir || '';
+/**
+ * Open the directory picker.
+ *
+ * Three call shapes are accepted:
+ *   openDirPicker(title)                                  // legacy app.js callers
+ *   openDirPicker(title, {rootId, selectedDir, onSelect}) // options form
+ *   openDirPicker(mode, title, {rootId, selectedDir, onSelect}) // shared-picker form
+ *
+ * `options` is optional; `rootId` temporarily overrides `state.rootId` (and is
+ * restored by closeDirPicker), `selectedDir` seeds the selection and `onSelect`
+ * installs the confirm callback.
+ */
+async function openDirPicker(title, options) {
+  var mode = 'move';
+  var opts = options || {};
+  if (typeof opts === 'string') {
+    // (mode, title, options) — the shape the shared picker in preview.js uses.
+    mode = title;
+    title = opts;
+    opts = arguments[2] || {};
+  }
+  dirPickerMode = mode || 'move';
+  dirPickerOpenTitle = title;
+  dirPickerOpenOpts = opts;
+  if (opts.rootId) {
+    // Stash the previous root once, so a reload while the picker is open (the
+    // hidden-directory toggle re-enters here) cannot overwrite the stash with
+    // the overridden value and leave it behind on close.
+    if (dirPickerRootIdBeforeOpen === null) { dirPickerRootIdBeforeOpen = state.rootId; }
+    state.rootId = opts.rootId;
+  }
+  if (typeof opts.onSelect === 'function') { dirPickerCallback = opts.onSelect; }
+  dirPickerSelectedDir = opts.selectedDir !== undefined ? opts.selectedDir : (state.dir || '');
   dirPickerCache = {};
   dirPickerExpanded = {};
   dirPickerLoading = {};

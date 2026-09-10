@@ -9,9 +9,7 @@
 
   // ============ URL Params ============
   const params = new URLSearchParams(window.location.search);
-  // Mutable: the shared dir picker temporarily repoints it while a caller
-  // browses a different root, and restores it when the picker closes.
-  let rootId = params.get('root') || '';
+  const rootId = params.get('root') || '';
   const filePathRaw = params.get('file') || '';
   // Fix double-encoded paths: keep decoding while %XX patterns remain
   var filePath = filePathRaw;
@@ -4445,28 +4443,9 @@
   var dirPickerExpanded = {};
   var dirPickerLoading = {};
   var dirPickerSkipped = 0;
-  // Directories hidden from the picker unless the user opts in.
-  var DIR_PICKER_TOGGLE_PREFIXES = ['.', '__pycache__', 'node_modules'];
-  // Root id in effect before a caller overrode it; null when not overridden.
-  var dirPickerRootIdBeforeOpen = null;
+  var DIR_PICKER_SKIP_PREFIXES = ['.', '__pycache__', 'node_modules'];
 
   function initDirPicker() {
-    // The filter runs at fetch time, so flipping the toggle invalidates every
-    // cached level. Reload through openDirPicker instead of only re-rendering:
-    // the root row has no expand arrow, so a bare re-render from an empty cache
-    // would leave the tree showing nothing but the root.
-    var toggle = document.getElementById('dirPickerShowHidden');
-    if (toggle) {
-      toggle.addEventListener('change', function () {
-        dirPickerCache = {};
-        dirPickerSkipped = 0;
-        var titleEl = document.getElementById('dirPickerTitle');
-        openDirPicker(dirPickerMode, titleEl ? titleEl.textContent : '', {
-          selectedDir: dirPickerSelectedDir,
-        });
-      });
-    }
-
     var closeBtn = document.getElementById('dirPickerClose');
     var cancelBtn = document.getElementById('dirPickerCancel');
     var confirmBtn = document.getElementById('dirPickerConfirm');
@@ -4493,15 +4472,7 @@
     dirPickerCache = {};
     dirPickerExpanded = {};
     dirPickerLoading = {};
-    if (dirPickerRootIdBeforeOpen !== null) {
-      rootId = dirPickerRootIdBeforeOpen;
-      dirPickerRootIdBeforeOpen = null;
-    }
     dirPickerSkipped = 0;
-    // The toggle is picker state too: every open starts from the documented
-    // default (hidden directories filtered) instead of remembering the switch.
-    var showHidden = document.getElementById('dirPickerShowHidden');
-    if (showHidden) showHidden.checked = false;
   }
 
   function confirmDirPicker() {
@@ -4513,35 +4484,23 @@
 
   /** Filter API entries to directories only, skipping hidden/cache dirs. */
   function _filterDirsForPicker(entries) {
-    var box = document.getElementById('dirPickerShowHidden');
-    var showHidden = !!(box && box.checked);
     var dirs = [];
     for (var i = 0; i < entries.length; i++) {
       if (!entries[i].is_dir) continue;
       var nm = entries[i].name;
-      if (!showHidden) {
-        var skip = false;
-        for (var s = 0; s < DIR_PICKER_TOGGLE_PREFIXES.length; s++) {
-          if (nm.indexOf(DIR_PICKER_TOGGLE_PREFIXES[s]) === 0) { skip = true; break; }
-        }
-        if (skip) { dirPickerSkipped++; continue; }
+      var skip = false;
+      for (var s = 0; s < DIR_PICKER_SKIP_PREFIXES.length; s++) {
+        if (nm.indexOf(DIR_PICKER_SKIP_PREFIXES[s]) === 0) { skip = true; break; }
       }
+      if (skip) { dirPickerSkipped++; continue; }
       dirs.push({name: nm, path: entries[i].path});
     }
     return dirs;
   }
 
-  async function openDirPicker(mode, title, options) {
-    var opts = options || {};
+  async function openDirPicker(mode, title) {
     dirPickerMode = mode;
-    // rootId is module-level state shared with the preview panel: stash it so
-    // closing the picker cannot leave the preview pointing at the system root.
-    if (opts.rootId) {
-      if (dirPickerRootIdBeforeOpen === null) { dirPickerRootIdBeforeOpen = rootId; }
-      rootId = opts.rootId;
-    }
-    if (typeof opts.onSelect === 'function') { dirPickerCallback = opts.onSelect; }
-    dirPickerSelectedDir = opts.selectedDir !== undefined ? opts.selectedDir : (parentDir || '');
+    dirPickerSelectedDir = parentDir || '';
     dirPickerCache = {};
     dirPickerExpanded = {};
     dirPickerLoading = {};
