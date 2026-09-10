@@ -757,12 +757,46 @@ def test_ordinary_user_does_not_render_the_settings_entry(browser):
               "对照：移动端菜单的其它项不受影响")
         page.set_viewport_size({"width": 1440, "height": 900})
 
-        body = page.request.get(f"{BASE_URL}/api/clawmate/config").text()
+        response = page.request.get(f"{BASE_URL}/api/clawmate/config")
+        body = response.text()
         check("password_hash" not in body, "配置响应不包含密码哈希")
-        check(E2E_SYSTEM_ROOT and E2E_SYSTEM_ROOT not in body,
-              "配置响应不包含系统根目录的绝对路径")
+
+        # The granted root's own absolute path *is* reported on purpose: the
+        # breadcrumb's copy button pastes it, and a regular user needs it to do
+        # so. The property that must hold is authorization scope -- this session
+        # holds exactly one grant, so nothing about any other root may leak.
+        reported = response.json()["roots"]
+        check([root["id"] for root in reported] == [SEEDED_ROOT_ID],
+              f"只报告被授权的 root（{[root['id'] for root in reported]}）")
+        check([root["dir"] for root in reported] == [f"{E2E_SYSTEM_ROOT}/private"],
+              f"被授权 root 报告自己的绝对路径（{[root['dir'] for root in reported]}）")
+        check(f"{E2E_SYSTEM_ROOT}/projects" not in body,
+              "配置响应不包含未授权 root 的路径")
     finally:
         context.close()
+
+
+@pytest.mark.usefixtures("admin_page")
+def test_breadcrumb_copy_pastes_an_absolute_path(page: Page):
+    """The reported symptom: the breadcrumb's copy button pasted "undefined/...".
+
+    app.js composes the path from `root.dir`, and /api/clawmate/config stopped
+    sending it -- so `undefined/docs/superpowers/specs` reached the clipboard.
+    Nothing headless caught it: the payload's *shape* was asserted in one place
+    and the composer's use of `root.dir` was in another, and neither test crossed
+    the boundary. This one reads the clipboard the way a user would.
+    """
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"])
+    page.goto(f"{CLAWMATE_URL}/?root=.&dir=projects")
+    page.wait_for_function("() => state.dir === 'projects'", timeout=15000)
+    page.locator(".breadcrumb-copy").first.wait_for(state="visible", timeout=10000)
+
+    page.locator(".breadcrumb-copy").first.click()
+
+    pasted = page.evaluate("() => navigator.clipboard.readText()")
+    check(pasted == f"{E2E_SYSTEM_ROOT}/projects",
+          f"复制得到绝对路径（{pasted!r}）")
+    check("undefined" not in pasted, f"复制结果不含 undefined（{pasted!r}）")
 
 
 @pytest.mark.usefixtures("admin_page")

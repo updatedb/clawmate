@@ -64,7 +64,12 @@ async def public_config(request: Request):
     # A legacy (system_root_dir-less) deployment keeps absolute-path roots that
     # carry no agent_id; those default to the gateway's "default" agent exactly
     # as before. Registry-backed roots always report their own agent_id.
-    roots = [{"id": root["id"], "label": root["label"],
+    #
+    # `dir` is the absolute path of a root the caller is already authorized for
+    # -- get_roots() returns nothing else, and for a regular user that means
+    # only their own grants. The breadcrumb's copy button pastes this path, so
+    # omitting it made that button copy "undefined/<dir>".
+    roots = [{"id": root["id"], "label": root["label"], "dir": root["dir"],
               "agent_id": root.get("agent_id", "default")}
              for root in visible_roots]
     return {
@@ -1141,8 +1146,9 @@ async def auth_me(request: Request):
         **user.public(),
         "must_change_password": bool(session.get("must_change_password")),
         # Same shape as /api/clawmate/config: legacy roots without a registry
-        # entry have no agent_id and keep the previous "default" value.
-        "roots": [{"id": root["id"], "label": root["label"],
+        # entry have no agent_id and keep the previous "default" value, and
+        # `dir` is the absolute path of a root this caller is authorized for.
+        "roots": [{"id": root["id"], "label": root["label"], "dir": root["dir"],
                    "agent_id": root.get("agent_id", "default")}
                   for root in visible],
     })

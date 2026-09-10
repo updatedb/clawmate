@@ -89,7 +89,18 @@ def test_regular_user_cannot_forge_another_root(tmp_path: Path, monkeypatch):
     assert client.get("/api/clawmate/list?root=private").status_code == 403
 
 
-def test_regular_user_config_exposes_only_granted_root_without_path(tmp_path: Path, monkeypatch):
+def test_regular_user_config_reports_only_granted_roots_but_with_their_dir(tmp_path: Path, monkeypatch):
+    """Each reported root carries its absolute `dir`, and only granted roots are
+    reported.
+
+    Both halves matter. The breadcrumb's "copy directory" button pastes an
+    absolute path, so the frontend needs `dir`; dropping it (the earlier
+    multi-user work) made that button copy "undefined/<dir>". But the property
+    worth pinning is *which* roots are reported -- the caller's grants and
+    nothing else -- not the absence of paths. A granted root's absolute path is
+    information its holder needs in order to paste it, and the system-root
+    prefix it reveals is already implied by any path they copy from the picker.
+    """
     client = _client(tmp_path, monkeypatch)
     _login_admin(client)
     client.post("/api/clawmate/settings/users", json={
@@ -100,8 +111,22 @@ def test_regular_user_config_exposes_only_granted_root_without_path(tmp_path: Pa
 
     roots = client.get("/api/clawmate/config").json()["roots"]
 
-    assert roots == [{"id": "projects", "label": "Projects", "agent_id": "work"}]
-    assert str(tmp_path) not in json.dumps({"roots": roots})
+    assert roots == [{"id": "projects", "label": "Projects",
+                      "dir": str((tmp_path / "projects").resolve()), "agent_id": "work"}]
+    # `private` is not granted: neither its id nor its path may be reported.
+    assert "private" not in json.dumps({"roots": roots})
+
+
+def test_admin_config_reports_the_system_root_absolute_dir(tmp_path: Path, monkeypatch):
+    """The reported symptom: copying the breadcrumb on the system root pasted
+    "undefined/...", because that root's `dir` never reached the browser."""
+    client = _client(tmp_path, monkeypatch)
+    _login_admin(client)
+
+    roots = client.get("/api/clawmate/config").json()["roots"]
+    system_root = next(root for root in roots if root["id"] == ".")
+
+    assert system_root["dir"] == str(tmp_path.resolve())
 
 
 def test_admin_settings_uses_current_account_role_not_stale_session_role(tmp_path: Path, monkeypatch):
@@ -128,8 +153,12 @@ def test_config_exposes_registry_labels_and_agent_ids(tmp_path: Path, monkeypatc
 
     roots = client.get("/api/clawmate/config").json()["roots"]
 
-    assert roots[0] == {"id": ".", "label": "系统根目录", "agent_id": "default"}
-    assert {"id": "projects", "label": "Projects", "agent_id": "work"} in roots
+    # `dir` is each root's resolved absolute path, which the breadcrumb's copy
+    # button pastes; this test's subject is the label/agent_id mapping.
+    assert roots[0] == {"id": ".", "label": "系统根目录",
+                        "dir": str(tmp_path.resolve()), "agent_id": "default"}
+    assert {"id": "projects", "label": "Projects",
+            "dir": str((tmp_path / "projects").resolve()), "agent_id": "work"} in roots
 
 
 def test_settings_users_returns_registry_summary_not_directory_dump(tmp_path: Path, monkeypatch):
@@ -269,7 +298,9 @@ def test_auth_me_exposes_granted_root_summaries(tmp_path: Path, monkeypatch):
 
     me = client.get("/api/clawmate/auth/me").json()
 
-    assert me["roots"] == [{"id": "projects", "label": "Projects", "agent_id": "work"}]
+    assert me["roots"] == [{"id": "projects", "label": "Projects",
+                            "dir": str((tmp_path / "projects").resolve()),
+                            "agent_id": "work"}]
 
 
 def test_local_admin_principal_is_never_listed_as_an_account(tmp_path: Path, monkeypatch):
@@ -307,7 +338,8 @@ def test_agent_routing_follows_the_registry_not_legacy_config(tmp_path: Path, mo
     client.post("/api/clawmate/auth/login", json={"username": "writer", "password": "writer-password"})
 
     assert client.get("/api/clawmate/config").json()["roots"] == [
-        {"id": "3gpp", "label": "3GPP Meetings", "agent_id": "helper"}]
+        {"id": "3gpp", "label": "3GPP Meetings",
+         "dir": str((tmp_path / "helper" / "3gpp").resolve()), "agent_id": "helper"}]
     assert config.load().root_agent("3gpp") == "helper"
 
 
