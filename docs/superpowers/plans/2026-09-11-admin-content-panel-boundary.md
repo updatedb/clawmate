@@ -364,12 +364,15 @@ def test_the_shared_gate_is_a_single_fetch():
     assert topbar.count("/api/clawmate/auth/status") == 1
 
 
-def test_the_hidden_attribute_is_the_gate_not_inline_style():
-    """_syncItems() reads `hidden`; an inline display would not survive the
-    page's own display toggling of #btnProjectPanel."""
+def test_the_three_entries_are_the_ones_hidden():
+    """Hiding the topbar button is the whole mechanism: _syncItems() derives
+    each more-menu mirror from its target's `hidden`, so the mobile menu needs
+    no separate code. The attribute is used rather than an inline display
+    because #btnProjectPanel has its display rewritten on every navigation."""
     topbar = (STATIC / "js" / "topbar.js").read_text(encoding="utf-8")
-    assert ".hidden = " in topbar
-    assert "contentPanelEntries" in topbar or "for" in topbar
+    for entry in ENTRIES:
+        assert entry in topbar, entry
+    assert "el.hidden = true" in topbar
 
 
 def test_both_pages_apply_the_boundary():
@@ -410,12 +413,36 @@ Expected: FAIL —— `topbar.js` 中不存在 `ClawMateAdmin`。
   // from its target's `hidden`, so the mobile menu follows for free. The
   // attribute is used rather than an inline display because #btnProjectPanel
   // has its display rewritten on every navigation.
-  var CONTENT_PANEL_ENTRIES = ['btnToggleAgent', 'btnProjectPanel', 'btnToggleFeedback'];
+  //
+  // Panel containers are listed per entry rather than derived, because index
+  // and preview name them differently (agentPanel vs previewAgentPanel) and
+  // preview has no project container at all. Absent ids are skipped.
+  var CONTENT_PANEL_ENTRIES = [
+    { toggle: 'btnToggleAgent', panels: ['agentPanel', 'previewAgentPanel'] },
+    { toggle: 'btnProjectPanel', panels: ['projectPanel'] },
+    { toggle: 'btnToggleFeedback', panels: ['rightSidebar'] },
+  ];
 
   function hideContentPanelEntries() {
-    CONTENT_PANEL_ENTRIES.forEach(function (id) {
-      var el = document.getElementById(id);
+    CONTENT_PANEL_ENTRIES.forEach(function (entry) {
+      var el = document.getElementById(entry.toggle);
       if (el) el.hidden = true;
+    });
+  }
+
+  // Close through the page's own toggle so the panel animation and the grid
+  // bookkeeping stay in the code path that owns them. #btnToggleFeedback's
+  // handler lives in a nested scope of preview.js and is not reachable from a
+  // new top-level function; the toggle is the supported way in.
+  function closeContentPanels() {
+    CONTENT_PANEL_ENTRIES.forEach(function (entry) {
+      var toggle = document.getElementById(entry.toggle);
+      if (!toggle) return;
+      var open = entry.panels.some(function (id) {
+        var panel = document.getElementById(id);
+        return panel && !panel.classList.contains('hidden');
+      });
+      if (open) toggle.click();
     });
   }
 ```
@@ -427,7 +454,7 @@ Expected: FAIL —— `topbar.js` 中不存在 `ClawMateAdmin`。
     load: loadIsAdmin,
     isAdmin: function () { return _isAdmin === true; },
     hideContentPanelEntries: hideContentPanelEntries,
-    entries: CONTENT_PANEL_ENTRIES,
+    closeContentPanels: closeContentPanels,
   };
 ```
 
@@ -449,7 +476,7 @@ function _applyAdminContentPanelBoundary() {
     _adminDeniesContentPanels = true;
     window.ClawMateAdmin.hideContentPanelEntries();
     _setProjectPanelOpen(false);
-    if (window.ClawMateAgentPanel) window.ClawMateAgentPanel.close('index');
+    window.ClawMateAdmin.closeContentPanels();
   });
 }
 ```
@@ -462,19 +489,18 @@ function _applyAdminContentPanelBoundary() {
 
 ```javascript
 // Same boundary as index: hidden entries, and no panel left open behind them.
+// Both effects live in topbar.js so the two pages cannot drift apart; the
+// preview page names its panels differently (previewAgentPanel / rightSidebar)
+// and closeContentPanels() covers that.
 function _applyAdminContentPanelBoundary() {
   if (!window.ClawMateAdmin) return;
   window.ClawMateAdmin.load().then(function (isAdmin) {
     if (!isAdmin) return;
     window.ClawMateAdmin.hideContentPanelEntries();
-    var agentPanel = document.getElementById('previewAgentPanel');
-    if (agentPanel) agentPanel.classList.add('hidden');
-    closeRightSidebar();
+    window.ClawMateAdmin.closeContentPanels();
   });
 }
 ```
-
-（`closeRightSidebar` 用 `preview.js:3095` 附近已存在的那个关闭函数名；实现时以文件中实际的关闭函数为准，不要新写一个。）
 
 - [ ] **Step 6: 运行契约测试确认通过**
 
@@ -565,16 +591,18 @@ git commit -m "fix: stop the project panel auto-opening for administrators"
 
 - [ ] **Step 1: 写 e2e 检查**
 
-在 `tests/test_e2e_browser.py` 中，紧跟 `test_ordinary_user_does_not_render_the_settings_entry`（约 752 行）之后新增。复用该文件既有的 `browser` 夹具与临时实例启动流程——**不要新建启动逻辑**：
+在 `tests/test_e2e_browser.py` 中，紧跟 `test_ordinary_user_does_not_render_the_settings_entry`（约 752 行）之后新增。复用该文件既有的 `page` 夹具、`login(page)` 辅助函数（签名为 `login(page, username=None, password=None)`，默认即模块级的管理员凭据）与临时实例启动流程——**不要新建启动逻辑**：
 
 ```python
 def test_an_admin_sees_no_content_panel_entries(page: Page):
     """The inverse of the settings check: the one entry an admin keeps is
     settings, and the three content panels are gone -- including on mobile,
     where the more-menu mirrors them."""
-    _login_as_admin(page)
-    page.goto(f"{BASE_URL}/clawmate/")
+    login(page)
+
+    # The gate resolves asynchronously, so poll rather than sampling once.
     for entry in ("#btnToggleAgent", "#btnProjectPanel", "#btnToggleFeedback"):
+        page.wait_for_selector(f"{entry}[hidden]", timeout=10000)
         check(page.locator(entry).is_hidden(), f"管理员看不到 {entry}")
 
     # The more-menu mirror follows the same gate; a mirror left behind would be
@@ -584,8 +612,6 @@ def test_an_admin_sees_no_content_panel_entries(page: Page):
     for mirror in ('[data-more="btnToggleAgent"]', '[data-more="btnProjectPanel"]'):
         check(page.locator(mirror).is_hidden(), f"移动端菜单不提供 {mirror}")
 ```
-
-（`_login_as_admin` 与 `BASE_URL` 用该文件现有的等价物；实现时以文件中实际的辅助函数名为准。）
 
 - [ ] **Step 2: 运行 e2e 确认通过**
 
