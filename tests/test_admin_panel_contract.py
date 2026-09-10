@@ -114,9 +114,14 @@ def test_both_pages_apply_the_boundary():
         assert "window.ClawMateAdmin" in script, page
         assert re.search(rf"(?m)^\s*function {BOUNDARY_FN}\(\)", script), \
             f"{page} must define {BOUNDARY_FN}()"
-        # Not the definition: that one is preceded by `function `.
-        calls = re.findall(rf"(?<!function ){BOUNDARY_FN}\(\)", script)
-        assert calls, f"{page} must invoke {BOUNDARY_FN}(), not merely define it"
+        # Anchored to its own line, and not the definition (that one is preceded
+        # by `function `). _strip_js_comments() drops whole-line // comments
+        # only, so an unanchored read is satisfied by a *trailing* comment --
+        # `0; // _applyAdminContentPanelBoundary()` has the call off and the
+        # identifier still "present", which is how this assertion was bypassed
+        # before. Same anchor as the auto-open read below.
+        assert re.search(rf"(?m)^\s*{BOUNDARY_FN}\(\);", script), \
+            f"{page} must invoke {BOUNDARY_FN}(), not merely define it"
 
 
 def test_the_project_panel_does_not_auto_open_for_an_admin():

@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -211,7 +212,40 @@ class _NeverEndingPty:
         return None
 
 
-@pytest.mark.timeout(30)
+def _run_within(timeout: float, body, label: str):
+    """Run `body` on a worker thread, and fail if it has not finished in time.
+
+    WebSocketTestSession.receive() is an unbounded portal.call, so a handler
+    that accepts and then stalls parks the test forever instead of failing it.
+    The bound cannot come from `@pytest.mark.timeout`: pytest-timeout is not a
+    dependency of this repo and no conftest registers the marker, so it only
+    ever produced a PytestUnknownMarkWarning (`--strict-markers` refuses to even
+    collect this file). The bound therefore lives here.
+
+    The whole interaction runs on the worker rather than just the receive: the
+    portal that WebSocketTestSession talks through is started inside that same
+    thread, so every websocket call stays on the thread that owns it. The worker
+    is a daemon, so one abandoned to a stalled handler cannot hold up
+    interpreter shutdown.
+    """
+    outcome: dict[str, object] = {}
+
+    def worker() -> None:
+        try:
+            outcome["value"] = body()
+        except BaseException as exc:  # noqa: BLE001 -- re-raised on this thread
+            outcome["error"] = exc
+
+    thread = threading.Thread(target=worker, daemon=True, name="clawmate-ws-check")
+    thread.start()
+    thread.join(timeout)
+    if thread.is_alive():
+        pytest.fail(f"{label}: 服务端 {timeout:g}s 内没有完成交互（handler 接受连接后卡住）")
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome.get("value")
+
+
 def test_an_ordinary_account_reaches_ready_on_the_terminal_websocket(client, monkeypatch):
     """The other direction of the same gate: it must not over-block.
 
@@ -224,8 +258,13 @@ def test_an_ordinary_account_reaches_ready_on_the_terminal_websocket(client, mon
     `ready` is the assertion rather than "not 4403": it is emitted only from
     inside the handler, after the hello parse, get_or_create and subscribe have
     all succeeded, so routing, auth and the role check had to pass for it to
-    arrive. The timeout is deliberate -- without it a handler that accepts and
-    then stalls would hang on WebSocketTestSession.receive() instead of failing.
+    arrive.
+
+    The interaction is bounded (_run_within) on purpose -- a handler that accepts
+    and then stalls would otherwise park on receive() forever. Measured: with the
+    ready frame withheld, this test used to hang until killed, because the
+    @pytest.mark.timeout(30) that stood here was inert under this repo's own
+    runner.
     """
     async def factory(request):
         return _NeverEndingPty()
@@ -237,19 +276,22 @@ def test_an_ordinary_account_reaches_ready_on_the_terminal_websocket(client, mon
     monkeypatch.setattr(agent_routes, "resolve_session_cwd", lambda root, dir_: "/tmp/project")
     _login_writer(client)
 
-    with client.websocket_connect("/api/clawmate/agent/terminal/v2") as ws:
-        ws.send_text(json.dumps({
-            "v": 2,
-            "type": "hello",
-            "id": "hello-1",
-            "client_id": "browser-1",
-            "root": "projects",
-            "dir": "app",
-            "backend": "claude",
-            "cols": 80,
-            "rows": 24,
-        }))
-        ready = ws.receive_json()
+    def exchange():
+        with client.websocket_connect("/api/clawmate/agent/terminal/v2") as ws:
+            ws.send_text(json.dumps({
+                "v": 2,
+                "type": "hello",
+                "id": "hello-1",
+                "client_id": "browser-1",
+                "root": "projects",
+                "dir": "app",
+                "backend": "claude",
+                "cols": 80,
+                "rows": 24,
+            }))
+            return ws.receive_json()
+
+    ready = _run_within(30, exchange, "ordinary account reaches ready")
 
     assert ready["type"] == "ready", ready
     assert ready["session_id"], ready
