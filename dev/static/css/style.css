@@ -320,9 +320,13 @@ button svg, .btn svg, a svg {
 }
 .more-item svg { flex: 0 0 16px; }
 .more-item:hover, .more-item:focus-visible { background: var(--bg-tertiary); outline: none; }
+@media (min-width: 769px) {
+  .more-menu .more-item:not(#btnSettings) { display: none !important; }
+}
 @media (max-width: 768px) {
   .content-col > .topbar:has(#btnMoreMenu) #btnMoreMenu { display: flex; }
   .content-col > .topbar:has(#btnMoreMenu) #btnProjectPanel,
+  .content-col > .topbar:has(#btnMoreMenu) #btnSettings,
   .content-col > .topbar:has(#btnMoreMenu) #themeToggle,
   .content-col > .topbar:has(#btnMoreMenu) #btnLogout,
   .content-col > .topbar:has(#btnMoreMenu) #btnToggleAgent { display: none; }

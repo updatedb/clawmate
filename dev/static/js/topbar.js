@@ -85,9 +85,9 @@
 
   // ── Mobile "more" menu (index + preview) ──
   // Folds the topbar action buttons (theme / logout / project / agent) into a
-  // dropdown on mobile. Each item's `data-more` is the TARGET button id, so clicking
-  // dispatches a native click and the page-specific handlers (theme cycle, logout,
-  // agent toggle, project panel) run unchanged. Share has no #btnMoreMenu — skipped.
+  // dropdown on mobile. Each mirrored item's `data-more` is the TARGET button id,
+  // so clicking dispatches a native click and the page-specific handlers run
+  // unchanged. Standalone menu actions, such as Settings, own their handlers.
   (function initMoreMenu() {
     var btn = document.getElementById('btnMoreMenu');
     var menu = document.querySelector('.more-menu');
@@ -97,11 +97,12 @@
     // inline `display:none` (e.g. the project panel only exists inside a project
     // directory) or with the `hidden` attribute (the admin-only settings gear) — NOT by
     // being merely CSS-folded on mobile, which leaves both of those empty. Both the
-    // inline style and the attribute are written back so the item's own `hidden`
-    // default stays in step with the target it mirrors.
+    // inline style and the attribute are written back so each mirrored item's
+    // own `hidden` default stays in step with the target it mirrors.
     function _syncItems() {
       Array.prototype.forEach.call(menu.querySelectorAll('.more-item'), function (item) {
         var id = item.getAttribute('data-more');
+        if (!id) return;
         var target = id ? document.getElementById(id) : null;
         var off = !target || target.style.display === 'none' || target.hidden;
         item.style.display = off ? 'none' : '';
