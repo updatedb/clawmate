@@ -139,6 +139,72 @@ def test_dir_picker_paints_above_the_settings_modal():
         "if the picker is ever moved after the settings modal this rule is no longer needed"
 
 
+def test_the_hidden_attribute_actually_gates_topbar_and_more_menu_controls():
+    """`.topbar-btn`/`.more-item` set `display: flex`, which outranks the UA
+    `[hidden] { display: none }` -- so before this rule the admin-only settings
+    gear stayed visible *and clickable* for an ordinary user on both the topbar
+    and the mobile "more" menu, and it opened a modal whose every request 403s.
+
+    The selector is bound to its value: a file-wide `"display: none" in css`
+    would be satisfied a hundred times over, so the check reads the one rule
+    whose selector is `[hidden]`. Comments are stripped first, or the
+    explanatory comment above the rule would satisfy it on its own.
+    """
+    css = re.sub(r"/\*.*?\*/", "", (STATIC / "css" / "style.css").read_text(encoding="utf-8"),
+                 flags=re.S)
+
+    assert re.search(r"\.topbar-btn\[hidden\][^{]*\{[^}]*display:\s*none", css), \
+        "the topbar gear must obey its own hidden attribute"
+    assert re.search(r"\.more-item\[hidden\][^{]*\{[^}]*display:\s*none", css), \
+        "the mobile more-menu entry must obey its own hidden attribute"
+
+
+def _balanced_body(source: str, anchor: str) -> str:
+    """Return the brace-balanced block that follows `anchor`.
+
+    `_js_function` below cannot be used for these: `_syncItems` is nested inside
+    an IIFE, so it never closes at column 0. Bounding matters -- `hidden` occurs
+    all over topbar.js, so only an occurrence inside this one function proves
+    the mirror consults it.
+    """
+    start = source.index(anchor)
+    open_brace = source.index("{", start)
+    depth = 0
+    for index in range(open_brace, len(source)):
+        char = source[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return source[open_brace:index + 1]
+    raise AssertionError(f"unbalanced braces after {anchor!r}")
+
+
+def test_more_menu_mirrors_a_target_gated_by_the_hidden_attribute():
+    """The more-menu entry must track the same signal as the button it mirrors.
+
+    Mirroring only the inline `display:none` missed the settings gear, which is
+    gated with the `hidden` attribute -- so an ordinary user got 系统设置 in the
+    mobile menu. Reading `target.hidden` alone is not enough either: the entry's
+    own `hidden` default has to be cleared for an admin, or the CSS rule above
+    hides the entry from the one account that should see it.
+    """
+    script = _strip_js_comments((STATIC / "js" / "topbar.js").read_text(encoding="utf-8"))
+
+    body = _balanced_body(script, "function _syncItems()")
+    assert "target.hidden" in body, "the mirror must consult the target's hidden attribute"
+    assert "item.hidden = off" in body, "the entry's own hidden default must follow the target"
+
+
+def test_settings_entry_is_gated_on_the_admin_flag():
+    """The gate the CSS rule above makes effective has to still be set."""
+    script = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
+
+    body = _js_function(script, "async function initSettings()")
+    assert "btn.hidden = !me.is_admin" in body
+
+
 def test_dir_picker_exposes_a_hidden_directory_toggle():
     html = (STATIC / "index.html").read_text(encoding="utf-8")
 

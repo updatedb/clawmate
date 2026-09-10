@@ -93,16 +93,19 @@
     var menu = document.querySelector('.more-menu');
     if (!btn || !menu) return;
     // Only show an item when its feature is actually available on the page — mirrored
-    // from the corresponding topbar action button. An item is hidden when its target
-    // button is gated off with an inline `display:none` (e.g. the project panel only
-    // exists inside a project directory) — NOT when it is merely CSS-folded on mobile,
-    // which leaves the inline style empty.
+    // from the corresponding topbar action button. A target is gated off either with an
+    // inline `display:none` (e.g. the project panel only exists inside a project
+    // directory) or with the `hidden` attribute (the admin-only settings gear) — NOT by
+    // being merely CSS-folded on mobile, which leaves both of those empty. Both the
+    // inline style and the attribute are written back so the item's own `hidden`
+    // default stays in step with the target it mirrors.
     function _syncItems() {
       Array.prototype.forEach.call(menu.querySelectorAll('.more-item'), function (item) {
         var id = item.getAttribute('data-more');
         var target = id ? document.getElementById(id) : null;
-        var off = !target || target.style.display === 'none';
+        var off = !target || target.style.display === 'none' || target.hidden;
         item.style.display = off ? 'none' : '';
+        item.hidden = off;
       });
     }
     function setOpen(open) {
