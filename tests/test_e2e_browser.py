@@ -411,6 +411,10 @@ E2E_USER_USERNAME = "e2e-user"
 E2E_USER_PASSWORD = "e2e-user-pass"
 SEEDED_ROOT_ID = "shared"
 SEEDED_ROOT_LABEL = "Shared"
+# A project (a dir carrying `.clawmate/`) *inside* the ordinary user's granted
+# root, so the mirror direction -- the project panel's first-visit auto-open --
+# is observable for a principal the boundary does not gate at all.
+SEEDED_ORDINARY_PROJECT = "drafts"
 
 # Absolute path of the throwaway system root, so a test can prove the server
 # never hands a client that path (empty when an external server is targeted).
@@ -451,6 +455,12 @@ def _write_instance(tmp_path: Path) -> tuple[Path, Path, int]:
     # the palette renders its empty state and test_search has nothing to find.
     (system_root / "projects" / ".clawmate").mkdir()
     (system_root / "private" / "notes.txt").write_text("private notes\n", encoding="utf-8")
+    # The ordinary user's granted root ("private") holds one project. The
+    # admin-only project check above cannot cover the mirror direction: the
+    # first-visit auto-open has to be observable for a principal the boundary
+    # does not gate, or `_setProjectPanelOpen(false)` for everyone would leave
+    # every assertion in this file green.
+    (system_root / "private" / SEEDED_ORDINARY_PROJECT / ".clawmate").mkdir(parents=True)
     (system_root / ".hidden-dir" / "secret.md").write_text("secret\n", encoding="utf-8")
 
     port = _free_port()
@@ -868,10 +878,12 @@ def test_an_admin_sees_no_content_panel_entries(browser):
         page = context.new_page()
         login(page)
         _wait_for_app(page)
-        _wait_for_the_boundary(page)
 
         page.goto(f"{CLAWMATE_URL}/?root=.&dir=projects")
         page.wait_for_function("() => state.project === 'projects'", timeout=15000)
+        # After the navigation, not before: `goto` is a full document load, so
+        # the role probe's answer and the gate flag it feeds do not survive it.
+        _wait_for_the_boundary(page)
         # A precondition, not decoration: it is what makes the project assertion
         # below a test of the boundary rather than of an empty state.
         check(page.evaluate(
@@ -941,12 +953,18 @@ def test_the_project_panel_does_not_auto_open_for_an_admin(browser):
         page = context.new_page()
         login(page)
         _wait_for_app(page)
-        # The gate flag is read at the decision point, so it must already be set
-        # when the project directory loads; otherwise this would measure a race.
-        _wait_for_the_boundary(page)
 
         page.goto(f"{CLAWMATE_URL}/?root=.&dir=projects")
         page.wait_for_function("() => state.project === 'projects'", timeout=15000)
+        # After the navigation, not before: `goto` is a full document load, so
+        # the gate flag does not survive it. What orders the boundary's callback
+        # against _updateProjectPanelBtn()'s decision is the request schedule
+        # inside init() -- /auth/status is issued at the top of init(), while
+        # state.project waits on /api/clawmate/list three round trips later. This
+        # test does not enforce that ordering; it waits for both effects and then
+        # asserts. If the callback ever landed after the decision, its own
+        # _setProjectPanelOpen(false) would close the panel the guard let open.
+        _wait_for_the_boundary(page)
         seen = page.evaluate(
             "() => Object.keys(sessionStorage)"
             ".filter(k => k.indexOf('clawmate.projectPanel.seen:') === 0)")
@@ -954,6 +972,38 @@ def test_the_project_panel_does_not_auto_open_for_an_admin(browser):
               f"前置：项目面板走到了首次访问的自动展开分支（{seen}）")
         check(page.locator("#projectPanel").is_hidden(),
               "管理员进入项目目录时项目面板不自动展开")
+    finally:
+        context.close()
+
+
+def test_the_project_panel_still_auto_opens_for_an_ordinary_user(browser):
+    """The mirror of the admin check: suppressing the auto-open for *everyone*
+    must not stay green.
+
+    Without this, calling `_setProjectPanelOpen(false)` unconditionally at the
+    guard's call site leaves every other assertion in the repo green -- the admin
+    check above wants the panel closed, tests/test_admin_panel_contract.py still
+    matches the guarded line, and the first-visit auto-open just becomes dead
+    code for every account. That is the same "an appended call bypasses the
+    source contract" hole Task 4 had, in the other direction.
+
+    The ordinary user's granted root carries a project, because the panel only
+    exists inside one, and the context is fresh because the sessionStorage flag
+    that gates the auto-open is per-context.
+    """
+    context = _content_panel_context(browser)
+    try:
+        page = context.new_page()
+        login(page, E2E_USER_USERNAME, E2E_USER_PASSWORD)
+        _wait_for_app(page)
+
+        page.goto(f"{CLAWMATE_URL}/?root={SEEDED_ROOT_ID}&dir={SEEDED_ORDINARY_PROJECT}")
+        page.wait_for_function(
+            "(dir) => state.dir === dir", arg=SEEDED_ORDINARY_PROJECT, timeout=15000)
+        # Read the internal state as well, so a red check says which half broke.
+        state_open = page.evaluate("() => _isProjectPanelOpen()")
+        check(page.locator("#projectPanel").is_visible(),
+              f"普通用户首次进入项目目录时项目面板自动展开（_isProjectPanelOpen={state_open}）")
     finally:
         context.close()
 
