@@ -16,6 +16,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import secrets
 import socket
 import time
@@ -66,7 +67,18 @@ async def websocket_user(websocket):
 
 
 def bind_request_user(user):
+    """Bind the caller for the current request. Returns a reset handle.
+
+    Callers that bind mid-request (a share token authorizes its recipient, who
+    holds no session) must pair this with release_request_user in a finally, the
+    same way the middleware does, so one request's principal cannot outlive it.
+    """
     return _request_user.set(user)
+
+
+def release_request_user(handle) -> None:
+    """Undo bind_request_user."""
+    _request_user.reset(handle)
 
 
 def _load_sessions() -> None:
@@ -318,16 +330,33 @@ _WHITELIST_PREFIXES = (
     "/clawmate/asset/",
     "/clawmate/m/",
     "/clawmate/js/",
-    "/api/clawmate/share/",
 )
 
-# Paths that are always allowed regardless of auth config
+# Share *recipient* endpoints, addressed by token. The recipient holds no
+# account -- the token in the path is the whole capability -- so these must stay
+# anonymous. They are matched by pattern rather than by the `/api/clawmate/share/`
+# prefix because the owner endpoints under that same prefix (/create, /active,
+# /expire) mint and lapse links: whitelisting the prefix left them anonymous AND,
+# since every share handler resolves paths through safe_path() -> get_roots(),
+# which fails closed without a resolved caller, answered 403 to everyone --
+# breaking sharing for owners and recipients alike. Anonymous callers could also
+# read the whole shared-file inventory (/active) and expire anyone's link.
+_SHARE_RECIPIENT = re.compile(
+    r"^/api/clawmate/share/[A-Za-z0-9_-]+/(?:data|raw|asset|feedback|feedback/delete)$")
+
+# Paths that are always allowed regardless of auth config.
+#
+# The read-serving routes (preview/download/raw) used to be listed here. They
+# cannot be: the exemption returns from the middleware *before* the session is
+# resolved, and every one of them resolves the caller's roots through
+# resolve_root() -> get_roots(), which fails closed for an unresolved caller.
+# The result was a 403 for every user on every one of them -- thumbnails and
+# previews included -- while the non-exempt `list` route kept working. They are
+# ordinary session-cookie routes now: a same-origin <img> sends the cookie, and
+# the loopback localhost bypass below still covers a local operator.
 _ALWAYS_ALLOWED = frozenset([
     "/",
     "/api/health",
-    "/api/clawmate/preview",
-    "/api/clawmate/download",
-    "/api/clawmate/raw",
     "/api/clawmate/agent/terminal",
     "/clawmate/share-view.html",
 ])
@@ -342,6 +371,9 @@ def _is_whitelisted(path: str) -> bool:
         stripped = path.rstrip("/")
         if stripped in _WHITELIST:
             return True
+    # Share recipients are authorized by their token, never by a session.
+    if _SHARE_RECIPIENT.match(path):
+        return True
     # Prefix match
     for prefix in _WHITELIST_PREFIXES:
         if path.startswith(prefix):

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import posixpath
 import secrets
 import time
 import hashlib
@@ -24,7 +25,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, FileResponse
 
 from constants import CONFIG_PATH_ENV
-from service import safe_path, guess_category, file_info, preview_text, find_project_marker
+from service import (safe_path, guess_category, file_info, get_roots,
+                     preview_text, find_project_marker)
 
 router = APIRouter()
 
@@ -77,6 +79,49 @@ def _find_link(token: str) -> dict | None:
                 return None  # expired
             return l
     return None
+
+
+class _ShareRecipient:
+    """Synthetic principal for the holder of a share link.
+
+    A recipient has no account -- the token is the capability. Binding this as
+    the caller is what lets the existing safe_path() -> get_roots() -> registry
+    chain resolve the link's root for an anonymous request, instead of reporting
+    nothing and failing closed on every share route. The grant is exactly one
+    root, and get_roots() still drops it once the registry no longer holds that
+    id, so a deleted root keeps failing closed rather than widening.
+    """
+
+    id = ""
+    username = "share-recipient"
+    is_admin = False
+    must_change_password = False
+
+    def __init__(self, root_id: str):
+        self.root_ids = (root_id,)
+
+    def public(self) -> dict:
+        """Same shape as UserRecord.public() so anything that serialises a
+        principal does not trip over this one."""
+        return {"id": self.id, "username": self.username, "is_admin": False,
+                "must_change_password": False, "root_ids": list(self.root_ids)}
+
+
+def _shared_path(link: dict, rel_path: str):
+    """Resolve a path under the root the share link recorded.
+
+    The root comes from the link, never from the caller: a token authorizes one
+    document, so a recipient must not be able to name a different root. Binding
+    the recipient principal keeps safe_path() the single fail-closed
+    authorization choke point rather than adding a second way to resolve paths.
+    """
+    from auth import bind_request_user, release_request_user
+
+    handle = bind_request_user(_ShareRecipient(link["root"]))
+    try:
+        return safe_path(link["root"], rel_path)
+    finally:
+        release_request_user(handle)
 
 
 def _allow_share_feedback(token: str, request: Request) -> bool:
@@ -188,7 +233,7 @@ async def share_create(request: Request):
 
 @router.get("/api/clawmate/share/active", response_class=JSONResponse)
 async def share_active():
-    """返回所有当前有效的分享文件列表（免登录）。
+    """返回当前调用者有权访问的 root 下、有效的分享文件列表。
 
     Response: {"shared": {"root_id": ["file1", "file2", ...], ...}}
     """
@@ -197,11 +242,15 @@ async def share_active():
     # Save cleaned data back (housekeeping)
     if len(data.get("links", [])) < len(_load_share_links().get("links", [])):
         _save_share_links(data)
+    # Report only the roots the caller may actually reach. The inventory spans
+    # every root, so without this a user granted one root would still learn which
+    # files are shared out of all the others.
+    allowed = {root["id"] for root in get_roots()[0]}
     result = {}
     for link in data.get("links", []):
         root = link.get("root", "")
         file = link.get("file", "")
-        if root and file:
+        if root and file and root in allowed:
             result.setdefault(root, []).append(file)
     return JSONResponse(content={"shared": result})
 
@@ -219,6 +268,20 @@ async def share_expire(request: Request):
 
     if not root_id or not file_path:
         raise HTTPException(status_code=400, detail="Missing root/path")
+
+    # Lapsing a link is an owner action on a root the caller must actually hold.
+    # The match below is on plain strings, so without this any logged-in user
+    # could expire a link for a root they were never granted just by naming it.
+    # safe_path() does not require the file to exist, so cleaning up a link whose
+    # file was since deleted still works while its root is still registered.
+    try:
+        safe_path(root_id, file_path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Root not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid path")
 
     data = _load_share_links()
     data = _clean_expired(data)
@@ -246,7 +309,7 @@ async def share_data(token: str):
         raise HTTPException(status_code=410, detail="链接已过期或不存在")
 
     try:
-        _, target, safe_rel = safe_path(link["root"], link["file"])
+        _, target, safe_rel = _shared_path(link, link["file"])
     except Exception:
         raise HTTPException(status_code=404, detail="文件已不存在")
 
@@ -294,7 +357,7 @@ async def share_feedback_create(token: str, request: Request):
     if not isinstance(selections, list) or not selections or len(selections) > 10:
         raise HTTPException(status_code=422, detail="Invalid selections")
     try:
-        root_path, _, safe_rel = safe_path(link["root"], link["file"])
+        root_path, _, safe_rel = _shared_path(link, link["file"])
         project = find_project_marker(root_path, safe_rel)
     except Exception:
         project = ""
@@ -329,7 +392,7 @@ async def share_feedback_list(token: str):
     if not link:
         raise HTTPException(status_code=410, detail="链接已过期或不存在")
     try:
-        root_path, _, safe_rel = safe_path(link["root"], link["file"])
+        root_path, _, safe_rel = _shared_path(link, link["file"])
         project = find_project_marker(root_path, safe_rel)
     except Exception:
         project = ""
@@ -377,7 +440,7 @@ async def share_feedback_delete(token: str, request: Request):
     if not feedback_id:
         raise HTTPException(status_code=422, detail="Missing id")
     try:
-        root_path, _, safe_rel = safe_path(link["root"], link["file"])
+        root_path, _, safe_rel = _shared_path(link, link["file"])
         project = find_project_marker(root_path, safe_rel)
     except Exception:
         project = ""
@@ -407,7 +470,7 @@ async def share_raw(token: str):
         raise HTTPException(status_code=410, detail="链接已过期或不存在")
 
     try:
-        _, target, _ = safe_path(link["root"], link["file"])
+        _, target, _ = _shared_path(link, link["file"])
     except Exception:
         raise HTTPException(status_code=404, detail="文件已不存在")
 
@@ -438,20 +501,31 @@ async def share_asset(token: str, root: str = "", path: str = ""):
         raise HTTPException(status_code=403, detail="Asset root mismatch")
 
     # A share token authorizes one document, never arbitrary files under its
-    # root.  Permit only assets explicitly referenced by that document.
+    # root. Permit only assets the document actually references.
+    #
+    # The recipient's browser rewrites a relative image src against the shared
+    # file's own directory, so the request has to be read relative to that
+    # directory before comparing: the document writes `img/foo.png`, the request
+    # arrives as `notes/img/foo.png`. Comparing the bare basename instead -- as
+    # this did -- let a recipient fetch any file whose name merely appeared
+    # somewhere in the text, so one mention of `README.md` exposed every
+    # README.md under the root.
     try:
-        _, shared_file, _ = safe_path(link["root"], link["file"])
+        _, shared_file, shared_rel = _shared_path(link, link["file"])
         source = shared_file.read_text(encoding="utf-8", errors="replace")
-        requested = path.replace("\\", "/")
-        if requested not in source and Path(requested).name not in source:
+        base = posixpath.dirname(shared_rel)
+        rel_to_doc = posixpath.relpath(path.replace("\\", "/"), base or ".")
+        if rel_to_doc.startswith("..") or rel_to_doc not in source:
             raise HTTPException(status_code=403, detail="Asset is not referenced by the shared file")
     except HTTPException:
         raise
     except Exception:
         raise HTTPException(status_code=403, detail="Cannot validate shared asset")
 
+    # `root` was pinned to the link's own root above, so the recipient principal
+    # resolves it the same way.
     try:
-        _, target, _ = safe_path(root, path)
+        _, target, _ = _shared_path(link, path)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Root not found")
     except PermissionError:

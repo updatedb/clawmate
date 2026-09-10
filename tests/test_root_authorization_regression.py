@@ -144,3 +144,64 @@ def test_registry_entry_escaping_the_system_root_is_never_served(tmp_path: Path,
     assert "projects" in ids
     assert client.get("/api/clawmate/list?root=escape").status_code == 403
     assert client.get("/api/clawmate/list?root=projects").status_code == 200
+
+
+def test_read_endpoints_serve_a_granted_file_to_a_logged_in_user(tmp_path: Path, monkeypatch):
+    """`/preview`, `/download` and `/raw` must resolve the caller's roots.
+
+    All three sit in `auth._ALWAYS_ALLOWED` ("always allowed regardless of auth
+    config"), and that exemption returns from the middleware *before* the session
+    is resolved. `get_roots()` fails closed for an unresolved caller, so it
+    reported no roots and every one of these endpoints answered 403 to everyone,
+    session or not -- while `list`, which is not exempt, kept working. The
+    gallery thumbnail is an <img> pointing at /preview and the preview page
+    fetches its content from the same route, so the app lost its thumbnails and
+    every preview; the user saw it as a 403 on one image.
+
+    Nothing covered these routes before, which is how the regression shipped.
+    """
+    client = _client(tmp_path, monkeypatch)
+    _login_admin(client)
+    _seed_roots(tmp_path)
+    (tmp_path / "projects" / "note.md").write_text("# hello\n", encoding="utf-8")
+    _create_writer()
+    client.post("/api/clawmate/auth/logout")
+    client.post("/api/clawmate/auth/login", json={"username": "writer", "password": "writer-password"})
+
+    # Control: the non-exempt route resolves the same root for the same session.
+    assert client.get("/api/clawmate/list?root=projects").status_code == 200
+
+    for endpoint in ("preview", "download", "raw"):
+        response = client.get(f"/api/clawmate/{endpoint}",
+                              params={"root": "projects", "path": "note.md"})
+        assert response.status_code == 200, f"{endpoint} -> {response.status_code}"
+
+
+def test_read_endpoints_still_deny_a_root_outside_the_callers_grants(tmp_path: Path, monkeypatch):
+    """Removing the exemption must not widen anything: the boundary still holds."""
+    client = _client(tmp_path, monkeypatch)
+    _login_admin(client)
+    _seed_roots(tmp_path)
+    (tmp_path / "private" / "secret.md").write_text("secret\n", encoding="utf-8")
+    _create_writer()
+    client.post("/api/clawmate/auth/logout")
+    client.post("/api/clawmate/auth/login", json={"username": "writer", "password": "writer-password"})
+
+    for endpoint in ("preview", "download", "raw"):
+        response = client.get(f"/api/clawmate/{endpoint}",
+                              params={"root": "private", "path": "secret.md"})
+        assert response.status_code == 403, f"{endpoint} -> {response.status_code}"
+
+
+def test_read_endpoints_deny_an_unauthenticated_caller(tmp_path: Path, monkeypatch):
+    """These routes are no longer anonymous: the caller must hold a session."""
+    client = _client(tmp_path, monkeypatch)
+    _login_admin(client)
+    _seed_roots(tmp_path)
+    (tmp_path / "projects" / "note.md").write_text("# hello\n", encoding="utf-8")
+    client.post("/api/clawmate/auth/logout")
+
+    for endpoint in ("preview", "download", "raw"):
+        response = client.get(f"/api/clawmate/{endpoint}",
+                              params={"root": "projects", "path": "note.md"})
+        assert response.status_code == 401, f"{endpoint} -> {response.status_code}"

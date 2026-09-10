@@ -41,6 +41,7 @@ pytest 运行说明:
   playwright install chromium
 """
 
+import base64
 import json
 import os
 import socket
@@ -246,6 +247,17 @@ def test_file_preview(page: Page):
     # Verify preview structure
     check(preview_page.locator("#contentBody").is_visible(), "预览内容区域可见")
     check(preview_page.locator("#leftSidebar").is_visible(), "markdown 预览展示大纲面板")
+
+    # The page *shell* renders whether or not the content fetch succeeded: the
+    # sidebar's visibility comes from the file type in the URL, and #contentBody
+    # is a static container. So this has to read the rendered file to be worth
+    # asserting -- the shell-only version of this test stayed green while
+    # /api/clawmate/preview was answering 403 to everything.
+    preview_page.locator("#contentBody h1").wait_for(state="visible", timeout=10000)
+    check(preview_page.locator("#contentBody h1").inner_text().strip() == "Projects",
+          "预览正文渲染出文件内容")
+    check(preview_page.locator(".preview-toc-item").count() > 0,
+          "大纲条目来自已加载的正文")
     # The feedback panel is deliberately collapsed on load; the topbar toggle is
     # what opens it, so assert the transition rather than a static expectation.
     check(not preview_page.locator("#rightSidebar").is_visible(), "评审面板默认折叠")
@@ -412,7 +424,14 @@ def _write_instance(tmp_path: Path) -> tuple[Path, Path, int]:
     (system_root / "projects").mkdir(parents=True)
     (system_root / "private").mkdir()
     (system_root / ".hidden-dir").mkdir()
-    (system_root / "projects" / "readme.md").write_text("# Projects\n\nhello\n", encoding="utf-8")
+    # Two headings on purpose: buildTOC collapses the outline panel for a file
+    # with fewer than two (a single heading is not a meaningful outline).
+    (system_root / "projects" / "readme.md").write_text(
+        "# Projects\n\nhello\n\n## Notes\n\nmore\n", encoding="utf-8")
+    # A real 1x1 PNG. The gallery thumbnail is an <img> pointing at
+    # /api/clawmate/preview -- the exact request the user saw answered with 403.
+    (system_root / "projects" / "cover.png").write_bytes(base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg=="))
     # The `.clawmate/` marker is what makes `projects` a *project*, which is the
     # only thing the command palette lists (see command-palette.js). Without it
     # the palette renders its empty state and test_search has nothing to find.
@@ -797,6 +816,31 @@ def test_breadcrumb_copy_pastes_an_absolute_path(page: Page):
     check(pasted == f"{E2E_SYSTEM_ROOT}/projects",
           f"复制得到绝对路径（{pasted!r}）")
     check("undefined" not in pasted, f"复制结果不含 undefined（{pasted!r}）")
+
+
+@pytest.mark.usefixtures("admin_page")
+def test_gallery_thumbnail_loads_through_the_preview_route(page: Page):
+    """The reported symptom: a 403 on /api/clawmate/preview, for an image.
+
+    A gallery thumbnail is `<img src="/api/clawmate/preview?...">`, so a 403 shows
+    up as a broken image and nothing else -- no in-page error, just a console
+    line. `naturalWidth` is what proves the bytes arrived; asserting that the
+    element exists would have passed against the broken build.
+    """
+    page.goto(f"{CLAWMATE_URL}/?root=.&dir=projects")
+    page.wait_for_function("() => state.dir === 'projects'", timeout=15000)
+
+    thumb = page.locator("#gallery .card", has_text="cover.png").locator("img").first
+    thumb.wait_for(state="visible", timeout=10000)
+    page.wait_for_function(
+        "() => { const img = document.querySelector('#gallery .card img');"
+        " return !!img && img.complete && img.naturalWidth > 0; }", timeout=15000)
+
+    loaded = page.evaluate(
+        "() => { const img = document.querySelector('#gallery .card img');"
+        " return img ? {naturalWidth: img.naturalWidth, src: img.src} : null; }")
+    check(loaded and loaded["naturalWidth"] > 0,
+          f"缩略图真的加载成功（{loaded and loaded['naturalWidth']}px 宽）")
 
 
 @pytest.mark.usefixtures("admin_page")
