@@ -361,9 +361,9 @@ cp config.example.json config.json
 
 其中所有路径均为示例路径，令牌、密钥与密码哈希均为空或安全占位值。部署前只需在本地 `config.json` 中填写实际目录、服务地址和凭据；请勿提交该文件。
 
-### 认证
+### 认证与 Rootdir
 
-配置一个可挂载的系统根目录；管理员可以在页面“系统设置”中把其已有子目录授权给不同用户：
+`config.json` 只提供一个绝对的 `system_root_dir`，应用不会修改它；它同时是完整的文件系统边界，所有可授权的目录都必须是它的子目录：
 
 ```json
 {
@@ -371,7 +371,44 @@ cp config.example.json config.json
 }
 ```
 
-首次启动会创建 `admin / password`，首次登录必须立即修改密码。账户、密码哈希和授权目录保存在与 `config.json` 同目录的私有 `users.json`，不要提交或公开它；普通用户只能访问被授权的系统根目录子目录。
+可授权的根目录（Rootdir）不再是 `config.json` 的一部分，而是私有 `roots.json` 中的注册表条目：
+
+```json
+{
+  "roots": [
+    { "id": "projects", "label": "项目", "dir": "projects", "agent_id": "default" }
+  ]
+}
+```
+
+其中 `dir` 是相对 `system_root_dir` 的路径（不是绝对路径），`id` 是用户授权的引用键，`agent_id` 为空时按 `default` 处理。账号保存在同目录的私有 `users.json`，通过 `root_ids` 引用这些 id：
+
+```json
+{
+  "users": [
+    { "id": "…", "username": "writer", "is_admin": false,
+      "must_change_password": false, "root_ids": ["projects"] }
+  ]
+}
+```
+
+`roots.json` 与 `users.json` 都是私有运行时数据（原子替换写入），不要提交或公开它们。管理员在页面“系统设置 → Rootdir 管理 / 用户管理”里维护 Rootdir 与授权；修改某个 Rootdir 的目录不会改变授权，因为授权引用的是 `id`。
+
+#### 从旧版升级
+
+旧版在 `config.json` 里用一个绝对路径的 `roots` 数组声明根目录。升级后首次启动会自动迁移：
+
+- 旧 `roots` 逐条写入 `roots.json`（`dir` 改写为相对系统根目录），旧账号中的 `root_dirs` 授权改写为对应的 `root_ids`；
+- 所有校验通过后才开始落盘，改写 `users.json` 之前会先写出 `users.json.bak`；
+- 只要有一个旧 root 无法收纳于 `system_root_dir` 之内（位于系统根目录之外、就是系统根目录本身、或与另一个 root 共用同一目录），服务会拒绝启动并打印出问题的那个路径。
+
+迁移完成后 `config.json` 里的 `roots` 键即被忽略，可以删除。
+
+#### 隐藏目录
+
+文件选择器（移动文件、选择 Rootdir）默认过滤隐藏目录（`.` 开头、`__pycache__`、`node_modules`）；勾选选择器底部的“显示隐藏目录”即可展开被过滤的目录。
+
+首次启动会创建 `admin / password`，首次登录必须立即修改密码。普通用户只能看到并访问被授权的 Rootdir。
 
 ```bash
 # 交互式修改当前管理员密码（读取并更新私有 users.json）

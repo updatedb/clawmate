@@ -42,6 +42,9 @@ test/DeepSeek*.pdf
 dev/sessions.json
 users.json
 roots.json
+# root_migration.py copies users.json here before rewriting it on upgrade; the
+# copy carries the same password hashes, so it must not be committable either.
+users.json.bak
 
 # Runtime feedback data (regenerated from feedback_api.py)
 feedback.json
