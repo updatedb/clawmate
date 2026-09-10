@@ -18,6 +18,7 @@ from pathlib import Path
 
 from service import (
     list_dir,
+    get_roots,
     safe_path,
     preview_text,
     guess_category,
@@ -59,9 +60,21 @@ async def public_config(request: Request):
             })
     except Exception:
         pass
+    user = getattr(request.state, "user", None)
+    if cfg.system_root_dir and user is not None:
+        roots = ([{"id": ".", "label": "系统根目录", "agent_id": "default"}]
+                 if user.is_admin else
+                 [{"id": root_id, "label": Path(root_id).name, "agent_id": "default"}
+                  for root_id in user.root_dirs])
+        default_root = roots[0]["id"] if roots else ""
+    else:
+        configured_roots, configured_default = get_roots()
+        roots = [{"id": root["id"], "label": root["label"], "agent_id": "default"}
+                 for root in configured_roots]
+        default_root = configured_default
     return {
-        "roots": [{"id": r.id, "label": r.label, "dir": r.dir, "agent_id": r.agent_id} for r in cfg.roots],
-        "defaultRootId": cfg.default_root_id,
+        "roots": roots,
+        "defaultRootId": default_root,
         "agent": {
             "backend": cfg.agent.ui_backend,
             "ws_url": _agent_ws_url(request),

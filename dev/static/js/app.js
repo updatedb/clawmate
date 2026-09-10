@@ -3016,7 +3016,7 @@ async function loadActiveShares() {
 }
 
 async function init() {
-  await initSettings();
+  if (await initSettings()) return;
   await loadConfig();
   await loadActiveShares();
   // Sync sort select with state default
@@ -3065,16 +3065,24 @@ async function initSettings() {
   var btn = document.getElementById('btnSettings');
   var modal = document.getElementById('settingsModal');
   var passwordModal = document.getElementById('passwordChangeModal');
-  if (!btn || !modal || !passwordModal) return;
+  if (!btn || !modal || !passwordModal) return false;
   var me;
-  try { me = await (await authFetch('/api/clawmate/auth/me')).json(); } catch (_) { return; }
+  try { me = await (await authFetch('/api/clawmate/auth/me')).json(); } catch (_) { return false; }
   btn.hidden = !me.is_admin;
   async function loadSettings() {
     var data = await (await authFetch('/api/clawmate/settings/users')).json();
     var users = document.getElementById('settingsUsers');
     var roots = document.getElementById('settingsRootDirs');
     users.textContent = '';
-    data.users.forEach(function (user) { var row = document.createElement('div'); row.className = 'settings-user'; row.textContent = user.username + (user.is_admin ? '（管理员）' : '') + ' · ' + user.root_dirs.join(', '); users.appendChild(row); });
+    data.users.forEach(function (user) {
+      var row = document.createElement('div'); row.className = 'settings-user';
+      var text = document.createElement('span'); text.textContent = user.username + (user.is_admin ? '（管理员）' : '') + ' · ' + user.root_dirs.join(', '); row.appendChild(text);
+      var edit = document.createElement('button'); edit.type = 'button'; edit.dataset.settingsAction = 'edit'; edit.textContent = '编辑';
+      edit.addEventListener('click', async function () { var name = window.prompt('用户名', user.username); if (name === null) return; var dirs = window.prompt('授权目录（逗号分隔）', user.root_dirs.join(',')); if (dirs === null) return; var password = window.prompt('新密码（留空则不修改）', ''); var body = {username:name, root_dirs:dirs.split(',').map(function (item) { return item.trim(); }).filter(Boolean)}; if (password) body.password = password; await authFetch('/api/clawmate/settings/users/' + encodeURIComponent(user.id), {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); await loadSettings(); });
+      var remove = document.createElement('button'); remove.type = 'button'; remove.dataset.settingsAction = 'delete'; remove.textContent = '删除';
+      remove.addEventListener('click', async function () { if (!window.confirm('删除用户 ' + user.username + '？')) return; await authFetch('/api/clawmate/settings/users/' + encodeURIComponent(user.id), {method:'DELETE'}); await loadSettings(); });
+      row.appendChild(edit); row.appendChild(remove); users.appendChild(row);
+    });
     roots.textContent = '';
     data.root_dirs.forEach(function (root) { var option = document.createElement('option'); option.value = root; option.textContent = root; roots.appendChild(option); });
   }
@@ -3088,9 +3096,10 @@ async function initSettings() {
   });
   document.getElementById('passwordChangeForm').addEventListener('submit', async function (event) {
     event.preventDefault(); var res = await authFetch('/api/clawmate/auth/change-password', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:document.getElementById('passwordChangeInput').value})});
-    if (res.ok) passwordModal.style.display = 'none'; else document.getElementById('passwordChangeError').textContent = (await res.json()).detail || '保存失败';
+    if (res.ok) window.location.reload(); else document.getElementById('passwordChangeError').textContent = (await res.json()).detail || '保存失败';
   });
-  if (me.must_change_password) passwordModal.style.display = 'flex';
+  if (me.must_change_password) { passwordModal.style.display = 'flex'; return true; }
+  return false;
 }
 
 function _initAgent() {

@@ -73,3 +73,18 @@ def test_regular_user_cannot_forge_another_root(tmp_path: Path, monkeypatch):
 
     assert client.get("/api/clawmate/list?root=projects").status_code == 200
     assert client.get("/api/clawmate/list?root=private").status_code == 403
+
+
+def test_regular_user_config_exposes_only_granted_root_without_path(tmp_path: Path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    client.post("/api/clawmate/auth/login", json={"username": "admin", "password": "password"})
+    client.post("/api/clawmate/auth/change-password", json={"password": "new-password"})
+    client.post("/api/clawmate/settings/users", json={
+        "username": "writer", "password": "writer-password", "root_dirs": ["projects"],
+    })
+    client.post("/api/clawmate/auth/logout")
+    client.post("/api/clawmate/auth/login", json={"username": "writer", "password": "writer-password"})
+
+    roots = client.get("/api/clawmate/config").json()["roots"]
+
+    assert roots == [{"id": "projects", "label": "projects", "agent_id": "default"}]

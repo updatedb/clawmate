@@ -297,7 +297,7 @@
     <div class="modal-box settings-modal-box">
       <div class="modal-header"><span class="modal-title">系统设置</span><button class="modal-close" id="settingsModalClose" title="关闭">✕</button></div>
       <div class="modal-body">
-        <section data-settings-section="users"><h3>用户与密码</h3><div id="settingsUsers"></div><form id="settingsUserForm" class="settings-form"><input id="settingsUsername" placeholder="用户名" required><input id="settingsPassword" type="password" placeholder="初始密码" required><select id="settingsRootDirs" multiple aria-label="可访问 Rootdir"></select><button class="btn btn-primary" type="submit">创建用户</button></form></section>
+        <section data-settings-section="users"><h3>用户与密码</h3><div id="settingsUsers"></div><template id="settingsUserActions"><button type="button" data-settings-action="edit">编辑</button><button type="button" data-settings-action="delete">删除</button></template><form id="settingsUserForm" class="settings-form"><input id="settingsUsername" placeholder="用户名" required><input id="settingsPassword" type="password" placeholder="初始密码" required><select id="settingsRootDirs" multiple aria-label="可访问 Rootdir"></select><button class="btn btn-primary" type="submit">创建用户</button></form></section>
         <section data-settings-section="rootdirs"><h3>Rootdir 授权</h3><p class="settings-help">仅可选择系统根目录下已有的子目录；创建用户时可多选授权目录。</p></section>
       </div>
     </div>

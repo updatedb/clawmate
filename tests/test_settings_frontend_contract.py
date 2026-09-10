@@ -13,6 +13,8 @@ def test_index_declares_grouped_settings_modal():
     assert 'data-settings-section="users"' in html
     assert 'data-settings-section="rootdirs"' in html
     assert 'data-more="btnSettings"' in html
+    assert 'data-settings-action="edit"' in html
+    assert 'data-settings-action="delete"' in html
 
 
 def test_settings_script_uses_identity_and_settings_endpoints():
@@ -20,3 +22,5 @@ def test_settings_script_uses_identity_and_settings_endpoints():
 
     assert "/api/clawmate/auth/me" in script
     assert "/api/clawmate/settings/users" in script
+    assert "method:'PATCH'" in script
+    assert "method:'DELETE'" in script

@@ -388,9 +388,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not session:
             return self._auth_failure_redirect(request, "会话已过期，请重新登录")
 
-        if session.get("must_change_password") and path not in {
+        if (session.get("must_change_password") and path.startswith("/api/") and path not in {
             "/api/clawmate/auth/me", "/api/clawmate/auth/change-password", "/api/clawmate/auth/logout",
-        }:
+        }):
             return JSONResponse({"error": "password_change_required", "detail": "请先修改初始密码"}, status_code=403)
 
         # Attach session user to request state
