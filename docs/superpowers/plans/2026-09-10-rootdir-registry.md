@@ -2147,10 +2147,12 @@ async def auth_me(request: Request):
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `PYTHONPATH=. dev/.venv/bin/python -m pytest tests/test_settings_routes.py tests/test_settings_frontend_contract.py -q`
-Expected: routes PASS; the frontend contract test still FAILS (it asserts the old markup) and is repaired in Task 6.
+Expected: **the entire suite is green** — `452 passed, 0 failed`.
+
+An earlier draft of this plan predicted that `tests/test_settings_frontend_contract.py` would still fail here and be repaired in Task 6. That was wrong, and the wrongness matters: that file only asserts markup ids and endpoint/method substrings — it contains no reference to `root_dirs` or `root_ids` at all. So nothing in the suite forces Task 6 to fix the frontend payload, even though `dev/static/js/app.js` still sends `root_dirs` and reads `user.root_dirs`. Task 6 therefore adds a payload-key assertion (`assert "root_dirs" not in script`) rather than relying on markup assertions to catch the drift.
 
 Run: `PYTHONPATH=. dev/.venv/bin/python -m pytest tests/ -q`
-Expected: only `tests/test_settings_frontend_contract.py` failures remain.
+Expected: `452 passed, 0 failed, 10 deselected`.
 
 - [ ] **Step 6: Commit**
 
