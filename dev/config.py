@@ -130,6 +130,7 @@ class ProjectConfig:
 
 @dataclass
 class AppConfig:
+    system_root_dir: Path = field(default_factory=Path)
     roots: list[RootEntry] = field(default_factory=list)
     default_root_id: str = ""
     port: int = 5533
@@ -267,6 +268,8 @@ def _parse_config(raw: dict) -> AppConfig:
     env_project_backend = os.getenv("CLAWMATE_AGENT_PROJECT_BACKEND")
 
     return AppConfig(
+        system_root_dir=Path(str(raw.get("system_root_dir", ""))).expanduser().resolve()
+        if raw.get("system_root_dir") else Path(),
         roots=roots,
         default_root_id=str(raw.get("defaultRootId", "")),
         port=int(env_port or raw.get("port", 5533)),
