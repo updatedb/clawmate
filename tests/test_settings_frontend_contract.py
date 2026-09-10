@@ -44,3 +44,28 @@ def test_settings_identity_probe_does_not_redirect_local_auth_bypass_to_login():
     script = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
 
     assert "await fetch('/api/clawmate/auth/status')" in script
+
+
+def test_dir_picker_exposes_a_hidden_directory_toggle():
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+
+    assert 'id="dirPickerShowHidden"' in html
+
+
+def test_dir_picker_filters_hidden_entries_behind_the_toggle():
+    script = (STATIC / "js" / "preview.js").read_text(encoding="utf-8")
+
+    assert "DIR_PICKER_TOGGLE_PREFIXES" in script
+    assert "dirPickerShowHidden" in script
+
+
+def test_dir_picker_accepts_an_options_argument_without_breaking_old_callers():
+    script = (STATIC / "js" / "preview.js").read_text(encoding="utf-8")
+
+    assert "function openDirPicker(mode, title, options)" in script
+
+
+def test_dir_picker_restores_the_previous_root_on_close():
+    script = (STATIC / "js" / "preview.js").read_text(encoding="utf-8")
+
+    assert "dirPickerRootIdBeforeOpen" in script
