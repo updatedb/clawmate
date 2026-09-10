@@ -82,3 +82,30 @@ def test_login_response_never_carries_a_password_hash(tmp_path: Path, monkeypatc
 
     assert "password_hash" not in login.text
     assert "password_hash" not in me.text
+
+
+def test_spoofed_forwarded_header_does_not_grant_local_trust():
+    """A remote peer must not be able to claim loopback via a header."""
+    from types import SimpleNamespace
+
+    def _request(peer: str, forwarded: str | None):
+        headers = {"x-forwarded-for": forwarded} if forwarded else {}
+        return SimpleNamespace(client=SimpleNamespace(host=peer), headers=headers)
+
+    assert auth.get_client_ip(_request("203.0.113.9", "127.0.0.1")) == "203.0.113.9"
+    assert auth.get_client_ip(_request("203.0.113.9", None)) == "203.0.113.9"
+    assert auth.get_client_ip(_request("127.0.0.1", "203.0.113.9")) == "203.0.113.9"
+    assert auth.get_client_ip(
+        _request("127.0.0.1", "127.0.0.1, 203.0.113.9")) == "203.0.113.9"
+
+
+def test_spoofed_forwarded_header_cannot_reach_admin_endpoints(tmp_path: Path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    spoof = {"X-Forwarded-For": "127.0.0.1"}
+
+    assert client.get("/api/clawmate/config", headers=spoof).status_code == 401
+    assert client.get("/api/clawmate/auth/me", headers=spoof).status_code == 401
+    assert client.get("/api/clawmate/settings/users", headers=spoof).status_code == 401
+    assert client.post("/api/clawmate/settings/users", headers=spoof, json={
+        "username": "attacker", "password": "attacker-pw",
+        "root_dirs": ["projects"]}).status_code == 401

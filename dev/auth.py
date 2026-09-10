@@ -176,11 +176,25 @@ def get_session_from_cookie(request: Request) -> Optional[str]:
 
 
 def get_client_ip(request: Request) -> str:
-    """Resolve the caller IP, honoring reverse-proxy ``x-forwarded-for``."""
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    """Resolve the caller IP.
+
+    ``x-forwarded-for`` is honored ONLY when the immediate peer is itself a
+    trusted local host, because the header is otherwise fully attacker
+    controlled and would let any remote client claim to be loopback and inherit
+    the local-client trust bypass.
+
+    The LAST hop is used rather than the first: the common nginx directive
+    ``$proxy_add_x_forwarded_for`` preserves whatever the client sent at the
+    front and appends the address the proxy actually observed at the end, so
+    the first element is the spoofable one. When a proxy replaces the header
+    instead, there is a single element and first equals last.
+    """
+    peer = request.client.host if request.client else "unknown"
+    if _is_local_client(peer):
+        forwarded = request.headers.get("x-forwarded-for", "")
+        if forwarded:
+            return forwarded.split(",")[-1].strip()
+    return peer
 
 
 # ── IP-level brute-force guard ───────────────────────────────────────────────
