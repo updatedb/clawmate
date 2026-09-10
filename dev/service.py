@@ -94,6 +94,7 @@ def get_roots() -> Tuple[List[Dict], str]:
     if cfg.system_root_dir:
         from auth import current_request_user, get_root_registry
         from root_auth import ROOT_ID_SYSTEM
+        from root_registry import RootRegistryError
 
         user = current_request_user()
         # No fallback to the legacy roots array: an unresolved caller sees
@@ -101,31 +102,33 @@ def get_roots() -> Tuple[List[Dict], str]:
         if user is None:
             return [], ""
         registry = get_root_registry()
+        roots: List[Dict] = []
         if getattr(user, "is_admin", False):
-            roots = [{"id": ROOT_ID_SYSTEM, "label": "系统根目录",
-                      "dir": str(cfg.system_root_dir), "agent_id": "default"}]
-            for entry in registry.list_all():
-                roots.append({
-                    "id": entry.id,
-                    "label": entry.label,
-                    "dir": str((cfg.system_root_dir / entry.dir).resolve()),
-                    "agent_id": entry.agent_id,
-                })
-            return roots, ROOT_ID_SYSTEM
-        roots = []
-        for root_id in user.root_ids:
-            entry = registry.get(root_id)
-            if entry is None:
-                # Unregistered grant: no directory to report and authorize_root
-                # will reject it anyway. Omit it rather than synthesising a
-                # server-side path from the id.
+            # Administrators always see the system root itself, whether or not
+            # the registry is readable.
+            roots.append({"id": ROOT_ID_SYSTEM, "label": "系统根目录",
+                          "dir": str(cfg.system_root_dir), "agent_id": "default"})
+            candidates = [(entry.id, entry.label, entry.agent_id) for entry in registry.list_all()]
+        else:
+            # An id absent from the registry has no directory to report and
+            # authorize_root will reject it anyway. Omit it rather than
+            # synthesising a server-side path from the id.
+            candidates = []
+            for root_id in user.root_ids:
+                entry = registry.get(root_id)
+                if entry is not None:
+                    candidates.append((entry.id, entry.label, entry.agent_id))
+        for root_id, label, agent_id in candidates:
+            try:
+                directory = registry.resolve(root_id)
+            except (LookupError, RootRegistryError):
+                # Vanished, or (for a hand-edited registry) escaping the system
+                # root. Skip it rather than report a path that resolve() itself
+                # would reject -- the read path must use the same boundary as
+                # authorization.
                 continue
-            roots.append({
-                "id": entry.id,
-                "label": entry.label,
-                "dir": str((cfg.system_root_dir / entry.dir).resolve()),
-                "agent_id": entry.agent_id,
-            })
+            roots.append({"id": root_id, "label": label,
+                          "dir": str(directory), "agent_id": agent_id})
         return roots, (roots[0]["id"] if roots else "")
     # Legacy deployments without system_root_dir keep the absolute-path roots.
     data = _load_config()

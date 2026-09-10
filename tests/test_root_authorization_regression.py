@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "dev"))
 import auth  # noqa: E402
 import config  # noqa: E402
 import routes  # noqa: E402
+import service  # noqa: E402
 import settings_routes  # noqa: E402
 
 
@@ -113,3 +114,33 @@ def test_authorization_failure_maps_to_403_not_400(tmp_path: Path, monkeypatch):
     response = client.get("/api/clawmate/list?root=private")
 
     assert response.status_code == 403
+
+
+def test_registry_entry_escaping_the_system_root_is_never_served(tmp_path: Path, monkeypatch):
+    """A hand-edited dir must not let reads resolve outside system_root_dir."""
+    outside = tmp_path.parent / "outside-served"
+    outside.mkdir(exist_ok=True)
+    (outside / "secret.txt").write_text("secret", encoding="utf-8")
+    client = _client(tmp_path, monkeypatch)
+    (tmp_path / "roots.json").write_text(json.dumps({"roots": [
+        {"id": "escape", "label": "Escape", "dir": "..", "agent_id": "default"},
+        {"id": "projects", "label": "Projects", "dir": "projects", "agent_id": "work"},
+    ]}), encoding="utf-8")
+    _login_admin(client)
+
+    # The reported set comes from get_roots() directly, not /api/clawmate/config:
+    # that route's admin branch still hardcodes ["."] (dev/routes.py:65) and never
+    # consults the registry, so it cannot report a registered root either way. The
+    # boundary that matters for reads is the one resolve_root() -> _root_map() ->
+    # get_roots() walks.
+    auth.bind_request_user(auth.get_user_store().get_administrator())
+    try:
+        reported, _ = service.get_roots()
+    finally:
+        auth.bind_request_user(None)
+    ids = [root["id"] for root in reported]
+
+    assert "escape" not in ids
+    assert "projects" in ids
+    assert client.get("/api/clawmate/list?root=escape").status_code == 403
+    assert client.get("/api/clawmate/list?root=projects").status_code == 200
