@@ -605,12 +605,17 @@ git commit -m "fix: stop the project panel auto-opening for administrators"
 ```python
 def test_an_admin_sees_no_content_panel_entries(page: Page):
     """The inverse of the settings check: the one entry an admin keeps is
-    settings, and the three content panels are gone -- including on mobile,
-    where the more-menu mirrors them."""
+    settings, and the content panels are gone -- including on mobile, where the
+    more-menu mirrors them.
+
+    #btnToggleFeedback exists on preview.html only; index.html has no such
+    element, so asserting it here would time out rather than fail honestly.
+    The feedback entry is covered by the preview-page check below.
+    """
     login(page)
 
     # The gate resolves asynchronously, so poll rather than sampling once.
-    for entry in ("#btnToggleAgent", "#btnProjectPanel", "#btnToggleFeedback"):
+    for entry in ("#btnToggleAgent", "#btnProjectPanel"):
         page.wait_for_selector(f"{entry}[hidden]", timeout=10000)
         check(page.locator(entry).is_hidden(), f"管理员看不到 {entry}")
 
@@ -626,31 +631,35 @@ def test_an_admin_sees_no_content_panel_entries(page: Page):
 
 Task 4 的行为（`_setProjectPanelOpen(firstVisit && !_adminDeniesContentPanels)`）目前**只有一个源码契约测试守着，而且它可被绕过**——在受守卫的调用后面再补一句不受守卫的 `_setProjectPanelOpen(firstVisit);`，正则仍匹配第一行，测试照绿而 admin 的面板又自动展开了。
 
-但**不要照着"登录后断言 `#projectPanel` 隐藏"来写，那会是一条空过的断言**，有两个独立的陷阱：
+写这条断言时有一个陷阱要避开：`_updateProjectPanelBtn()` 在 `state.project` 为空时提前 return（`app.js:2293` 附近），所以**裸页面上的 `assert #projectPanel hidden` 是恒真的**——必须先进入一个项目目录再断言。
 
-1. `_updateProjectPanelBtn()` 在 `state.project` 为空时提前 return（`app.js:2293` 附近），裸页面上的断言恒真；
-2. 更关键：**真实 admin 结构上拿不到任何 root**（`user_store` 创建/更新时 `if admin: roots = []`），所以 `init()` 在加载目录前就 return 了，`state.project` 永远为空——即便"先选个项目"也到不了那个状态。
-
-因此这条断言要成立，夹具必须**显式预置一个带授权的 admin**（在临时实例的 `users.json` 里给 admin 记录写上 `root_ids: ["projects"]`；v1.54 已移除读取时的授权重校验，手写的授权会被沿用），然后：
+> **勘误（本计划初版此处写错了，Task 5 执行时核对代码推翻）**：初版称"真实 admin 结构上拿不到任何 root，所以到不了那个状态"，并据此要求夹具预置一个带授权的 admin。**那是错的**：`dev/service.py` 的 `get_roots()` 对管理员无条件返回系统根目录——
+> ```python
+> if getattr(user, "is_admin", False):
+>     # Administrators always see the system root itself, whether or not
+>     # the registry is readable.
+>     roots = [{"id": ROOT_ID_SYSTEM, ...}, *_registry_roots(registry)]
+> ```
+> 所以 admin 本来就能访问 `?root=.&dir=projects`，`state.project` 会被正常设置。给 admin 手写 `root_ids` 不仅多余，而且**会被完全忽略**（`authorize_root` 走 `ROOT_ID_SYSTEM` 分支，`root_ids` 不参与解析）。夹具**不需要任何改动**，直接用既有 admin 会话即可。
 
 ```python
 def test_the_project_panel_does_not_auto_open_for_an_admin(page: Page):
     """The guard's only other coverage is a source-text test that can be
     bypassed by appending an unguarded call, so it needs a behavioural pin.
 
-    A real admin is granted no roots, so `state.project` can never be set and a
-    bare assertion would be vacuous. The fixture therefore seeds an admin that
-    *does* hold a grant, which is also the config where the guard actually
-    fires.
+    Must enter a project first: `_updateProjectPanelBtn()` returns early while
+    `state.project` is empty, so asserting on a bare page would be vacuously
+    true. An admin reaches the system root (get_roots() hands every admin
+    ROOT_ID_SYSTEM), so no fixture change is needed.
     """
-    login(page, username=E2E_ADMIN_USERNAME, password=PASSWORD)  # 用预置了授权的 admin
+    login(page)
     page.goto(f"{CLAWMATE_URL}/?root=.&dir=projects")
     page.wait_for_function("() => state.dir === 'projects'", timeout=15000)
     check(not page.locator("#projectPanel").is_visible(),
           "管理员进入项目目录时项目面板不自动展开")
 ```
 
-若实现时发现这个状态**仍然不可达**（例如 admin 的授权被 `get_roots()` 过滤掉），**不要改写成一条恒真的断言**——报告 `NEEDS_CONTEXT` 说明卡在哪，由控制者决定是换手段还是把该守卫记录为"不可达的防御性代码"。
+若实现时发现这个状态**不可达**，**不要改写成一条恒真的断言**——报告 `NEEDS_CONTEXT` 说明卡在哪，由控制者决定是换手段还是把该守卫记录为"不可达的防御性代码"。
 
 > **这三条 `check` 是"循环覆盖"的唯一保障，不要删。** Task 3 的源码契约测试能钉住 `CONTENT_PANEL_ENTRIES` 的内容和每条的处理方式，但**看不见循环访问了几条**——把 `CONTENT_PANEL_ENTRIES.forEach(` 改成 `.slice(0, 1).forEach(` 时，契约测试仍然 3 passed，而只隐藏了第一个入口。上面逐条断言三个 `#btnToggle*` 才能抓到它（index 页只有两个，`btnProjectPanel` 可见即失败）。这是源码契约测试的固有代价，浏览器断言是唯一的真修法。
 
