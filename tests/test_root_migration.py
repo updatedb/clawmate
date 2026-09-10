@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "dev"))
 
 from root_migration import MigrationError, migrate_legacy_roots  # noqa: E402
+from root_registry import RootRegistry  # noqa: E402
 
 
 def _workspace(tmp_path: Path, *, outside_dir: str | None = None) -> Path:
@@ -108,3 +109,36 @@ def test_migration_refuses_an_id_that_the_registry_could_not_read(tmp_path: Path
         migrate_legacy_roots(config_path, tmp_path)
 
     assert not (tmp_path / "roots.json").exists()
+
+
+def test_migration_refuses_an_agent_id_that_the_registry_could_not_read(tmp_path: Path):
+    config_path = _workspace(tmp_path)
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    payload["roots"][0]["agent_id"] = "my agent"
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(MigrationError, match="agent id|agent_id"):
+        migrate_legacy_roots(config_path, tmp_path)
+
+    assert not (tmp_path / "roots.json").exists()
+
+
+def test_migration_refuses_two_roots_sharing_a_directory(tmp_path: Path):
+    config_path = _workspace(tmp_path)
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    payload["roots"][1]["dir"] = payload["roots"][0]["dir"]
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(MigrationError, match="duplicate|重复|already"):
+        migrate_legacy_roots(config_path, tmp_path)
+
+    assert not (tmp_path / "roots.json").exists()
+
+
+def test_migrated_registry_reloads_without_error(tmp_path: Path):
+    config_path = _workspace(tmp_path)
+
+    assert migrate_legacy_roots(config_path, tmp_path) is True
+
+    entries = RootRegistry(tmp_path / "roots.json", tmp_path).list_all()
+    assert {entry.id for entry in entries} == {"3gpp", "webprojects"}

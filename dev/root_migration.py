@@ -61,15 +61,29 @@ def migrate_legacy_roots(config_path: Path, system_root_dir: Path) -> bool:
         if not valid_root_id(root_id):
             raise MigrationError(
                 f"旧 root id {root_id!r} 含非法字符，迁移后会无法读取，请先修正 config.json")
+        # The registry runs the same charset check over agent_id on every read
+        # (RootRegistry._read -> _agent_id), so an off-charset value would brick
+        # the registry just like an off-charset id. Only a non-empty invalid
+        # value is an error; a missing/empty one still falls back below.
+        agent_id = str(item.get("agent_id") or "").strip()
+        if agent_id and not valid_root_id(agent_id):
+            raise MigrationError(
+                f"旧 root {root_id} 的 agent_id {agent_id!r} 含非法字符，迁移后会无法读取，"
+                "请先修正 config.json")
         try:
             relative = _relative_to(system_root, str(item.get("dir", "")))
         except MigrationError as exc:
             raise MigrationError(f"旧 root {root_id}: {exc}") from exc
         if relative in dir_to_id:
-            continue
+            # The registry treats dir as unique (RootRegistry.create rejects a
+            # duplicate), and silently dropping one here would alias that
+            # directory's grants to whichever id won. Fail instead.
+            raise MigrationError(
+                f"旧 root {root_id} 与 {dir_to_id[relative]} 共用目录 {relative!r}"
+                "（duplicate directory），无法同时登记，请先修正 config.json")
         dir_to_id[relative] = root_id
         entries.append(RootEntry(root_id, str(item.get("label") or root_id), relative,
-                                 str(item.get("agent_id") or "default")))
+                                 agent_id or "default"))
 
     users_path = config_path.parent / "users.json"
     raw_users: dict | None = None
