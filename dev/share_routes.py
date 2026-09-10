@@ -90,6 +90,10 @@ class _ShareRecipient:
     nothing and failing closed on every share route. The grant is exactly one
     root, and get_roots() still drops it once the registry no longer holds that
     id, so a deleted root keeps failing closed rather than widening.
+
+    It has to be bound for the whole handler, not just the path resolution:
+    store resolves the root again through _get_feedback_path, so a scope that
+    covered only safe_path left recipients unable to submit or read feedback.
     """
 
     id = ""
@@ -105,23 +109,6 @@ class _ShareRecipient:
         principal does not trip over this one."""
         return {"id": self.id, "username": self.username, "is_admin": False,
                 "must_change_password": False, "root_ids": list(self.root_ids)}
-
-
-def _shared_path(link: dict, rel_path: str):
-    """Resolve a path under the root the share link recorded.
-
-    The root comes from the link, never from the caller: a token authorizes one
-    document, so a recipient must not be able to name a different root. Binding
-    the recipient principal keeps safe_path() the single fail-closed
-    authorization choke point rather than adding a second way to resolve paths.
-    """
-    from auth import bind_request_user, release_request_user
-
-    handle = bind_request_user(_ShareRecipient(link["root"]))
-    try:
-        return safe_path(link["root"], rel_path)
-    finally:
-        release_request_user(handle)
 
 
 def _allow_share_feedback(token: str, request: Request) -> bool:
@@ -308,37 +295,42 @@ async def share_data(token: str):
     if not link:
         raise HTTPException(status_code=410, detail="链接已过期或不存在")
 
-    try:
-        _, target, safe_rel = _shared_path(link, link["file"])
-    except Exception:
-        raise HTTPException(status_code=404, detail="文件已不存在")
+    # Bound for the whole handler: see _ShareRecipient.
+    from auth import request_user_scope
 
-    if not target.exists():
-        raise HTTPException(status_code=404, detail="文件已不存在")
+    with request_user_scope(_ShareRecipient(link["root"])):
 
-    category = guess_category(target)
-    meta = file_info(target, safe_rel)
+        try:
+            _, target, safe_rel = safe_path(link["root"], link["file"])
+        except Exception:
+            raise HTTPException(status_code=404, detail="文件已不存在")
 
-    result = {
-        "name": target.name,
-        "path": safe_rel,
-        "root": link["root"],
-        "category": category,
-        "suffix": target.suffix.lower(),
-        "meta": meta,
-        "expires_at": link["expires_at"],
-        "expires_str": _fmt_expiry(link["expires_at"]),
-    }
+        if not target.exists():
+            raise HTTPException(status_code=404, detail="文件已不存在")
 
-    if category == "text":
-        content, truncated = preview_text(target)
-        result["content"] = content
-        result["truncated"] = truncated
-    else:
-        result["content"] = ""
-        result["truncated"] = False
+        category = guess_category(target)
+        meta = file_info(target, safe_rel)
 
-    return JSONResponse(content=result)
+        result = {
+            "name": target.name,
+            "path": safe_rel,
+            "root": link["root"],
+            "category": category,
+            "suffix": target.suffix.lower(),
+            "meta": meta,
+            "expires_at": link["expires_at"],
+            "expires_str": _fmt_expiry(link["expires_at"]),
+        }
+
+        if category == "text":
+            content, truncated = preview_text(target)
+            result["content"] = content
+            result["truncated"] = truncated
+        else:
+            result["content"] = ""
+            result["truncated"] = False
+
+        return JSONResponse(content=result)
 
 
 @router.post("/api/clawmate/share/{token}/feedback")
@@ -347,42 +339,47 @@ async def share_feedback_create(token: str, request: Request):
     link = _find_link(token)
     if not link:
         raise HTTPException(status_code=410, detail="链接已过期或不存在")
-    if not _allow_share_feedback(token, request):
-        raise HTTPException(status_code=429, detail="反馈过于频繁，请稍后再试")
-    try:
-        body = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
-    selections = body.get("selections") or []
-    if not isinstance(selections, list) or not selections or len(selections) > 10:
-        raise HTTPException(status_code=422, detail="Invalid selections")
-    try:
-        root_path, _, safe_rel = _shared_path(link, link["file"])
-        project = find_project_marker(root_path, safe_rel)
-    except Exception:
-        project = ""
-    if not project:
-        raise HTTPException(status_code=422, detail="共享文件不属于已初始化项目")
-    nickname = str(body.get("author") or body.get("nickname") or "匿名评审人").strip()[:80]
-    normalized = []
-    for selection in selections:
-        if not isinstance(selection, dict):
-            continue
-        normalized.append({"text": str(selection.get("text") or selection.get("content") or "").strip(),
-            "note": str(selection.get("note", "")).strip()[:4000],
-            "position": str(selection.get("position") or selection.get("location") or "").strip()[:240],
-            "action": str(selection.get("action") or "other").strip(),
-            "scope": str(selection.get("scope") or "document").strip(),
-            "task_id": str(selection.get("task_id") or "").strip(),
-            "source": "share", "author": nickname,
-            "share_token_id": hashlib.sha256(token.encode()).hexdigest()[:16]})
-    if not normalized or not all(s["text"] for s in normalized):
-        raise HTTPException(status_code=422, detail="反馈必须包含选中内容")
-    from store import create_items
-    items = create_items(link["root"], project, safe_rel, normalized)
-    if not items:
-        raise HTTPException(status_code=409, detail="重复反馈")
-    return {"ok": True, "ids": [i["id"] for i in items]}
+
+    # Bound for the whole handler: see _ShareRecipient.
+    from auth import request_user_scope
+
+    with request_user_scope(_ShareRecipient(link["root"])):
+        if not _allow_share_feedback(token, request):
+            raise HTTPException(status_code=429, detail="反馈过于频繁，请稍后再试")
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON")
+        selections = body.get("selections") or []
+        if not isinstance(selections, list) or not selections or len(selections) > 10:
+            raise HTTPException(status_code=422, detail="Invalid selections")
+        try:
+            root_path, _, safe_rel = safe_path(link["root"], link["file"])
+            project = find_project_marker(root_path, safe_rel)
+        except Exception:
+            project = ""
+        if not project:
+            raise HTTPException(status_code=422, detail="共享文件不属于已初始化项目")
+        nickname = str(body.get("author") or body.get("nickname") or "匿名评审人").strip()[:80]
+        normalized = []
+        for selection in selections:
+            if not isinstance(selection, dict):
+                continue
+            normalized.append({"text": str(selection.get("text") or selection.get("content") or "").strip(),
+                "note": str(selection.get("note", "")).strip()[:4000],
+                "position": str(selection.get("position") or selection.get("location") or "").strip()[:240],
+                "action": str(selection.get("action") or "other").strip(),
+                "scope": str(selection.get("scope") or "document").strip(),
+                "task_id": str(selection.get("task_id") or "").strip(),
+                "source": "share", "author": nickname,
+                "share_token_id": hashlib.sha256(token.encode()).hexdigest()[:16]})
+        if not normalized or not all(s["text"] for s in normalized):
+            raise HTTPException(status_code=422, detail="反馈必须包含选中内容")
+        from store import create_items
+        items = create_items(link["root"], project, safe_rel, normalized)
+        if not items:
+            raise HTTPException(status_code=409, detail="重复反馈")
+        return {"ok": True, "ids": [i["id"] for i in items]}
 
 
 @router.get("/api/clawmate/share/{token}/feedback")
@@ -391,39 +388,44 @@ async def share_feedback_list(token: str):
     link = _find_link(token)
     if not link:
         raise HTTPException(status_code=410, detail="链接已过期或不存在")
-    try:
-        root_path, _, safe_rel = _shared_path(link, link["file"])
-        project = find_project_marker(root_path, safe_rel)
-    except Exception:
-        project = ""
-    if not project:
-        raise HTTPException(status_code=422, detail="共享文件不属于已初始化项目")
 
-    # A token is a public capability, so do not expose the project's general
-    # feedback list. Match both its non-reversible token identifier and the
-    # shared file (including legacy root-relative/project-prefixed paths).
-    from store import _feedback_paths_match, list_items
-    token_id = hashlib.sha256(token.encode()).hexdigest()[:16]
-    try:
-        items, _ = list_items(link["root"], project, file=safe_rel)
-    except (FileNotFoundError, ValueError):
-        items = []
-    fields = ("id", "status", "created", "updated", "action", "scope", "task_id", "content", "note")
-    visible = []
-    for item in items:
-        if not (item.get("share_token_id") == token_id
-                and _feedback_paths_match(safe_rel, item.get("file", ""))):
-            continue
-        # `position` is canonical. Older records can contain only `location`,
-        # so normalize it while retaining a populated legacy alias for clients
-        # that still read it. Do not emit an empty alias for current records.
-        position = item.get("position") or item.get("location") or ""
-        response_item = {field: item.get(field, "") for field in fields}
-        response_item["position"] = position
-        if item.get("location"):
-            response_item["location"] = item["location"]
-        visible.append(response_item)
-    return {"items": visible}
+    # Bound for the whole handler: see _ShareRecipient.
+    from auth import request_user_scope
+
+    with request_user_scope(_ShareRecipient(link["root"])):
+        try:
+            root_path, _, safe_rel = safe_path(link["root"], link["file"])
+            project = find_project_marker(root_path, safe_rel)
+        except Exception:
+            project = ""
+        if not project:
+            raise HTTPException(status_code=422, detail="共享文件不属于已初始化项目")
+
+        # A token is a public capability, so do not expose the project's general
+        # feedback list. Match both its non-reversible token identifier and the
+        # shared file (including legacy root-relative/project-prefixed paths).
+        from store import _feedback_paths_match, list_items
+        token_id = hashlib.sha256(token.encode()).hexdigest()[:16]
+        try:
+            items, _ = list_items(link["root"], project, file=safe_rel)
+        except (FileNotFoundError, ValueError):
+            items = []
+        fields = ("id", "status", "created", "updated", "action", "scope", "task_id", "content", "note")
+        visible = []
+        for item in items:
+            if not (item.get("share_token_id") == token_id
+                    and _feedback_paths_match(safe_rel, item.get("file", ""))):
+                continue
+            # `position` is canonical. Older records can contain only `location`,
+            # so normalize it while retaining a populated legacy alias for clients
+            # that still read it. Do not emit an empty alias for current records.
+            position = item.get("position") or item.get("location") or ""
+            response_item = {field: item.get(field, "") for field in fields}
+            response_item["position"] = position
+            if item.get("location"):
+                response_item["location"] = item["location"]
+            visible.append(response_item)
+        return {"items": visible}
 
 
 @router.post("/api/clawmate/share/{token}/feedback/delete")
@@ -432,34 +434,39 @@ async def share_feedback_delete(token: str, request: Request):
     link = _find_link(token)
     if not link:
         raise HTTPException(status_code=410, detail="链接已过期或不存在")
-    try:
-        body = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
-    feedback_id = str(body.get("id", "")).strip()
-    if not feedback_id:
-        raise HTTPException(status_code=422, detail="Missing id")
-    try:
-        root_path, _, safe_rel = _shared_path(link, link["file"])
-        project = find_project_marker(root_path, safe_rel)
-    except Exception:
-        project = ""
-    if not project:
-        raise HTTPException(status_code=422, detail="共享文件不属于已初始化项目")
-    from store import _feedback_paths_match, delete_item, list_items
-    token_id = hashlib.sha256(token.encode()).hexdigest()[:16]
-    try:
-        items, _ = list_items(link["root"], project, file=safe_rel)
-    except (FileNotFoundError, ValueError):
-        items = []
-    allowed = any(item.get("id") == feedback_id
-                  and item.get("share_token_id") == token_id
-                  and _feedback_paths_match(safe_rel, item.get("file", ""))
-                  for item in items)
-    if not allowed:
-        raise HTTPException(status_code=404, detail="Feedback not found")
-    delete_item(link["root"], project, feedback_id)
-    return {"ok": True, "id": feedback_id}
+
+    # Bound for the whole handler: see _ShareRecipient.
+    from auth import request_user_scope
+
+    with request_user_scope(_ShareRecipient(link["root"])):
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON")
+        feedback_id = str(body.get("id", "")).strip()
+        if not feedback_id:
+            raise HTTPException(status_code=422, detail="Missing id")
+        try:
+            root_path, _, safe_rel = safe_path(link["root"], link["file"])
+            project = find_project_marker(root_path, safe_rel)
+        except Exception:
+            project = ""
+        if not project:
+            raise HTTPException(status_code=422, detail="共享文件不属于已初始化项目")
+        from store import _feedback_paths_match, delete_item, list_items
+        token_id = hashlib.sha256(token.encode()).hexdigest()[:16]
+        try:
+            items, _ = list_items(link["root"], project, file=safe_rel)
+        except (FileNotFoundError, ValueError):
+            items = []
+        allowed = any(item.get("id") == feedback_id
+                      and item.get("share_token_id") == token_id
+                      and _feedback_paths_match(safe_rel, item.get("file", ""))
+                      for item in items)
+        if not allowed:
+            raise HTTPException(status_code=404, detail="Feedback not found")
+        delete_item(link["root"], project, feedback_id)
+        return {"ok": True, "id": feedback_id}
 
 
 @router.get("/api/clawmate/share/{token}/raw")
@@ -469,24 +476,29 @@ async def share_raw(token: str):
     if not link:
         raise HTTPException(status_code=410, detail="链接已过期或不存在")
 
-    try:
-        _, target, _ = _shared_path(link, link["file"])
-    except Exception:
-        raise HTTPException(status_code=404, detail="文件已不存在")
+    # Bound for the whole handler: see _ShareRecipient.
+    from auth import request_user_scope
 
-    if not target.exists() or target.is_dir():
-        raise HTTPException(status_code=404, detail="文件已不存在")
+    with request_user_scope(_ShareRecipient(link["root"])):
 
-    import mimetypes
-    media_type, _ = mimetypes.guess_type(str(target))
-    if not media_type:
-        media_type = "application/octet-stream"
+        try:
+            _, target, _ = safe_path(link["root"], link["file"])
+        except Exception:
+            raise HTTPException(status_code=404, detail="文件已不存在")
 
-    headers = {
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        "X-Content-Type-Options": "nosniff",
-    }
-    return FileResponse(target, media_type=media_type, headers=headers)
+        if not target.exists() or target.is_dir():
+            raise HTTPException(status_code=404, detail="文件已不存在")
+
+        import mimetypes
+        media_type, _ = mimetypes.guess_type(str(target))
+        if not media_type:
+            media_type = "application/octet-stream"
+
+        headers = {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "X-Content-Type-Options": "nosniff",
+        }
+        return FileResponse(target, media_type=media_type, headers=headers)
 
 
 @router.get("/api/clawmate/share/{token}/asset")
@@ -496,52 +508,57 @@ async def share_asset(token: str, root: str = "", path: str = ""):
     if not link:
         raise HTTPException(status_code=410, detail="链接已过期或不存在")
 
-    # Security: only allow assets under the same root as the shared file
-    if root != link["root"]:
-        raise HTTPException(status_code=403, detail="Asset root mismatch")
+    # Bound for the whole handler: see _ShareRecipient.
+    from auth import request_user_scope
 
-    # A share token authorizes one document, never arbitrary files under its
-    # root. Permit only assets the document actually references.
-    #
-    # The recipient's browser rewrites a relative image src against the shared
-    # file's own directory, so the request has to be read relative to that
-    # directory before comparing: the document writes `img/foo.png`, the request
-    # arrives as `notes/img/foo.png`. Comparing the bare basename instead -- as
-    # this did -- let a recipient fetch any file whose name merely appeared
-    # somewhere in the text, so one mention of `README.md` exposed every
-    # README.md under the root.
-    try:
-        _, shared_file, shared_rel = _shared_path(link, link["file"])
-        source = shared_file.read_text(encoding="utf-8", errors="replace")
-        base = posixpath.dirname(shared_rel)
-        rel_to_doc = posixpath.relpath(path.replace("\\", "/"), base or ".")
-        if rel_to_doc.startswith("..") or rel_to_doc not in source:
-            raise HTTPException(status_code=403, detail="Asset is not referenced by the shared file")
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=403, detail="Cannot validate shared asset")
+    with request_user_scope(_ShareRecipient(link["root"])):
 
-    # `root` was pinned to the link's own root above, so the recipient principal
-    # resolves it the same way.
-    try:
-        _, target, _ = _shared_path(link, path)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Root not found")
-    except PermissionError:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid path")
+        # Security: only allow assets under the same root as the shared file
+        if root != link["root"]:
+            raise HTTPException(status_code=403, detail="Asset root mismatch")
 
-    if not target.exists() or target.is_dir():
-        raise HTTPException(status_code=404, detail="Asset not found")
+        # A share token authorizes one document, never arbitrary files under its
+        # root. Permit only assets the document actually references.
+        #
+        # The recipient's browser rewrites a relative image src against the shared
+        # file's own directory, so the request has to be read relative to that
+        # directory before comparing: the document writes `img/foo.png`, the request
+        # arrives as `notes/img/foo.png`. Comparing the bare basename instead -- as
+        # this did -- let a recipient fetch any file whose name merely appeared
+        # somewhere in the text, so one mention of `README.md` exposed every
+        # README.md under the root.
+        try:
+            _, shared_file, shared_rel = safe_path(link["root"], link["file"])
+            source = shared_file.read_text(encoding="utf-8", errors="replace")
+            base = posixpath.dirname(shared_rel)
+            rel_to_doc = posixpath.relpath(path.replace("\\", "/"), base or ".")
+            if rel_to_doc.startswith("..") or rel_to_doc not in source:
+                raise HTTPException(status_code=403, detail="Asset is not referenced by the shared file")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=403, detail="Cannot validate shared asset")
 
-    import mimetypes
-    media_type, _ = mimetypes.guess_type(str(target))
-    if not media_type:
-        media_type = "application/octet-stream"
+        # `root` was pinned to the link's own root above, so the recipient principal
+        # resolves it the same way.
+        try:
+            _, target, _ = safe_path(link["root"], path)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Root not found")
+        except PermissionError:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid path")
 
-    return FileResponse(target, media_type=media_type, headers={
-        "Cache-Control": "public, max-age=3600",
-        "X-Content-Type-Options": "nosniff",
-    })
+        if not target.exists() or target.is_dir():
+            raise HTTPException(status_code=404, detail="Asset not found")
+
+        import mimetypes
+        media_type, _ = mimetypes.guess_type(str(target))
+        if not media_type:
+            media_type = "application/octet-stream"
+
+        return FileResponse(target, media_type=media_type, headers={
+            "Cache-Control": "public, max-age=3600",
+            "X-Content-Type-Options": "nosniff",
+        })

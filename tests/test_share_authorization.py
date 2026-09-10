@@ -145,6 +145,35 @@ def test_recipient_reads_the_shared_file_without_a_session(wired):
     assert "shared body" in raw.text
 
 
+def test_recipient_submits_and_reads_feedback_through_the_token(wired):
+    """The recipient's scope has to cover the store calls, not only the path
+    resolution.
+
+    store resolves the root a second time through _get_feedback_path, so a scope
+    that covered only safe_path left every submission answering 403 -- the whole
+    feedback half of a share link was dead, and these endpoints are exactly what
+    a recipient is invited to use.
+    """
+    client, tmp_path = wired
+    project = tmp_path / "projects" / "notes"
+    (project / ".clawmate").mkdir(parents=True)
+    (project / "doc.md").write_text("# doc\n\nbody text\n", encoding="utf-8")
+    _login(client)
+    token = _mint(client, "notes/doc.md")["token"]
+
+    recipient = _fresh_client(client)
+    submitted = recipient.post(f"/api/clawmate/share/{token}/feedback", json={
+        "author": "reviewer",
+        "selections": [{"text": "body text", "note": "tighten this", "position": "L3"}],
+    })
+    assert submitted.status_code == 200, submitted.text
+    assert submitted.json()["ok"] is True
+
+    listed = recipient.get(f"/api/clawmate/share/{token}/feedback")
+    assert listed.status_code == 200, listed.text
+    assert [item["id"] for item in listed.json()["items"]] == submitted.json()["ids"]
+
+
 def test_recipient_fails_closed_once_its_root_leaves_the_registry(wired):
     """The recipient principal grants exactly the link's root, so removing that
     root from the registry must not fall back to serving it anyway."""
