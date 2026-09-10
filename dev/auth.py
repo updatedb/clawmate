@@ -240,6 +240,12 @@ def is_auth_enabled(config: dict | None = None) -> bool:
     return bool(c.system_root_dir or (c.auth and c.auth.password_hash.strip()))
 
 
+def config_path() -> Path:
+    """Single source of truth for the active config file."""
+    from config import _CONFIG_PATH  # noqa: PLC0415
+    return Path(_CONFIG_PATH) if _CONFIG_PATH else Path(os.environ.get("CLAWMATE_CONFIG", "config.json"))
+
+
 def get_user_store():
     """Return the private account store for the configured system root."""
     from config import load as _cfg
@@ -247,8 +253,22 @@ def get_user_store():
     cfg = _cfg()
     if not cfg.system_root_dir:
         raise RuntimeError("system_root_dir is not configured")
-    config_path = Path(os.environ.get("CLAWMATE_CONFIG", "config.json"))
-    return UserStore(config_path.parent / "users.json", cfg.system_root_dir)
+    return UserStore(config_path().parent / "users.json", cfg.system_root_dir)
+
+
+def get_root_registry():
+    """Return the root registry for the configured system root."""
+    from config import load as _cfg
+    from root_registry import RootRegistry
+    cfg = _cfg()
+    if not cfg.system_root_dir:
+        raise RuntimeError("system_root_dir is not configured")
+    return RootRegistry(config_path().parent / "roots.json", cfg.system_root_dir)
+
+
+def local_admin_principal():
+    from root_auth import LocalAdmin
+    return LocalAdmin()
 
 
 def get_session_ttl(config: dict | None = None) -> int:
@@ -369,9 +389,19 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Localhost bypass: 服务器本机进程访问不需要登录
         # request.client.host 在直接连接时有效，代理场景走 x-forwarded-for
         # 同时支持 auth.local_hosts 配置的 LAN 主机名/IP
+        # Trusted local clients get an explicit principal so downstream root
+        # authorization resolves registered roots instead of seeing no user.
         client_host = self._get_client_ip(request)  # already normalizes to IP
         if _is_local_client(client_host):
-            return await call_next(request)
+            principal = local_admin_principal()
+            request.state.session = {"user": principal.username, "is_admin": True,
+                                     "must_change_password": False, "user_id": ""}
+            request.state.user = principal
+            token = _request_user.set(principal)
+            try:
+                return await call_next(request)
+            finally:
+                _request_user.reset(token)
 
         # A locally spawned executor calls review/result over loopback and
         # bypasses auth above. A non-loopback fallback is allowed only with
@@ -419,14 +449,18 @@ class AuthMiddleware(BaseHTTPMiddleware):
         }):
             return JSONResponse({"error": "password_change_required", "detail": "请先修改初始密码"}, status_code=403)
 
-        # Attach session user to request state
+        # Attach session user to request state. A session whose account has
+        # gone away must not continue as an anonymous user: that was the path
+        # that previously reached the legacy-roots fallback.
         request.state.session = session
         try:
             user = get_user_store().get(str(session.get("user_id", "")))
-        except RuntimeError:
+        except (RuntimeError, ValueError):
             user = None
-        if user is not None:
-            request.state.user = user
+        if user is None:
+            self._clear_session_cookie(request)
+            return self._auth_failure_redirect(request, "账号不存在或已停用，请重新登录")
+        request.state.user = user
         token = _request_user.set(user)
         try:
             return await call_next(request)
@@ -440,15 +474,23 @@ class AuthMiddleware(BaseHTTPMiddleware):
     def _is_api_route(self, path: str) -> bool:
         return path.startswith("/api/")
 
+    def _clear_session_cookie(self, request: Request) -> None:
+        request.state.clear_session_cookie = True
+
     def _auth_failure_redirect(self, request: Request, message: str) -> PlainTextResponse | RedirectResponse:
         if self._is_api_route(request.url.path):
-            return JSONResponse({"error": "unauthorized", "detail": message}, status_code=401)
-        # Build full path with query string so login can redirect back to the original URL
-        full_path = request.url.path
-        if request.url.query:
-            full_path += "?" + request.url.query
-        redirect_to = f"/clawmate/login.html?redirect={quote(full_path, safe='')}"
-        return RedirectResponse(url=redirect_to, status_code=302)
+            response: PlainTextResponse | RedirectResponse = JSONResponse(
+                {"error": "unauthorized", "detail": message}, status_code=401)
+        else:
+            # Build full path with query string so login can redirect back to the original URL
+            full_path = request.url.path
+            if request.url.query:
+                full_path += "?" + request.url.query
+            redirect_to = f"/clawmate/login.html?redirect={quote(full_path, safe='')}"
+            response = RedirectResponse(url=redirect_to, status_code=302)
+        if getattr(request.state, "clear_session_cookie", False):
+            response.delete_cookie("clawmate_session")
+        return response
 
 
 # ── Internal API token（供 OpenClaw agent 回调 /feedback 接口）────────────

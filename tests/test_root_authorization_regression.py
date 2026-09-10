@@ -1,0 +1,115 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import sys
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "dev"))
+
+import auth  # noqa: E402
+import config  # noqa: E402
+import routes  # noqa: E402
+import settings_routes  # noqa: E402
+
+
+def _client(tmp_path: Path, monkeypatch) -> TestClient:
+    (tmp_path / "projects").mkdir(exist_ok=True)
+    (tmp_path / "private").mkdir(exist_ok=True)
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps({
+        "system_root_dir": str(tmp_path),
+        "auth": {"session_ttl_minutes": 480},
+    }))
+    monkeypatch.setenv("CLAWMATE_CONFIG", str(config_path))
+    config.set_config_path(config_path)
+    config.clear_config_cache()
+    app = FastAPI()
+    app.add_middleware(auth.AuthMiddleware, config=config.load())
+    app.include_router(routes.router)
+    app.include_router(settings_routes.router)
+    return TestClient(app, base_url="http://testserver.local")
+
+
+def _seed_roots(tmp_path: Path) -> None:
+    (tmp_path / "roots.json").write_text(json.dumps({"roots": [
+        {"id": "private", "label": "Private", "dir": "private", "agent_id": "default"},
+        {"id": "projects", "label": "Projects", "dir": "projects", "agent_id": "work"},
+    ]}), encoding="utf-8")
+
+
+def _login_admin(client: TestClient) -> None:
+    client.post("/api/clawmate/auth/login", json={"username": "admin", "password": "password"})
+    client.post("/api/clawmate/auth/change-password", json={"password": "new-password"})
+
+
+def _create_writer() -> object:
+    """Create the regular user straight through the store.
+
+    The settings user API does not take root_ids until Task 5 rewrites it, so
+    these regression tests bind the account the same way the login path does.
+    """
+    return auth.get_user_store().create_user("writer", "writer-password", ["projects"])
+
+
+def test_deleted_user_session_is_rejected(tmp_path: Path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    _login_admin(client)
+    _seed_roots(tmp_path)
+    writer_id = _create_writer().id
+
+    client.delete(f"/api/clawmate/settings/users/{writer_id}")
+    session_id, _ = asyncio.run(auth.create_session("writer", 480, user_id=writer_id, is_admin=False))
+    client.cookies.set("clawmate_session", session_id)
+
+    assert client.get("/api/clawmate/config").status_code == 401
+    assert client.get("/api/clawmate/list?root=private").status_code == 401
+
+
+def test_registered_root_outside_user_grants_is_forbidden(tmp_path: Path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    _login_admin(client)
+    _seed_roots(tmp_path)
+    _create_writer()
+    client.post("/api/clawmate/auth/logout")
+    client.post("/api/clawmate/auth/login", json={"username": "writer", "password": "writer-password"})
+
+    assert client.get("/api/clawmate/list?root=projects").status_code == 200
+    assert client.get("/api/clawmate/list?root=private").status_code == 403
+
+
+def test_unregistered_root_is_not_resolved_from_legacy_config(tmp_path: Path, monkeypatch):
+    """A root id present only in the old config.json roots array must not resolve."""
+    outside = tmp_path.parent / "legacy-outside"
+    outside.mkdir(exist_ok=True)
+    (outside / "secret.txt").write_text("secret", encoding="utf-8")
+    client = _client(tmp_path, monkeypatch)
+    config_path = tmp_path / "config.json"
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    payload["roots"] = [{"id": "legacy", "label": "Legacy", "dir": str(outside), "agent_id": "main"}]
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+    config.clear_config_cache()
+
+    client.post("/api/clawmate/auth/login", json={"username": "admin", "password": "password"})
+    client.post("/api/clawmate/auth/change-password", json={"password": "new-password"})
+
+    ids = [root["id"] for root in client.get("/api/clawmate/config").json()["roots"]]
+    assert "legacy" not in ids
+    assert client.get("/api/clawmate/list?root=legacy").status_code == 403
+
+
+def test_authorization_failure_maps_to_403_not_400(tmp_path: Path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    _login_admin(client)
+    _seed_roots(tmp_path)
+    _create_writer()
+    client.post("/api/clawmate/auth/logout")
+    client.post("/api/clawmate/auth/login", json={"username": "writer", "password": "writer-password"})
+
+    response = client.get("/api/clawmate/list?root=private")
+
+    assert response.status_code == 403

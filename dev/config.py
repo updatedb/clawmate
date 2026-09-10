@@ -157,18 +157,10 @@ class AppConfig:
     def root_dir(self, root_id: str) -> Path:
         """返回指定 root 的绝对路径 Path，找不到时抛 ValueError。"""
         if self.system_root_dir:
-            from auth import current_request_user
-            from user_store import resolve_granted_root
-            user = current_request_user()
-            if user is None:
-                raise ValueError("Authenticated user required")
-            if user.is_admin:
-                if root_id == ".":
-                    return self.system_root_dir
-                return resolve_granted_root(self.system_root_dir, root_id)
-            if root_id not in user.root_dirs:
-                raise ValueError("Root not allowed")
-            return resolve_granted_root(self.system_root_dir, root_id)
+            from auth import current_request_user, get_root_registry
+            from root_auth import authorize_root
+            return authorize_root(
+                current_request_user(), root_id, get_root_registry(), self.system_root_dir)
         for r in self.roots:
             if r.id == root_id:
                 return Path(r.dir).expanduser().resolve()
