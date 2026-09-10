@@ -97,7 +97,7 @@
 1. 逐条把旧 `roots` 的绝对路径转为相对 `system_root_dir` 的 `dir`，保留原 `id`、`label`、`agent_id`。
 2. 把 `users.json` 中各用户的授权路径按解析后目录反查，映射为 `root_ids`。
 3. 任一条目无法收纳于 `system_root_dir` 内 → 打印明确错误并退出，不启动。
-4. 写入前对 `roots.json` 与 `users.json` 各留一份同目录备份 `roots.json.bak` / `users.json.bak`（已存在则覆盖），写入走原子替换。
+4. 写入前对`users.json`留一份同目录备份 `users.json.bak`（已存在则覆盖），写入走原子替换。迁移触发时 `roots.json` 尚不存在（其缺失正是迁移的触发条件），因此迁移只会产生 `users.json.bak` 这一份备份。
 5. **幂等**：`roots.json` 已存在时跳过迁移。
 6. `config.json` 的 `roots` 段迁移后**保留但不再读取**，便于回滚；README 说明可自行删除。
 
