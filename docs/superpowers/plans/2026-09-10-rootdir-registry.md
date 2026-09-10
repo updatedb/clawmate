@@ -1564,24 +1564,31 @@ Expected: PASS.
 
 - [ ] **Step 5: Call the migration at startup**
 
-In `dev/main.py`, immediately after `set_config_path(CONFIG_PATH_STR)` (line 36) and after `cfg = load_cfg()` (line 40), add:
+In `dev/main.py`, place the call as the **first statement inside the `if __name__ == "__main__":` block** (currently line 288), before `_cli_set_password()` is called:
 
 ```python
-# One-time migration: legacy absolute-path roots become registry entries.
-if cfg.system_root_dir:
-    from root_migration import MigrationError, migrate_legacy_roots
+if __name__ == "__main__":
+    import uvicorn
 
-    try:
-        if migrate_legacy_roots(CONFIG_PATH, cfg.system_root_dir):
-            print("[clawmate] 已将旧 roots 迁移到 roots.json")
-    except MigrationError as exc:
-        print(f"[clawmate] 配置迁移失败，终止启动: {exc}")
-        raise SystemExit(1)
+    # One-time migration: legacy absolute-path roots become registry entries.
+    # Deliberately NOT at module level: importing this module must never rewrite
+    # config.json-adjacent runtime data.
+    if cfg.system_root_dir:
+        from root_migration import MigrationError, migrate_legacy_roots
+
+        try:
+            if migrate_legacy_roots(CONFIG_PATH, cfg.system_root_dir):
+                print("[clawmate] 已将旧 roots 迁移到 roots.json")
+        except MigrationError as exc:
+            print(f"[clawmate] 配置迁移失败，终止启动: {exc}")
+            raise SystemExit(1)
+
+    do_set_password, force_password = _cli_set_password()
 ```
 
-No cache invalidation is needed after a successful migration: `get_root_registry()` constructs a fresh `RootRegistry` per call and `_read()` re-reads the file each time, so the newly written `roots.json` is visible to the first request. The migration deliberately does **not** modify `config.json`, so the cached `AppConfig` it was read from stays valid.
+**Do not put this at module level.** Everything above line 288 executes on `import main`, and several existing workflows import this module purely to inspect the app object — `python -c "import main"` is a real command used to check that startup wiring still resolves. Running the migration on import would let any import rewrite the operator's real `users.json` and create `users.json.bak`. Placing it inside the `__main__` guard keeps both the server path and the `--set-password` path covered (the CLI reads `users.json`, so it needs the grant rename too) while making import side-effect free.
 
-Place this block **before** any code that resolves a root (the app imports `auth` and registers middleware at lines 196–199, which build routers that resolve roots lazily per request, so startup-time placement directly after `cfg = load_cfg()` is sufficient).
+No cache invalidation is needed after a successful migration: `get_root_registry()` constructs a fresh `RootRegistry` per call and `_read()` re-reads the file each time, so the newly written `roots.json` is visible to the first request. The migration deliberately does **not** modify `config.json`, so the cached `AppConfig` it was read from stays valid.
 
 - [ ] **Step 6: Run the suite**
 
