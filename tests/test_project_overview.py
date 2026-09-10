@@ -118,7 +118,7 @@ def test_main_project_panel_is_switchable_and_auto_opens_once_per_session_projec
     assert "clawmate.projectPanel.seen:" in js
     assert "sessionStorage.getItem(key)" in js
     assert "if (_projectPanelContext === key) return;" in js
-    assert "_setProjectPanelOpen(firstVisit);" in js
+    assert "_setProjectPanelOpen(firstVisit && !_adminDeniesContentPanels);" in js
     assert 'if (_isProjectPanelOpen()) _setProjectPanelOpen(false);' in js
     assert "#projectPanel { grid-column: 3; min-width: 0; }" in css
     assert "_setProjectPanelOpen(!_isProjectPanelOpen())" in js
