@@ -7,7 +7,7 @@
 // Keep CACHE_VERSION distinct for deployments that must invalidate an already
 // installed worker's app-shell cache.
 //
-const CACHE_VERSION = 'v20260905-openclaw-proxy-v21';
+const CACHE_VERSION = 'v20260910-cache-write-safety-v22';
 const STATIC_CACHE = 'clawmate-static-' + CACHE_VERSION;
 const VENDOR_CACHE = 'clawmate-vendor-' + CACHE_VERSION;
 const API_CACHE = 'clawmate-api-' + CACHE_VERSION;
@@ -127,19 +127,36 @@ function safeClone(response) {
   }
 }
 
+function isCacheableResponse(response) {
+  if (!response || !response.ok || response.status === 206) return false;
+  const contentType = response.headers.get('content-type') || '';
+  const cacheControl = response.headers.get('cache-control') || '';
+  return !contentType.includes('text/event-stream')
+    && !cacheControl.includes('no-store')
+    && response.headers.get('vary') !== '*';
+}
+
+async function putInCache(request, response, cacheName) {
+  if (!isCacheableResponse(response)) return;
+  const clone = safeClone(response);
+  if (!clone) return;
+  try {
+    const cache = await caches.open(cacheName);
+    await cache.put(request, clone);
+  } catch (_) {
+    // Caching is an optional optimization. A stream can end while its clone is
+    // being consumed, so never turn a successful network response into an
+    // unhandled Service Worker rejection.
+  }
+}
+
 // Cache-first: serve from cache, fallback to network (caches fresh copy).
 async function cacheFirst(request, cacheName) {
   const cached = await caches.match(request);
   if (cached) return cached;
   try {
     const response = await fetch(request);
-    if (response.ok) {
-      const clone = safeClone(response);
-      if (clone) {
-        const cache = await caches.open(cacheName);
-        cache.put(request, clone);
-      }
-    }
+    await putInCache(request, response, cacheName);
     return response;
   } catch (_) {
     return new Response('Offline — resource not available', { status: 503 });
@@ -150,13 +167,7 @@ async function cacheFirst(request, cacheName) {
 async function networkFirst(request, cacheName) {
   try {
     const response = await fetch(request);
-    if (response.ok && response.status !== 206) {
-      const clone = safeClone(response);
-      if (clone) {
-        const cache = await caches.open(cacheName);
-        cache.put(request, clone);
-      }
-    }
+    await putInCache(request, response, cacheName);
     return response;
   } catch (_) {
     const cached = await caches.match(request);
@@ -167,13 +178,8 @@ async function networkFirst(request, cacheName) {
 // Stale-while-revalidate: serve cached, update cache in background.
 async function staleWhileRevalidate(request, cacheName) {
   const cached = await caches.match(request);
-  const fetchPromise = fetch(request).then((response) => {
-    if (response.ok && response.status !== 206) {
-      const clone = safeClone(response);
-      if (clone) {
-        caches.open(cacheName).then((cache) => cache.put(request, clone));
-      }
-    }
+  const fetchPromise = fetch(request).then(async (response) => {
+    await putInCache(request, response, cacheName);
     return response;
   }).catch(() => null);
   return cached || fetchPromise || new Response('Offline', { status: 503 });

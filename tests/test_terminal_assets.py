@@ -40,6 +40,17 @@ def test_service_worker_refreshes_protocol_bearing_agent_assets_from_network():
     assert "event.respondWith(networkFirst(request, STATIC_CACHE));" in service_worker
 
 
+def test_service_worker_does_not_cache_sse_or_leak_cache_write_failures():
+    service_worker = (ROOT / "dev/static/sw.js").read_text(encoding="utf-8")
+
+    assert "function isCacheableResponse(response)" in service_worker
+    assert "response.headers.get('content-type')" in service_worker
+    assert "text/event-stream" in service_worker
+    assert "async function putInCache(request, response, cacheName)" in service_worker
+    assert "await cache.put(request, clone);" in service_worker
+    assert "await putInCache(request, response, cacheName);" in service_worker
+
+
 def test_replay_exposes_loading_status_until_terminal_output_is_restored():
     source = (ROOT / "dev/frontend/terminal/agent-panel-adapter.ts").read_text(encoding="utf-8")
 
