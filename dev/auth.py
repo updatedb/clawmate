@@ -355,6 +355,28 @@ _WHITELIST_PREFIXES = (
     "/clawmate/js/",
 )
 
+# Content work -- agent sessions, project tasks, feedback review -- belongs to
+# ordinary accounts. An administrator's job is the system itself.
+#
+# There is deliberately no exemption list. The two server-to-server paths under
+# these prefixes (/api/clawmate/review/result, /api/clawmate/feedback/cron-tick)
+# are taken by the loopback and internal-token branches ABOVE this gate, which
+# return before the session branch is reached. Moving this gate up would
+# silently 403 the executor callback, so tests/test_admin_content_boundary.py
+# pins that ordering.
+_ADMIN_DENIED_PREFIXES = (
+    "/api/clawmate/agent/",
+    "/api/clawmate/project/",
+    "/api/clawmate/feedback",  # no trailing slash: covers POST /feedback itself
+    "/api/clawmate/review/",
+)
+
+
+def _is_admin_denied(path: str) -> bool:
+    """True when this path is closed to administrator accounts."""
+    return any(path.startswith(prefix) for prefix in _ADMIN_DENIED_PREFIXES)
+
+
 # Share *recipient* endpoints, addressed by token. The recipient holds no
 # account -- the token in the path is the whole capability -- so these must stay
 # anonymous. They are matched by pattern rather than by the `/api/clawmate/share/`
@@ -542,6 +564,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
             self._clear_session_cookie(request)
             return self._auth_failure_redirect(request, "账号不存在或已停用，请重新登录")
         request.state.user = user
+        # Inside the session branch on purpose: the loopback and internal-token
+        # callers above already returned, so this refuses account holders only.
+        if getattr(user, "is_admin", False) and _is_admin_denied(path):
+            return JSONResponse(
+                {"error": "forbidden", "detail": "管理员账号不参与内容工作"},
+                status_code=403,
+            )
         token = _request_user.set(user)
         try:
             return await call_next(request)
