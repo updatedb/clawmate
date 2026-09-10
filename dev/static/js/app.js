@@ -635,6 +635,7 @@ function toggleMultiSelect() {
       deselectAll();
     }
   }
+  updateBatchBar();
 }
 
 function selectAll() {
@@ -670,12 +671,26 @@ function deselectAll() {
 
 function updateBatchBar() {
   if (!els.batchBar) return;
-  const count = state.selectedPaths.size;
-  if (count === 0) {
+  // The bar belongs to the multi-select *mode*, not to the selection: it opens
+  // the moment the toggle goes on, and only the toggle closes it. Clearing the
+  // selection is not a close — it just leaves the bar with nothing to act on.
+  if (!state.multiSelectEnabled) {
     els.batchBar.classList.add("hidden");
-  } else {
-    els.batchBar.classList.remove("hidden");
-    if (els.batchCount) els.batchCount.textContent = `已选 ${count} 个文件`;
+    return;
+  }
+  els.batchBar.classList.remove("hidden");
+  const count = state.selectedPaths.size;
+  if (els.batchCount) els.batchCount.textContent = `已选 ${count} 个文件`;
+  const empty = count === 0;
+  [els.batchDeleteBtn, els.batchMoveBtn, els.batchDownloadBtn2].forEach(function (btn) {
+    if (btn) btn.disabled = empty;
+  });
+  // .main-scroll reserves room for the bar; it is position:fixed, so the last
+  // row of cards would otherwise sit permanently underneath it. Measured rather
+  // than hardcoded because the bar reflows to two rows at narrow widths.
+  const h = els.batchBar.offsetHeight;
+  if (h && document.body.style.getPropertyValue("--batch-bar-h") !== h + "px") {
+    document.body.style.setProperty("--batch-bar-h", h + "px");
   }
 }
 
@@ -1901,16 +1916,22 @@ if (els.rootSelect) {
     state.searchResults = null;
     state.searchQuery = "";
     _initAgent();
-    // Reset multi-select state on root change
+    // Reset multi-select state on root change. The body class has to drop with
+    // the flag: leaving it on keeps the per-card checkboxes rendered while
+    // state says the mode is off, and those checkboxes still feed the bar.
     if (state.multiSelectEnabled) {
       state.multiSelectEnabled = false;
       state.selectedPaths.clear();
+      document.body.classList.remove("multiselect");
       if (els.multiSelectToggle) {
-        els.multiSelectToggle.textContent = "☐";
+        if (typeof iconSVG === 'function') {
+          els.multiSelectToggle.innerHTML = iconSVG('check-square', 14);
+        } else {
+          els.multiSelectToggle.textContent = "☐";
+        }
         els.multiSelectToggle.classList.remove("active");
       }
       updateBatchBar();
-      if (els.batchBar) els.batchBar.classList.add("hidden");
     }
     loadDir("");
     hideRootSwitchMenu();
@@ -2566,6 +2587,11 @@ els.batchDeleteBtn && els.batchDeleteBtn.addEventListener("click", batchDelete);
 els.batchMoveBtn && els.batchMoveBtn.addEventListener("click", batchMoveSelected);
 els.batchDownloadBtn2 && els.batchDownloadBtn2.addEventListener("click", batchDownloadSelected);
 els.batchClearBtn && els.batchClearBtn.addEventListener("click", batchClear);
+// The bar reflows to two rows at narrow widths, so its reserved space has to be
+// re-measured whenever the viewport changes while it is open.
+window.addEventListener("resize", function () {
+  if (state.multiSelectEnabled) updateBatchBar();
+});
 
 
 // ===== Feedback Detail Modal =====

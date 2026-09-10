@@ -1163,12 +1163,8 @@ body.multiselect .list-item { grid-template-columns: 26px 1fr max-content max-co
   .pagination button { padding: 5px 10px; font-size: 11px; }
   .pagination span { font-size: 11px; }
 
-  /* Batch bar */
-  .batch-bar { padding: 8px 10px; }
-  .batch-bar-inner { flex-direction: column; gap: 6px; align-items: flex-start; }
-  .batch-count { font-size: 12px; }
-  .batch-actions { gap: 4px; }
-  .batch-actions button { padding: 5px 10px; font-size: 11px; }
+  /* Batch bar lives next to its own base rules further down — same specificity,
+     so it has to come after them to win. */
 
   /* Status text */
   .status { font-size: 12px; }
@@ -1365,11 +1361,26 @@ pre:hover .code-copy-btn,
 .batch-bar-inner { max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .batch-count { font-weight: 600; font-size: 14px; color: var(--text-primary); white-space: nowrap; }
 .batch-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.batch-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--btn-bg); cursor: pointer; font-size: 13px; color: var(--btn-text); font-weight: 500; }
-.batch-actions button:hover { background: var(--border-color); }
+.batch-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: var(--btn-h); padding: 0 16px; box-sizing: border-box; border-radius: var(--btn-radius); border: 1px solid var(--border-color); background: var(--btn-bg); cursor: pointer; font: 500 var(--btn-font)/1 var(--font-ui); color: var(--btn-text); }
+.batch-actions button:hover:not(:disabled) { background: var(--border-color); }
+/* The bar is open because the mode is on, not because anything is picked; the
+   file actions stay disabled until there is a target. */
+.batch-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
 .batch-actions button.danger { color: var(--danger); border-color: var(--danger-border); }
-.batch-actions button.danger:hover { background: var(--danger-bg); border-color: var(--danger); }
+.batch-actions button.danger:hover:not(:disabled) { background: var(--danger-bg); border-color: var(--danger); }
+/* The bar is fixed, so reserve the height updateBatchBar() measures — otherwise
+   the last row of cards sits underneath it and never scrolls clear. */
+body.multiselect .main-scroll { padding-bottom: calc(var(--batch-bar-h, 56px) + 20px); }
 @keyframes batch-bar-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+/* Must come after the rules above: same specificity, so source order decides. */
+@media (max-width: 768px) {
+  .batch-bar { padding: 8px 10px; }
+  .batch-bar-inner { flex-direction: column; gap: 6px; align-items: flex-start; }
+  .batch-count { font-size: 12px; }
+  .batch-actions { gap: 4px; }
+  .batch-actions button { height: var(--btn-h-sm); padding: 0 10px; font-size: 11px; }
+}
 
 /* ===== Per-Preview Feedback Panel ===== */
 .preview-feedback-panel {
