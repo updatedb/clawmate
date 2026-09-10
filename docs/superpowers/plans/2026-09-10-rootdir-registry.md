@@ -723,6 +723,25 @@ def test_authorization_failure_maps_to_403_not_400(tmp_path: Path, monkeypatch):
     response = client.get("/api/clawmate/list?root=private")
 
     assert response.status_code == 403
+
+
+def test_registry_entry_escaping_the_system_root_is_never_served(tmp_path: Path, monkeypatch):
+    """A hand-edited dir must not let reads resolve outside system_root_dir."""
+    outside = tmp_path.parent / "outside-served"
+    outside.mkdir(exist_ok=True)
+    (outside / "secret.txt").write_text("secret", encoding="utf-8")
+    client = _client(tmp_path, monkeypatch)
+    (tmp_path / "roots.json").write_text(json.dumps({"roots": [
+        {"id": "escape", "label": "Escape", "dir": "..", "agent_id": "default"},
+        {"id": "projects", "label": "Projects", "dir": "projects", "agent_id": "work"},
+    ]}), encoding="utf-8")
+    _login_admin(client)
+
+    ids = [root["id"] for root in client.get("/api/clawmate/config").json()["roots"]]
+
+    assert "escape" not in ids
+    assert "projects" in ids
+    assert client.get("/api/clawmate/list?root=escape").status_code == 403
 ```
 
 Create `tests/test_user_root_authorization.py`:
@@ -943,6 +962,33 @@ def test_login_response_never_carries_a_password_hash(tmp_path: Path, monkeypatc
 
     assert "password_hash" not in login.text
     assert "password_hash" not in me.text
+
+
+def test_spoofed_forwarded_header_does_not_grant_local_trust():
+    """A remote peer must not be able to claim loopback via a header."""
+    from types import SimpleNamespace
+
+    def _request(peer: str, forwarded: str | None):
+        headers = {"x-forwarded-for": forwarded} if forwarded else {}
+        return SimpleNamespace(client=SimpleNamespace(host=peer), headers=headers)
+
+    assert auth.get_client_ip(_request("203.0.113.9", "127.0.0.1")) == "203.0.113.9"
+    assert auth.get_client_ip(_request("203.0.113.9", None)) == "203.0.113.9"
+    assert auth.get_client_ip(_request("127.0.0.1", "203.0.113.9")) == "203.0.113.9"
+    assert auth.get_client_ip(
+        _request("127.0.0.1", "127.0.0.1, 203.0.113.9")) == "203.0.113.9"
+
+
+def test_spoofed_forwarded_header_cannot_reach_admin_endpoints(tmp_path: Path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    spoof = {"X-Forwarded-For": "127.0.0.1"}
+
+    assert client.get("/api/clawmate/config", headers=spoof).status_code == 401
+    assert client.get("/api/clawmate/auth/me", headers=spoof).status_code == 401
+    assert client.get("/api/clawmate/settings/users", headers=spoof).status_code == 401
+    assert client.post("/api/clawmate/settings/users", headers=spoof, json={
+        "username": "attacker", "password": "attacker-pw",
+        "root_dirs": ["projects"]}).status_code == 401
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -1044,31 +1090,30 @@ def get_roots() -> Tuple[List[Dict], str]:
         if user is None:
             return [], ""
         registry = get_root_registry()
+        roots: List[Dict] = []
         if getattr(user, "is_admin", False):
-            roots = [{"id": ROOT_ID_SYSTEM, "label": "系统根目录",
-                      "dir": str(cfg.system_root_dir), "agent_id": "default"}]
-            for entry in registry.list_all():
-                roots.append({
-                    "id": entry.id,
-                    "label": entry.label,
-                    "dir": str((cfg.system_root_dir / entry.dir).resolve()),
-                    "agent_id": entry.agent_id,
-                })
-            return roots, ROOT_ID_SYSTEM
-        roots = []
-        for root_id in user.root_ids:
-            entry = registry.get(root_id)
-            if entry is None:
-                # Unregistered grant: no directory to report and authorize_root
-                # will reject it anyway. Omit it rather than synthesising a
-                # server-side path from the id.
+            roots.append({"id": ROOT_ID_SYSTEM, "label": "系统根目录",
+                          "dir": str(cfg.system_root_dir), "agent_id": "default"})
+            candidates = [(entry.id, entry.label, entry.agent_id) for entry in registry.list_all()]
+        else:
+            candidates = []
+            for root_id in user.root_ids:
+                entry = registry.get(root_id)
+                if entry is not None:
+                    candidates.append((entry.id, entry.label, entry.agent_id))
+        for root_id, label, agent_id in candidates:
+            try:
+                directory = registry.resolve(root_id)
+            except (LookupError, RootRegistryError):
+                # Vanished, or (for a hand-edited registry) escaping the system
+                # root. Skip it rather than report a path that resolve() itself
+                # would reject: this value becomes root_path for the whole read
+                # path via resolve_root(), so it must use the same boundary as
+                # authorization. An unregistered grant is silently omitted for
+                # the same reason -- authorize_root rejects it anyway.
                 continue
-            roots.append({
-                "id": entry.id,
-                "label": entry.label,
-                "dir": str((cfg.system_root_dir / entry.dir).resolve()),
-                "agent_id": entry.agent_id,
-            })
+            roots.append({"id": root_id, "label": label,
+                          "dir": str(directory), "agent_id": agent_id})
         return roots, (roots[0]["id"] if roots else "")
     # Legacy deployments without system_root_dir keep the absolute-path roots.
     data = _load_config()
@@ -1127,6 +1172,35 @@ and use `config_path().parent / "users.json"` in `get_user_store`.
             finally:
                 _request_user.reset(token)
 ```
+
+3b. **Make client-IP resolution trustworthy — this block's security depends on it.** `get_client_ip` (`dev/auth.py:178-183`) currently returns `x-forwarded-for.split(",")[0]` whenever the header is present, with no check on who sent it. Since the bypass above binds `LocalAdmin` — **including `request.state.session`, which unlocks the settings APIs** — an unauthenticated remote request carrying `X-Forwarded-For: 127.0.0.1` was measured returning **201 Created** from `POST /api/clawmate/settings/users`, plus 200s from `/config`, `/auth/me`, and `/settings/users`. That is unauthenticated full administrator access and the entire `system_root_dir` through the `.` root, so it must be fixed in this task, before the bypass is relied upon.
+
+```python
+def get_client_ip(request: Request) -> str:
+    """Resolve the caller IP.
+
+    ``x-forwarded-for`` is honored ONLY when the immediate peer is itself a
+    trusted local host, because the header is otherwise fully attacker
+    controlled and would let any remote client claim to be loopback and inherit
+    the local-client trust bypass.
+
+    The LAST hop is used rather than the first: the common nginx directive
+    ``$proxy_add_x_forwarded_for`` preserves whatever the client sent at the
+    front and appends the address the proxy actually observed at the end, so
+    the first element is the spoofable one. When a proxy replaces the header
+    instead, there is a single element and first equals last.
+    """
+    peer = request.client.host if request.client else "unknown"
+    if _is_local_client(peer):
+        forwarded = request.headers.get("x-forwarded-for", "")
+        if forwarded:
+            return forwarded.split(",")[-1].strip()
+    return peer
+```
+
+`_is_local_client` is defined later in the module (around `dev/auth.py:318`), which is fine — both are module-level and resolution happens at call time. Leave `_is_local_client` unchanged.
+
+Cover it in `tests/test_auth_users.py` with a unit test over the four combinations (spoofed value from a remote peer is ignored; a value from a loopback peer is honored; the last hop wins over a client-supplied first element; an absent header falls back to the peer) and an integration test asserting a spoofed header yields **401** from `/config`, `/auth/me`, `/settings/users`, and user creation. Both must fail before the change.
 
 4. Replace the session-binding block (currently `dev/auth.py:422-434`) to reject sessions whose account no longer exists:
 
@@ -1232,6 +1306,7 @@ Expected: only the known `tests/test_settings_routes.py` failures from Task 2 re
 
 **Files:**
 - Create: `dev/root_migration.py`
+- Modify: `dev/root_registry.py` (add the `valid_root_id` helper)
 - Modify: `dev/main.py:36-60` (call migration after `set_config_path`)
 - Test: `tests/test_root_migration.py`
 
@@ -1360,7 +1435,7 @@ import shutil
 from dataclasses import asdict
 from pathlib import Path
 
-from root_registry import RootEntry, atomic_write_json
+from root_registry import RootEntry, atomic_write_json, valid_root_id
 
 
 class MigrationError(RuntimeError):
@@ -1399,6 +1474,12 @@ def migrate_legacy_roots(config_path: Path, system_root_dir: Path) -> bool:
     dir_to_id: dict[str, str] = {}
     for item in legacy:
         root_id = str(item.get("id", "")).strip()
+        # RootRegistry._read() rejects an off-charset id on every read, so
+        # migrating one would produce a roots.json that can never be loaded.
+        # Fail here with the offending value instead of bricking the registry.
+        if not valid_root_id(root_id):
+            raise MigrationError(
+                f"旧 root id {root_id!r} 含非法字符，迁移后会无法读取，请先修正 config.json")
         try:
             relative = _relative_to(system_root, str(item.get("dir", "")))
         except MigrationError as exc:
@@ -1450,7 +1531,31 @@ def migrate_legacy_roots(config_path: Path, system_root_dir: Path) -> bool:
     return True
 ```
 
-Note `roots.json` never needs a backup: it does not exist when the migration triggers (its absence is the trigger condition), so `users.json.bak` is the only backup the migration produces. Import `asdict` from `dataclasses` and `atomic_write_json` from `root_registry` at the top of the module, replacing the `RootRegistry` import:
+Note `roots.json` never needs a backup: it does not exist when the migration triggers (its absence is the trigger condition), so `users.json.bak` is the only backup the migration produces. Import `asdict` from `dataclasses` and `atomic_write_json, valid_root_id` from `root_registry` at the top of the module, replacing the `RootRegistry` import.
+
+Also **add this helper to `dev/root_registry.py`** — the migration needs the same id charset the registry enforces internally, and duplicating the regex would let the two drift:
+
+```python
+def valid_root_id(value: object) -> bool:
+    """Expose the id charset the registry enforces, for writers such as the migration."""
+    return bool(_ID_RE.match(str(value).strip()))
+```
+
+Then add a case to `tests/test_root_migration.py` covering the guard:
+
+```python
+def test_migration_refuses_an_id_that_the_registry_could_not_read(tmp_path: Path):
+    config_path = _workspace(tmp_path)
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    payload["roots"].append({"id": "bad id", "label": "Bad", "dir": str(tmp_path / "webprojects"),
+                             "agent_id": "main"})
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(MigrationError, match="含非法字符"):
+        migrate_legacy_roots(config_path, tmp_path)
+
+    assert not (tmp_path / "roots.json").exists()
+```
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1474,7 +1579,9 @@ if cfg.system_root_dir:
         raise SystemExit(1)
 ```
 
-Ensure `config.clear_config_cache()` is called after a successful migration so the freshly written `roots.json` is picked up on the first request.
+No cache invalidation is needed after a successful migration: `get_root_registry()` constructs a fresh `RootRegistry` per call and `_read()` re-reads the file each time, so the newly written `roots.json` is visible to the first request. The migration deliberately does **not** modify `config.json`, so the cached `AppConfig` it was read from stays valid.
+
+Place this block **before** any code that resolves a root (the app imports `auth` and registers middleware at lines 196–199, which build routers that resolve roots lazily per request, so startup-time placement directly after `cfg = load_cfg()` is sufficient).
 
 - [ ] **Step 6: Run the suite**
 
