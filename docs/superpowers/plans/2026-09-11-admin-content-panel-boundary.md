@@ -617,6 +617,8 @@ def test_an_admin_sees_no_content_panel_entries(page: Page):
         check(page.locator(mirror).is_hidden(), f"移动端菜单不提供 {mirror}")
 ```
 
+> **这三条 `check` 是"循环覆盖"的唯一保障，不要删。** Task 3 的源码契约测试能钉住 `CONTENT_PANEL_ENTRIES` 的内容和每条的处理方式，但**看不见循环访问了几条**——把 `CONTENT_PANEL_ENTRIES.forEach(` 改成 `.slice(0, 1).forEach(` 时，契约测试仍然 3 passed，而只隐藏了第一个入口。上面逐条断言三个 `#btnToggle*` 才能抓到它（index 页只有两个，`btnProjectPanel` 可见即失败）。这是源码契约测试的固有代价，浏览器断言是唯一的真修法。
+
 - [ ] **Step 2: 运行 e2e 确认通过**
 
 Run: `python3 -m pytest tests/test_e2e_browser.py -m e2e -v -k "admin_sees_no_content_panel"`
