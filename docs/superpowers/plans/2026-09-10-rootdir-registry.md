@@ -2168,7 +2168,7 @@ Expected: `452 passed, 0 failed, 10 deselected`.
 **Files:**
 - Modify: `dev/static/index.html:296-305` (settings modal markup)
 - Modify: `dev/static/js/app.js:3073-3137` (`initSettings`)
-- Modify: `dev/static/css/style.css` (tab and list styling)
+- Modify: `dev/static/css/style.css` (tab and list styling, plus the picker's z-index)
 - Modify: `tests/test_settings_frontend_contract.py`
 
 **Interfaces:**
@@ -2266,6 +2266,32 @@ def test_settings_identity_probe_does_not_redirect_local_auth_bypass_to_login():
 
 Run: `PYTHONPATH=. dev/.venv/bin/python -m pytest tests/test_settings_frontend_contract.py -q`
 Expected: FAIL on the tab and registry-control assertions.
+
+- [ ] **Step 3a: Fix the modal stacking, or the browse button opens an unclickable picker**
+
+`#dirPickerModal` sits at `index.html:278` and `#settingsModal` at `:299`. Both are `.modal-overlay`, and `.modal-overlay` carries `z-index: 10000` (`dev/static/css/style.css:28-30`) with no per-modal override. Two siblings at equal z-index paint in **DOM order**, so the settings modal covers the picker — and a click meant for the picker lands on the settings modal's overlay, where its backdrop handler (`dev/static/js/app.js:3125`) closes the *settings* modal instead. Task 6's Rootdir browse button therefore appears broken in exactly the way that is hardest to diagnose.
+
+Raise the picker above the settings modal with a targeted rule rather than changing the shared `.modal-overlay` (other modals depend on the current value):
+
+```css
+/* The directory picker can be opened from inside the settings modal, so it
+   must paint above it; both are .modal-overlay siblings at z-index 10000 and
+   would otherwise resolve by DOM order, with the settings modal later. */
+#dirPickerModal { z-index: 10001; }
+```
+
+Add a contract assertion so the rule cannot be dropped silently — a behavioural check, not a bare id grep:
+
+```python
+def test_dir_picker_paints_above_the_settings_modal():
+    """Both are .modal-overlay siblings; DOM order puts the settings modal last."""
+    css = (STATIC / "css" / "style.css").read_text(encoding="utf-8")
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+
+    assert "#dirPickerModal" in css and "z-index: 10001" in css
+    assert html.index('id="dirPickerModal"') < html.index('id="settingsModal"'), \
+        "if the picker is ever moved after the settings modal this rule is no longer needed"
+```
 
 - [ ] **Step 3: Rewrite the settings modal markup**
 
@@ -2777,14 +2803,54 @@ def test_picker_opens_at_the_system_root_and_fills_the_form(page: "Page"):
     check(page.evaluate("() => state.rootId") != ".", "关闭后 root 已还原")
 
 
-def test_hidden_directories_are_toggled_in_the_picker(page: "Page"):
+def test_hidden_directories_are_toggled_without_emptying_the_tree(page: "Page"):
+    """Toggling must add/remove hidden entries, not collapse the tree.
+
+    The tree cannot be re-rendered from cache -- the child renderer returns ''
+    for an uncached parent and the root row has no expand arrow -- so a naive
+    "clear cache and re-render" yields an empty tree. This is the check that
+    catches that regression in a real browser.
+    """
     login(page)
     page.locator("#btnSettings").click()
     page.locator("#settingsRootBrowse").click()
     check(page.locator("#dirPickerModal").is_visible(), "目录选择器打开")
+    before = page.locator("#dirPickerTree button, #dirPickerTree .dir-picker-name").count()
+    check(before > 0, f"打开时目录树非空（{before} 项）")
     page.locator("#dirPickerShowHidden").check()
-    check(page.locator("#dirPickerShowHidden").is_checked(), "隐藏目录开关可切换")
+    checked = page.locator("#dirPickerTree button, #dirPickerTree .dir-picker-name").count()
+    check(checked > 0, f"勾选隐藏目录后树仍非空（{checked} 项）")
+    check(page.locator("#dirPickerTree").get_by_text(".git").count() > 0
+          or page.locator("#dirPickerTree").get_by_text(".clawmate").count() > 0,
+          "勾选后出现隐藏目录")
+    page.locator("#dirPickerShowHidden").uncheck()
+    after = page.locator("#dirPickerTree button, #dirPickerTree .dir-picker-name").count()
+    check(after > 0, f"取消勾选后树仍非空（{after} 项）")
     page.locator("#dirPickerCancel").click()
+
+
+def test_every_picker_close_path_leaves_the_main_root_unchanged(page: "Page"):
+    """Cancel, X and backdrop must each restore the stashed root.
+
+    A missed path silently points the main file browser at the system root,
+    and no headless test in this repo can catch it.
+    """
+    login(page)
+    for label, closer in (("取消", "#dirPickerCancel"), ("关闭按钮", "#dirPickerClose")):
+        before = page.evaluate("() => state.rootId")
+        page.locator("#btnSettings").click()
+        page.locator("#settingsRootBrowse").click()
+        page.locator(closer).click()
+        after = page.evaluate("() => state.rootId")
+        check(before == after, f"{label}后主浏览器 root 不变（{before} -> {after}）")
+        page.locator("#settingsModalClose").click()
+
+    before = page.evaluate("() => state.rootId")
+    page.locator("#btnSettings").click()
+    page.locator("#settingsRootBrowse").click()
+    page.locator("#dirPickerModal").click(position={"x": 5, "y": 5})
+    after = page.evaluate("() => state.rootId")
+    check(before == after, f"点击遮罩后主浏览器 root 不变（{before} -> {after}）")
 
 
 def test_admin_registers_a_root_and_grants_it(page: "Page"):
