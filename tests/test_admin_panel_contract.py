@@ -117,3 +117,31 @@ def test_both_pages_apply_the_boundary():
         # Not the definition: that one is preceded by `function `.
         calls = re.findall(rf"(?<!function ){BOUNDARY_FN}\(\)", script)
         assert calls, f"{page} must invoke {BOUNDARY_FN}(), not merely define it"
+
+
+def test_the_project_panel_does_not_auto_open_for_an_admin():
+    """_updateProjectPanelBtn() opens the panel on a project's first visit in a
+    login session. With the entry hidden for an administrator, that would open a
+    panel nobody can close -- so the auto-open has to be a conjunction of the
+    first visit and the admin gate.
+
+    Three things keep this from going green on prose or on a neighbour:
+
+    - `_strip_js_comments()` runs first, because the expression is spelled out in
+      the comment above the call.
+    - The read is anchored to the start of its own line. The helper drops
+      whole-line `//` comments only (its docstring says so), so without the
+      anchor the expression planted in a trailing comment would satisfy the
+      assertion while the call itself lost its guard.
+    - The read is bounded to _updateProjectPanelBtn(), so a guarded call anywhere
+      else in the file cannot stand in for the one that auto-opens the panel.
+
+    Whitespace is free; the tokens and their order are not.
+    """
+    script = _strip_js_comments((STATIC / "js" / "app.js").read_text(encoding="utf-8"))
+    body = _bracketed(script, "function _updateProjectPanelBtn()", "{", "}")
+
+    assert re.search(
+        r"(?m)^\s*_setProjectPanelOpen\(\s*firstVisit\s*&&\s*!_adminDeniesContentPanels\s*\)",
+        body,
+    ), "the auto-open must stay gated on !_adminDeniesContentPanels as well as firstVisit"

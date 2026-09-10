@@ -2303,8 +2303,10 @@ function _updateProjectPanelBtn() {
     if (firstVisit) sessionStorage.setItem(key, '1');
   } catch (_) { firstVisit = !_isProjectPanelOpen(); }
   // Only a newly visited project opens automatically. Switching to a project
-  // already visited in this login session always starts closed.
-  _setProjectPanelOpen(firstVisit);
+  // already visited in this login session always starts closed. An
+  // administrator gets no panel at all: the entry is hidden, so an auto-open
+  // would leave a panel with no way to close it.
+  _setProjectPanelOpen(firstVisit && !_adminDeniesContentPanels);
 }
 async function refreshProjectPanel() {
   if (!state.project || !state.rootId || !projectPanelBody) return;
