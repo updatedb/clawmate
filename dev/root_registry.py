@@ -43,6 +43,11 @@ def validate_root_dir(system_root_dir: Path, relative: str) -> str:
     return resolved.relative_to(system_root_dir).as_posix()
 
 
+def valid_root_id(value: object) -> bool:
+    """Expose the id charset the registry enforces, for writers such as the migration."""
+    return bool(_ID_RE.match(str(value).strip()))
+
+
 def _agent_id(value: object) -> str:
     agent = str(value).strip() or "default"
     if not _ID_RE.match(agent):

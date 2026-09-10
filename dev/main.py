@@ -288,6 +288,19 @@ def _start_periodic_cron_tick():
 if __name__ == "__main__":
     import uvicorn
 
+    # One-time migration: legacy absolute-path roots become registry entries.
+    # Deliberately NOT at module level: importing this module must never rewrite
+    # config.json-adjacent runtime data.
+    if cfg.system_root_dir:
+        from root_migration import MigrationError, migrate_legacy_roots
+
+        try:
+            if migrate_legacy_roots(CONFIG_PATH, cfg.system_root_dir):
+                print("[clawmate] 已将旧 roots 迁移到 roots.json")
+        except MigrationError as exc:
+            print(f"[clawmate] 配置迁移失败，终止启动: {exc}")
+            raise SystemExit(1)
+
     do_set_password, force_password = _cli_set_password()
     if do_set_password:
         _run_set_password(force=force_password)
