@@ -622,6 +622,36 @@ def test_an_admin_sees_no_content_panel_entries(page: Page):
         check(page.locator(mirror).is_hidden(), f"移动端菜单不提供 {mirror}")
 ```
 
+**还要加一条：项目面板对 admin 不自动展开。**
+
+Task 4 的行为（`_setProjectPanelOpen(firstVisit && !_adminDeniesContentPanels)`）目前**只有一个源码契约测试守着，而且它可被绕过**——在受守卫的调用后面再补一句不受守卫的 `_setProjectPanelOpen(firstVisit);`，正则仍匹配第一行，测试照绿而 admin 的面板又自动展开了。
+
+但**不要照着"登录后断言 `#projectPanel` 隐藏"来写，那会是一条空过的断言**，有两个独立的陷阱：
+
+1. `_updateProjectPanelBtn()` 在 `state.project` 为空时提前 return（`app.js:2293` 附近），裸页面上的断言恒真；
+2. 更关键：**真实 admin 结构上拿不到任何 root**（`user_store` 创建/更新时 `if admin: roots = []`），所以 `init()` 在加载目录前就 return 了，`state.project` 永远为空——即便"先选个项目"也到不了那个状态。
+
+因此这条断言要成立，夹具必须**显式预置一个带授权的 admin**（在临时实例的 `users.json` 里给 admin 记录写上 `root_ids: ["projects"]`；v1.54 已移除读取时的授权重校验，手写的授权会被沿用），然后：
+
+```python
+def test_the_project_panel_does_not_auto_open_for_an_admin(page: Page):
+    """The guard's only other coverage is a source-text test that can be
+    bypassed by appending an unguarded call, so it needs a behavioural pin.
+
+    A real admin is granted no roots, so `state.project` can never be set and a
+    bare assertion would be vacuous. The fixture therefore seeds an admin that
+    *does* hold a grant, which is also the config where the guard actually
+    fires.
+    """
+    login(page, username=E2E_ADMIN_USERNAME, password=PASSWORD)  # 用预置了授权的 admin
+    page.goto(f"{CLAWMATE_URL}/?root=.&dir=projects")
+    page.wait_for_function("() => state.dir === 'projects'", timeout=15000)
+    check(not page.locator("#projectPanel").is_visible(),
+          "管理员进入项目目录时项目面板不自动展开")
+```
+
+若实现时发现这个状态**仍然不可达**（例如 admin 的授权被 `get_roots()` 过滤掉），**不要改写成一条恒真的断言**——报告 `NEEDS_CONTEXT` 说明卡在哪，由控制者决定是换手段还是把该守卫记录为"不可达的防御性代码"。
+
 > **这三条 `check` 是"循环覆盖"的唯一保障，不要删。** Task 3 的源码契约测试能钉住 `CONTENT_PANEL_ENTRIES` 的内容和每条的处理方式，但**看不见循环访问了几条**——把 `CONTENT_PANEL_ENTRIES.forEach(` 改成 `.slice(0, 1).forEach(` 时，契约测试仍然 3 passed，而只隐藏了第一个入口。上面逐条断言三个 `#btnToggle*` 才能抓到它（index 页只有两个，`btnProjectPanel` 可见即失败）。这是源码契约测试的固有代价，浏览器断言是唯一的真修法。
 
 - [ ] **Step 2: 运行 e2e 确认通过**
