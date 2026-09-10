@@ -194,9 +194,11 @@ app.add_middleware(RequestLoggingMiddleware)
 
 # Import auth middleware - must be after CORS, before static files
 from auth import AuthMiddleware, is_auth_enabled  # noqa: E402
+from root_auth import RootNotAuthorized, root_not_authorized_handler  # noqa: E402
 
 # v1.26: AuthMiddleware 内部使用 config.load()，不再需要传入 config dict
 app.add_middleware(AuthMiddleware, config=load_cfg())
+app.add_exception_handler(RootNotAuthorized, root_not_authorized_handler)
 
 # import routes AFTER env vars are set (they read env at import time)
 from routes import router as clawmate_router  # noqa: E402

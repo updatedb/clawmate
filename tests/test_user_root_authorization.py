@@ -102,3 +102,24 @@ def test_local_admin_serialises_like_a_real_account():
 
     assert summary == {"id": "", "username": "local-admin", "is_admin": True,
                        "must_change_password": False, "root_ids": []}
+
+
+def test_uncaught_authorization_failure_is_403_not_500(tmp_path: Path):
+    """The registered handler is the safety net for routes that do not catch it."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from root_auth import RootNotAuthorized, authorize_root, root_not_authorized_handler
+
+    app = FastAPI()
+    app.add_exception_handler(RootNotAuthorized, root_not_authorized_handler)
+    registry = _registry(tmp_path)
+
+    @app.get("/boom")
+    async def boom():
+        authorize_root(None, "private", registry, tmp_path)
+
+    response = TestClient(app, raise_server_exceptions=False).get("/boom")
+
+    assert response.status_code == 403
+    assert response.json()["error"] == "forbidden"

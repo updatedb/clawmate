@@ -241,7 +241,7 @@ async def feedback_list(
         for rid in root_ids:
             try:
                 items, pending = list_items(rid, project, status=status, file=file, since=since)
-            except ValueError:
+            except (ValueError, PermissionError):
                 continue
             total_pending += pending
             results.append({
@@ -287,7 +287,7 @@ async def feedback_list(
                 continue
             try:
                 items, pending = list_items(root_id, proj, status=status, file=file, since=since)
-            except ValueError:
+            except (ValueError, PermissionError):
                 continue
             if items:
                 results.append({

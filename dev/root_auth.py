@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from fastapi.responses import JSONResponse
+
 from root_registry import RootRegistryError
 
 ROOT_ID_SYSTEM = "."
@@ -54,3 +56,8 @@ def authorize_root(user, root_id: str, registry, system_root_dir: Path) -> Path:
         # or became unreachable. Both are authorization failures for this
         # request only, never a store-wide failure.
         raise RootNotAuthorized("Root not allowed") from exc
+
+
+async def root_not_authorized_handler(request, exc) -> JSONResponse:
+    """Authorization failures are 403, never a 500 with a stack trace."""
+    return JSONResponse({"error": "forbidden", "detail": "Root not allowed"}, status_code=403)
