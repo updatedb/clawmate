@@ -117,7 +117,7 @@ def test_migration_refuses_an_agent_id_that_the_registry_could_not_read(tmp_path
     payload["roots"][0]["agent_id"] = "my agent"
     config_path.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(MigrationError, match="agent id|agent_id"):
+    with pytest.raises(MigrationError, match="含非法字符"):
         migrate_legacy_roots(config_path, tmp_path)
 
     assert not (tmp_path / "roots.json").exists()
@@ -129,7 +129,7 @@ def test_migration_refuses_two_roots_sharing_a_directory(tmp_path: Path):
     payload["roots"][1]["dir"] = payload["roots"][0]["dir"]
     config_path.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(MigrationError, match="duplicate|重复|already"):
+    with pytest.raises(MigrationError, match="共用目录"):
         migrate_legacy_roots(config_path, tmp_path)
 
     assert not (tmp_path / "roots.json").exists()
@@ -142,3 +142,48 @@ def test_migrated_registry_reloads_without_error(tmp_path: Path):
 
     entries = RootRegistry(tmp_path / "roots.json", tmp_path).list_all()
     assert {entry.id for entry in entries} == {"3gpp", "webprojects"}
+
+
+def test_migration_maps_an_absolute_grant(tmp_path: Path):
+    """Legacy root_dirs were relative, but an absolute grant must still map."""
+    config_path = _workspace(tmp_path)
+    payload = json.loads((tmp_path / "users.json").read_text(encoding="utf-8"))
+    payload["users"][0]["root_dirs"] = [str(tmp_path / "helper" / "3gpp")]
+    (tmp_path / "users.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    migrate_legacy_roots(config_path, tmp_path)
+
+    users = json.loads((tmp_path / "users.json").read_text(encoding="utf-8"))["users"]
+    assert users[0]["root_ids"] == ["3gpp"]
+
+
+def test_migration_refuses_a_root_reached_through_an_escaping_symlink(tmp_path: Path):
+    """Pins the security-critical containment check: a symlink must not escape."""
+    outside = tmp_path.parent / "migration-outside"
+    outside.mkdir(exist_ok=True)
+    (tmp_path / "linked").symlink_to(outside, target_is_directory=True)
+    config_path = _workspace(tmp_path)
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    payload["roots"].append({"id": "linked", "label": "Linked",
+                             "dir": str(tmp_path / "linked"), "agent_id": "main"})
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(MigrationError, match="无法收纳"):
+        migrate_legacy_roots(config_path, tmp_path)
+
+    assert not (tmp_path / "roots.json").exists()
+
+
+def test_migration_refuses_a_grant_matching_no_registered_root(tmp_path: Path):
+    """An unmatched grant must abort loudly rather than be dropped."""
+    config_path = _workspace(tmp_path)
+    payload = json.loads((tmp_path / "users.json").read_text(encoding="utf-8"))
+    payload["users"][0]["root_dirs"] = ["helper/3gpp", "no/such/place"]
+    (tmp_path / "users.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(MigrationError, match="未匹配|no/such/place"):
+        migrate_legacy_roots(config_path, tmp_path)
+
+    assert not (tmp_path / "roots.json").exists()
+    assert "root_ids" not in json.loads(
+        (tmp_path / "users.json").read_text(encoding="utf-8"))["users"][0]

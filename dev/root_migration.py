@@ -79,8 +79,8 @@ def migrate_legacy_roots(config_path: Path, system_root_dir: Path) -> bool:
             # duplicate), and silently dropping one here would alias that
             # directory's grants to whichever id won. Fail instead.
             raise MigrationError(
-                f"旧 root {root_id} 与 {dir_to_id[relative]} 共用目录 {relative!r}"
-                "（duplicate directory），无法同时登记，请先修正 config.json")
+                f"旧 root {root_id} 与 {dir_to_id[relative]} 共用目录 {relative!r}，"
+                "无法同时登记，请先修正 config.json")
         dir_to_id[relative] = root_id
         entries.append(RootEntry(root_id, str(item.get("label") or root_id), relative,
                                  agent_id or "default"))
