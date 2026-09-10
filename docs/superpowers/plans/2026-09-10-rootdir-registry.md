@@ -2228,16 +2228,30 @@ def test_settings_script_calls_registry_and_grant_endpoints():
     assert "root_ids" in script
 
 
-def test_root_browse_reuses_the_shared_directory_picker():
-    script = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
+def _strip_js_comments(source: str) -> str:
+    """Drop // line comments and /* */ blocks so an assertion cannot be
+    satisfied by explanatory prose that happens to quote the code."""
+    without_blocks = re.sub(r"/\*.*?\*/", "", source, flags=re.S)
+    return re.sub(r"(?m)^\s*//.*$", "", without_blocks)
 
-    assert "openDirPicker" in script
+
+def test_root_browse_reuses_the_shared_directory_picker():
+    script = _strip_js_comments((STATIC / "js" / "app.js").read_text(encoding="utf-8"))
+
     assert "/api/clawmate/settings/browse" not in script
+    # The assertion must be bounded to the browse handler: `openDirPicker`
+    # occurs about a dozen times in this ~7000-line file, so a bare substring
+    # check proves nothing about the settings flow.
+    handler = script.index("settingsRootBrowse")
+    window = script[handler:handler + 600]
+    assert "openDirPicker(" in window
 
 
 def test_root_browse_starts_at_the_system_root():
-    script = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
+    script = _strip_js_comments((STATIC / "js" / "app.js").read_text(encoding="utf-8"))
 
+    # Comment-stripped: the plain substring appears in the explanatory comment
+    # too, so an unstripped check would stay green with the code deleted.
     assert "selectedDir: ''" in script
     assert "rootId: '.'" in script
 
@@ -2288,7 +2302,12 @@ def test_dir_picker_paints_above_the_settings_modal():
     css = (STATIC / "css" / "style.css").read_text(encoding="utf-8")
     html = (STATIC / "index.html").read_text(encoding="utf-8")
 
-    assert "#dirPickerModal" in css and "z-index: 10001" in css
+    # The selector must be bound to its value: the literal `z-index: 10001`
+    # already appears twice elsewhere in this stylesheet, so a file-wide
+    # substring check stays green when the picker's rule is changed to 9999 --
+    # reintroducing exactly the covered-picker bug, undetected.
+    assert re.search(r"#dirPickerModal\s*\{[^}]*z-index:\s*10001", css), \
+        "the picker must outrank .modal-overlay's 10000"
     assert html.index('id="dirPickerModal"') < html.index('id="settingsModal"'), \
         "if the picker is ever moved after the settings modal this rule is no longer needed"
 ```
