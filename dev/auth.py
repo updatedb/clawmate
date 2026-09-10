@@ -43,6 +43,32 @@ def current_request_user():
     return _request_user.get()
 
 
+async def websocket_user(websocket):
+    """Resolve and validate the session used by a browser WebSocket."""
+    if not is_auth_enabled():
+        return None
+    cookies = getattr(websocket, "cookies", None)
+    if cookies is None:
+        # Lightweight protocol tests and non-browser callers do not expose
+        # ASGI cookie parsing; preserve the legacy unauthenticated test mode.
+        return None
+    sid = cookies.get("clawmate_session")
+    if not sid:
+        return False
+    session = await get_session(sid)
+    if not session or session.get("must_change_password"):
+        return False
+    try:
+        user = get_user_store().get(str(session.get("user_id", "")))
+    except RuntimeError:
+        return False
+    return user or False
+
+
+def bind_request_user(user):
+    return _request_user.set(user)
+
+
 def _load_sessions() -> None:
     """Load sessions from JSON file on startup. Silently ignore missing/corrupt files."""
     global _sessions

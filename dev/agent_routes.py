@@ -953,6 +953,12 @@ async def agent_openclaw_proxy(ws: WebSocket):
     contract consumed by ``OpenClawTransport``.  Gateway credentials and its
     protocol-specific Origin/header requirements stay on the server.
     """
+    from auth import bind_request_user, websocket_user
+    user = await websocket_user(ws)
+    if user is False:
+        await ws.close(code=4401, reason="Authentication required")
+        return
+    bind_request_user(user)
     await ws.accept()
     root = str(ws.query_params.get("root") or "")
     dir_ = str(ws.query_params.get("dir") or "")
@@ -1035,6 +1041,12 @@ async def agent_openclaw_proxy(ws: WebSocket):
 @router.websocket("/api/clawmate/agent/terminal/v2")
 async def agent_terminal_v2(ws: WebSocket):
     """Protocol-v2 PTY endpoint with separate control and binary data frames."""
+    from auth import bind_request_user, websocket_user
+    user = await websocket_user(ws)
+    if user is False:
+        await ws.close(code=4401, reason="Authentication required")
+        return
+    bind_request_user(user)
     await ws.accept()
     _ensure_reaper()
     # xterm 6 is now the only browser terminal implementation.  Keep the
