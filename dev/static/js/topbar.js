@@ -83,6 +83,68 @@
     return currentTheme;
   };
 
+  // ── Account role (shared by index + preview) ──
+  // One fetch per page load. The boundary it feeds is enforced on the server;
+  // this only decides which entries are drawn.
+  var _adminPromise = null;
+  var _isAdmin = null;
+
+  function loadIsAdmin() {
+    if (_adminPromise) return _adminPromise;
+    // Plain fetch, not authFetch: a loopback client is not "logged in" and
+    // authFetch would bounce it to the login page on its expected 401.
+    _adminPromise = fetch('/api/clawmate/auth/status')
+      .then(function (response) { return response.ok ? response.json() : null; })
+      .then(function (me) { _isAdmin = !!(me && me.logged_in && me.is_admin); return _isAdmin; })
+      .catch(function () { _isAdmin = false; return false; });
+    return _adminPromise;
+  }
+
+  // The three content panels are closed to administrators. Hiding the topbar
+  // button is the whole mechanism: _syncItems() derives each more-menu mirror
+  // from its target's `hidden`, so the mobile menu follows for free. The
+  // attribute is used rather than an inline display because #btnProjectPanel
+  // has its display rewritten on every navigation.
+  //
+  // Panel containers are listed per entry rather than derived, because index
+  // and preview name them differently (agentPanel vs previewAgentPanel) and
+  // preview has no project container at all. Absent ids are skipped.
+  var CONTENT_PANEL_ENTRIES = [
+    { toggle: 'btnToggleAgent', panels: ['agentPanel', 'previewAgentPanel'] },
+    { toggle: 'btnProjectPanel', panels: ['projectPanel'] },
+    { toggle: 'btnToggleFeedback', panels: ['rightSidebar'] },
+  ];
+
+  function hideContentPanelEntries() {
+    CONTENT_PANEL_ENTRIES.forEach(function (entry) {
+      var el = document.getElementById(entry.toggle);
+      if (el) el.hidden = true;
+    });
+  }
+
+  // Close through the page's own toggle so the panel animation and the grid
+  // bookkeeping stay in the code path that owns them. #btnToggleFeedback's
+  // handler lives in a nested scope of preview.js and is not reachable from a
+  // new top-level function; the toggle is the supported way in.
+  function closeContentPanels() {
+    CONTENT_PANEL_ENTRIES.forEach(function (entry) {
+      var toggle = document.getElementById(entry.toggle);
+      if (!toggle) return;
+      var open = entry.panels.some(function (id) {
+        var panel = document.getElementById(id);
+        return panel && !panel.classList.contains('hidden');
+      });
+      if (open) toggle.click();
+    });
+  }
+
+  window.ClawMateAdmin = {
+    load: loadIsAdmin,
+    isAdmin: function () { return _isAdmin === true; },
+    hideContentPanelEntries: hideContentPanelEntries,
+    closeContentPanels: closeContentPanels,
+  };
+
   // ── Mobile "more" menu (index + preview) ──
   // Folds the topbar action buttons (theme / logout / project / agent) into a
   // dropdown on mobile. Each mirrored item's `data-more` is the TARGET button id,

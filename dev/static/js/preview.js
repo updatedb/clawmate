@@ -3152,6 +3152,20 @@
   rightSidebar.classList.add('hidden');
   updateGridColumns();
 
+  // Same boundary as index: hidden entries, and no panel left open behind them.
+  // Both effects live in topbar.js so the two pages cannot drift apart; the
+  // preview page names its panels differently (previewAgentPanel / rightSidebar)
+  // and closeContentPanels() covers that.
+  function _applyAdminContentPanelBoundary() {
+    if (!window.ClawMateAdmin) return;
+    window.ClawMateAdmin.load().then(function (isAdmin) {
+      if (!isAdmin) return;
+      window.ClawMateAdmin.hideContentPanelEntries();
+      window.ClawMateAdmin.closeContentPanels();
+    });
+  }
+  _applyAdminContentPanelBoundary();
+
   // Keep responsive outline visibility and button state in sync with side panels.
   function _syncPanelOpenClass() {
     var rightOpen = rightSidebar && !rightSidebar.classList.contains('hidden');

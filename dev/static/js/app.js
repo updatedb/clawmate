@@ -3051,6 +3051,8 @@ async function loadActiveShares() {
 }
 
 async function init() {
+  // Runs before the early returns below so every load path gets the boundary.
+  _applyAdminContentPanelBoundary();
   if (await initSettings()) return;
   await loadConfig();
   await loadActiveShares();
@@ -3358,6 +3360,23 @@ function _initAgent() {
       agentId: curRoot.agent_id || "",
     });
   }
+}
+
+// Administrators run the system, not the content panels: the server refuses
+// these routes for them (auth._ADMIN_DENIED_PREFIXES), and this keeps the
+// entries from being drawn. _updateProjectPanelBtn() is what closes the
+// project panel -- it must not auto-open it either (see _adminDeniesContentPanels).
+let _adminDeniesContentPanels = false;
+
+function _applyAdminContentPanelBoundary() {
+  if (!window.ClawMateAdmin) return;
+  window.ClawMateAdmin.load().then(function (isAdmin) {
+    if (!isAdmin) return;
+    _adminDeniesContentPanels = true;
+    window.ClawMateAdmin.hideContentPanelEntries();
+    _setProjectPanelOpen(false);
+    window.ClawMateAdmin.closeContentPanels();
+  });
 }
 
 // ── Responsive: auto-switch to list on small screens ──
