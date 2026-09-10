@@ -23,11 +23,6 @@ def _registry():
     return get_root_registry()
 
 
-def _referenced_root_ids() -> set[str]:
-    return {str(rid) for user in get_user_store().list_public_users()
-            for rid in (user.get("root_ids") or [])}
-
-
 def _validate_root_ids(root_ids: object) -> list[str]:
     """Grant ids must reference registered roots. Unknown ids are a 422.
 
@@ -55,7 +50,11 @@ def _validate_root_ids(root_ids: object) -> list[str]:
 @router.get("/api/clawmate/settings/roots")
 async def list_roots(request: Request):
     _admin(request)
-    return JSONResponse({"roots": _registry().public_list()})
+    try:
+        roots = _registry().public_list()
+    except RootRegistryError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return JSONResponse({"roots": roots})
 
 
 @router.post("/api/clawmate/settings/roots", status_code=201)
@@ -64,10 +63,12 @@ async def create_root(request: Request):
     body = await request.json()
     try:
         entry = _registry().create(
-            label=str(body.get("label", "")),
+            # An explicit JSON null is treated like an absent key for id/label:
+            # without the `or ""` the value would stringify to "None".
+            label=str(body.get("label") or ""),
             dir=str(body.get("dir", "")),
             agent_id=str(body.get("agent_id", "") or "default"),
-            root_id=str(body.get("id", "")).strip() or None,
+            root_id=str(body.get("id") or "").strip() or None,
         )
     except RootRegistryError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -96,7 +97,8 @@ async def update_root(root_id: str, request: Request):
 async def delete_root(root_id: str, request: Request):
     _admin(request)
     try:
-        _registry().delete(root_id, referenced_by=_referenced_root_ids())
+        _registry().delete(root_id, referenced_by=_registry().referenced_ids(
+            get_user_store().list_public_users()))
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RootRegistryError as exc:
@@ -108,10 +110,11 @@ async def delete_root(root_id: str, request: Request):
 async def list_users(request: Request):
     _admin(request)
     store = get_user_store()
-    return JSONResponse({
-        "users": store.list_public_users(),
-        "roots": [{"id": entry.id, "label": entry.label} for entry in _registry().list_all()],
-    })
+    try:
+        roots = [{"id": entry.id, "label": entry.label} for entry in _registry().list_all()]
+    except RootRegistryError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return JSONResponse({"users": store.list_public_users(), "roots": roots})
 
 
 @router.post("/api/clawmate/settings/users", status_code=201)

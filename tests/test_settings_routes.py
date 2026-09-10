@@ -308,3 +308,67 @@ def test_agent_routing_follows_the_registry_not_legacy_config(tmp_path: Path, mo
     assert client.get("/api/clawmate/config").json()["roots"] == [
         {"id": "3gpp", "label": "3GPP Meetings", "agent_id": "helper"}]
     assert config.load().root_agent("3gpp") == "helper"
+
+
+def test_root_mutation_endpoints_require_admin(tmp_path: Path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    _login_admin(client)
+    client.post("/api/clawmate/settings/users", json={
+        "username": "writer", "password": "writer-password", "root_ids": ["projects"]})
+    client.post("/api/clawmate/auth/logout")
+    client.post("/api/clawmate/auth/login", json={"username": "writer", "password": "writer-password"})
+
+    assert client.patch("/api/clawmate/settings/roots/projects",
+                        json={"label": "X"}).status_code == 403
+    assert client.delete("/api/clawmate/settings/roots/projects").status_code == 403
+    assert client.patch("/api/clawmate/settings/users/whatever",
+                        json={"username": "x"}).status_code == 403
+    assert client.delete("/api/clawmate/settings/users/whatever").status_code == 403
+
+
+def test_unknown_root_id_gives_404_on_patch_and_delete(tmp_path: Path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    _login_admin(client)
+
+    assert client.patch("/api/clawmate/settings/roots/nope",
+                        json={"label": "X"}).status_code == 404
+    assert client.delete("/api/clawmate/settings/roots/nope").status_code == 404
+
+
+def test_create_root_rejects_an_out_of_charset_id_or_agent_id(tmp_path: Path, monkeypatch):
+    # A fresh directory: a seeded one would be rejected as already registered
+    # before the charset checks run, which would not exercise them.
+    (tmp_path / "docs").mkdir()
+    client = _client(tmp_path, monkeypatch)
+    _login_admin(client)
+
+    assert client.post("/api/clawmate/settings/roots", json={
+        "id": "bad id", "label": "Bad", "dir": "docs"}).status_code == 422
+    assert client.post("/api/clawmate/settings/roots", json={
+        "label": "Bad", "dir": "docs", "agent_id": "bad agent"}).status_code == 422
+
+
+def test_explicit_json_null_id_derives_instead_of_creating_a_None_root(tmp_path: Path, monkeypatch):
+    # A fresh directory, for the same reason as the charset test above.
+    (tmp_path / "docs").mkdir()
+    client = _client(tmp_path, monkeypatch)
+    _login_admin(client)
+
+    created = client.post("/api/clawmate/settings/roots", json={
+        "id": None, "label": None, "dir": "docs", "agent_id": None})
+
+    assert created.status_code == 201
+    body = created.json()
+    assert body["id"] == "docs"
+    assert body["id"] != "None"
+    assert body["label"] != "None"
+    assert body["agent_id"] == "default"
+
+
+def test_corrupt_registry_returns_422_not_500(tmp_path: Path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    _login_admin(client)
+    (tmp_path / "roots.json").write_text("{ not json", encoding="utf-8")
+
+    assert client.get("/api/clawmate/settings/roots").status_code == 422
+    assert client.get("/api/clawmate/settings/users").status_code == 422
