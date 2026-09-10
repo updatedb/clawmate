@@ -177,6 +177,7 @@ def test_admin_cannot_delete_a_root_in_use(tmp_path: Path, monkeypatch):
     response = client.delete("/api/clawmate/settings/roots/projects")
 
     assert response.status_code == 422
+    assert "正被用户引用" in response.text
     assert client.get("/api/clawmate/settings/roots").json()["roots"][0]["id"] == "projects"
 
 

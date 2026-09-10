@@ -31,15 +31,15 @@ def validate_root_dir(system_root_dir: Path, relative: str) -> str:
     """Normalize a registry dir for a WRITE. Requires the directory to exist."""
     raw = str(relative).strip()
     if not raw or Path(raw).is_absolute():
-        raise RootRegistryError("Root directory must be a subdirectory of the system root")
+        raise RootRegistryError("Rootdir 目录必须是系统根目录下的子目录")
     value = raw.strip("/")
     if not value or value == ".":
-        raise RootRegistryError("Root directory must be a subdirectory of the system root")
+        raise RootRegistryError("Rootdir 目录必须是系统根目录下的子目录")
     resolved = (system_root_dir / value).resolve()
     if system_root_dir not in resolved.parents:
-        raise RootRegistryError("Root directory is outside the system root")
+        raise RootRegistryError("Rootdir 目录位于系统根目录之外")
     if not resolved.is_dir():
-        raise RootRegistryError("Root directory does not exist")
+        raise RootRegistryError("Rootdir 目录不存在")
     return resolved.relative_to(system_root_dir).as_posix()
 
 
@@ -51,7 +51,7 @@ def valid_root_id(value: object) -> bool:
 def _agent_id(value: object) -> str:
     agent = str(value).strip() or "default"
     if not _ID_RE.match(agent):
-        raise RootRegistryError("Invalid agent id")
+        raise RootRegistryError("agent_id 含非法字符")
     return agent
 
 
@@ -89,17 +89,17 @@ class RootRegistry:
         try:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
-            raise RootRegistryError("Root configuration is invalid") from exc
+            raise RootRegistryError("Rootdir 配置无效") from exc
         items = raw.get("roots") if isinstance(raw, dict) else None
         if not isinstance(items, list):
-            raise RootRegistryError("Root configuration is invalid")
+            raise RootRegistryError("Rootdir 配置无效")
         result: list[RootEntry] = []
         for item in items:
             if not isinstance(item, dict):
-                raise RootRegistryError("Root configuration is invalid")
+                raise RootRegistryError("Rootdir 配置无效")
             root_id = str(item.get("id", "")).strip()
             if not _ID_RE.match(root_id):
-                raise RootRegistryError(f"Invalid root id: {root_id!r}")
+                raise RootRegistryError(f"root id 含非法字符: {root_id!r}")
             result.append(RootEntry(
                 id=root_id,
                 label=str(item.get("label") or root_id),
@@ -132,7 +132,7 @@ class RootRegistry:
             raise LookupError("Root not found")
         resolved = (self.system_root_dir / entry.dir).resolve()
         if self.system_root_dir not in resolved.parents or not resolved.is_dir():
-            raise RootRegistryError("Root directory is unavailable")
+            raise RootRegistryError("Rootdir 目录不可用")
         return resolved
 
     def referenced_ids(self, users: list[dict]) -> set[str]:
@@ -152,13 +152,13 @@ class RootRegistry:
         roots = self._read()
         normalized = validate_root_dir(self.system_root_dir, dir)
         if any(entry.dir == normalized for entry in roots):
-            raise RootRegistryError("Directory is already registered")
+            raise RootRegistryError("该目录已被其它 Rootdir 占用")
         taken = {entry.id for entry in roots}
         final_id = str(root_id).strip() if root_id else self._derive_id(normalized, taken)
         if not _ID_RE.match(final_id):
-            raise RootRegistryError("Invalid root id")
+            raise RootRegistryError("root id 含非法字符")
         if final_id in taken:
-            raise RootRegistryError("Root id already exists")
+            raise RootRegistryError("root id 已存在")
         entry = RootEntry(final_id, str(label).strip() or final_id, normalized, _agent_id(agent_id))
         self._write([*roots, entry])
         return entry
@@ -172,7 +172,7 @@ class RootRegistry:
         current = roots[index]
         new_dir = validate_root_dir(self.system_root_dir, dir) if dir is not None else current.dir
         if any(i != index and entry.dir == new_dir for i, entry in enumerate(roots)):
-            raise RootRegistryError("Directory is already registered")
+            raise RootRegistryError("该目录已被其它 Rootdir 占用")
         updated = RootEntry(
             id=current.id,
             label=str(label).strip() if label is not None else current.label,
@@ -189,5 +189,5 @@ class RootRegistry:
         if target is None:
             raise LookupError("Root not found")
         if target.id in referenced_by:
-            raise RootRegistryError("Root is referenced by users")
+            raise RootRegistryError("该 Rootdir 正被用户引用，无法删除")
         self._write([entry for entry in roots if entry.id != root_id])

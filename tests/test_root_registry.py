@@ -43,7 +43,7 @@ def test_create_derives_unique_id_on_collision(tmp_path: Path):
 def test_create_rejects_directory_outside_system_root(tmp_path: Path):
     registry = _registry(tmp_path)
 
-    with pytest.raises(RootRegistryError, match="outside the system root"):
+    with pytest.raises(RootRegistryError, match="位于系统根目录之外"):
         registry.create(label="Escape", dir="../outside")
 
 
@@ -53,7 +53,7 @@ def test_create_rejects_symlink_escape(tmp_path: Path):
     (tmp_path / "escape").symlink_to(outside, target_is_directory=True)
     registry = _registry(tmp_path)
 
-    with pytest.raises(RootRegistryError, match="outside the system root"):
+    with pytest.raises(RootRegistryError, match="位于系统根目录之外"):
         registry.create(label="Escape", dir="escape")
 
 
@@ -68,7 +68,7 @@ def test_create_rejects_invalid_directory(tmp_path: Path, bad_dir: str):
 def test_create_rejects_missing_directory(tmp_path: Path):
     registry = _registry(tmp_path)
 
-    with pytest.raises(RootRegistryError, match="does not exist"):
+    with pytest.raises(RootRegistryError, match="目录不存在"):
         registry.create(label="Ghost", dir="not-there")
 
 
@@ -76,7 +76,7 @@ def test_create_rejects_duplicate_directory(tmp_path: Path):
     registry = _registry(tmp_path)
     registry.create(label="A", dir="projects")
 
-    with pytest.raises(RootRegistryError, match="already registered"):
+    with pytest.raises(RootRegistryError, match="已被其它 Rootdir 占用"):
         registry.create(label="B", dir="projects")
 
 
@@ -84,7 +84,7 @@ def test_create_rejects_explicit_duplicate_id(tmp_path: Path):
     registry = _registry(tmp_path)
     registry.create(label="A", dir="projects", root_id="shared")
 
-    with pytest.raises(RootRegistryError, match="id already exists"):
+    with pytest.raises(RootRegistryError, match="root id 已存在"):
         registry.create(label="B", dir="helper/3gpp", root_id="shared")
 
 
@@ -105,7 +105,7 @@ def test_update_rejects_a_directory_already_registered(tmp_path: Path):
     first = registry.create(label="A", dir="projects")
     registry.create(label="B", dir="helper/3gpp")
 
-    with pytest.raises(RootRegistryError, match="already registered"):
+    with pytest.raises(RootRegistryError, match="已被其它 Rootdir 占用"):
         registry.update(first.id, dir="helper/3gpp")
 
 
@@ -113,7 +113,7 @@ def test_delete_rejects_referenced_root(tmp_path: Path):
     registry = _registry(tmp_path)
     entry = registry.create(label="A", dir="projects")
 
-    with pytest.raises(RootRegistryError, match="referenced"):
+    with pytest.raises(RootRegistryError, match="正被用户引用"):
         registry.delete(entry.id, referenced_by={entry.id})
 
     registry.delete(entry.id, referenced_by=set())
@@ -126,7 +126,7 @@ def test_read_does_not_touch_filesystem_when_directory_disappears(tmp_path: Path
     (tmp_path / "projects").rmdir()
 
     assert registry.list_all()[0].id == "projects"
-    with pytest.raises(RootRegistryError, match="unavailable"):
+    with pytest.raises(RootRegistryError, match="目录不可用"):
         registry.resolve("projects")
 
 
@@ -134,7 +134,7 @@ def test_read_rejects_malformed_registry(tmp_path: Path):
     registry = _registry(tmp_path)
     registry.path.write_text("{ not json", encoding="utf-8")
 
-    with pytest.raises(RootRegistryError, match="invalid"):
+    with pytest.raises(RootRegistryError, match="配置无效"):
         registry.list_all()
 
 

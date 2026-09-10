@@ -3121,11 +3121,9 @@ async function initSettings() {
     document.getElementById('settingsRootHint').textContent = '';
     document.getElementById('settingsRootCancel').hidden = true;
   }
-  var rootsCache = [];
   var usersCache = [];
   async function loadRoots() {
     var data = await settingsRequest('/api/clawmate/settings/roots');
-    rootsCache = data.roots;
     var list = document.getElementById('settingsRootList');
     list.textContent = '';
     data.roots.forEach(function (root) {
