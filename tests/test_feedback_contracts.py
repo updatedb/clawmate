@@ -2,17 +2,22 @@
 
 from pathlib import Path
 import json
+import re
 import subprocess
+import sys
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import auth
-import feedback_api
-import store
-
-
 ROOT = Path(__file__).resolve().parent.parent / "dev"
+# Without this the module only collects when another test file has already put
+# dev/ on sys.path, so `pytest tests/test_feedback_contracts.py` fails on its own.
+sys.path.insert(0, str(ROOT))
+
+import auth  # noqa: E402
+import feedback_api  # noqa: E402
+import store  # noqa: E402
+
 SHARE = (ROOT / "static/share-view.html").read_text(encoding="utf-8")
 PREVIEW = (ROOT / "static/js/preview.js").read_text(encoding="utf-8")
 FEEDBACK_PANEL = (ROOT / "static/js/feedback-panel.js").read_text(encoding="utf-8")
@@ -235,3 +240,28 @@ def test_editable_feedback_cards_have_one_shared_field_order_without_meta():
     assert ".fb-card-header .fb-btn-delete { flex: 0 0 auto;" in css
     assert ".fb-card-actions .preview-bottom-btn" in css
     assert "@media (max-width: 480px)" in css
+
+
+def _css_without_comments(source: str) -> str:
+    """Drop block comments so an assertion that a declaration is *gone* cannot
+    be defeated by prose quoting the very value it checks for."""
+    return re.sub(r"/\*.*?\*/", "", source, flags=re.S)
+
+
+def test_mobile_card_header_chrome_keeps_its_natural_width():
+    """At <=480px the timestamp was ellipsized and the status pill wrapped onto
+    two lines ("执行" / "中").
+
+    The header is `id | time | status | delete`, whose fixed chrome needs
+    58 + 47 + 26 = 131px plus the three gaps between the four items. The id
+    reserved `calc(100% - 132px)` for it, which under-counts by the gaps, so the
+    row ran over budget at every width up to 480 and the only two items still
+    allowed to shrink paid for it. The chrome now keeps its natural width and the
+    id takes whatever is left.
+    """
+    rules = _css_without_comments(CSS)
+
+    assert ".fb-card-header .fb-card-id { flex: 1 1 0; }" in rules
+    assert (".fb-card-header .fb-card-time,\n"
+            "      .fb-card-header .fb-status-pill { flex: 0 0 auto; }") in rules
+    assert "calc(100% - 132px)" not in rules

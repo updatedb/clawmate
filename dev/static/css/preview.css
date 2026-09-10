@@ -902,7 +902,15 @@
       padding: 2px 0;
     }
     @media (max-width: 480px) {
-      .fb-card-header .fb-card-id { flex: 1 1 calc(100% - 132px); }
+      /* The timestamp, status pill and delete button are fixed-size chrome; the
+         id takes whatever they leave. Reserving `calc(100% - 132px)` for the
+         chrome under-counted the three inter-item gaps, so the row ran over
+         budget and the two items still allowed to shrink paid for it -- the
+         timestamp clipped to 56px of the 58px it needs and the pill to 46px of
+         47px, at every width up to 480. */
+      .fb-card-header .fb-card-id { flex: 1 1 0; }
+      .fb-card-header .fb-card-time,
+      .fb-card-header .fb-status-pill { flex: 0 0 auto; }
       .fb-card-meta .fb-card-position { flex: 1 1 140px; white-space: normal; word-break: break-word; }
     }
     .fb-card-result {
