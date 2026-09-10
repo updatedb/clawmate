@@ -2578,13 +2578,24 @@ async function initSettings() {
 Append to `dev/static/css/style.css`:
 
 ```css
-.settings-tabs { display: flex; gap: 4px; padding: 0 16px; border-bottom: 1px solid var(--border-subtle); }
+.settings-tabs { display: flex; gap: 4px; padding: 0 16px; border-bottom: 1px solid var(--border-color); }
 .settings-tab { appearance: none; background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; font: inherit; font-size: 13px; color: var(--text-secondary); cursor: pointer; }
 .settings-tab[aria-selected="true"] { color: var(--text-primary); border-bottom-color: var(--accent); }
-.settings-root, .settings-user { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; font-size: 13px; }
-.settings-root button, .settings-user button { font-size: 12px; }
+.settings-root { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; font-size: 13px; }
+.settings-root button { font-size: 12px; }
 #settingsUserRoots { display: flex; flex-direction: column; gap: 4px; border: 0; margin: 0; padding: 0; font-size: 13px; }
+
+/* `.settings-user` already exists earlier in this file with its own
+   border-bottom; extend it rather than redeclaring the whole rule here. */
+.settings-user button { font-size: 12px; }
+
+/* Required by Task 6 Step 3a: the picker is opened from inside the settings
+   modal, and both are .modal-overlay siblings at z-index 10000, so without
+   this the settings modal paints over the picker and swallows its clicks. */
+#dirPickerModal { z-index: 10001; }
 ```
+
+The `#dirPickerModal` rule and the assertion above are the **same requirement** as Step 3a. Steps run in order, so Step 3a already added both; this block repeats them only so the whole style sheet is visible in one place. Do not add a second copy of the rule or the assertion.
 
 - [ ] **Step 6: Run the checks**
 
