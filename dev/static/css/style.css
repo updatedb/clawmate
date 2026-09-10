@@ -338,17 +338,20 @@ body.content-narrow .content-col > .topbar { gap: 8px; }
   grid-column: 1;
   translate: 0;
   transition: translate var(--duration-slow) var(--ease-out);
+  position: relative;
 }
 .sidebar.hidden {
   translate: -100%;
   pointer-events: none;
 }
-.sidebar-header { flex-shrink: 0; display: flex; align-items: center; gap: 6px; padding: 0 12px; height: 48px; box-sizing: border-box; border-bottom: none; }
+.sidebar-header { flex-shrink: 0; display: flex; align-items: center; gap: 6px; padding: 0 12px; height: 40px; box-sizing: border-box; border-bottom: none; }
 /* Command-palette button while it sits inside the sidebar header. */
 .sidebar-header .topbar-btn { color: var(--text-primary); background: transparent; border-color: var(--border-color); }
-.sidebar-header #rootSelect { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; padding: 6px 10px; height: var(--btn-h-lg); border-radius: var(--radius-sm); border: 1px solid var(--accent); background: var(--accent-light); color: var(--text-primary); outline: none; cursor: pointer; }
-.sidebar-header #rootSelect:focus { border-color: var(--accent-hover); box-shadow: 0 0 0 2px var(--focus-ring); }
 .sidebar-header .panel-close-btn { margin-left: auto; }
+.root-switch-menu { position: absolute; z-index: 2; top: 0; left: 0; right: 0; padding: 0; }
+.root-switch-menu[hidden] { display: none; }
+.root-switch-menu #rootSelect { width: 100%; min-width: 0; box-sizing: border-box; font-size: 13px; font-weight: 600; padding: 0 10px; height: 30px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); outline: none; cursor: pointer; }
+.root-switch-menu #rootSelect:focus { border-color: var(--accent-hover); box-shadow: 0 0 0 2px var(--focus-ring); }
 .dir-list { flex: 1; overflow-y: auto; padding: 0 14px 14px; list-style: none; margin: 0; }
 #rootSelect { width: 100%; padding: 8px 10px; border-radius: var(--radius-md); border: 2px solid var(--accent); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-size: 13px; font-weight: 600; outline: none; transition: border-color var(--duration-fast) var(--ease-out); }
 #rootSelect:focus { border-color: var(--accent-hover); }
@@ -393,11 +396,27 @@ body.content-narrow .content-col > .topbar { gap: 8px; }
 .topbar .breadcrumb-copy:hover, .topbar .breadcrumb-refresh:hover { opacity: 1; background: rgba(255,255,255,0.12); }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Sidebar tree */
-.dir-list li { padding: 7px 10px; margin-bottom: 2px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; color: var(--text-primary); display: flex; align-items: center; gap: 6px; transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out); }
-.dir-list li:hover { background: var(--bg-tertiary); }
-.dir-list li.active { background: var(--accent-light); color: var(--accent); font-weight: 600; }
-.dir-list li.active span:first-child { filter: none; }
+/* Directory path stack: ancestors are stacked in one column; only the
+   current directory exposes its direct children. */
+.sidebar-path-item { list-style: none; margin: 2px 0; }
+.sidebar-root-path-item { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.sidebar-root-path-item .sidebar-path-link { flex: 1; }
+.sidebar-root-path-item > .sidebar-current-children { flex-basis: 100%; }
+.root-switch-btn { flex: 0 0 auto; width: 30px; height: 30px; box-sizing: border-box; border: 0; border-radius: var(--radius-sm); background: var(--bg-tertiary); color: var(--text-secondary); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.sidebar-root-current .root-switch-btn { background: var(--accent-light); color: var(--accent); }
+.sidebar-root-ancestor .root-switch-btn { background: var(--bg-tertiary); }
+.root-switch-btn:hover { background: var(--bg-secondary); color: var(--accent); }
+.sidebar-path-link, .sidebar-child-item > button { width: 100%; min-width: 0; height: 30px; box-sizing: border-box; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 0 10px; font: inherit; font-size: 13px; text-align: left; }
+.sidebar-path-link:hover, .sidebar-child-item > button:hover { background: var(--bg-tertiary); }
+.sidebar-path-link.active { background: var(--accent-light); color: var(--accent); font-weight: 600; }
+.sidebar-path-link.ancestor { background: var(--bg-tertiary); color: var(--text-secondary); }
+.sidebar-path-link.ancestor:hover { background: var(--border-color); }
+.sidebar-path-link > span:last-child, .sidebar-child-item > button > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-tree-glyph { width: 10px; flex: 0 0 10px; color: var(--text-muted); font-size: 11px; }
+.sidebar-current-children { list-style: none; margin: 2px 0 4px 20px; padding: 0; border-left: 1px solid var(--border-color); }
+.sidebar-child-item, .sidebar-children-empty { list-style: none; margin: 1px 0; }
+.sidebar-child-item > button { padding-left: 10px; }
+.sidebar-children-empty { color: var(--text-muted); font-size: 12px; padding: 7px 10px; }
 
 /* ===== Agent Panel (Right Sidebar) ===== */
 .agent-panel {

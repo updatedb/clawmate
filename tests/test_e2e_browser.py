@@ -110,7 +110,7 @@ def test_main_page_loads(page: Page):
     check(page.locator("#themeToggle").is_visible(), "主题切换按钮可见")
     check(page.locator("#viewGrid").is_visible(), "画廊视图按钮可见")
     check(page.locator("#viewList").is_visible(), "列表视图按钮可见")
-    check(page.locator("#rootSelect").is_visible(), "根目录选择器可见")
+    check(page.locator("#btnRootSwitch").is_visible(), "根目录切换按钮可见")
     check(page.locator("#btnToggleAgent").is_visible(), "Agent 按钮可见")
 
 

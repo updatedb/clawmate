@@ -51,9 +51,10 @@ const state = {
   activeShares: {},       // root -> [file_paths] for active share links
 };
 
-// Sidebar state — shows parent directory's children (siblings of current dir)
-let sidebarParentDir = "";
-let sidebarEntries = [];
+// Directory panel state — root-to-current path plus current children.
+let sidebarPathEntries = [];
+let sidebarCurrentChildren = [];
+let sidebarPathRequest = 0;
 
 const els = {
   dirList: document.getElementById("dirList"),
@@ -85,6 +86,7 @@ const els = {
   pageInfo: document.getElementById("pageInfo"),
   loadMoreBtn: document.getElementById("loadMoreBtn"),
   rootSelect: document.getElementById("rootSelect"),
+  rootSwitchMenu: document.getElementById("rootSwitchMenu"),
   // Multi-select
   multiSelectToggle: document.getElementById("multiSelectToggle"),
   btnCreate: document.getElementById("btnCreate"),
@@ -482,84 +484,119 @@ function getParentDir(dir) {
   return parts.join("/");
 }
 
-// Load parent directory entries for sidebar
-async function loadSidebarParent(dir) {
+// The root remains a clickable path node; only the current directory exposes
+// its children, keeping the single-column path stack compact.
+async function loadSidebarPath(dir) {
   if (!state.rootId) return;
-  // At root level: load root's own directory listing (not parent, which doesn't exist)
-  // At subdirectory: load parent directory listing to show sibling dirs
-  const fetchDir = (dir === "") ? "" : getParentDir(dir);
+  const requestId = ++sidebarPathRequest;
+  const parts = dir.split("/").filter(Boolean);
+  const rootLabel = state.rootLabel || "根目录";
+  sidebarPathEntries = [{ name: rootLabel, relPath: "" }];
+  let currentPath = "";
+  parts.forEach(function (name) {
+    currentPath = currentPath ? currentPath + "/" + name : name;
+    sidebarPathEntries.push({ name: name, relPath: currentPath });
+  });
   try {
-    const res = await authFetch(`/api/clawmate/list?root=${encodeURIComponent(state.rootId)}&dir=${encodeURIComponent(fetchDir)}`);
+    const res = await authFetch(`/api/clawmate/list?root=${encodeURIComponent(state.rootId)}&dir=${encodeURIComponent(dir)}`);
+    if (requestId !== sidebarPathRequest) return;
     if (!res.ok) {
-      sidebarParentDir = fetchDir;
-      sidebarEntries = [];
+      sidebarCurrentChildren = [];
       return;
     }
     const data = await res.json();
-    sidebarParentDir = fetchDir;
-    sidebarEntries = (data.entries || [])
+    if (requestId !== sidebarPathRequest) return;
+    sidebarCurrentChildren = (data.entries || [])
       .filter(e => e.is_dir && !e.name.startsWith("."))
-      .map(e => ({
-        ...e,
-        relPath: e.path || ""
-      }))
+      .map(e => ({ ...e, relPath: e.path || "" }))
       .sort((a, b) => a.name.localeCompare(b.name));
   } catch (_) {
-    sidebarParentDir = fetchDir;
-    sidebarEntries = [];
+    if (requestId !== sidebarPathRequest) return;
+    sidebarCurrentChildren = [];
   }
+}
+
+function appendSidebarCurrentChildren(container) {
+  const entries = sidebarCurrentChildren.filter(e => e.name.trim() !== "");
+  if (!entries.length) {
+    const empty = document.createElement("li");
+    empty.className = "sidebar-children-empty";
+    empty.textContent = "（无子目录）";
+    container.appendChild(empty);
+    return;
+  }
+  entries.forEach(function (child) {
+    const childLi = document.createElement("li");
+    childLi.className = "sidebar-child-item";
+    const childButton = document.createElement("button");
+    childButton.type = "button";
+    childButton.title = child.relPath;
+    childButton.innerHTML = '<span class="sidebar-tree-glyph" aria-hidden="true">▸</span>'
+      + (typeof iconSVG === 'function' ? iconSVG(child.marker ? 'folder-project' : 'folder', 14) : '📁');
+    const childLabel = document.createElement("span");
+    childLabel.textContent = child.name;
+    childButton.appendChild(childLabel);
+    childButton.addEventListener("click", () => loadDir(child.relPath));
+    childLi.appendChild(childButton);
+    container.appendChild(childLi);
+  });
 }
 
 function renderSidebarTree() {
   els.dirList.innerHTML = "";
-  // v1.24-b 防御性：过滤 name 为空白字符的目录项（避免 CSS ellipsis 截断导致"空名"假象）
-  sidebarEntries = sidebarEntries.filter(e => !(e.is_dir && e.name.trim() === ""));
-  if (!sidebarEntries.length) {
+  const currentPath = state.dir || "";
+  sidebarPathEntries.forEach(function (entry) {
     const li = document.createElement("li");
-    li.textContent = "（无子目录）";
-    li.style.paddingLeft = "8px";
-    li.style.color = "var(--text-muted, #999)";
-    els.dirList.appendChild(li);
-    return;
-  }
-  sidebarEntries.forEach((entry) => {
-    const li = document.createElement("li");
-    li.style.display = "flex";
-    li.style.alignItems = "center";
-    li.style.gap = "4px";
-    li.style.paddingLeft = "8px";
-    li.style.cursor = "pointer";
-    li.style.borderRadius = "4px";
-
+    li.className = "sidebar-path-item";
+    const isCurrent = entry.relPath === currentPath;
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "sidebar-path-link " + (isCurrent ? "active" : "ancestor");
+    if (isCurrent) row.setAttribute("aria-current", "page");
+    row.title = entry.relPath || entry.name;
+    row.innerHTML = '<span class="sidebar-tree-glyph" aria-hidden="true">▾</span>';
     const icon = document.createElement("span");
-    var icoName = entry.relPath === state.dir ? 'folder-open' : (entry.marker ? 'folder-project' : 'folder');
-    icon.innerHTML = typeof iconSVG === 'function' ? iconSVG(icoName, 14) : (entry.relPath === state.dir ? '📂' : ('📁'));
-    icon.style.flexShrink = "0";
-
+    icon.innerHTML = typeof iconSVG === 'function' ? iconSVG(isCurrent ? 'folder-open' : 'folder', 14) : (isCurrent ? '📂' : '📁');
     const label = document.createElement("span");
     label.textContent = entry.name;
-    label.style.flex = "1";
-    label.style.overflow = "hidden";
-    label.style.textOverflow = "ellipsis";
-    label.style.whiteSpace = "nowrap";
-
-    li.addEventListener("click", () => {
-      if (entry.relPath !== state.dir) loadDir(entry.relPath);
-      if (window.innerWidth < 768) {
-        els.sidebar.classList.add('hidden');
-        btnToggleSidebar.classList.remove('active');
-        if (els.sidebarOverlay) els.sidebarOverlay.style.display = 'none';
-      }
-    });
-    if (entry.relPath === state.dir) {
-      li.style.fontWeight = "bold";
-      li.style.color = "var(--accent, #4a9eff)";
+    row.appendChild(icon);
+    row.appendChild(label);
+    row.addEventListener("click", () => loadDir(entry.relPath));
+    li.appendChild(row);
+    if (entry.relPath === "") {
+      const switchButton = document.createElement("button");
+      switchButton.type = "button";
+      switchButton.id = "btnRootSwitch";
+      switchButton.className = "root-switch-btn";
+      switchButton.innerHTML = typeof iconSVG === 'function' ? iconSVG('arrow-left-right', 14) : '↔';
+      switchButton.setAttribute("aria-label", "切换根目录");
+      switchButton.setAttribute("aria-expanded", String(els.rootSwitchMenu && !els.rootSwitchMenu.hidden));
+      switchButton.addEventListener("click", function (event) {
+        event.stopPropagation();
+        if (!els.rootSwitchMenu) return;
+        els.rootSwitchMenu.hidden = !els.rootSwitchMenu.hidden;
+        switchButton.setAttribute("aria-expanded", String(!els.rootSwitchMenu.hidden));
+        if (!els.rootSwitchMenu.hidden) els.rootSelect.focus();
+      });
+      li.classList.add("sidebar-root-path-item", isCurrent ? "sidebar-root-current" : "sidebar-root-ancestor");
+      li.appendChild(switchButton);
+      if (els.rootSwitchMenu) li.appendChild(els.rootSwitchMenu);
     }
-
-    li.appendChild(icon);
-    li.appendChild(label);
+    if (isCurrent) {
+      const children = document.createElement("ul");
+      children.className = "sidebar-current-children";
+      appendSidebarCurrentChildren(children);
+      li.appendChild(children);
+    }
     els.dirList.appendChild(li);
   });
+}
+
+function hideRootSwitchMenu() {
+  if (!els.rootSwitchMenu) return;
+  els.rootSwitchMenu.hidden = true;
+  const switchButton = document.getElementById("btnRootSwitch");
+  if (switchButton) switchButton.setAttribute("aria-expanded", "false");
 }
 
 // Backward-compatible alias (kept so other code that might call renderDirs still works)
@@ -1618,7 +1655,7 @@ async function loadDir(dir) {
     state.hasMore = cached.hasMore;
     state.project = cached.project;
     updateUrl();
-    await loadSidebarParent(state.dir);
+    await loadSidebarPath(state.dir);
     await loadActiveShares();
     _connectFsWatch();
     render();
@@ -1651,8 +1688,8 @@ async function loadDir(dir) {
     dir: state.dir, entries: state.entries, total: state.total, hasMore: state.hasMore, project: state.project
   });
   updateUrl();
-  // Also load parent dir for sidebar
-  await loadSidebarParent(state.dir);
+  // Load the one-column root-to-current path stack for the directory panel.
+  await loadSidebarPath(state.dir);
   await loadActiveShares();  // refresh share status
   _connectFsWatch();
   render();
@@ -1876,8 +1913,15 @@ if (els.rootSelect) {
       if (els.batchBar) els.batchBar.classList.add("hidden");
     }
     loadDir("");
+    hideRootSwitchMenu();
   });
 }
+document.addEventListener("click", function (event) {
+  if (!els.rootSwitchMenu || els.rootSwitchMenu.hidden) return;
+  const rootItem = els.rootSwitchMenu.closest(".sidebar-root-path-item");
+  if (rootItem && rootItem.contains(event.target)) return;
+  hideRootSwitchMenu();
+});
 els.viewGrid.addEventListener("click", () => setView("grid"));
 els.viewList.addEventListener("click", () => setView("list"));
 
@@ -3069,18 +3113,23 @@ function syncSidebarBtn() {
   }
 }
 
-// Command-palette button follows the dir panel: inside the sidebar header (before
-// #rootSelect) when the panel is open, else left of #btnToggleSidebar in the topbar.
+// Command-palette button follows the dir panel: inside the sidebar control row
+// before its close button when open, else immediately after #btnToggleSidebar.
 (function () {
   var btn = document.getElementById('btnCommandPalette');
   var sb = document.getElementById('sidebar');
-  var rootSel = document.getElementById('rootSelect');
-  if (!btn || !sb || !rootSel) return;
+  var closeButton = document.getElementById('btnCloseSidebar');
+  if (!btn || !sb || !closeButton) return;
   var place = function () {
-    var target = (!sb.classList.contains('hidden')) ? rootSel : document.getElementById('btnToggleSidebar');
+    var target = (!sb.classList.contains('hidden')) ? closeButton : document.getElementById('btnToggleSidebar');
     if (!target) return;
-    if (btn.nextElementSibling === target) return;   // already in place
-    target.parentNode.insertBefore(btn, target);
+    if (target === closeButton) {
+      if (btn.nextElementSibling === target) return; // already in place
+      target.parentNode.insertBefore(btn, target);
+    } else {
+      if (target.nextElementSibling === btn) return; // already in place
+      target.insertAdjacentElement('afterend', btn);
+    }
   };
   if (window.MutationObserver) new MutationObserver(place).observe(sb, { attributes: true, attributeFilter: ['class'] });
   place();
