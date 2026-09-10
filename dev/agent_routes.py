@@ -968,6 +968,13 @@ async def agent_openclaw_proxy(ws: WebSocket):
     if user is False:
         await ws.close(code=4401, reason="Authentication required")
         return
+    # The middleware never runs for a websocket, so the content-panel boundary
+    # has to be enforced here too. websocket_user() returns None when auth is
+    # disabled; getattr(None, "is_admin", False) is False, so that mode is
+    # unaffected -- which is why this checks `is_admin` rather than `is not None`.
+    if getattr(user, "is_admin", False):
+        await ws.close(code=4403, reason="Content panels are unavailable to administrators")
+        return
     bind_request_user(user)
     await ws.accept()
     root = str(ws.query_params.get("root") or "")
@@ -1055,6 +1062,13 @@ async def agent_terminal_v2(ws: WebSocket):
     user = await websocket_user(ws)
     if user is False:
         await ws.close(code=4401, reason="Authentication required")
+        return
+    # The middleware never runs for a websocket, so the content-panel boundary
+    # has to be enforced here too. websocket_user() returns None when auth is
+    # disabled; getattr(None, "is_admin", False) is False, so that mode is
+    # unaffected -- which is why this checks `is_admin` rather than `is not None`.
+    if getattr(user, "is_admin", False):
+        await ws.close(code=4403, reason="Content panels are unavailable to administrators")
         return
     bind_request_user(user)
     await ws.accept()

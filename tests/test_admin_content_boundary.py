@@ -158,3 +158,17 @@ def test_the_executor_result_callback_is_not_affected(client):
     # a bare `!= 403`.
     assert response.status_code == 422, response.text
     assert "Invalid review result fields" in response.json()["detail"]
+
+
+def test_both_agent_websockets_close_an_admin_at_handshake(client, monkeypatch):
+    """Websockets bypass the middleware entirely, so each handler has to refuse
+    on its own. 4403 rather than 4401: the caller authenticated fine, the
+    account role is what closed it."""
+    from starlette.websockets import WebSocketDisconnect
+
+    _login_admin(client)
+    for path in ("/api/clawmate/agent/openclaw", "/api/clawmate/agent/terminal/v2"):
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            with client.websocket_connect(path) as ws:
+                ws.receive_text()
+        assert excinfo.value.code == 4403, path
