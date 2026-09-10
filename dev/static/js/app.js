@@ -51,6 +51,13 @@ const state = {
   activeShares: {},       // root -> [file_paths] for active share links
 };
 
+// Set once the account-role probe answers, and read by _updateProjectPanelBtn()
+// to keep the project panel from auto-opening for an administrator. Declared up
+// here rather than beside its writer: _updateProjectPanelBtn() is called at
+// module level (below), so a `let` further down would still be in its temporal
+// dead zone at that call and reading it would throw.
+let _adminDeniesContentPanels = false;
+
 // Directory panel state — root-to-current path plus current children.
 let sidebarPathEntries = [];
 let sidebarCurrentChildren = [];
@@ -3365,9 +3372,8 @@ function _initAgent() {
 // Administrators run the system, not the content panels: the server refuses
 // these routes for them (auth._ADMIN_DENIED_PREFIXES), and this keeps the
 // entries from being drawn. _updateProjectPanelBtn() is what closes the
-// project panel -- it must not auto-open it either (see _adminDeniesContentPanels).
-let _adminDeniesContentPanels = false;
-
+// project panel -- it must not auto-open it either (see _adminDeniesContentPanels,
+// declared beside `state` so it is initialized before the module-level call).
 function _applyAdminContentPanelBoundary() {
   if (!window.ClawMateAdmin) return;
   window.ClawMateAdmin.load().then(function (isAdmin) {
