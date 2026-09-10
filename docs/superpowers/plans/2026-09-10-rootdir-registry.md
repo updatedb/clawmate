@@ -1485,21 +1485,33 @@ def migrate_legacy_roots(config_path: Path, system_root_dir: Path) -> bool:
     dir_to_id: dict[str, str] = {}
     for item in legacy:
         root_id = str(item.get("id", "")).strip()
-        # RootRegistry._read() rejects an off-charset id on every read, so
-        # migrating one would produce a roots.json that can never be loaded.
-        # Fail here with the offending value instead of bricking the registry.
+        agent_id = str(item.get("agent_id") or "default").strip()
+        # RootRegistry._read() rejects an off-charset id OR agent_id on every
+        # read, so migrating one would produce a roots.json that can never be
+        # loaded -- and because roots.json then exists, the migration never
+        # re-runs, leaving only manual file surgery. Fail here with the
+        # offending value instead of bricking the registry. Both fields share
+        # the same charset, so both are guarded.
         if not valid_root_id(root_id):
             raise MigrationError(
                 f"旧 root id {root_id!r} 含非法字符，迁移后会无法读取，请先修正 config.json")
+        if not valid_root_id(agent_id):
+            raise MigrationError(
+                f"旧 root {root_id!r} 的 agent_id {agent_id!r} 含非法字符，"
+                "迁移后会无法读取，请先修正 config.json")
         try:
             relative = _relative_to(system_root, str(item.get("dir", "")))
         except MigrationError as exc:
             raise MigrationError(f"旧 root {root_id}: {exc}") from exc
         if relative in dir_to_id:
-            continue
+            # The registry's own invariant is that dir is unique, and silently
+            # dropping the second entry would alias that directory's grants to
+            # the first id -- a silent change in who can reach what.
+            raise MigrationError(
+                f"旧 root {root_id!r} 与 {dir_to_id[relative]!r} 指向同一目录 {relative!r}，"
+                "无法登记为两个 Rootdir，请先修正 config.json")
         dir_to_id[relative] = root_id
-        entries.append(RootEntry(root_id, str(item.get("label") or root_id), relative,
-                                 str(item.get("agent_id") or "default")))
+        entries.append(RootEntry(root_id, str(item.get("label") or root_id), relative, agent_id))
 
     users_path = config_path.parent / "users.json"
     raw_users: dict | None = None
@@ -1552,7 +1564,78 @@ def valid_root_id(value: object) -> bool:
     return bool(_ID_RE.match(str(value).strip()))
 ```
 
-Then add a case to `tests/test_root_migration.py` covering the guard:
+Then add cases to `tests/test_root_migration.py` covering all three guards — the off-charset id, the off-charset agent id (which shares the charset and the same bricking failure mode), and two legacy roots sharing one directory (which would violate the registry's `dir` uniqueness and silently alias grants to the first id):
+
+```python
+def test_migration_refuses_an_agent_id_that_the_registry_could_not_read(tmp_path: Path):
+    config_path = _workspace(tmp_path)
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    payload["roots"][0]["agent_id"] = "my agent"
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(MigrationError, match="agent_id"):
+        migrate_legacy_roots(config_path, tmp_path)
+
+    assert not (tmp_path / "roots.json").exists()
+
+
+def test_migration_refuses_two_roots_sharing_a_directory(tmp_path: Path):
+    config_path = _workspace(tmp_path)
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    payload["roots"][1]["dir"] = payload["roots"][0]["dir"]
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(MigrationError, match="指向同一目录"):
+        migrate_legacy_roots(config_path, tmp_path)
+
+    assert not (tmp_path / "roots.json").exists()
+
+
+def test_migrated_registry_reloads_without_error(tmp_path: Path):
+    """The failure mode being guarded is writing a registry that cannot be read."""
+    config_path = _workspace(tmp_path)
+
+    assert migrate_legacy_roots(config_path, tmp_path) is True
+
+    entries = RootRegistry(tmp_path / "roots.json", tmp_path).list_all()
+    assert {entry.id for entry in entries} == {"3gpp", "webprojects"}
+```
+
+Also add a case covering an **absolute-shaped grant** — `_relative_to` takes an absolute branch that a `roots[].dir` value exercises, but no test drives it from the `root_dirs` side:
+
+```python
+def test_migration_maps_an_absolute_grant(tmp_path: Path):
+    config_path = _workspace(tmp_path)
+    payload = json.loads((tmp_path / "users.json").read_text(encoding="utf-8"))
+    payload["users"][0]["root_dirs"] = [str(tmp_path / "helper" / "3gpp")]
+    (tmp_path / "users.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    migrate_legacy_roots(config_path, tmp_path)
+
+    users = json.loads((tmp_path / "users.json").read_text(encoding="utf-8"))["users"]
+    assert users[0]["root_ids"] == ["3gpp"]
+```
+
+And this one, which pins the security-critical symlink check that the containment guard performs:
+
+```python
+def test_migration_refuses_a_root_reached_through_an_escaping_symlink(tmp_path: Path):
+    outside = tmp_path.parent / "migration-outside"
+    outside.mkdir(exist_ok=True)
+    (tmp_path / "linked").symlink_to(outside, target_is_directory=True)
+    config_path = _workspace(tmp_path)
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    payload["roots"].append({"id": "linked", "label": "Linked",
+                             "dir": str(tmp_path / "linked"), "agent_id": "main"})
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(MigrationError, match="无法收纳"):
+        migrate_legacy_roots(config_path, tmp_path)
+
+    assert not (tmp_path / "roots.json").exists()
+```
+
+And the off-charset **id** guard itself:
 
 ```python
 def test_migration_refuses_an_id_that_the_registry_could_not_read(tmp_path: Path):
