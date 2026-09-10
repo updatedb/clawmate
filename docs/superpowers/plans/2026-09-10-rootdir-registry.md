@@ -601,6 +601,7 @@ Fixes defect B and completes the agent-routing fix: `get_roots()` no longer fall
 - Modify: `dev/service.py:92-108`
 - Modify: `dev/config.py:157-175`
 - Modify: `dev/auth.py:41-69,373-374,422-434`
+- Modify: `.gitignore` (add `roots.json` — this task establishes the runtime path)
 - Test: `tests/test_root_authorization_regression.py`, `tests/test_user_root_authorization.py`, `tests/test_auth_users.py`
 
 **Interfaces:**
@@ -1018,12 +1019,16 @@ def get_roots() -> Tuple[List[Dict], str]:
         roots = []
         for root_id in user.root_ids:
             entry = registry.get(root_id)
-            directory = entry.dir if entry else root_id
+            if entry is None:
+                # Unregistered grant: no directory to report and authorize_root
+                # will reject it anyway. Omit it rather than synthesising a
+                # server-side path from the id.
+                continue
             roots.append({
-                "id": root_id,
-                "label": entry.label if entry else root_id,
-                "dir": str((cfg.system_root_dir / directory).resolve()),
-                "agent_id": entry.agent_id if entry else "default",
+                "id": entry.id,
+                "label": entry.label,
+                "dir": str((cfg.system_root_dir / entry.dir).resolve()),
+                "agent_id": entry.agent_id,
             })
         return roots, (roots[0]["id"] if roots else "")
     # Legacy deployments without system_root_dir keep the absolute-path roots.
@@ -1132,6 +1137,18 @@ Rewrite `_auth_failure_redirect` (currently `dev/auth.py:443-451`) so the cookie
         return response
 ```
 
+5. **Ignore the new runtime file.** `get_root_registry()` makes `roots.json` a runtime artifact sitting next to `config.json`, exactly like `users.json`. `.gitignore:43` already lists `users.json` but not `roots.json`, so add it on the following line:
+
+```
+roots.json
+```
+
+Confirm it takes effect (expect a match naming `.gitignore`):
+
+```bash
+/usr/bin/git check-ignore -v roots.json
+```
+
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `PYTHONPATH=. dev/.venv/bin/python -m pytest tests/test_root_authorization_regression.py tests/test_user_root_authorization.py tests/test_auth_users.py -q`
@@ -1143,7 +1160,7 @@ Expected: only the known `tests/test_settings_routes.py` failures from Task 2 re
 - [ ] **Step 6: Commit**
 
 ```bash
-/usr/bin/git add -- dev/root_auth.py dev/config.py dev/service.py dev/auth.py \
+/usr/bin/git add -- dev/root_auth.py dev/config.py dev/service.py dev/auth.py .gitignore \
   tests/test_root_authorization_regression.py tests/test_user_root_authorization.py \
   tests/test_auth_users.py
 /usr/bin/git commit -m "fix: make root authorization fail closed"
