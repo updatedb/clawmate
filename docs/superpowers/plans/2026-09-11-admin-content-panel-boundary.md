@@ -593,7 +593,12 @@ git commit -m "fix: stop the project panel auto-opening for administrators"
 
 在 `tests/test_e2e_browser.py` 中，紧跟 `test_ordinary_user_does_not_render_the_settings_entry`（约 752 行）之后新增。复用该文件既有的 `page` 夹具、`login(page)` 辅助函数（签名为 `login(page, username=None, password=None)`，默认即模块级的管理员凭据）与临时实例启动流程——**不要新建启动逻辑**。
 
-> **实测注意（Task 3 执行时踩到，务必先读）**：`page.route()` **拦不住 `/api/clawmate/config`**——该请求被 service worker 接管，桩会静默失效，探测可能**因错误的原因**看起来是绿的。凡是用路由拦截构造状态的用例（例如伪造 admin 载荷），浏览器夹具必须用 `service_workers="block"`；否则改用 `page.unroute` 之外的手段，或以真实会话断言。
+> **实测注意（Task 3、Task 4 执行时各踩一次，务必先读）**：service worker 会**静默地**接管请求——不只是路由，**静态资源也一样**。
+>
+> - `page.route()` **拦不住 `/api/clawmate/config`**，桩会失效，探测可能**因错误的原因**看起来是绿的；
+> - Task 4 的前两次浏览器尝试拿到的是 SW 缓存的**旧 `app.js`**，改动的效果根本没加载。
+>
+> 因此：浏览器夹具必须用 `service_workers="block"`，且**只有 SW 屏蔽后的运行才算数**。不要因为第一次跑是绿的（或红的）就下结论。
 >
 > 同时：本仓库**可以**用真实 admin 会话做浏览器验收。`tests/test_e2e_browser.py` 已预置 admin 账号（`is_admin: True`、`must_change_password: False`，约 `:408-410`）并设置 `CLIENT_HEADERS = {"X-Forwarded-For": "203.0.113.9"}`（`:514`），让服务端把浏览器当作**远程客户端**而非 loopback 主体——`test_ordinary_user_does_not_render_the_settings_entry`（`:750`）正是这样给 `#btnSettings` 断言反向行为的。不要因为"loopback 不是登录态"就认为这条无法验收。
 
