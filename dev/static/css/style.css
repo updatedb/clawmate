@@ -35,6 +35,11 @@ body { font-family: var(--font-ui); color: var(--text-primary); background: var(
 }
 @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
 
+/* The directory picker can be opened from inside the settings modal, so it
+   must paint above it; both are .modal-overlay siblings at z-index 10000 and
+   would otherwise resolve by DOM order, with the settings modal later. */
+#dirPickerModal { z-index: 10001; }
+
 .modal-box {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -87,13 +92,23 @@ body { font-family: var(--font-ui); color: var(--text-primary); background: var(
 }
 
 .settings-modal-box { max-width: 640px; }
-.settings-modal-box section + section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color); }
 .settings-modal-box h3 { margin: 0 0 10px; font-size: var(--font-size-base); }
 .settings-form { display: grid; gap: 8px; }
 .settings-form input, .settings-form select { width: 100%; min-height: var(--btn-h); padding: 6px 8px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--text-primary); }
 .settings-form select { min-height: 92px; }
 .settings-help { margin: 0; color: var(--text-secondary); font-size: var(--font-size-sm); }
 .settings-user { display:flex; justify-content:space-between; gap:8px; padding:8px 0; border-bottom:1px solid var(--border-color); }
+
+/* ── Settings tabs (Rootdir / user) ─────────────────────────────────────────
+   The tabs swap a single visible panel, so the old two-stacked-sections rule
+   that used to live above was dropped with it instead of leaving a divider
+   over whichever panel is showing. */
+.settings-tabs { display: flex; gap: 4px; padding: 0 16px; border-bottom: 1px solid var(--border-color); }
+.settings-tab { appearance: none; background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; font: inherit; font-size: 13px; color: var(--text-secondary); cursor: pointer; }
+.settings-tab[aria-selected="true"] { color: var(--text-primary); border-bottom-color: var(--accent); }
+.settings-root, .settings-user { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; font-size: 13px; }
+.settings-root button, .settings-user button { font-size: 12px; }
+#settingsUserRoots { display: flex; flex-direction: column; gap: 4px; border: 0; margin: 0; padding: 0; font-size: 13px; }
 
 
 

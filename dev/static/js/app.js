@@ -3077,9 +3077,8 @@ async function initSettings() {
   if (!btn || !modal || !passwordModal) return false;
   var me;
   try {
-    // A loopback request may deliberately bypass auth middleware and therefore
-    // has no session identity. Probe directly so that expected 401 does not
-    // redirect a local operator to the login page.
+    // A loopback request bypasses session auth, so probe without authFetch to
+    // avoid redirecting a local operator to the login page on an expected 401.
     var meResponse = await fetch('/api/clawmate/auth/status');
     if (!meResponse.ok) return false;
     me = await meResponse.json();
@@ -3087,9 +3086,8 @@ async function initSettings() {
   } catch (_) { return false; }
   btn.hidden = !me.is_admin;
   var error = document.getElementById('settingsError');
-  function showSettingsError(message) {
-    error.textContent = message;
-  }
+  var editingRootId = '';
+  function showSettingsError(message) { error.textContent = message || ''; }
   async function settingsRequest(url, options) {
     var response = await authFetch(url, options);
     var data;
@@ -3103,34 +3101,202 @@ async function initSettings() {
     }
     return data;
   }
-  async function loadSettings() {
+  function selectTab(name) {
+    var tabs = modal.querySelectorAll('[data-settings-tab]');
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].setAttribute('aria-selected', String(tabs[i].dataset.settingsTab === name));
+    }
+    var panels = modal.querySelectorAll('[data-settings-panel]');
+    for (var j = 0; j < panels.length; j++) {
+      panels[j].hidden = panels[j].dataset.settingsPanel !== name;
+    }
+  }
+  function resetRootForm() {
+    editingRootId = '';
+    document.getElementById('settingsRootId').value = '';
+    document.getElementById('settingsRootId').disabled = false;
+    document.getElementById('settingsRootLabel').value = '';
+    document.getElementById('settingsRootDir').value = '';
+    document.getElementById('settingsRootAgent').value = '';
+    document.getElementById('settingsRootHint').textContent = '';
+    document.getElementById('settingsRootCancel').hidden = true;
+  }
+  var rootsCache = [];
+  var usersCache = [];
+  async function loadRoots() {
+    var data = await settingsRequest('/api/clawmate/settings/roots');
+    rootsCache = data.roots;
+    var list = document.getElementById('settingsRootList');
+    list.textContent = '';
+    data.roots.forEach(function (root) {
+      var row = document.createElement('div');
+      row.className = 'settings-root';
+      var text = document.createElement('span');
+      text.textContent = root.label + ' · ' + root.dir + ' · agent:' + root.agent_id;
+      row.appendChild(text);
+      var edit = document.createElement('button');
+      edit.type = 'button'; edit.textContent = '编辑';
+      edit.addEventListener('click', function () {
+        editingRootId = root.id;
+        document.getElementById('settingsRootId').value = root.id;
+        document.getElementById('settingsRootId').disabled = true;
+        document.getElementById('settingsRootLabel').value = root.label;
+        document.getElementById('settingsRootDir').value = root.dir;
+        document.getElementById('settingsRootAgent').value = root.agent_id;
+        document.getElementById('settingsRootCancel').hidden = false;
+        // Grants reference the id, so changing dir must not be read as
+        // revoking access. State the consequence before the user commits.
+        var referenced = usersCache.filter(function (user) {
+          return (user.root_ids || []).indexOf(root.id) >= 0;
+        }).length;
+        document.getElementById('settingsRootHint').textContent = referenced
+          ? '该 Rootdir 已被 ' + referenced + ' 位用户引用；修改目录后其授权不受影响（授权引用的是 id）。'
+          : '';
+        showSettingsError('');
+      });
+      var remove = document.createElement('button');
+      remove.type = 'button'; remove.textContent = '删除';
+      remove.addEventListener('click', async function () {
+        if (!window.confirm('删除 Rootdir ' + root.label + '？')) return;
+        try {
+          await settingsRequest('/api/clawmate/settings/roots/' + encodeURIComponent(root.id), {method: 'DELETE'});
+          await loadRoots();
+        } catch (_) {}
+      });
+      row.appendChild(edit); row.appendChild(remove);
+      list.appendChild(row);
+    });
+  }
+  async function loadUsers() {
     var data = await settingsRequest('/api/clawmate/settings/users');
+    usersCache = data.users;
     var users = document.getElementById('settingsUsers');
-    var roots = document.getElementById('settingsRootDirs');
+    var labels = {};
+    data.roots.forEach(function (root) { labels[root.id] = root.label; });
     users.textContent = '';
     data.users.forEach(function (user) {
-      var row = document.createElement('div'); row.className = 'settings-user';
-      var text = document.createElement('span'); text.textContent = user.username + (user.is_admin ? '（管理员）' : '') + ' · ' + user.root_dirs.join(', '); row.appendChild(text);
-      var edit = document.createElement('button'); edit.type = 'button'; edit.dataset.settingsAction = 'edit'; edit.textContent = '编辑';
-      edit.addEventListener('click', async function () { var name = window.prompt('用户名', user.username); if (name === null) return; var dirs = window.prompt('授权目录（逗号分隔）', user.root_dirs.join(',')); if (dirs === null) return; var password = window.prompt('新密码（留空则不修改）', ''); var body = {username:name, root_dirs:dirs.split(',').map(function (item) { return item.trim(); }).filter(Boolean)}; if (password) body.password = password; try { await settingsRequest('/api/clawmate/settings/users/' + encodeURIComponent(user.id), {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); await loadSettings(); } catch (_) {} });
-      var remove = document.createElement('button'); remove.type = 'button'; remove.dataset.settingsAction = 'delete'; remove.textContent = '删除';
-      remove.addEventListener('click', async function () { if (!window.confirm('删除用户 ' + user.username + '？')) return; try { await settingsRequest('/api/clawmate/settings/users/' + encodeURIComponent(user.id), {method:'DELETE'}); await loadSettings(); } catch (_) {} });
-      row.appendChild(edit); row.appendChild(remove); users.appendChild(row);
+      var row = document.createElement('div');
+      row.className = 'settings-user';
+      var text = document.createElement('span');
+      var granted = (user.root_ids || []).map(function (id) { return labels[id] || id; }).join(', ');
+      text.textContent = user.username + (user.is_admin ? '（管理员）' : '') + ' · ' + (granted || '—');
+      row.appendChild(text);
+      var edit = document.createElement('button');
+      edit.type = 'button'; edit.dataset.settingsAction = 'edit'; edit.textContent = '编辑';
+      edit.addEventListener('click', async function () {
+        var name = window.prompt('用户名', user.username);
+        if (name === null) return;
+        var password = window.prompt('新密码（留空则不修改）', '');
+        var dirs = window.prompt('授权 Rootdir id（逗号分隔）', (user.root_ids || []).join(','));
+        if (dirs === null) return;
+        var body = {username: name, root_ids: dirs.split(',').map(function (item) { return item.trim(); }).filter(Boolean)};
+        if (password) body.password = password;
+        try {
+          await settingsRequest('/api/clawmate/settings/users/' + encodeURIComponent(user.id),
+            {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+          await loadUsers();
+        } catch (_) {}
+      });
+      var remove = document.createElement('button');
+      remove.type = 'button'; remove.dataset.settingsAction = 'delete'; remove.textContent = '删除';
+      remove.addEventListener('click', async function () {
+        if (!window.confirm('删除用户 ' + user.username + '？')) return;
+        try {
+          await settingsRequest('/api/clawmate/settings/users/' + encodeURIComponent(user.id), {method: 'DELETE'});
+          await loadUsers();
+        } catch (_) {}
+      });
+      row.appendChild(edit); row.appendChild(remove);
+      users.appendChild(row);
     });
-    roots.textContent = '';
-    data.root_dirs.forEach(function (root) { var option = document.createElement('option'); option.value = root; option.textContent = root; roots.appendChild(option); });
+    var fieldset = document.getElementById('settingsUserRoots');
+    fieldset.textContent = '';
+    data.roots.forEach(function (root) {
+      var label = document.createElement('label');
+      var box = document.createElement('input');
+      box.type = 'checkbox'; box.name = 'root_ids'; box.value = root.id;
+      label.appendChild(box);
+      label.appendChild(document.createTextNode(' ' + root.label));
+      fieldset.appendChild(label);
+    });
   }
-  btn.addEventListener('click', async function () { modal.style.display = 'flex'; showSettingsError(''); try { await loadSettings(); } catch (_) {} });
+  async function loadSettings() {
+    await loadRoots();
+    await loadUsers();
+  }
+  modal.querySelectorAll('[data-settings-tab]').forEach(function (tab) {
+    tab.addEventListener('click', function () { selectTab(tab.dataset.settingsTab); });
+  });
+  document.getElementById('settingsRootBrowse').addEventListener('click', function () {
+    if (typeof openDirPicker !== 'function') return;
+    // selectedDir: '' — without it the picker defaults to the preview panel's
+    // current directory, because dirPickerSelectedDir falls back to parentDir.
+    openDirPicker('rootdir', '选择 Rootdir 目录', {
+      rootId: '.',
+      selectedDir: '',
+      onSelect: function (dir) {
+        document.getElementById('settingsRootDir').value = dir;
+      }
+    });
+  });
+  document.getElementById('settingsRootCancel').addEventListener('click', resetRootForm);
+  document.getElementById('settingsRootForm').addEventListener('submit', async function (event) {
+    event.preventDefault();
+    var payload = {
+      label: document.getElementById('settingsRootLabel').value,
+      dir: document.getElementById('settingsRootDir').value,
+      agent_id: document.getElementById('settingsRootAgent').value || 'default'
+    };
+    if (!payload.dir) { showSettingsError('请先选择一个目录。'); return; }
+    try {
+      if (editingRootId) {
+        await settingsRequest('/api/clawmate/settings/roots/' + encodeURIComponent(editingRootId),
+          {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+      } else {
+        var explicitId = document.getElementById('settingsRootId').value.trim();
+        if (explicitId) payload.id = explicitId;
+        await settingsRequest('/api/clawmate/settings/roots',
+          {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+      }
+      resetRootForm();
+      await loadSettings();
+    } catch (_) {}
+  });
+  document.getElementById('settingsUserForm').addEventListener('submit', async function (event) {
+    event.preventDefault();
+    var fieldset = document.getElementById('settingsUserRoots');
+    var chosen = [];
+    fieldset.querySelectorAll('input[name="root_ids"]:checked').forEach(function (box) { chosen.push(box.value); });
+    if (!chosen.length) { showSettingsError('请至少选择一个可访问 Rootdir。'); return; }
+    try {
+      await settingsRequest('/api/clawmate/settings/users', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          username: document.getElementById('settingsUsername').value,
+          password: document.getElementById('settingsPassword').value,
+          root_ids: chosen
+        })
+      });
+      event.target.reset();
+      await loadSettings();
+    } catch (_) {}
+  });
+  btn.addEventListener('click', async function () {
+    modal.style.display = 'flex';
+    showSettingsError('');
+    resetRootForm();
+    selectTab('roots');
+    try { await loadSettings(); } catch (_) {}
+  });
   document.getElementById('settingsModalClose').addEventListener('click', function () { modal.style.display = 'none'; });
   modal.addEventListener('click', function (event) { if (event.target === modal) modal.style.display = 'none'; });
-  document.getElementById('settingsUserForm').addEventListener('submit', async function (event) {
-    event.preventDefault(); var roots = Array.from(document.getElementById('settingsRootDirs').selectedOptions).map(function (o) { return o.value; });
-    if (!roots.length) { showSettingsError('请至少选择一个可访问 Rootdir。'); return; }
-    try { await settingsRequest('/api/clawmate/settings/users', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:document.getElementById('settingsUsername').value, password:document.getElementById('settingsPassword').value, root_dirs:roots})}); event.target.reset(); await loadSettings(); } catch (_) {}
-  });
   document.getElementById('passwordChangeForm').addEventListener('submit', async function (event) {
-    event.preventDefault(); var res = await authFetch('/api/clawmate/auth/change-password', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:document.getElementById('passwordChangeInput').value})});
-    if (res.ok) window.location.reload(); else document.getElementById('passwordChangeError').textContent = (await res.json()).detail || '保存失败';
+    event.preventDefault();
+    var res = await authFetch('/api/clawmate/auth/change-password',
+      {method: 'POST', headers: {'Content-Type': 'application/json'},
+       body: JSON.stringify({password: document.getElementById('passwordChangeInput').value})});
+    if (res.ok) window.location.reload();
+    else document.getElementById('passwordChangeError').textContent = (await res.json()).detail || '保存失败';
   });
   if (me.must_change_password) { passwordModal.style.display = 'flex'; return true; }
   return false;

@@ -1,32 +1,66 @@
+from __future__ import annotations
+
 from pathlib import Path
 
-
-ROOT = Path(__file__).resolve().parents[1]
-STATIC = ROOT / "dev" / "static"
+STATIC = Path(__file__).resolve().parents[1] / "dev" / "static"
 
 
-def test_index_declares_grouped_settings_modal():
+def test_index_declares_two_settings_tabs():
     html = (STATIC / "index.html").read_text(encoding="utf-8")
 
-    assert 'id="btnSettings"' in html
-    assert 'id="settingsModal"' in html
-    assert 'data-settings-section="users"' in html
-    assert 'data-settings-section="rootdirs"' in html
+    assert 'id="btnSettings"' in html and 'id="settingsModal"' in html
+    assert 'data-settings-tab="roots"' in html and 'data-settings-tab="users"' in html
     assert 'data-more="btnSettings"' in html
-    assert 'data-settings-action="edit"' in html
-    assert 'data-settings-action="delete"' in html
 
 
-def test_settings_script_uses_identity_and_settings_endpoints():
+def test_root_tab_declares_registry_controls():
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+
+    assert 'id="settingsRootList"' in html
+    assert 'id="settingsRootDir"' in html
+    assert 'id="settingsRootBrowse"' in html
+    assert 'id="settingsRootAgent"' in html
+
+
+def test_user_tab_uses_registry_checkboxes_not_a_path_multiselect():
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+
+    assert 'id="settingsUserRoots"' in html
+    assert '<select id="settingsRootDirs"' not in html
+
+
+def test_frontend_sends_root_ids_not_the_removed_root_dirs_key():
+    """The API now rejects root_dirs, so a stale payload would 422 silently."""
     script = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
 
-    assert "/api/clawmate/auth/status" in script
+    assert "root_ids" in script
+    assert "root_dirs" not in script
+
+
+def test_settings_script_calls_registry_and_grant_endpoints():
+    script = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
+
+    assert "/api/clawmate/settings/roots" in script
     assert "/api/clawmate/settings/users" in script
-    assert "method:'PATCH'" in script
-    assert "method:'DELETE'" in script
+    assert "/api/clawmate/auth/status" in script
+    assert "root_ids" in script
 
 
-def test_settings_script_reports_failed_admin_requests_without_iterating_error_payload():
+def test_root_browse_reuses_the_shared_directory_picker():
+    script = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
+
+    assert "openDirPicker" in script
+    assert "/api/clawmate/settings/browse" not in script
+
+
+def test_root_browse_starts_at_the_system_root():
+    script = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
+
+    assert "selectedDir: ''" in script
+    assert "rootId: '.'" in script
+
+
+def test_settings_script_reports_failed_admin_requests():
     script = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
 
     assert "设置请求失败" in script
@@ -44,6 +78,16 @@ def test_settings_identity_probe_does_not_redirect_local_auth_bypass_to_login():
     script = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
 
     assert "await fetch('/api/clawmate/auth/status')" in script
+
+
+def test_dir_picker_paints_above_the_settings_modal():
+    """Both are .modal-overlay siblings; DOM order puts the settings modal last."""
+    css = (STATIC / "css" / "style.css").read_text(encoding="utf-8")
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+
+    assert "#dirPickerModal" in css and "z-index: 10001" in css
+    assert html.index('id="dirPickerModal"') < html.index('id="settingsModal"'), \
+        "if the picker is ever moved after the settings modal this rule is no longer needed"
 
 
 def test_dir_picker_exposes_a_hidden_directory_toggle():
