@@ -193,6 +193,10 @@ GET /api/clawmate/list?root=.&dir=helper&dirs_only=true&limit=500
 
 422 校验失败或引用冲突；403 未授权；404 不存在；401 未认证。设置路由要求管理员身份，且在首次改密完成前不可使用。
 
+授权失败必须**必然**落到 403，不能因为某条路由没写 `except` 就变成 500。因此应用注册一个 `RootNotAuthorized → 403` 的全局异常处理器作为兜底。处理器只针对 `RootNotAuthorized`，不针对宽泛的 `PermissionError`——后者也会由真实的文件系统操作抛出，其既有语义必须保留。
+
+两处反馈接口按设计需要**跳过**调用方无权访问的 root（而非报错），其 `except ValueError: continue` 需补上 `PermissionError`，否则越权的 root 参数会让整个请求 500，而不是被跳过。
+
 ## 设置界面
 
 设置弹窗内拆为两个 tab，顺序按工作流：**先登记 Rootdir，再给用户授权**。复用既有 `.modal-overlay` / `.modal-box` token 与「更多」菜单入口，不引入侧边推挤面板。

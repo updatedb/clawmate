@@ -601,6 +601,8 @@ Fixes defect B and completes the agent-routing fix: `get_roots()` no longer fall
 - Modify: `dev/service.py:92-108`
 - Modify: `dev/config.py:157-175`
 - Modify: `dev/auth.py:41-69,373-374,422-434`
+- Modify: `dev/main.py` (register the `RootNotAuthorized` → 403 handler)
+- Modify: `dev/feedback_api.py:244,290` (preserve the intentional skip of unauthorized roots)
 - Modify: `.gitignore` (add `roots.json` — this task establishes the runtime path)
 - Test: `tests/test_root_authorization_regression.py`, `tests/test_user_root_authorization.py`, `tests/test_auth_users.py`
 
@@ -824,6 +826,34 @@ def test_authorization_failure_is_a_permission_error(tmp_path: Path):
 
     with pytest.raises(PermissionError):
         authorize_root(None, "private", registry, tmp_path)
+
+
+def test_local_admin_serialises_like_a_real_account():
+    summary = LocalAdmin().public()
+
+    assert summary == {"id": "", "username": "local-admin", "is_admin": True,
+                       "must_change_password": False, "root_ids": []}
+
+
+def test_uncaught_authorization_failure_is_403_not_500():
+    """The registered handler is the safety net for routes that do not catch it."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from root_auth import RootNotAuthorized, authorize_root, root_not_authorized_handler
+
+    app = FastAPI()
+    app.add_exception_handler(RootNotAuthorized, root_not_authorized_handler)
+    registry = _registry(tmp_path)
+
+    @app.get("/boom")
+    async def boom():
+        authorize_root(None, "private", registry, tmp_path)
+
+    response = TestClient(app, raise_server_exceptions=False).get("/boom")
+
+    assert response.status_code == 403
+    assert response.json()["error"] == "forbidden"
 ```
 
 Create `tests/test_auth_users.py` — the login and forced-password-change contract the original plan named but never produced:
@@ -950,6 +980,15 @@ class LocalAdmin:
     is_admin = True
     must_change_password = False
     root_ids: tuple[str, ...] = ()
+
+    def public(self) -> dict:
+        """Same shape as UserRecord.public() so /auth/me can serialise either.
+
+        Without this, a local client reaching /api/clawmate/auth/me would raise
+        AttributeError and turn a previously graceful 401 into a 500.
+        """
+        return {"id": self.id, "username": self.username, "is_admin": True,
+                "must_change_password": False, "root_ids": []}
 
 
 def authorize_root(user, root_id: str, registry, system_root_dir: Path) -> Path:
@@ -1137,7 +1176,28 @@ Rewrite `_auth_failure_redirect` (currently `dev/auth.py:443-451`) so the cookie
         return response
 ```
 
-5. **Ignore the new runtime file.** `get_root_registry()` makes `roots.json` a runtime artifact sitting next to `config.json`, exactly like `users.json`. `.gitignore:43` already lists `users.json` but not `roots.json`, so add it on the following line:
+5. **Make the 403 actually land, and stop the contract change from turning graceful paths into 500s.** `authorize_root` raises `RootNotAuthorized`, but nothing in the app handles it: `main.py` registers no exception handler, and existing call sites guard with `except ValueError`, which no longer matches. Two consequences to fix, both caused by this task's contract change:
+   - Uncaught authorization failures must become a clean 403 rather than a 500. Add the handler function to `dev/root_auth.py` so it can be registered by the app and exercised directly by a test:
+   ```python
+   async def root_not_authorized_handler(request, exc) -> JSONResponse:
+       """Authorization failures are 403, never a 500 with a stack trace."""
+       return JSONResponse({"error": "forbidden", "detail": "Root not allowed"}, status_code=403)
+   ```
+   with `from fastapi.responses import JSONResponse` at the top of the module, and register it in `dev/main.py` next to the other app setup:
+   ```python
+   from root_auth import RootNotAuthorized, root_not_authorized_handler  # noqa: E402
+
+   app.add_exception_handler(RootNotAuthorized, root_not_authorized_handler)
+   ```
+   Register it for `RootNotAuthorized` specifically — **not** for `PermissionError` broadly, because `PermissionError` is also raised by genuine filesystem operations, which must keep their existing meaning.
+   - Two feedback paths deliberately *skip* roots the caller may not see, and used `except ValueError: continue` to do it. Add a `PermissionError` sibling so the skip survives. In `dev/feedback_api.py`, at the `except ValueError:` inside the per-root loop at both `:244` and `:290`:
+   ```python
+           except (ValueError, PermissionError):
+               continue
+   ```
+   With the handler registered, the remaining sites (`dev/feedback_api.py:71`, `:341`, and the `except ValueError -> 422` guards) need no edit: an authorization failure there now yields 403 instead of a 500, which is the intended contract.
+
+6. **Ignore the new runtime file.** `get_root_registry()` makes `roots.json` a runtime artifact sitting next to `config.json`, exactly like `users.json`. `.gitignore:43` already lists `users.json` but not `roots.json`, so add it on the following line:
 
 ```
 roots.json
