@@ -149,6 +149,10 @@ class AppConfig:
 
     def root_agent(self, root_id: str) -> str:
         """返回指定 root 对应的 agent_id。"""
+        if self.system_root_dir:
+            from auth import get_root_registry
+            entry = get_root_registry().get(str(root_id))
+            return entry.agent_id if entry is not None else "default"
         for r in self.roots:
             if r.id == root_id:
                 return r.agent_id

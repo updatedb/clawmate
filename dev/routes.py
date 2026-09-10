@@ -60,18 +60,13 @@ async def public_config(request: Request):
             })
     except Exception:
         pass
-    user = getattr(request.state, "user", None)
-    if cfg.system_root_dir and user is not None:
-        roots = ([{"id": ".", "label": "系统根目录", "agent_id": "default"}]
-                 if user.is_admin else
-                 [{"id": root_id, "label": Path(root_id).name, "agent_id": "default"}
-                  for root_id in user.root_dirs])
-        default_root = roots[0]["id"] if roots else ""
-    else:
-        configured_roots, configured_default = get_roots()
-        roots = [{"id": root["id"], "label": root["label"], "agent_id": "default"}
-                 for root in configured_roots]
-        default_root = configured_default
+    visible_roots, default_root = get_roots()
+    # A legacy (system_root_dir-less) deployment keeps absolute-path roots that
+    # carry no agent_id; those default to the gateway's "default" agent exactly
+    # as before. Registry-backed roots always report their own agent_id.
+    roots = [{"id": root["id"], "label": root["label"],
+              "agent_id": root.get("agent_id", "default")}
+             for root in visible_roots]
     return {
         "roots": roots,
         "defaultRootId": default_root,
@@ -1141,7 +1136,16 @@ async def auth_me(request: Request):
     user = getattr(request.state, "user", None)
     if user is None:
         return JSONResponse({"error": "unauthorized", "detail": "用户不存在"}, status_code=401)
-    return JSONResponse({**user.public(), "must_change_password": bool(session.get("must_change_password"))})
+    visible, _ = get_roots()
+    return JSONResponse({
+        **user.public(),
+        "must_change_password": bool(session.get("must_change_password")),
+        # Same shape as /api/clawmate/config: legacy roots without a registry
+        # entry have no agent_id and keep the previous "default" value.
+        "roots": [{"id": root["id"], "label": root["label"],
+                   "agent_id": root.get("agent_id", "default")}
+                  for root in visible],
+    })
 
 
 @router.post("/api/clawmate/auth/change-password")
