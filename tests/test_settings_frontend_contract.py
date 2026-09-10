@@ -47,7 +47,16 @@ def test_index_declares_two_settings_tabs():
 
     assert 'id="btnSettings"' in html and 'id="settingsModal"' in html
     assert 'data-settings-tab="roots"' in html and 'data-settings-tab="users"' in html
-    assert 'data-more="btnSettings"' in html
+
+
+def test_settings_entry_is_a_desktop_topbar_control_and_a_mobile_menu_mirror():
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    menu_start = html.index('<div class="more-menu"')
+    menu_end = html.index('</div>', menu_start)
+    menu = html[menu_start:menu_end]
+
+    assert '<button id="btnSettings" class="topbar-btn"' in html
+    assert 'data-more="btnSettings"' in menu
 
 
 def test_root_tab_declares_registry_controls():
@@ -64,6 +73,15 @@ def test_user_tab_uses_registry_checkboxes_not_a_path_multiselect():
 
     assert 'id="settingsUserRoots"' in html
     assert '<select id="settingsRootDirs"' not in html
+
+
+def test_user_edit_reuses_the_registry_checkbox_form():
+    script = _strip_js_comments((STATIC / "js" / "app.js").read_text(encoding="utf-8"))
+    edit_handler = _handler_body(script, "text.textContent = user.username")
+
+    assert "editingUserId = user.id" in edit_handler
+    assert "settingsUserRoots" in edit_handler
+    assert "window.prompt('授权 Rootdir id" not in edit_handler
 
 
 def test_frontend_sends_root_ids_not_the_removed_root_dirs_key():

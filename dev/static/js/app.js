@@ -3087,6 +3087,7 @@ async function initSettings() {
   btn.hidden = !me.is_admin;
   var error = document.getElementById('settingsError');
   var editingRootId = '';
+  var editingUserId = '';
   function showSettingsError(message) { error.textContent = message || ''; }
   async function settingsRequest(url, options) {
     var response = await authFetch(url, options);
@@ -3120,6 +3121,13 @@ async function initSettings() {
     document.getElementById('settingsRootAgent').value = '';
     document.getElementById('settingsRootHint').textContent = '';
     document.getElementById('settingsRootCancel').hidden = true;
+  }
+  function resetUserForm() {
+    editingUserId = '';
+    var form = document.getElementById('settingsUserForm');
+    form.reset();
+    form.querySelector('button[type="submit"]').textContent = '创建用户';
+    document.getElementById('settingsUserCancel').hidden = true;
   }
   var usersCache = [];
   async function loadRoots() {
@@ -3181,19 +3189,16 @@ async function initSettings() {
       row.appendChild(text);
       var edit = document.createElement('button');
       edit.type = 'button'; edit.textContent = '编辑';
-      edit.addEventListener('click', async function () {
-        var name = window.prompt('用户名', user.username);
-        if (name === null) return;
-        var password = window.prompt('新密码（留空则不修改）', '');
-        var dirs = window.prompt('授权 Rootdir id（逗号分隔）', (user.root_ids || []).join(','));
-        if (dirs === null) return;
-        var body = {username: name, root_ids: dirs.split(',').map(function (item) { return item.trim(); }).filter(Boolean)};
-        if (password) body.password = password;
-        try {
-          await settingsRequest('/api/clawmate/settings/users/' + encodeURIComponent(user.id),
-            {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
-          await loadUsers();
-        } catch (_) {}
+      edit.addEventListener('click', function () {
+        editingUserId = user.id;
+        document.getElementById('settingsUsername').value = user.username;
+        document.getElementById('settingsPassword').value = '';
+        document.getElementById('settingsUserRoots').querySelectorAll('input[name="root_ids"]').forEach(function (box) {
+          box.checked = (user.root_ids || []).indexOf(box.value) >= 0;
+        });
+        document.querySelector('#settingsUserForm button[type="submit"]').textContent = '保存用户';
+        document.getElementById('settingsUserCancel').hidden = false;
+        showSettingsError('');
       });
       var remove = document.createElement('button');
       remove.type = 'button'; remove.textContent = '删除';
@@ -3238,6 +3243,7 @@ async function initSettings() {
     });
   });
   document.getElementById('settingsRootCancel').addEventListener('click', resetRootForm);
+  document.getElementById('settingsUserCancel').addEventListener('click', resetUserForm);
   document.getElementById('settingsRootForm').addEventListener('submit', async function (event) {
     event.preventDefault();
     var payload = {
@@ -3267,15 +3273,19 @@ async function initSettings() {
     fieldset.querySelectorAll('input[name="root_ids"]:checked').forEach(function (box) { chosen.push(box.value); });
     if (!chosen.length) { showSettingsError('请至少选择一个可访问 Rootdir。'); return; }
     try {
-      await settingsRequest('/api/clawmate/settings/users', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          username: document.getElementById('settingsUsername').value,
-          password: document.getElementById('settingsPassword').value,
-          root_ids: chosen
-        })
+      var body = {
+        username: document.getElementById('settingsUsername').value,
+        root_ids: chosen
+      };
+      var password = document.getElementById('settingsPassword').value;
+      if (!editingUserId || password) body.password = password;
+      await settingsRequest(editingUserId
+        ? '/api/clawmate/settings/users/' + encodeURIComponent(editingUserId)
+        : '/api/clawmate/settings/users', {
+        method: editingUserId ? 'PATCH' : 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
       });
-      event.target.reset();
+      resetUserForm();
       await loadSettings();
     } catch (_) {}
   });

@@ -670,7 +670,9 @@ def test_unauthenticated_browser_is_redirected_to_login(browser):
 
 @pytest.mark.usefixtures("admin_page")
 def test_settings_modal_is_admin_only(page: Page):
-    check(page.locator("#btnSettings").is_visible(), "管理员可见设置入口")
+    check(page.locator("#btnSettings").is_visible(), "管理员在桌面 topbar 可见系统设置入口")
+    check(not page.locator("#btnMoreMenu").is_visible(), "桌面不展示移动端更多菜单入口")
+    check(page.locator("#btnSettings svg").is_visible(), "设置入口展示图标")
     _open_settings(page)
     check(page.locator("#settingsModal").is_visible(), "管理员可见设置弹窗")
     check(page.locator('[data-settings-tab="roots"]').is_visible(), "默认展示 Rootdir 管理")
