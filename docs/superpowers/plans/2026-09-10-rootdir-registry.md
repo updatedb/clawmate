@@ -417,7 +417,7 @@ Fixes defect C: a single vanished directory could raise out of `auth_login` and 
 
 **Interfaces:**
 - Consumes: `RootRegistryError`, `validate_root_dir` from Task 1 (write-time validation only).
-- Produces: `UserRecord.root_ids: tuple[str, ...]`, `UserRecord.public()` including `root_ids`; `UserStore(path, system_root_dir)` where `system_root_dir` is only used to validate `root_ids` are well-formed relative paths; `create_user(username, password, root_ids, *, is_admin=False)`, `update_user(user_id, *, username, password, root_ids, is_admin)`.
+- Produces: `UserRecord.root_ids: tuple[str, ...]`, `UserRecord.public()` including `root_ids`; `UserStore(path, system_root_dir)` — after this task the store holds **no** registry or filesystem knowledge, so `system_root_dir` is retained only for backwards-compatible construction; `create_user(username, password, root_ids, *, is_admin=False)`, `update_user(user_id, *, username, password, root_ids, is_admin)`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -443,10 +443,10 @@ def test_admin_can_still_log_in_after_a_grant_target_disappears(tmp_path: Path):
     assert store.authenticate("admin", "password") is not None
 
 
-def test_create_user_rejects_a_root_outside_the_system_root(tmp_path: Path):
+def test_create_user_rejects_a_root_id_outside_the_allowed_charset(tmp_path: Path):
     store = UserStore(tmp_path / "users.json", tmp_path)
 
-    with pytest.raises(ValueError, match="outside the system root"):
+    with pytest.raises(ValueError, match="Invalid root id"):
         store.create_user("writer", "writer-password", ["../outside"])
 
 
@@ -520,7 +520,8 @@ and replace `_root_dirs` with:
 ```python
     @staticmethod
     def _root_ids(values: object) -> list[str]:
-        """Validate grant shape only. Existence is checked at write time."""
+        """Validate grant shape only. Existence is checked by the settings routes
+        against the root registry, not here."""
         if not isinstance(values, list):
             raise ValueError("root_ids must be a list")
         result: list[str] = []
@@ -528,20 +529,6 @@ and replace `_root_dirs` with:
             root_id = str(value).strip()
             if not _RID_RE.match(root_id):
                 raise ValueError("Invalid root id")
-            if root_id not in result:
-                result.append(root_id)
-        return result
-
-    def _validate_grants(self, root_ids: list[str]) -> list[str]:
-        """Write-time validation: each id must name an existing system-root subdirectory."""
-        from root_registry import RootRegistryError, validate_root_dir
-
-        result: list[str] = []
-        for root_id in root_ids:
-            try:
-                validate_root_dir(self.system_root_dir, root_id)
-            except RootRegistryError as exc:
-                raise ValueError(str(exc)) from exc
             if root_id not in result:
                 result.append(root_id)
         return result
@@ -562,7 +549,7 @@ Replace the body of `_write` with the shared atomic writer from Task 1 so the cr
 In `create_user` replace the `roots = self._root_dirs(root_dirs)` line:
 
 ```python
-        roots = self._validate_grants(self._root_ids(root_ids)) if not is_admin else []
+        roots = self._root_ids(root_ids) if not is_admin else []
         if not is_admin and not roots:
             raise ValueError("A regular user requires at least one root directory")
         user = UserRecord(str(uuid.uuid4()), name, self.hash_password(password), is_admin, False, tuple(roots))
@@ -571,13 +558,21 @@ In `create_user` replace the `roots = self._root_dirs(root_dirs)` line:
 In `update_user`, replace `roots = ...` and the `must_change_password` computation:
 
 ```python
-        roots = (self._validate_grants(self._root_ids(root_ids)) if root_ids is not None
-                 else ([] if admin else list(current.root_ids)))
+        if admin:
+            roots = []
+        elif root_ids is not None:
+            roots = self._root_ids(root_ids)
+        else:
+            roots = list(current.root_ids)
         if not admin and not roots:
             raise ValueError("A regular user requires at least one root directory")
 ```
 
+The explicit `admin` branch is load-bearing: passing `root_ids` alongside `is_admin=True` must still leave the account with empty grants, because the specification requires administrators to keep `root_ids` empty (their visibility comes from `is_admin`, not from grants).
+
 and rename the `root_dirs` keyword to `root_ids` in the signature and in `_read`'s dict construction.
+
+**Grant existence is deliberately NOT validated here.** An earlier revision of this plan had the store resolve each grant id as a filesystem path, which was wrong: a registry entry `id="3gpp" / dir="helper/3gpp"` (exactly what the migration produces) made `validate_root_dir(system_root, "3gpp")` check `system_root/3gpp` and reject a legitimate grant. Grant ids are registry references, so existence is checked in the settings routes (Task 5) against the registry, and unknown ids return 422 there. This keeps `UserStore` free of both registry and filesystem knowledge, mirroring how `RootRegistry.delete(referenced_by=...)` keeps the registry free of user knowledge.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1527,6 +1522,47 @@ def test_admin_cannot_register_a_directory_outside_the_system_root(tmp_path: Pat
     assert response.status_code == 422
 
 
+def test_grant_referencing_an_unregistered_root_id_is_rejected(tmp_path: Path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    _login_admin(client)
+
+    response = client.post("/api/clawmate/settings/users", json={
+        "username": "writer", "password": "writer-password", "root_ids": ["no-such-root"]})
+
+    assert response.status_code == 422
+    assert "no-such-root" in response.text
+    assert [user["username"] for user in
+            client.get("/api/clawmate/settings/users").json()["users"]] == ["admin"]
+
+
+def test_grant_ids_are_validated_against_the_registry_not_the_filesystem(tmp_path: Path, monkeypatch):
+    """A root whose id differs from its directory basename must still be grantable."""
+    (tmp_path / "helper" / "3gpp").mkdir(parents=True)
+    client = _client(tmp_path, monkeypatch)
+    _login_admin(client)
+    created = client.post("/api/clawmate/settings/roots", json={
+        "label": "3GPP Meetings", "dir": "helper/3gpp", "agent_id": "helper"})
+    assert created.json()["id"] == "3gpp"
+
+    response = client.post("/api/clawmate/settings/users", json={
+        "username": "writer", "password": "writer-password", "root_ids": ["3gpp"]})
+
+    assert response.status_code == 201
+    assert response.json()["root_ids"] == ["3gpp"]
+
+
+def test_patch_rejects_an_unregistered_grant_id(tmp_path: Path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    _login_admin(client)
+    created = client.post("/api/clawmate/settings/users", json={
+        "username": "writer", "password": "writer-password", "root_ids": ["projects"]})
+
+    response = client.patch(f"/api/clawmate/settings/users/{created.json()['id']}",
+                            json={"root_ids": ["no-such-root"]})
+
+    assert response.status_code == 422
+
+
 def test_regular_user_cannot_reach_root_management(tmp_path: Path, monkeypatch):
     client = _client(tmp_path, monkeypatch)
     _login_admin(client)
@@ -1623,6 +1659,30 @@ def _referenced_root_ids() -> set[str]:
             for rid in (user.get("root_ids") or [])}
 
 
+def _validate_root_ids(root_ids: object) -> list[str]:
+    """Grant ids must reference registered roots. Unknown ids are a 422.
+
+    Existence lives here rather than in UserStore so that the store holds no
+    registry knowledge, mirroring how RootRegistry.delete(referenced_by=...)
+    keeps the registry free of user knowledge.
+    """
+    if not isinstance(root_ids, list):
+        raise HTTPException(status_code=422, detail="root_ids must be a list")
+    registry = _registry()
+    result: list[str] = []
+    for value in root_ids:
+        root_id = str(value).strip()
+        try:
+            entry = registry.get(root_id)
+        except RootRegistryError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if entry is None:
+            raise HTTPException(status_code=422, detail=f"Unknown root id: {root_id}")
+        if root_id not in result:
+            result.append(root_id)
+    return result
+
+
 @router.get("/api/clawmate/settings/roots")
 async def list_roots(request: Request):
     _admin(request)
@@ -1692,10 +1752,13 @@ async def list_users(request: Request):
 async def create_user(request: Request):
     _admin(request)
     body = await request.json()
+    is_admin = bool(body.get("is_admin", False))
+    # Administrators keep root_ids empty, so there is nothing to validate.
+    root_ids = [] if is_admin else _validate_root_ids(body.get("root_ids", []))
     try:
         user = get_user_store().create_user(
             str(body.get("username", "")), str(body.get("password", "")),
-            body.get("root_ids", []), is_admin=bool(body.get("is_admin", False)))
+            root_ids, is_admin=is_admin)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return JSONResponse(user.public(), status_code=201)
@@ -1704,11 +1767,24 @@ async def create_user(request: Request):
 @router.patch("/api/clawmate/settings/users/{user_id}")
 async def update_user(user_id: str, request: Request):
     _admin(request)
+    store = get_user_store()
+    current = store.get(user_id)
+    if current is None:
+        raise HTTPException(status_code=404, detail="User not found")
     body = await request.json()
+    is_admin = body.get("is_admin")
+    # Resolve the effective role before validating: promoting to admin discards
+    # grants, so validating them first would reject a legitimate promotion.
+    effective_admin = current.is_admin if is_admin is None else bool(is_admin)
+    root_ids = body.get("root_ids")
+    if effective_admin:
+        root_ids = []
+    elif root_ids is not None:
+        root_ids = _validate_root_ids(root_ids)
     try:
-        user = get_user_store().update_user(
+        user = store.update_user(
             user_id, username=body.get("username"), password=body.get("password"),
-            root_ids=body.get("root_ids"), is_admin=body.get("is_admin"))
+            root_ids=root_ids, is_admin=is_admin)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
