@@ -49,10 +49,19 @@ def valid_root_id(value: object) -> bool:
 
 
 def _agent_id(value: object) -> str:
-    agent = str(value).strip() or "default"
+    if not isinstance(value, str) or not value.strip():
+        raise RootRegistryError("agent_id 不能为空")
+    agent = value.strip()
     if not _ID_RE.match(agent):
         raise RootRegistryError("agent_id 含非法字符")
     return agent
+
+
+def _required_text(item: dict, name: str) -> str:
+    value = item.get(name)
+    if not isinstance(value, str) or not value.strip():
+        raise RootRegistryError(f"{name} 不能为空")
+    return value.strip()
 
 
 def atomic_write_json(path: Path, payload: dict) -> None:
@@ -97,14 +106,14 @@ class RootRegistry:
         for item in items:
             if not isinstance(item, dict):
                 raise RootRegistryError("Rootdir 配置无效")
-            root_id = str(item.get("id", "")).strip()
+            root_id = _required_text(item, "id")
             if not _ID_RE.match(root_id):
                 raise RootRegistryError(f"root id 含非法字符: {root_id!r}")
             result.append(RootEntry(
                 id=root_id,
-                label=str(item.get("label") or root_id),
-                dir=str(item.get("dir", "")).strip(),
-                agent_id=_agent_id(item.get("agent_id", "default")),
+                label=_required_text(item, "label"),
+                dir=_required_text(item, "dir"),
+                agent_id=_agent_id(item.get("agent_id")),
             ))
         return result
 
@@ -159,7 +168,8 @@ class RootRegistry:
             raise RootRegistryError("root id 含非法字符")
         if final_id in taken:
             raise RootRegistryError("root id 已存在")
-        entry = RootEntry(final_id, str(label).strip() or final_id, normalized, _agent_id(agent_id))
+        entry = RootEntry(final_id, _required_text({"label": label}, "label"), normalized,
+                          _agent_id(agent_id))
         self._write([*roots, entry])
         return entry
 
@@ -175,7 +185,7 @@ class RootRegistry:
             raise RootRegistryError("该目录已被其它 Rootdir 占用")
         updated = RootEntry(
             id=current.id,
-            label=str(label).strip() if label is not None else current.label,
+            label=_required_text({"label": label}, "label") if label is not None else current.label,
             dir=new_dir,
             agent_id=_agent_id(agent_id) if agent_id is not None else current.agent_id,
         )

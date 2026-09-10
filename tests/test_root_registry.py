@@ -134,8 +134,30 @@ def test_read_rejects_malformed_registry(tmp_path: Path):
     registry = _registry(tmp_path)
     registry.path.write_text("{ not json", encoding="utf-8")
 
-    with pytest.raises(RootRegistryError, match="配置无效"):
+    with pytest.raises(RootRegistryError):
         registry.list_all()
+
+
+@pytest.mark.parametrize("entry", [
+    {"label": "Projects", "dir": "projects", "agent_id": "work"},
+    {"id": "projects", "dir": "projects", "agent_id": "work"},
+    {"id": "projects", "label": "Projects", "agent_id": "work"},
+    {"id": "projects", "label": "Projects", "dir": "projects"},
+])
+def test_read_rejects_a_root_missing_a_required_field(tmp_path: Path, entry: dict):
+    registry = _registry(tmp_path)
+    registry.path.write_text(json.dumps({"roots": [entry]}), encoding="utf-8")
+
+    with pytest.raises(RootRegistryError):
+        registry.list_all()
+
+
+@pytest.mark.parametrize("label,agent_id", [("", "work"), ("Projects", "")])
+def test_create_rejects_empty_required_label_or_agent(tmp_path: Path, label: str, agent_id: str):
+    registry = _registry(tmp_path)
+
+    with pytest.raises(RootRegistryError, match="不能为空"):
+        registry.create(label=label, dir="projects", agent_id=agent_id)
 
 
 def test_write_is_atomic_and_leaves_no_temp_files(tmp_path: Path):

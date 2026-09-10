@@ -381,21 +381,19 @@ def test_create_root_rejects_an_out_of_charset_id_or_agent_id(tmp_path: Path, mo
         "label": "Bad", "dir": "docs", "agent_id": "bad agent"}).status_code == 422
 
 
-def test_explicit_json_null_id_derives_instead_of_creating_a_None_root(tmp_path: Path, monkeypatch):
+def test_create_root_rejects_missing_required_label_or_agent(tmp_path: Path, monkeypatch):
     # A fresh directory, for the same reason as the charset test above.
     (tmp_path / "docs").mkdir()
     client = _client(tmp_path, monkeypatch)
     _login_admin(client)
 
-    created = client.post("/api/clawmate/settings/roots", json={
+    missing_label = client.post("/api/clawmate/settings/roots", json={
         "id": None, "label": None, "dir": "docs", "agent_id": None})
+    missing_agent = client.post("/api/clawmate/settings/roots", json={
+        "label": "Docs", "dir": "docs", "agent_id": None})
 
-    assert created.status_code == 201
-    body = created.json()
-    assert body["id"] == "docs"
-    assert body["id"] != "None"
-    assert body["label"] != "None"
-    assert body["agent_id"] == "default"
+    assert missing_label.status_code == 422
+    assert missing_agent.status_code == 422
 
 
 def test_corrupt_registry_returns_422_not_500(tmp_path: Path, monkeypatch):

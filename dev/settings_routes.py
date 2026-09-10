@@ -63,11 +63,14 @@ async def create_root(request: Request):
     body = await request.json()
     try:
         entry = _registry().create(
-            # An explicit JSON null is treated like an absent key for id/label:
-            # without the `or ""` the value would stringify to "None".
-            label=str(body.get("label") or ""),
+            # label and agent_id are passed through untouched so the registry's
+            # own validation reports them: stringifying first would turn an
+            # explicit JSON null into the literal "None".
+            label=body.get("label"),
             dir=str(body.get("dir", "")),
-            agent_id=str(body.get("agent_id", "") or "default"),
+            agent_id=body.get("agent_id"),
+            # An explicit JSON null *is* treated like an absent key for the id:
+            # the registry then derives one from the directory.
             root_id=str(body.get("id") or "").strip() or None,
         )
     except RootRegistryError as exc:

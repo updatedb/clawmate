@@ -381,7 +381,7 @@ cp config.example.json config.json
 }
 ```
 
-其中 `dir` 是相对 `system_root_dir` 的路径（不是绝对路径），`id` 是用户授权的引用键，`agent_id` 为空时按 `default` 处理。账号保存在同目录的私有 `users.json`，通过 `root_ids` 引用这些 id：
+其中 `dir` 是相对 `system_root_dir` 的路径（不是绝对路径），`id` 是用户授权的引用键；`id`、`label`、`dir` 与 `agent_id` 均为必填字段（设置界面会为 Agent 预填 `default`）。账号保存在同目录的私有 `users.json`，通过 `root_ids` 引用这些 id：
 
 ```json
 {
