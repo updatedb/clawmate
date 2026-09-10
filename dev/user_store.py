@@ -132,10 +132,28 @@ class UserStore:
 
     def authenticate(self, username: str, password: str) -> UserRecord | None:
         target = str(username).strip()
+        user = self.get_by_username(target)
+        if user is not None and self.verify_password(password, user.password_hash):
+            return user
+        return None
+
+    def get_by_username(self, username: str) -> UserRecord | None:
+        target = str(username).strip()
         for user in self._read():
-            if user.username == target and self.verify_password(password, user.password_hash):
+            if user.username == target:
                 return user
         return None
+
+    def get_administrator(self) -> UserRecord | None:
+        return next((user for user in self._read() if user.is_admin), None)
+
+    def reset_password(self, username: str, password: str) -> UserRecord:
+        """Reset a named account password for the local recovery CLI."""
+        target = self._username(username)
+        user = self.get_by_username(target)
+        if user is None:
+            raise LookupError("User not found")
+        return self.update_user(user.id, password=password)
 
     def get(self, user_id: str) -> UserRecord | None:
         return next((user for user in self._read() if user.id == user_id), None)

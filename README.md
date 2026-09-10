@@ -374,11 +374,11 @@ cp config.example.json config.json
 首次启动会创建 `admin / password`，首次登录必须立即修改密码。账户、密码哈希和授权目录保存在与 `config.json` 同目录的私有 `users.json`，不要提交或公开它；普通用户只能访问被授权的系统根目录子目录。
 
 ```bash
-# 交互式设置密码（推荐）
-python3 main.py --set-password
+# 交互式修改当前管理员密码（读取并更新私有 users.json）
+python3 dev/main.py --set-password
 
-# 或手动生成 bcrypt hash
-python3 -c "import bcrypt; print(bcrypt.hashpw(b'你的密码', bcrypt.gensalt()).decode())"
+# 忘记当前密码时使用本机恢复模式（仍会提示输入新密码两次）
+python3 dev/main.py --set-password --force
 ```
 
 启用后，`127.0.0.1` 及 `auth.local_hosts` 中的主机自动绕过认证。

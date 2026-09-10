@@ -1117,7 +1117,7 @@ async def auth_logout(request: Request):
 @router.get("/api/clawmate/auth/status")
 async def auth_status(request: Request):
     """Return current login state."""
-    from auth import get_session, get_session_from_cookie
+    from auth import get_session, get_session_from_cookie, get_user_store
 
     sid = get_session_from_cookie(request)
     if not sid:
@@ -1125,8 +1125,11 @@ async def auth_status(request: Request):
     session = await get_session(sid)
     if not session:
         return JSONResponse({"logged_in": False})
-    return JSONResponse({"logged_in": True, "username": session.get("user", ""),
-                         "is_admin": bool(session.get("is_admin")),
+    user = get_user_store().get(str(session.get("user_id", "")))
+    if user is None:
+        return JSONResponse({"logged_in": False})
+    return JSONResponse({"logged_in": True, "username": user.username,
+                         "is_admin": user.is_admin,
                          "must_change_password": bool(session.get("must_change_password"))})
 
 

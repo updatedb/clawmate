@@ -85,6 +85,41 @@ def _run_set_password(force: bool = False):
     current_hash = ac.get("password_hash", "")
     current_user = ac.get("username", "admin")
 
+    # Multi-user deployments authenticate against users.json, not the legacy
+    # auth.password_hash field. Keep the latter path below for old configs.
+    system_root = str(cfg.get("system_root_dir", "")).strip()
+    if system_root:
+        from user_store import UserStore
+
+        store = UserStore(CONFIG_PATH.parent / "users.json", Path(system_root).expanduser().resolve())
+        account = store.get_by_username(current_user) or store.get_administrator()
+        if account is None:
+            print(f"未找到用户 {current_user}，操作取消。")
+            sys.exit(1)
+
+        print("=== ClawMate 密码设置 ===")
+        print(f"当前用户名: {account.username}")
+        if not force:
+            old = getpass.getpass("当前密码: ")
+            if not store.verify_password(old, account.password_hash):
+                print("原密码错误，操作取消。")
+                sys.exit(1)
+        else:
+            print("(force 模式，跳过原密码验证)")
+
+        while True:
+            p1 = getpass.getpass("新密码(至少4字符): ")
+            if len(p1) < 4:
+                print("新密码太短，至少需要4个字符。")
+                continue
+            if p1 != getpass.getpass("确认新密码: "):
+                print("两次输入的密码不一致，请重试。")
+                continue
+            break
+        store.reset_password(account.username, p1)
+        print(f"密码已更新(用户: {account.username})。")
+        return
+
     print("=== ClawMate 密码设置 ===")
     print(f"当前用户名: {current_user}")
 

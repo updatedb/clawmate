@@ -31,3 +31,13 @@ def test_granted_root_rejects_symlink_escape(tmp_path: Path):
 
     with pytest.raises(ValueError, match="outside system root"):
         resolve_granted_root(tmp_path, "escape")
+
+
+def test_reset_password_updates_named_user(tmp_path: Path):
+    store = UserStore(tmp_path / "users.json", tmp_path)
+
+    store.reset_password("admin", "replacement-password")
+
+    assert store.get_administrator() is not None
+    assert store.authenticate("admin", "replacement-password") is not None
+    assert store.authenticate("admin", "password") is None

@@ -88,3 +88,21 @@ def test_regular_user_config_exposes_only_granted_root_without_path(tmp_path: Pa
     roots = client.get("/api/clawmate/config").json()["roots"]
 
     assert roots == [{"id": "projects", "label": "projects", "agent_id": "default"}]
+
+
+def test_admin_settings_uses_current_account_role_not_stale_session_role(tmp_path: Path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    admin = auth.get_user_store().authenticate("admin", "password")
+    assert admin is not None
+
+    import asyncio
+    session_id, _ = asyncio.run(auth.create_session(
+        admin.username,
+        3600,
+        user_id=admin.id,
+        is_admin=False,
+    ))
+    client.cookies.set("clawmate_session", session_id)
+
+    assert client.get("/api/clawmate/auth/status").json()["is_admin"] is True
+    assert client.get("/api/clawmate/settings/users").status_code == 200

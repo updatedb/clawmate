@@ -14,7 +14,8 @@ router = APIRouter()
 
 def _admin(request: Request):
     session = getattr(request.state, "session", None)
-    if not session or not session.get("is_admin"):
+    user = getattr(request.state, "user", None)
+    if not session or not user or not user.is_admin:
         raise HTTPException(status_code=403, detail="Administrator access required")
     return session
 
