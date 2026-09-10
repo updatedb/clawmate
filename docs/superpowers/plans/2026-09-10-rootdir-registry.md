@@ -2748,6 +2748,35 @@ def test_settings_modal_is_admin_only(page: "Page"):
     check(page.locator("#settingsUserRoots").is_visible(), "用户管理展示授权复选框")
 
 
+def test_cancelling_the_picker_leaves_the_main_browser_root_unchanged(page: "Page"):
+    """The settings picker overrides state.rootId; closing must restore it.
+
+    This is the one behaviour the contract tests cannot prove: they are
+    string/shape checks, and the implementer's discrimination evidence for the
+    picker was an uncommitted harness. A missed close path silently points the
+    main file browser at the system root, which no unit test here would catch.
+    """
+    login(page)
+    before = page.evaluate("() => state.rootId")
+    page.locator("#btnSettings").click()
+    page.locator("#settingsRootBrowse").click()
+    check(page.locator("#dirPickerModal").is_visible(), "目录选择器打开")
+    page.locator("#dirPickerCancel").click()
+    after = page.evaluate("() => state.rootId")
+    check(before == after, f"取消后主浏览器 root 不变（{before} -> {after}）")
+
+
+def test_picker_opens_at_the_system_root_and_fills_the_form(page: "Page"):
+    login(page)
+    page.locator("#btnSettings").click()
+    page.locator("#settingsRootBrowse").click()
+    check(page.locator("#dirPickerModal").is_visible(), "目录选择器打开")
+    page.locator("#dirPickerTree").get_by_text("projects").first.click()
+    page.locator("#dirPickerConfirm").click()
+    check(page.input_value("#settingsRootDir") != "", "选定目录已填入 Rootdir 表单")
+    check(page.evaluate("() => state.rootId") != ".", "关闭后 root 已还原")
+
+
 def test_hidden_directories_are_toggled_in_the_picker(page: "Page"):
     login(page)
     page.locator("#btnSettings").click()
