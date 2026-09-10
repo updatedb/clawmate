@@ -10,6 +10,10 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-10-rootdir-registry-design.md`
 
+## Execution Order
+
+**Run Task 7 before Task 6.** Task 6's Rootdir form wires its「浏览…」button by calling `openDirPicker(mode, title, {rootId: '.', selectedDir: '', onSelect})`, but the third `options` argument — and the `rootId` override and `onSelect` callback it carries — is introduced by Task 7. Executed in numeric order, Task 6's browse button would open the picker bound to the preview panel's root with no callback wired, so the button would appear to work while selecting nothing. Every other task runs in numeric order. Task 8 depends on both and is unaffected.
+
 ## Global Constraints
 
 - `config.json` is read-only to the application. Never write it. It contains `openclaw_token`, `DEEPSEEK_API_KEY`, and `jwt_secret`.
@@ -2203,6 +2207,14 @@ def test_user_tab_uses_registry_checkboxes_not_a_path_multiselect():
 
     assert 'id="settingsUserRoots"' in html
     assert '<select id="settingsRootDirs"' not in html
+
+
+def test_frontend_sends_root_ids_not_the_removed_root_dirs_key():
+    """The API now rejects root_dirs, so a stale payload would 422 silently."""
+    script = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
+
+    assert "root_ids" in script
+    assert "root_dirs" not in script
 
 
 def test_settings_script_calls_registry_and_grant_endpoints():
