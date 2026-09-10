@@ -97,7 +97,7 @@
       global.dispatchEvent(new Event('previewPanelChange'));
     }
     function openFeedback(filter) {
-      var toggle = document.getElementById('btnToggleRight');
+      var toggle = document.getElementById('btnToggleFeedback');
       var bar = document.getElementById('previewFilterBar');
       if (toggle && (!bar || bar.classList.contains('hidden') || bar.offsetParent === null)) toggle.click();
       var desired = filter === 'approved' ? '已评审' : '待评审';
@@ -112,7 +112,7 @@
       var grid = global.document.querySelector('.preview-three-col');
       if (grid) {
         var rightSb = global.document.getElementById('rightSidebar');
-        if (rightSb && !rightSb.classList.contains('hidden')) { rightSb.classList.add('hidden'); rightSb.style.display = 'none'; var rt = global.document.getElementById('btnToggleRight'); if (rt) rt.classList.remove('active'); }
+        if (rightSb && !rightSb.classList.contains('hidden')) { rightSb.classList.add('hidden'); rightSb.style.display = 'none'; var rt = global.document.getElementById('btnToggleFeedback'); if (rt) rt.classList.remove('active'); }
         ['agentPanel', 'previewAgentPanel'].forEach(function (agentId) {
           var agent = global.document.getElementById(agentId);
           if (agent && !agent.classList.contains('hidden')) { agent.classList.add('hidden'); agent.style.display = 'none'; var ab = global.document.getElementById('btnToggleAgent'); if (ab) ab.classList.remove('active'); }

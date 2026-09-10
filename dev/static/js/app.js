@@ -2331,7 +2331,7 @@ function _openProjectFeedback(filter) {
   // Preview owns its feedback UI; open it and select its existing filter without
   // passing feedback text between windows. Both documents are same-origin.
   popup.addEventListener('load', () => {
-    const toggle = popup.document.getElementById('btnToggleRight');
+    const toggle = popup.document.getElementById('btnToggleFeedback');
     if (toggle) toggle.click();
     const desired = filter === 'approved' ? '已评审' : '待评审';
     let attempts = 0;

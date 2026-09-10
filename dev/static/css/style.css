@@ -327,6 +327,7 @@ button svg, .btn svg, a svg {
   .content-col > .topbar:has(#btnMoreMenu) #btnMoreMenu { display: flex; }
   .content-col > .topbar:has(#btnMoreMenu) #btnProjectPanel,
   .content-col > .topbar:has(#btnMoreMenu) #btnSettings,
+  .content-col > .topbar:has(#btnMoreMenu) #btnToggleFeedback,
   .content-col > .topbar:has(#btnMoreMenu) #themeToggle,
   .content-col > .topbar:has(#btnMoreMenu) #btnLogout,
   .content-col > .topbar:has(#btnMoreMenu) #btnToggleAgent { display: none; }

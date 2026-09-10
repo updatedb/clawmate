@@ -225,7 +225,7 @@ def test_file_preview(page: Page):
     * The panel expectations were wrong, and unreachable while the wait above
       aborted the test before them. Measured here: a .txt preview hides *both*
       side panels (there is no outline to show), a .md preview shows the outline
-      and keeps the feedback panel collapsed until `#btnToggleRight` opens it.
+      and keeps the feedback panel collapsed until `#btnToggleFeedback` opens it.
       The old assertions demanded both panels visible on any file.
     """
     print("\n── 5. 文件预览 ──")
@@ -261,9 +261,23 @@ def test_file_preview(page: Page):
     # The feedback panel is deliberately collapsed on load; the topbar toggle is
     # what opens it, so assert the transition rather than a static expectation.
     check(not preview_page.locator("#rightSidebar").is_visible(), "评审面板默认折叠")
-    preview_page.locator("#btnToggleRight").click()
+    preview_page.locator("#btnToggleFeedback").click()
     preview_page.locator("#rightSidebar").wait_for(state="visible", timeout=10000)
     check(preview_page.locator("#rightSidebar").is_visible(), "点击开关后评审面板可见")
+
+    # Mobile folds every topbar action into More. Feedback must therefore have
+    # no direct button, but remain reachable through its mirrored menu item.
+    preview_page.locator("#btnToggleFeedback").click()
+    preview_page.locator("#rightSidebar").wait_for(state="hidden", timeout=10000)
+    preview_page.set_viewport_size({"width": 375, "height": 812})
+    check(not preview_page.locator("#btnToggleFeedback").is_visible(),
+          "手机端反馈入口不留在顶栏")
+    preview_page.locator("#btnMoreMenu").click()
+    feedback_menu_item = preview_page.locator('[data-more="btnToggleFeedback"]')
+    check(feedback_menu_item.is_visible(), "手机端 More 菜单提供反馈入口")
+    feedback_menu_item.click()
+    preview_page.locator("#rightSidebar").wait_for(state="visible", timeout=10000)
+    check(preview_page.locator("#rightSidebar").is_visible(), "More 菜单可打开反馈面板")
 
     preview_page.close()
 

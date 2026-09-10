@@ -1,12 +1,8 @@
-"""Every topbar action the mobile CSS folds away must be reachable from the
-page's more-menu.
+"""Every actionable button in a mobile page's topbar belongs in More.
 
-The fold is CSS-only: `.content-col > .topbar:has(#btnMoreMenu) #<id>` sets
-`display: none` at <=768px. The button itself stays in the DOM and keeps its
-handler, so nothing breaks loudly -- the action simply becomes untappable on a
-phone. That is how the preview page lost its Agent 终端 button: the menu
-mirrored three of the four folded actions, and the missing one had no other way
-to be triggered.
+The topbar is the authoritative list. If CSS is updated separately, it can
+leave a visible action outside More (or hide one with no menu mirror), so the
+contract validates the HTML actions, their mirrors, and the fold rule together.
 """
 
 from __future__ import annotations
@@ -49,29 +45,32 @@ def _more_menu_mirrors(html: str) -> set[str]:
     return set(re.findall(r'data-more="([^"]+)"', html[start:end]))
 
 
-def _assert_folded_actions_are_mirrored(page: str) -> set[str]:
+def _topbar_action_ids(html: str) -> set[str]:
+    start = html.index('class="topbar-actions"')
+    end = html.index("</div>", start)
+    actions = set(re.findall(r'id="([^"]+)"', html[start:end]))
+    actions.remove("btnMoreMenu")
+    return actions
+
+
+def _assert_topbar_actions_are_mirrored_and_folded(page: str) -> set[str]:
     html = (STATIC / page).read_text(encoding="utf-8")
     folded = _folded_topbar_ids((STATIC / "css" / "style.css").read_text(encoding="utf-8"))
-    # A page only inherits the rules for ids it actually declares: #btnSettings
-    # is an index-only entry, so the preview page neither folds nor mirrors it.
-    present = {root_id for root_id in folded if f'id="{root_id}"' in html}
-    missing = sorted(present - _more_menu_mirrors(html))
-    assert not missing, (
-        f"{page} hides {missing} at <=768px with no more-menu entry, so those "
-        f"actions cannot be triggered from a phone")
-    return present
+    actions = _topbar_action_ids(html)
+    mirrors = _more_menu_mirrors(html)
+    assert actions == mirrors, f"{page} topbar actions and More items diverged"
+    assert actions <= folded, f"{page} leaves {sorted(actions - folded)} outside More on mobile"
+    return actions
 
 
-def test_index_mirrors_every_folded_topbar_action():
-    assert _assert_folded_actions_are_mirrored("index.html") == {
+def test_index_mirrors_every_topbar_action():
+    assert _assert_topbar_actions_are_mirrored_and_folded("index.html") == {
         "btnProjectPanel", "btnSettings", "themeToggle", "btnLogout", "btnToggleAgent"}
 
 
-def test_preview_mirrors_every_folded_topbar_action():
-    present = _assert_folded_actions_are_mirrored("preview.html")
-    # The preview topbar has no settings entry: asserting the set keeps the
-    # test honest if a rule is added without a matching mirror.
-    assert present == {"btnProjectPanel", "themeToggle", "btnLogout", "btnToggleAgent"}
+def test_preview_mirrors_every_topbar_action():
+    assert _assert_topbar_actions_are_mirrored_and_folded("preview.html") == {
+        "btnProjectPanel", "btnToggleFeedback", "themeToggle", "btnLogout", "btnToggleAgent"}
 
 
 def test_fold_rules_are_discovered_not_assumed():
@@ -80,10 +79,10 @@ def test_fold_rules_are_discovered_not_assumed():
     css = (STATIC / "css" / "style.css").read_text(encoding="utf-8")
 
     assert _folded_topbar_ids(css) == {
-        "btnProjectPanel", "btnSettings", "themeToggle", "btnLogout", "btnToggleAgent"}
+        "btnProjectPanel", "btnSettings", "btnToggleFeedback", "themeToggle", "btnLogout", "btnToggleAgent"}
 
 
-def test_preview_more_menu_dispatches_the_agent_toggle():
+def test_preview_more_menu_dispatches_the_agent_and_feedback_toggles():
     """The mirror is only useful if it targets the button the page wires up."""
     html = (STATIC / "preview.html").read_text(encoding="utf-8")
     preview_js = (STATIC / "js" / "preview.js").read_text(encoding="utf-8")
@@ -92,5 +91,8 @@ def test_preview_more_menu_dispatches_the_agent_toggle():
     assert 'data-more="btnToggleAgent"' in html
     assert 'id="btnToggleAgent"' in html
     assert "btnToggleAgent.addEventListener('click'" in preview_js
+    assert 'data-more="btnToggleFeedback"' in html
+    assert 'id="btnToggleFeedback"' in html
+    assert "btnToggleFeedback').addEventListener('click'" in preview_js
     # Generic dispatch: a mirror is just the target id, so no per-item wiring.
     assert "document.getElementById(id)" in topbar_js and ".click()" in topbar_js

@@ -2008,7 +2008,7 @@
   }
 
   // Toggle right (feedback) panel
-  document.getElementById('btnToggleRight').addEventListener('click', () => {
+  document.getElementById('btnToggleFeedback').addEventListener('click', () => {
     if (rightSidebar.classList.contains('hidden')) {
       // Opening sidebar explicitly refreshes the current filter once.
       reloadCurrentFeedback();
@@ -3088,7 +3088,7 @@
     rightSidebar.offsetHeight;                  // reflow: w=panelW, translateX(100%)
     rightSidebar.classList.remove('hidden');    // slide-in: 100% → 0
     rightSidebar.style.display = '';            // let CSS handle display
-    document.getElementById('btnToggleRight').classList.add('active');
+    document.getElementById('btnToggleFeedback').classList.add('active');
     _syncPanelOpenClass();
   }
 
@@ -3097,7 +3097,7 @@
     clearTimeout(_rightCloseTimer);
     rightSidebar.style.display = 'flex';        // override global .hidden
     rightSidebar.classList.add('hidden');       // slide-out: 0 → 100%
-    document.getElementById('btnToggleRight').classList.remove('active');
+    document.getElementById('btnToggleFeedback').classList.remove('active');
     _rightCloseTimer = setTimeout(function () {
       rightSidebar.style.display = 'none';      // explicitly hide — CSS .preview-right.hidden broken in CSSOM
       updateGridColumns();                      // grid column → 0px
@@ -3169,7 +3169,7 @@
       agentOpen = false;
     }
     // Buttons: only the open panel's toggle shows active/aria-expanded (mutually exclusive).
-    var bt = document.getElementById('btnToggleRight');
+    var bt = document.getElementById('btnToggleFeedback');
     if (bt) { bt.classList.toggle('active', rightOpen); bt.setAttribute('aria-expanded', String(rightOpen)); }
     var ba = document.getElementById('btnToggleAgent');
     if (ba) { ba.classList.toggle('active', agentOpen); ba.setAttribute('aria-expanded', String(agentOpen)); }
