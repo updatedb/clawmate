@@ -18,6 +18,10 @@
 - **768px 边界对齐**：CSS 一直用 `max-width: 768px` 定义 mobile，但 JS 用 `< 768`（把 768 当桌面）、preview.js 用 `<= 768`——同一宽度两套解释。现统一为 **768 属于 mobile**（`<= 768` / `> 768`），app.js 8 处、preview.js 14 处、terminal bundle 1 处。
 - preview 页大纲的同类抑制（`<= 1500` 时只要右侧面板打开就隐藏）一并按同一模型收敛为**仅 mobile** 生效。
 
+### 归档预览修复
+- **归档树渲染成阶梯状**：展开归档后同层条目落在不同 x（实测 62 项 `.tar.gz`：depth 1 在 585，depth 2/3 在 712–933，且 depth 3 出现在 depth 2 左侧），缩进不带任何信息。JS 的缩进逻辑本就正确（`padding-left = depth * 20 + 12`），缺陷在 CSS：`.archive-entry` 是 nowrap flex 行、`.archive-name { flex: 1 }` 吃掉剩余空间，而子树容器是同一行的**兄弟**而非其下的元素——每层因此向右开新列，偏移量取决于该分支吸收了多宽。改为换行 + 子树满宽 basis，恢复一层一个 x（52 / 84 / 136 / 208）。所有归档格式共用。
+- **目录名可直接展开**：归档树的目录名本身成为点击目标（`role="button"`、`tabindex`、Enter/Space），并同步 `aria-expanded`；此前只能点前面的小三角。
+
 ### 权限边界
 - 管理员账号不再参与内容工作：agent 终端、项目面板、反馈面板对其不可见且不可达。闸口位于 `AuthMiddleware.dispatch()` 的会话分支内、按四个 API 前缀拒绝；两条 agent WebSocket 因不经中间件而在握手处单独拒绝（关闭码 4403）。loopback 与内部 token 调用方在更早的分支返回，因此本机操作者与执行器回调（`/review/result`）不受影响——这也让闸口无需豁免表。
 - 前端隐藏三个顶栏入口（手机端 more-menu 镜像自动跟随），并抑制项目面板的首次访问自动展开。
