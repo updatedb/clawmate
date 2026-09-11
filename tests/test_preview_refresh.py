@@ -14,7 +14,10 @@ def test_markdown_refresh_preserves_outline_state_and_bypasses_cached_assets():
     assert "if (outlineWasOpen) openLeftSidebar();" in source
     assert "else closeLeftSidebar();" in source
     assert "function buildTOC(div, preserveSidebarVisibility)" in source
-    assert "if (!preserveSidebarVisibility && window.innerWidth >= 768)" in source
+    # `> 768`: 768px is the last mobile width, matching the stylesheet's
+    # `max-width: 768px` mobile rules. The JS used `>= 768` and so laid out as a
+    # phone at exactly that width while behaving as a desktop.
+    assert "if (!preserveSidebarVisibility && window.innerWidth > 768)" in source
     assert "function buildPreviewUrl(path, refreshToken)" in source
     assert "function buildStaticAssetUrl(path, refreshToken)" in source
     assert "^\\/?dev\\/static\\/" in source

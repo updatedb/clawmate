@@ -1704,16 +1704,26 @@ body.multiselect .main-scroll { padding-bottom: calc(var(--batch-bar-h, 56px) + 
   .sort-pill { padding: 0 8px; }
 }
 
-/* Panel open: content keeps priority — hide the left Dir sidebar first at narrow
-   widths, then compact the toolbar. The suppression is confined to 1241-1500px,
-   the only band where the Dir column and the agent column both claim real width.
-   Above it both fit, and at 1240px and below the agent is a floating drawer that
-   occupies no column at all, so hiding the Dir panel there cost the user a panel
-   and bought nothing. project-open never hides the sidebar — Dir (col1) and
-   project (col3) coexist, they are independent grid columns with no overlap. */
-@media (min-width: 1241px) and (max-width: 1500px) {
-  body.agent-open .sidebar { display: none; }
-}
+/* ── Responsive tiers ───────────────────────────────────────────────────────
+   One ladder for the whole app, and only this one. Anything narrower than a
+   tier boundary is a refinement inside a tier, never a new mode.
+
+     mobile   <= 768px   Side panels are full-screen overlays, so only one is
+                         visible at a time: one overlay replaces another rather
+                         than sitting beside it.
+     tablet   769-1240px Side panels are bounded overlay drawers. They float
+                         over the content and claim no grid column --
+                         updateIndexGrid() sets col3/col4 to 0 in this band --
+                         so the Dir column and the content column coexist.
+     desktop  >= 1241px  Side panels occupy real grid columns and sit beside
+                         the content. Dir (col1), project (col3) and the agent
+                         (col4) are independent columns.
+
+   The Dir sidebar is never hidden merely because a right panel is open. It used
+   to be, through `body.agent-open .sidebar` under a 1500px threshold -- a value
+   that cut across the tablet/desktop boundary above and hid the sidebar in the
+   tablet band, where the two never compete for a column in the first place.
+   The rule is gone; the band is gone with it. */
 @media (max-width: 1300px) {
   body.agent-open .list-item > :nth-child(3),
   body.agent-open .list-item > :nth-child(4) { display: none; }
@@ -2952,10 +2962,11 @@ body.multiselect .main-scroll { padding-bottom: calc(var(--batch-bar-h, 56px) + 
   display: flex; align-items: center; flex: 1; min-width: 0; gap: 5px;
   padding: 0; border: 0; background: transparent;
 }
-/* The backend select is the one control that gives no ground on its own: pinned
-   at 108px it left the search box 70px wide at 320px. The search is the field
-   people actually type in, so the select yields first. */
-@media (max-width: 420px) {
+/* Mobile tier (see the responsive tiers above). The backend select is the one
+   control that gives no ground on its own: pinned at 108px it left the search
+   box 70px wide at 320px. The search is the field people actually type in, so
+   the select yields first. */
+@media (max-width: 768px) {
   .agent-history-controls .agent-history-backend-input { width: 88px; max-width: 88px; }
 }
 .agent-history-pagination {

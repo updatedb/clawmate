@@ -883,7 +883,7 @@
       return;
     }
     // Show sidebar and build TOC (on mobile: keep hidden, user opens via topbar)
-    if (!preserveSidebarVisibility && window.innerWidth >= 768) {
+    if (!preserveSidebarVisibility && window.innerWidth > 768) {
       openLeftSidebar();
     }
     headings.forEach((h, i) => { if (!h.id) h.id = `heading-${i}`; });
@@ -900,7 +900,7 @@
       a.textContent = h.textContent;
       a.addEventListener('click', e => {
         e.preventDefault();
-        if (window.innerWidth < 768) {
+        if (window.innerWidth <= 768) {
           leftSidebar.classList.add('hidden');
           btnToggleLeft.classList.remove('active');
           updateGridColumns();
@@ -1272,7 +1272,7 @@
       a.textContent = item.text;
       a.addEventListener('click', function(e) {
         e.preventDefault();
-        if (window.innerWidth < 768) {
+        if (window.innerWidth <= 768) {
           leftSidebar.classList.add('hidden');
           btnToggleLeft.classList.remove('active');
           updateGridColumns();
@@ -1331,7 +1331,7 @@
       (function(p) {
         a.addEventListener('click', function(e) {
           e.preventDefault();
-          if (window.innerWidth < 768) {
+          if (window.innerWidth <= 768) {
             leftSidebar.classList.add('hidden');
             btnToggleLeft.classList.remove('active');
             updateGridColumns();
@@ -1345,7 +1345,7 @@
     tocBody.innerHTML = '';
     tocBody.appendChild(list);
     // Show left sidebar on desktop
-    if (window.innerWidth >= 768) {
+    if (window.innerWidth > 768) {
       openLeftSidebar();
     }
   }
@@ -1374,7 +1374,7 @@
         a.addEventListener('click', function(e) {
           e.preventDefault();
           // On mobile, close sidebar after click
-          if (window.innerWidth < 768) {
+          if (window.innerWidth <= 768) {
             leftSidebar.classList.add('hidden');
             btnToggleLeft.classList.remove('active');
             updateGridColumns();
@@ -1397,7 +1397,7 @@
     tocBody.appendChild(list);
 
     // Show left sidebar on desktop when outline is available
-    if (window.innerWidth >= 768) {
+    if (window.innerWidth > 768) {
       openLeftSidebar();
     }
   }
@@ -2902,7 +2902,7 @@
           // Render outline sidebar for code (display mode: auto-open on desktop only)
           if (codeOutlineItems.length >= 2) {
             renderCodeOutline(codeOutlineItems);
-            if (window.innerWidth >= 768) {
+            if (window.innerWidth > 768) {
               openLeftSidebar();
             }
           }
@@ -3022,13 +3022,13 @@
   }
 
   function syncResponsiveOutlineVisibility() {
-    var rightOpen = rightSidebar && !rightSidebar.classList.contains('hidden');
-    var agentOpen = agentPanel && !agentPanel.classList.contains('hidden');
-    var projectOpen = Boolean(document.getElementById('previewProjectPanel'));
-    var shouldHide = !outlineForcedOpen && (
-      window.innerWidth <= 768 ||
-      (window.innerWidth <= 1500 && (rightOpen || agentOpen || projectOpen))
-    );
+    // Mobile only. There the outline is a full-screen overlay and content is the
+    // entry point. From 769px up it shares the grid with the right panels, and in
+    // the tablet band those are drawers that claim no column -- so there is
+    // nothing for the outline to give way to. A 1500px threshold used to hide it
+    // whenever a right panel was open; that value cut across the tablet/desktop
+    // boundary and hid a panel that was not in anyone's way.
+    var shouldHide = !outlineForcedOpen && window.innerWidth <= 768;
     leftSidebar.classList.toggle('responsive-hidden', shouldHide);
     syncOutlineToggleState();
     updateGridColumns();
@@ -3140,7 +3140,7 @@
 
   // Left sidebar: markdown & image show it, other modes hide it
   // On mobile: always start hidden, user toggles via topbar
-  const isMobileViewport = window.innerWidth < 768;
+  const isMobileViewport = window.innerWidth <= 768;
   if (isMobileViewport || (!isMarkdownMode && !isImageMode)) {
     leftSidebar.classList.add('hidden');
     btnToggleLeft.classList.remove('active');
@@ -3194,15 +3194,9 @@
     syncResponsiveOutlineVisibility();
   }
 
-  // Restore the outline when the viewport grows, unless the user had explicitly
-  // closed it. On narrow screens, a user may still force the outline open.
+  // Restore the outline when the viewport grows past the mobile tier, unless the
+  // user had explicitly closed it. On a phone a user may still force it open.
   if (window.matchMedia) {
-    window.matchMedia('(max-width: 1500px)').addEventListener('change', function (e) {
-      if (!e.matches) {
-        outlineForcedOpen = false;
-      }
-      syncResponsiveOutlineVisibility();
-    });
     window.matchMedia('(max-width: 768px)').addEventListener('change', function (e) {
       if (!e.matches) outlineForcedOpen = false;
       syncResponsiveOutlineVisibility();
@@ -6206,7 +6200,7 @@
   let hideDesktopSelBtn = null;
 
   function isAgentSelectionMode() {
-    return window.innerWidth >= 768 &&
+    return window.innerWidth > 768 &&
       window.Agent &&
       typeof window.Agent.isOpen === 'function' &&
       window.Agent.isOpen();
@@ -6241,7 +6235,7 @@
     // Mobile: selection handling is done by touchend + mobileSelBtn flow;
     // skip desktop auto-copy + auto-highlight on small screens so users
     // can select text without immediately copying/highlighting it.
-    if (window.innerWidth < 768) return;
+    if (window.innerWidth <= 768) return;
     if (tooltip.contains(e.target)) return;
     setTimeout(() => {
       const sel = window.getSelection();
@@ -6907,7 +6901,7 @@
     }
 
     function showSelBtn(range) {
-      if (window.innerWidth >= 768) return;
+      if (window.innerWidth > 768) return;
       var rect = range.getBoundingClientRect();
       var top = rect.top - 42;
       if (top < 8) top = rect.bottom + 8;
@@ -6940,7 +6934,7 @@
 
     // ── Unified selection check (called by both selectionchange + touchend) ──
     function _checkMobileSelection() {
-      if (window.innerWidth >= 768) return;
+      if (window.innerWidth > 768) return;
       var sel = window.getSelection();
       if (!sel || sel.isCollapsed || !sel.toString().trim()) { hideSelBtn(); return; }
       var text = sel.toString().trim();
@@ -7080,7 +7074,7 @@
 
       function checkDesktopSelection() {
         // Desktop only, and only when agent panel is open
-        if (window.innerWidth < 768) return;
+        if (window.innerWidth <= 768) return;
         var agentOpen = false;
         try { agentOpen = window.Agent && typeof window.Agent.isOpen === 'function' && window.Agent.isOpen(); } catch (_) {}
         if (!agentOpen) {

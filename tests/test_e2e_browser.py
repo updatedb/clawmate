@@ -1419,12 +1419,12 @@ def _open_agent_history(page: Page) -> None:
 
 # ── Dir panel vs the right-hand panels ─────────────────────────────────
 
-@pytest.mark.parametrize("width", [1600, 1100])
+@pytest.mark.parametrize("width", [1600, 1300, 1100])
 def test_opening_the_dir_panel_leaves_the_agent_panel_open(browser, width):
-    """Dir (col1) and the agent (col4) are independent grid columns, and in this
-    band there is no width contention: above 1500px both fit, and at 1240px and
-    below the agent is a floating drawer. Opening the Dir panel closed the agent
-    unconditionally."""
+    """Dir (col1) and the agent (col4) are independent grid columns. Opening the
+    Dir panel closed the agent unconditionally, and the surviving suppression
+    used a 1500px threshold that cut across the layout's own boundary -- panels
+    stop being floating drawers and start occupying real columns at 1240px."""
     context = _content_panel_context(browser)
     try:
         page = context.new_page()
@@ -1476,23 +1476,48 @@ def test_opening_the_dir_panel_leaves_the_project_panel_open(browser):
         context.close()
 
 
-def test_the_content_first_band_still_gives_way_by_closing_the_agent(browser):
-    """1241-1500px is the band where the two genuinely compete for width
-    (`body.agent-open .sidebar` is suppressed there by the content-first rule),
-    so opening the Dir panel there still closes the agent. That is the
-    documented rule, not the bug this change removes."""
+@pytest.mark.parametrize("width,exclusive", [(768, True), (769, False)])
+def test_the_tier_boundary_is_768px_on_both_sides(browser, width, exclusive):
+    """768px is the last mobile width, not the first desktop one -- that is what
+    the stylesheet says (`max-width: 768px` for the mobile rules, `min-width:
+    769px` above them). The JS disagreed with the CSS and with preview.js: it
+    used `< 768`, so at exactly 768px the app laid out as a phone while the JS
+    treated it as a desktop and let two overlay panels open at once."""
     context = _content_panel_context(browser)
     try:
         page = context.new_page()
-        page.set_viewport_size({"width": 1300, "height": 800})
+        page.set_viewport_size({"width": width, "height": 900})
         login(page, E2E_USER_USERNAME, E2E_USER_PASSWORD)
         _wait_for_app(page)
-        _open_agent_panel(page)
-        check(page.locator("#agentPanel").is_visible(), "1300px：前置：Agent 面板已打开")
         _open_dir_panel(page)
-        check(page.locator("#sidebar").is_visible(), "1300px：Dir 面板已打开")
-        check(page.locator("#agentPanel").is_hidden(),
-              "1300px：content-first 区间保持既有规则，Agent 让位")
+        check(page.locator("#sidebar").is_visible(), f"{width}px：前置：Dir 面板已打开")
+        _open_agent_panel(page)
+        check(page.locator("#agentPanel").is_visible(), f"{width}px：Agent 面板已打开")
+        still_there = page.locator("#sidebar").is_visible()
+        check(still_there != exclusive,
+              f"{width}px：{'mobile 档，浮层互斥' if exclusive else 'tablet 档，两者共存'}"
+              f"（Dir 面板{'仍在' if still_there else '已关闭'}）")
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("width", [1600, 1300, 1100])
+def test_opening_the_agent_panel_leaves_the_dir_panel_open(browser, width):
+    """The other direction, and the one that stayed one-way after the Dir panel
+    stopped closing the agent: opening the agent hid the Dir panel at every width
+    up to 1500px, including bands where the two never compete for width."""
+    context = _content_panel_context(browser)
+    try:
+        page = context.new_page()
+        page.set_viewport_size({"width": width, "height": 800})
+        login(page, E2E_USER_USERNAME, E2E_USER_PASSWORD)
+        _wait_for_app(page)
+        _open_dir_panel(page)
+        check(page.locator("#sidebar").is_visible(), f"{width}px：前置：Dir 面板已打开")
+        _open_agent_panel(page)
+        check(page.locator("#agentPanel").is_visible(), f"{width}px：Agent 面板已打开")
+        check(page.locator("#sidebar").is_visible(),
+              f"{width}px：打开 Agent 面板后 Dir 面板仍在")
     finally:
         context.close()
 
@@ -1634,6 +1659,23 @@ def test_the_history_date_axis_is_exactly_as_tall_as_the_agent_toolbar(browser, 
         context.close()
 
 
+_INJECT_DATES_JS = """() => {
+  const anchor = document.querySelector('.agent-history-date-axis');
+  if (!anchor) return false;
+  anchor.removeAttribute('hidden');
+  let strip = anchor.querySelector('.agent-history-date-btns');
+  if (!strip) {
+    strip = document.createElement('div');
+    strip.className = 'agent-history-date-btns';
+    anchor.appendChild(strip);
+  }
+  strip.innerHTML = ['09/09','09/08','09/07','09/06','09/05','09/04','09/03','09/02']
+    .map(t => '<button type="button" class="agent-history-date-btn">' + t + '</button>')
+    .join('');
+  return true;
+}"""
+
+
 def test_the_date_axis_never_hides_a_date_where_it_cannot_be_reached(browser):
     """The date strip renders as many buttons as its width suggested at render
     time, and that estimate is taken once -- so a window that narrows afterwards
@@ -1652,23 +1694,31 @@ def test_the_date_axis_never_hides_a_date_where_it_cannot_be_reached(browser):
         login(page, E2E_USER_USERNAME, E2E_USER_PASSWORD)
         _wait_for_app(page)
         _open_agent_history(page)
-        page.evaluate("""() => {
-          const anchor = document.querySelector('.agent-history-date-axis');
-          anchor.removeAttribute('hidden');
-          let strip = anchor.querySelector('.agent-history-date-btns');
-          if (!strip) {
-            strip = document.createElement('div');
-            strip.className = 'agent-history-date-btns';
-            anchor.appendChild(strip);
-          }
-          strip.innerHTML = ['09/09','09/08','09/07','09/06','09/05','09/04','09/03','09/02']
-            .map(t => '<button type="button" class="agent-history-date-btn">' + t + '</button>')
-            .join('');
-        }""")
+        page.evaluate(_INJECT_DATES_JS)
         # Narrow the window after the strip was laid out, then look for dates
         # that sit outside the box they are supposed to be visible in.
         page.set_viewport_size({"width": 320, "height": 780})
-        page.wait_for_timeout(300)
+        # Put the buttons back and make sure the overlay survived the resize.
+        # The axis is re-rendered by the app (renderHistoryDateAxis replaces its
+        # children) and the lazily built overlay can go with the panel it was
+        # mounted in, so an injection that is not replayed can be gone by the
+        # time the measurement runs -- which is what a rare flake here looked
+        # like, not a layout that was ever wrong.
+        _open_agent_history(page)
+        page.evaluate(_INJECT_DATES_JS)
+        # Wait for the reflow to settle before measuring. This file has been
+        # bitten by sampling a transient state before (openDirPicker's blank
+        # tree), and here a half-applied resize is what a flake looked like:
+        # the strip reports scrollWidth > clientWidth while still laying out,
+        # but scrollLeft will not move yet, so the test reads "clipped and
+        # unreachable" off a frame that was about to become fine.
+        page.wait_for_function(
+            "() => { const y = document.querySelector('.agent-history-date-axis');"
+            " const s = document.querySelector('.agent-history-date-btns');"
+            " if (!y || !s) return false;"
+            " return y.getBoundingClientRect().width > 0"
+            " && y.getBoundingClientRect().width <= 321"
+            " && s.getBoundingClientRect().width > 0; }", timeout=10000)
         m = page.evaluate("""() => {
           const strip = document.querySelector('.agent-history-date-btns');
           const sr = strip.getBoundingClientRect();

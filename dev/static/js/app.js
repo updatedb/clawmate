@@ -1650,7 +1650,7 @@ async function loadDir(dir) {
     return;
   }
   // Mobile: auto-close directory panel after navigation
-  if (window.innerWidth < 768) {
+  if (window.innerWidth <= 768) {
     var sidebar = els.sidebar;
     if (sidebar && !sidebar.classList.contains('hidden')) {
       sidebar.classList.add('hidden');
@@ -2017,13 +2017,13 @@ els.loadMoreBtn && els.loadMoreBtn.addEventListener("click", loadMore);
 const btnToggleSidebar = document.getElementById("btnToggleSidebar");
 if (btnToggleSidebar) {
   // Set initial active state
-  if (window.innerWidth >= 768) {
+  if (window.innerWidth > 768) {
     btnToggleSidebar.classList.add("active");
   }
   btnToggleSidebar.addEventListener("click", function () {
     const sidebar = els.sidebar;
     if (!sidebar) return;
-    if (window.innerWidth < 768) {
+    if (window.innerWidth <= 768) {
       // Mobile: close agent overlay first if showing (mutual exclusion)
       const agentPanel = document.getElementById("agentPanel");
       if (agentPanel && !agentPanel.classList.contains('hidden')) {
@@ -2044,22 +2044,14 @@ if (btnToggleSidebar) {
         els.sidebarOverlay.style.display = isHidden ? 'block' : 'none';
       }
     } else {
-      // Desktop: 1241-1500px is the one band where the Dir column and the agent
-      // column both claim real width, and the band where the stylesheet
-      // suppresses the sidebar while the agent is open. So there, and only
-      // there, opening the Dir panel costs the agent panel. Above 1500px both
-      // fit; at 1240px and below the agent is a floating drawer.
-      const agentPanel = document.getElementById("agentPanel");
-      const suppressiveBand = window.innerWidth > 1240 && window.innerWidth <= 1500;
-      const cssHidden = suppressiveBand && agentPanel && !agentPanel.classList.contains("hidden") && document.body.classList.contains("agent-open");
-      if (cssHidden && sidebar.classList.contains("hidden")) {
-        if (window.Agent) window.Agent.close();
-      }
-      // Toggle with slide animation
+      // Desktop (>= 769px): nothing here closes another panel. Above 1240px the
+      // panels are independent columns that sit side by side; from 769px to
+      // 1240px they are overlay drawers that claim no column. Only the mobile
+      // band, where they are full-screen overlays, keeps them exclusive -- and
+      // that is handled above.
+      // ── Toggle with slide animation ──
       const isHidden = sidebar.classList.contains("hidden");
       if (isHidden) {
-        // Dir (col1) and the project panel (col3) are independent grid columns
-        // that coexist by design, so opening one must not close the other.
         // ── Open: slide from left ──
         sidebar.style.display = 'flex';           // override global .hidden display:none
         // Expand grid column directly while sidebar is still "hidden"
@@ -2095,7 +2087,7 @@ if (btnCloseSidebar && typeof els !== 'undefined') {
   btnCloseSidebar.addEventListener("click", function () {
     const sidebar = els.sidebar;
     if (!sidebar || sidebar.classList.contains('hidden')) return;
-    if (window.innerWidth < 768) {
+    if (window.innerWidth <= 768) {
       sidebar.classList.add('hidden');
       btnToggleSidebar.classList.remove('active');
       if (els.sidebarOverlay) els.sidebarOverlay.style.display = 'none';
@@ -2216,21 +2208,16 @@ btnToggleAgent && btnToggleAgent.addEventListener("click", function () {
   if (window.Agent) {
     // If opening agent, close sidebar first (mutual exclusion)
     if (!window.Agent.isOpen()) {
-      if (window.innerWidth < 768) {
+      if (window.innerWidth <= 768) {
         // Mobile: close sidebar overlay
         if (els.sidebar && !els.sidebar.classList.contains('hidden')) {
           els.sidebar.classList.add('hidden');
           syncSidebarBtn();
           if (els.sidebarOverlay) els.sidebarOverlay.style.display = 'none';
         }
-      } else if (window.innerWidth <= 1500) {
-        // Desktop narrow: hide sidebar
-        if (els.sidebar && !els.sidebar.classList.contains('hidden')) {
-          els.sidebar.classList.add('hidden');
-          syncSidebarBtn();
-          updateIndexGrid();
-        }
       }
+      // No tablet/desktop counterpart: from 769px up the Dir panel and the agent
+      // panel are not exclusive, so opening the agent leaves the Dir panel open.
     }
     window.Agent.toggle();
     if (window.Agent.isOpen()) {
@@ -3527,7 +3514,7 @@ const RESPONSIVE_BREAKPOINT = 768;
 let _responsiveViewActive = false;
 
 function applyResponsiveView() {
-  const small = window.innerWidth < RESPONSIVE_BREAKPOINT;
+  const small = window.innerWidth <= RESPONSIVE_BREAKPOINT;
   _syncMobileSidebarVisibility();
   if (small && !_responsiveViewActive) {
     _responsiveViewActive = true;
@@ -3542,7 +3529,7 @@ function applyResponsiveView() {
 // Content is the entry point on small screens.  The directory tree remains
 // available from its existing toggle, but must not cover the first view.
 function _syncMobileSidebarVisibility() {
-  if (window.innerWidth >= RESPONSIVE_BREAKPOINT || !els.sidebar) return;
+  if (window.innerWidth > RESPONSIVE_BREAKPOINT || !els.sidebar) return;
   els.sidebar.classList.add("hidden");
   if (els.sidebarOverlay) els.sidebarOverlay.style.display = "none";
 }
@@ -3553,7 +3540,7 @@ function syncSidebarBtn() {
   if (!btn || !sidebar) return;
   // Desktop: check actual visibility (CSS may have auto-hidden it)
   const visible = getComputedStyle(sidebar).display !== 'none' && !sidebar.classList.contains('hidden');
-  if (window.innerWidth < 768) {
+  if (window.innerWidth <= 768) {
     btn.classList.toggle("active", !sidebar.classList.contains("hidden"));
   } else {
     btn.classList.toggle("active", visible);
@@ -3582,16 +3569,10 @@ function syncSidebarBtn() {
   place();
 })();
 
-// Watch for CSS-driven sidebar auto-hide (agent-open content-first band). Both
-// boundaries matter now that the suppression runs from 1241px to 1500px: the
-// button state has to be re-synced when either edge is crossed.
-if (window.matchMedia) {
-  ['(max-width: 1500px)', '(max-width: 1240px)'].forEach(function (query) {
-    window.matchMedia(query).addEventListener('change', function () {
-      if (document.body.classList.contains('agent-open')) syncSidebarBtn();
-    });
-  });
-}
+// No viewport watcher here any more. It existed to re-sync the Dir button when
+// `body.agent-open .sidebar` hid the sidebar on a CSS-driven breakpoint; that
+// rule is gone (see the responsive tiers in style.css), so the button now
+// follows nothing but the sidebar's own state.
 
 // Run on load and on resize (debounced)
 applyResponsiveView();

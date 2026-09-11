@@ -207,7 +207,7 @@ export function getFontSizeForAgentPanelWidth(width: number): number {
 export function syncMainAgentPanelLayout(open: boolean, panelWidth?: number): void {
   document.body.classList.toggle('agent-open', open);
   const content = document.querySelector<HTMLElement>('.content');
-  if (!content || window.innerWidth < 768) {
+  if (!content || window.innerWidth <= 768) {
     return;
   }
   const sidebar = document.getElementById('sidebar');

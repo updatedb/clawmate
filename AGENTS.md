@@ -20,6 +20,22 @@ Use four-space indentation and type annotations for new Python code. Follow exis
 
 Side panels (TOC/大纲, feedback/review 反馈/评审, Agent 终端, project 项目面板) share a single layout model across `preview.html`, `share-view.html`, and `index.html`:
 
+### Responsive tiers (the only ladder)
+
+Three bands, two boundaries — **768px and 1240px**. Every panel-visibility rule uses these and nothing else; a value between them (a 1500px threshold used to exist) is a bug, not a tier.
+
+| Tier | Range | Panel behaviour |
+|---|---|---|
+| mobile | `<= 768px` | Panels are full-screen overlays, so **only one is visible at a time** — one overlay replaces another rather than sitting beside it. |
+| tablet | `769–1240px` | Panels are bounded overlay drawers that claim **no grid column** (`updateIndexGrid()` sets col3/col4 to `0px`). The Dir column and the content column coexist. |
+| desktop | `>= 1241px` | Panels occupy **real grid columns** and sit beside the content. Dir (col1), project (col3) and the agent (col4) are independent columns. |
+
+Consequences worth stating, because both were violated before:
+
+- **From 769px up, no panel closes another.** Opening the Dir panel must not close the agent or project panel, and opening either of those must not close the Dir panel. Only the mobile band is exclusive.
+- **The Dir sidebar is never hidden merely because a right panel is open.** `body.agent-open .sidebar` used to do that under a 1500px threshold; it is gone.
+- These boundaries are for *panel modes*. Narrower media queries (e.g. a toolbar that compacts progressively) are refinements **inside** a tier and must not change which panels exist or are exclusive.
+
 - Each page is a CSS grid: `<left panel> <main 1fr> <right panels...>`. The main content always occupies the `1fr` column.
 - Every grid item must declare an explicit `grid-column` (never rely on auto-placement) — otherwise the main column collapses when a sibling panel is hidden.
 - Panels **push** content: their grid column expands from `0px` to their width when open (grid reflow), rather than floating over it. No `position: fixed`/overlay panels except a mobile-only fallback.
