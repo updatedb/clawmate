@@ -4023,10 +4023,23 @@
           childrenWrap.appendChild(childDom);
           row.appendChild(childrenWrap);
 
-          icon.addEventListener('click', function() {
+          function toggleDirectory() {
             var isHidden = childrenWrap.style.display === 'none';
             childrenWrap.style.display = isHidden ? '' : 'none';
             icon.textContent = isHidden ? '▼' : '▶';
+            nameSpan.setAttribute('aria-expanded', String(isHidden));
+          }
+          nameSpan.classList.add('archive-toggle-name');
+          nameSpan.setAttribute('role', 'button');
+          nameSpan.setAttribute('tabindex', '0');
+          nameSpan.setAttribute('aria-expanded', 'false');
+          icon.addEventListener('click', toggleDirectory);
+          nameSpan.addEventListener('click', toggleDirectory);
+          nameSpan.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              toggleDirectory();
+            }
           });
         } else if (child.isDir) {
           // Empty directory

@@ -28,6 +28,7 @@ import re
 from pathlib import Path
 
 CSS = Path(__file__).resolve().parents[1] / "dev" / "static" / "css" / "preview.css"
+PREVIEW_JS = CSS.parents[1] / "js" / "preview.js"
 
 
 def _uncommented(source: str) -> str:
@@ -69,6 +70,23 @@ def test_the_indent_is_still_computed_from_depth():
     It was already correct: padding-left = depth * 20 + 12, with a matching
     guide line per level at d * 20 + 10.
     """
-    source = (CSS.parents[1] / "js" / "preview.js").read_text(encoding="utf-8")
+    source = PREVIEW_JS.read_text(encoding="utf-8")
     assert "paddingLeft = (depth * 20 + 12)" in source
     assert "guide.style.left = (d * 20 + 10)" in source
+
+
+def test_a_directory_name_uses_the_same_toggle_handler_as_its_disclosure_icon():
+    """A directory should not require the user to target its small arrow."""
+    source = PREVIEW_JS.read_text(encoding="utf-8")
+    assert "function toggleDirectory()" in source
+    assert "icon.addEventListener('click', toggleDirectory)" in source
+    assert "nameSpan.addEventListener('click', toggleDirectory)" in source
+    assert "nameSpan.setAttribute('aria-expanded', 'false')" in source
+    assert "event.key === 'Enter' || event.key === ' '" in source
+
+
+def test_archive_metadata_columns_remain_right_aligned():
+    """Deeply nested names must not pull size and date columns away from the right edge."""
+    css = CSS.read_text(encoding="utf-8")
+    assert "text-align: right" in _rule_body(css, ".archive-size")
+    assert "text-align: right" in _rule_body(css, ".archive-mtime")
