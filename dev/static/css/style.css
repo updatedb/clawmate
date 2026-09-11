@@ -2810,10 +2810,21 @@ body.multiselect .main-scroll { padding-bottom: calc(var(--batch-bar-h, 56px) + 
 .agent-history-date-arrow[disabled] {
   opacity: 0.25; cursor: default;
 }
+/* Scrollable rather than clipped. The button count is chosen from the axis
+   width at render time, so a window that narrows afterwards leaves more dates
+   than fit; `overflow: hidden` with `justify-content: center` then cut both ends
+   (measured 20px at 380, 50px at 320) with no way to reach them. `safe center`
+   keeps the centred look while it fits and falls back to `start` once it does
+   not, so the first date is never the half that gets cut. The scrollbar is
+   hidden because it would otherwise add height and break the 38px parity with
+   .agent-toolbar. */
 .agent-history-date-btns {
-  display: flex; gap: 2px; flex: 1; overflow: hidden;
-  justify-content: center;
+  display: flex; gap: 2px; flex: 1;
+  overflow-x: auto; overflow-y: hidden;
+  justify-content: safe center;
+  scrollbar-width: none;
 }
+.agent-history-date-btns::-webkit-scrollbar { display: none; }
 .agent-history-date-btn {
   flex-shrink: 0;
   height: var(--btn-h-sm);
@@ -2874,20 +2885,38 @@ body.multiselect .main-scroll { padding-bottom: calc(var(--batch-bar-h, 56px) + 
   border-bottom: none;
   background: var(--bg-secondary);
 }
+/* `max-content` out here, `1fr` in the middle. The outer columns used to be
+   `minmax(0, 1fr)`, which collapsed them to ~0 at phone widths while the middle
+   `auto` column refused to go below its min-content (the 108px backend select) —
+   so the title, sized to max-content by its own `justify-self: start`, spilled
+   sideways into the middle column and the close button spilled back into it.
+   Measured at 375px: the search box covered 70% of the 历史会话 title.
+   `max-content` also keeps the outer columns from absorbing free space, which
+   `auto` would: that stretch widened the controls from 306 to 350 on a desktop
+   panel, where nothing was wrong to begin with. */
 .agent-history-list-header {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px;
+  display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; align-items: center; gap: 8px;
   width: 100%; height: 48px; padding: 0 14px; box-sizing: border-box;
 }
 .agent-history-list-header[hidden],
 .agent-history-detail-header[hidden] { display: none; }
 .agent-history-overlay-title {
-  grid-column: 1; justify-self: start; min-width: 0;
+  /* No `justify-self: start`: that sized the box to max-content and let it spill
+     out of its track. Stretched, it shrinks with the track instead. */
+  grid-column: 1; min-width: 0;
   color: var(--text-primary); font: 500 12px/1 var(--font-ui); white-space: nowrap;
   display: inline-flex; align-items: center; gap: 4px;
-  overflow: hidden; text-overflow: ellipsis;
+  overflow: hidden;
 }
+/* The ellipsis belongs on the inner span: `text-overflow` does nothing on a flex
+   container, so the label used to be hard-clipped instead of ellipsized. */
+.agent-history-overlay-title > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* `width: auto` + `justify-self: center` keeps the controls at their natural
+   width on a wide panel (306px: the search input's intrinsic width + the select)
+   instead of stretching them into the free space, while `max-width` still lets
+   them shrink with the track on a phone. */
 .agent-history-list-header .agent-history-controls {
-  grid-column: 2; justify-self: center; width: min(360px, 100%);
+  grid-column: 2; justify-self: center; width: auto; max-width: min(360px, 100%);
 }
 .agent-history-list-header .agent-history-overlay-close { grid-column: 3; justify-self: end; }
 .agent-history-detail-header .agent-history-back { grid-column: 1; justify-self: start; }
@@ -2920,6 +2949,12 @@ body.multiselect .main-scroll { padding-bottom: calc(var(--batch-bar-h, 56px) + 
 .agent-history-controls {
   display: flex; align-items: center; flex: 1; min-width: 0; gap: 5px;
   padding: 0; border: 0; background: transparent;
+}
+/* The backend select is the one control that gives no ground on its own: pinned
+   at 108px it left the search box 70px wide at 320px. The search is the field
+   people actually type in, so the select yields first. */
+@media (max-width: 420px) {
+  .agent-history-controls .agent-history-backend-input { width: 88px; max-width: 88px; }
 }
 .agent-history-pagination {
   display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -2976,8 +3011,11 @@ body.multiselect .main-scroll { padding-bottom: calc(var(--batch-bar-h, 56px) + 
 .agent-history-detail { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 .agent-history-detail.hidden { display: none; }
 .agent-history-detail-header { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: none; }
+/* Same track shape as the list header, and for the same reason: the back button
+   carries `min-width: max-content`, so with `1fr` outer tracks the middle title
+   spilled over it (measured −16.5px at 320). The title still ellipsizes. */
 .agent-history-overlay-header > .agent-history-detail-header {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px;
+  display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; align-items: center; gap: 8px;
   width: 100%; height: 48px; padding: 0 14px; box-sizing: border-box;
 }
 .agent-history-overlay-header > .agent-history-list-header[hidden],

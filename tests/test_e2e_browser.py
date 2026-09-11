@@ -1367,6 +1367,234 @@ def run_all(page: Page):
     test_anti_flash_theme(page)
 
 
+# ── Agent history overlay layout ───────────────────────────────────────
+
+def _open_agent_history(page: Page) -> None:
+    """Open the agent panel, then its history overlay. Idempotent.
+
+    The overlay is built lazily by toggleHistory() and is appended to the panel,
+    so a viewport change can take it away with the panel it was mounted in; and
+    the toggle is a toggle, so clicking #btnToggleAgent while the panel is open
+    would close it instead. Both are why this checks before it clicks. On a phone
+    the agent toggle is mirrored into the more-menu, hence the fallback.
+    """
+    if not page.locator("#agentPanel").is_visible():
+        toggle = page.locator("#btnToggleAgent")
+        if toggle.is_visible():
+            toggle.click()
+        else:
+            page.locator("#btnMoreMenu").click()
+            page.locator(".more-menu").wait_for(state="visible")
+            _toggle_mirror(page, "btnToggleAgent").click()
+        page.locator("#agentPanel").wait_for(state="visible")
+
+    overlay = page.locator(".agent-history-overlay")
+    if overlay.count() == 0 or not overlay.is_visible():
+        page.locator("#btnAgentHistory").click()
+    page.locator(".agent-history-list-header").wait_for(state="visible", timeout=10000)
+
+
+_BOXES_JS = """
+() => {
+  const o = document.querySelector('.agent-history-overlay');
+  if (!o) return null;
+  const box = sel => {
+    const el = o.querySelector(sel);
+    if (!el) return null;
+    const b = el.getBoundingClientRect();
+    return { l: +b.left.toFixed(1), r: +b.right.toFixed(1), w: +b.width.toFixed(1) };
+  };
+  return {
+    header: box('.agent-history-list-header'),
+    title: box('.agent-history-overlay-title'),
+    controls: box('.agent-history-controls'),
+    close: box('.agent-history-overlay-close'),
+    search: box('.agent-history-search-input'),
+    select: box('.agent-history-backend-input'),
+  };
+}
+"""
+
+
+@pytest.mark.parametrize("width", [414, 390, 375, 360, 320])
+def test_the_history_header_keeps_its_parts_apart_on_a_phone(browser, width):
+    """Measured on the real header before the fix: at 375px the search box
+    covered 70% of the 历史会话 title and the close button had begun to overlap
+    the backend select; at 320px the control block started 58px into the title.
+
+    Title, controls and close are one grid row, so "the three of them plus the
+    header paddings fit" is the whole contract.
+    """
+    context = _content_panel_context(browser)
+    try:
+        page = context.new_page()
+        page.set_viewport_size({"width": width, "height": 780})
+        # An ordinary account: the administrator boundary hides the agent panel
+        # from an admin entirely.
+        login(page, E2E_USER_USERNAME, E2E_USER_PASSWORD)
+        _wait_for_app(page)
+        _open_agent_history(page)
+        m = page.evaluate(_BOXES_JS)
+
+        for name in ("header", "title", "controls", "close", "search"):
+            check(m[name] is not None, f"{width}px：{name} 存在")
+        check(m["controls"]["l"] >= m["title"]["r"] - 0.5,
+              f"{width}px：控件不压住标题（标题右 {m['title']['r']} / 控件左 {m['controls']['l']}）")
+        check(m["close"]["l"] >= m["controls"]["r"] - 0.5,
+              f"{width}px：关闭按钮不压住控件（控件右 {m['controls']['r']} / 关闭左 {m['close']['l']}）")
+        check(m["title"]["l"] >= m["header"]["l"] - 0.5 and m["close"]["r"] <= m["header"]["r"] + 0.5,
+              f"{width}px：三者都在 header 内（header {m['header']['l']}–{m['header']['r']}，"
+              f"标题左 {m['title']['l']}，关闭右 {m['close']['r']}）")
+        # Shrinking the title is fine; squeezing the search to a sliver is not.
+        check(m["search"]["w"] >= 72,
+              f"{width}px：搜索框仍可用（实测 {m['search']['w']}px）")
+    finally:
+        context.close()
+
+
+def test_the_history_controls_keep_their_natural_width_on_a_wide_panel(browser):
+    """The narrow-screen fix must leave the desktop header alone.
+
+    An `auto` grid column absorbs the panel's spare width. With three of them the
+    stretch took the controls from their natural 306px to 350px and the search
+    box from 193px to 237px -- an unrequested change on a screen that had nothing
+    wrong with it. The controls are content-sized, so their width must not track
+    the panel's, which the two panel widths below tell apart.
+    """
+    context = _content_panel_context(browser)
+    try:
+        page = context.new_page()
+        page.set_viewport_size({"width": 1280, "height": 800})
+        login(page, E2E_USER_USERNAME, E2E_USER_PASSWORD)
+        _wait_for_app(page)
+        _open_agent_history(page)
+
+        measured = []
+        for vw in (1280, 900, 1500):
+            page.set_viewport_size({"width": vw, "height": 800})
+            page.wait_for_timeout(250)
+            _open_agent_history(page)
+            measured.append((vw, page.evaluate("""() => {
+              const o = document.querySelector('.agent-history-overlay');
+              const w = sel => {
+                const el = (sel === '#agentPanel' ? document : o).querySelector(sel);
+                return el ? +el.getBoundingClientRect().width.toFixed(1) : null;
+              };
+              return { panel: w('#agentPanel'), controls: w('.agent-history-controls'),
+                       search: w('.agent-history-search-input') };
+            }""")))
+        for vw, m in measured:
+            check(m["search"] <= 200,
+                  f"{vw}px：搜索框保持自然宽度，未被拉伸（实测 {m['search']}）")
+        search_widths = {m["search"] for _, m in measured}
+        check(len(search_widths) == 1,
+              f"搜索框宽度不随面板宽度变化（面板 {[m['panel'] for _, m in measured]} → "
+              f"搜索 {[m['search'] for _, m in measured]}）")
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("width,label", [(1280, "桌面"), (390, "移动端")])
+def test_the_history_date_axis_is_exactly_as_tall_as_the_agent_toolbar(browser, width, label):
+    """The date axis is documented as mirroring .agent-toolbar -- 34px on desktop,
+    38px on mobile -- but `min-height` is only a floor. With 30px controls the
+    toolbar measured 39/41 against the axis's 35/38, so two stacked bars in the
+    same panel were visibly 3-4px apart. Both use --btn-h-sm now, which is what
+    makes the floors the deciding factor.
+    """
+    context = _content_panel_context(browser)
+    try:
+        page = context.new_page()
+        page.set_viewport_size({"width": width, "height": 800})
+        login(page, E2E_USER_USERNAME, E2E_USER_PASSWORD)
+        _wait_for_app(page)
+        _open_agent_history(page)
+        h = page.evaluate("""() => {
+          const o = document.querySelector('.agent-history-overlay');
+          const axis = o.querySelector('.agent-history-date-axis');
+          axis.removeAttribute('hidden');
+          let strip = axis.querySelector('.agent-history-date-btns');
+          if (!strip) { strip = document.createElement('div');
+            strip.className = 'agent-history-date-btns'; axis.appendChild(strip); }
+          if (!strip.children.length) {
+            strip.innerHTML = ['Today','Yesterday','09/09']
+              .map(t => '<button type="button" class="agent-history-date-btn">' + t + '</button>').join('');
+          }
+          const tb = document.querySelector('.agent-toolbar');
+          return { toolbar: tb ? +tb.getBoundingClientRect().height.toFixed(1) : null,
+                   axis: +axis.getBoundingClientRect().height.toFixed(1) };
+        }""")
+        check(h["toolbar"] is not None, f"{label}：agent toolbar 存在")
+        check(h["toolbar"] == h["axis"],
+              f"{label}：日期轴与 agent toolbar 等高（toolbar {h['toolbar']} / 日期轴 {h['axis']}）")
+    finally:
+        context.close()
+
+
+def test_the_date_axis_never_hides_a_date_where_it_cannot_be_reached(browser):
+    """The date strip renders as many buttons as its width suggested at render
+    time, and that estimate is taken once -- so a window that narrows afterwards
+    leaves a strip wider than its box. `.agent-history-date-btns` was
+    `overflow: hidden` with `justify-content: center`, which silently cut BOTH
+    ends (measured 20px at 380, 50px at 320) with no way to reach them.
+
+    The buttons are injected with the app's own class names because this fixture
+    has no sessions to list; what is under test is the strip's layout contract
+    for whatever the app renders, not the count heuristic that chooses it.
+    """
+    context = _content_panel_context(browser)
+    try:
+        page = context.new_page()
+        page.set_viewport_size({"width": 600, "height": 780})
+        login(page, E2E_USER_USERNAME, E2E_USER_PASSWORD)
+        _wait_for_app(page)
+        _open_agent_history(page)
+        page.evaluate("""() => {
+          const anchor = document.querySelector('.agent-history-date-axis');
+          anchor.removeAttribute('hidden');
+          let strip = anchor.querySelector('.agent-history-date-btns');
+          if (!strip) {
+            strip = document.createElement('div');
+            strip.className = 'agent-history-date-btns';
+            anchor.appendChild(strip);
+          }
+          strip.innerHTML = ['09/09','09/08','09/07','09/06','09/05','09/04','09/03','09/02']
+            .map(t => '<button type="button" class="agent-history-date-btn">' + t + '</button>')
+            .join('');
+        }""")
+        # Narrow the window after the strip was laid out, then look for dates
+        # that sit outside the box they are supposed to be visible in.
+        page.set_viewport_size({"width": 320, "height": 780})
+        page.wait_for_timeout(300)
+        m = page.evaluate("""() => {
+          const strip = document.querySelector('.agent-history-date-btns');
+          const sr = strip.getBoundingClientRect();
+          const kids = [...strip.children].map(b => {
+            const r = b.getBoundingClientRect();
+            return { t: b.textContent, l: +r.left.toFixed(1), r: +r.right.toFixed(1) };
+          });
+          const outside = kids.filter(k => k.l < sr.left - 0.5 || k.r > sr.right + 0.5);
+          const before = strip.scrollLeft;
+          strip.scrollLeft = strip.scrollWidth;
+          return {
+            overflowX: getComputedStyle(strip).overflowX,
+            scrollW: strip.scrollWidth, clientW: strip.clientWidth,
+            outside: outside.map(k => k.t),
+            scrolledFrom: before, scrolledTo: strip.scrollLeft,
+          };
+        }""")
+        if m["outside"]:
+            check(m["overflowX"] in ("auto", "scroll"),
+                  f"日期条溢出时必须可横向滚动，而不是裁掉（overflow-x: {m['overflowX']}，"
+                  f"越界 {m['outside']}）")
+            check(m["scrolledTo"] > m["scrolledFrom"],
+                  f"被裁的日期确实能滚到（scrollLeft {m['scrolledFrom']} → {m['scrolledTo']}）")
+        else:
+            check(not m["outside"], f"无日期落在可视框外（{m['outside']}）")
+    finally:
+        context.close()
+
+
 def main():
     from playwright.sync_api import sync_playwright
 
@@ -1436,4 +1664,5 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
 

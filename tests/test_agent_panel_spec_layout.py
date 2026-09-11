@@ -179,7 +179,11 @@ def test_agent_panel_separates_terminal_and_web_typography():
     assert ".agent-panel-v2 .xterm" in terminal_css
     assert "font-family: var(--font-mono" in terminal_css
     assert "font-family: var(--font-ui)" in css
-    assert "grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr)" in css
+    # The history header's own track shape. It used to be
+    # `minmax(0, 1fr) auto minmax(0, 1fr)`, which collapsed the outer tracks to
+    # ~0 on a phone while the middle one could not shrink past the backend
+    # select, so the title and the close button overlapped the search box.
+    assert "grid-template-columns: max-content minmax(0, 1fr) max-content" in css
     back_start = css.index(".agent-history-back {\n  flex:")
     assert "white-space: nowrap" in css[back_start:back_start + 500]
     assert "font-size: 12px; line-height: 1.5" in css

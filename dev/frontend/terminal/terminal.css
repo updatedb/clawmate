@@ -102,12 +102,16 @@
 .agent-status[data-status="disconnected"]::before { background: #ef4444; }
 
 .agent-toolbar-actions { display: flex; align-items: center; gap: 3px; }
+/* --btn-h-sm, not --btn-h: .agent-history-date-axis is documented as mirroring
+   this bar (34px desktop / 38px mobile), but min-height is only a floor. With
+   30px controls the toolbar measured 39/41 against the axis's 35/38. Matching
+   the control height is what makes the two bars the same height. */
 .agent-toolbar-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
-  height: var(--btn-h);
+  height: var(--btn-h-sm);
   padding: 0 7px;
   border: 1px solid transparent;
   border-radius: var(--btn-radius);
@@ -169,7 +173,7 @@
     padding-bottom: env(safe-area-inset-bottom);
   }
   .agent-panel-v2 .agent-toolbar { min-height: 38px; padding: 5px 8px; }
-  .agent-panel-v2 .agent-toolbar-btn { height: var(--btn-h); padding: 0 6px; }
+  .agent-panel-v2 .agent-toolbar-btn { height: var(--btn-h-sm); padding: 0 6px; }
   .agent-toolbar-actions .agent-btn-label { display: none; }
 }
 
