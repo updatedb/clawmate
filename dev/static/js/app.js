@@ -3135,6 +3135,18 @@ async function initSettings() {
   var editingRootId = '';
   var editingUserId = '';
   function showSettingsError(message) { error.textContent = message || ''; }
+
+  // Two-step in place rather than a dialog: the repo has no reusable confirm
+  // component (.modal-overlay only supplies the container), and a delete that
+  // asks where it happens keeps the consequence and the action together.
+  function armDelete(askId, confirmId) {
+    document.getElementById(askId).hidden = true;
+    document.getElementById(confirmId).hidden = false;
+  }
+  function disarmDelete(askId, confirmId) {
+    document.getElementById(confirmId).hidden = true;
+    document.getElementById(askId).hidden = false;
+  }
   async function settingsRequest(url, options) {
     var response = await authFetch(url, options);
     var data;
@@ -3148,7 +3160,37 @@ async function initSettings() {
     }
     return data;
   }
-  function selectTab(name) {
+  // The inventory and the single-item editor are separate views. They used to
+  // share one scroll column, so reading meant scrolling past a form and
+  // editing put the edited row out of sight.
+  //
+  // Named modalBody, not body: the submit handlers below declare their own
+  // `body` for the request payload, and shadowing this one would be a trap.
+  var modalBody = modal.querySelector('.modal-body');
+  var settingsView = 'list';
+  var listScrollTop = 0;
+
+  function showSettingsView(name, tab) {
+    // One scroll column serves both views, so the list's position is saved on
+    // the way out and restored on the way back. Saving on the way *in* would
+    // be a no-op: it would read and write the same value in one call.
+    if (settingsView === 'list' && name !== 'list') listScrollTop = modalBody.scrollTop;
+    settingsView = name;
+    var views = modalBody.querySelectorAll('[data-settings-view]');
+    for (var i = 0; i < views.length; i++) {
+      views[i].hidden = views[i].dataset.settingsView !== name;
+    }
+    // `true`: selectTab would otherwise call back into here (see below) and the
+    // pair would recurse until the stack blows.
+    if (tab) selectTab(tab, true);
+    document.getElementById('settingsRootNew').hidden = name !== 'list';
+    document.getElementById('settingsUserNew').hidden = name !== 'list';
+    // After the view is visible: setting scrollTop on a hidden element is a
+    // no-op in some browsers.
+    if (name === 'list') modalBody.scrollTop = listScrollTop;
+  }
+
+  function selectTab(name, keepView) {
     var tabs = modal.querySelectorAll('[data-settings-tab]');
     for (var i = 0; i < tabs.length; i++) {
       tabs[i].setAttribute('aria-selected', String(tabs[i].dataset.settingsTab === name));
@@ -3157,6 +3199,9 @@ async function initSettings() {
     for (var j = 0; j < panels.length; j++) {
       panels[j].hidden = panels[j].dataset.settingsPanel !== name;
     }
+    // Switching tabs abandons whatever was being edited: a half-filled Rootdir
+    // form must not be silently carried into the user tab.
+    if (!keepView) showSettingsView('list', name);
   }
   function resetRootForm() {
     editingRootId = '';
@@ -3167,6 +3212,9 @@ async function initSettings() {
     document.getElementById('settingsRootAgent').value = '';
     document.getElementById('settingsRootHint').textContent = '';
     document.getElementById('settingsRootCancel').hidden = true;
+    // Leaving no target behind means the danger zone must go with it, or it
+    // would offer to delete whatever was last opened.
+    document.getElementById('settingsRootDanger').hidden = true;
   }
   function resetUserForm() {
     editingUserId = '';
@@ -3174,52 +3222,94 @@ async function initSettings() {
     form.reset();
     form.querySelector('button[type="submit"]').textContent = '创建用户';
     document.getElementById('settingsUserCancel').hidden = true;
+    document.getElementById('settingsUserDanger').hidden = true;
   }
   var usersCache = [];
+
+  // Opening a row is the way in, so the whole row is the button: there are no
+  // per-row action buttons any more, and 删除 has moved into the form's danger
+  // zone where its consequence can be stated next to it.
+  function openRootForm(root) {
+    editingRootId = root ? root.id : '';
+    document.getElementById('settingsRootId').value = root ? root.id : '';
+    // The id is the identity grants point at, so it is fixed once it exists.
+    document.getElementById('settingsRootId').disabled = Boolean(root);
+    document.getElementById('settingsRootLabel').value = root ? root.label : '';
+    document.getElementById('settingsRootDir').value = root ? root.dir : '';
+    document.getElementById('settingsRootAgent').value = root ? root.agent_id : '';
+    document.getElementById('settingsRootCancel').hidden = !root;
+    document.getElementById('settingsRootDanger').hidden = !root;
+    // A confirmation left armed from the previous row must not carry over.
+    disarmDelete('settingsRootDeleteAsk', 'settingsRootDeleteConfirm');
+    document.getElementById('settingsRootForm').querySelector('button[type="submit"]').textContent =
+      root ? '保存 Rootdir' : '创建 Rootdir';
+    // Grants reference the id, so changing dir must not be read as revoking
+    // access. State the consequence before the user commits.
+    var referenced = root ? usersCache.filter(function (user) {
+      return (user.root_ids || []).indexOf(root.id) >= 0;
+    }).length : 0;
+    document.getElementById('settingsRootHint').textContent = referenced
+      ? '该 Rootdir 已被 ' + referenced + ' 位用户引用；修改目录后其授权不受影响（授权引用的是 id）。'
+      : '';
+    document.getElementById('settingsRootDangerHelp').textContent = referenced
+      ? '已被 ' + referenced + ' 位用户引用，删除后这些授权将失效。'
+      : '';
+    showSettingsError('');
+    showSettingsView('form', 'roots');
+  }
+
+  function openUserForm(user) {
+    var target = user || {};
+    editingUserId = target.id || '';
+    document.getElementById('settingsUsername').value = target.username || '';
+    document.getElementById('settingsPassword').value = '';
+    var granted = target.root_ids || [];
+    document.getElementById('settingsUserRoots').querySelectorAll('input[name="root_ids"]').forEach(function (box) {
+      box.checked = granted.indexOf(box.value) >= 0;
+    });
+    document.getElementById('settingsUserCancel').hidden = !user;
+    document.getElementById('settingsUserDanger').hidden = !user;
+    disarmDelete('settingsUserDeleteAsk', 'settingsUserDeleteConfirm');
+    document.getElementById('settingsUserForm').querySelector('button[type="submit"]').textContent =
+      user ? '保存用户' : '创建用户';
+    document.getElementById('settingsUserDangerHelp').textContent = user
+      ? '删除后该账号立即失效，其会话不再可用。'
+      : '';
+    showSettingsError('');
+    showSettingsView('form', 'users');
+  }
+
   async function loadRoots() {
     var data = await settingsRequest('/api/clawmate/settings/roots');
     var list = document.getElementById('settingsRootList');
     list.textContent = '';
     data.roots.forEach(function (root) {
-      var row = document.createElement('div');
-      row.className = 'settings-root';
+      var row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'settings-row';
       var text = document.createElement('span');
-      text.textContent = root.label + ' · ' + root.dir + ' · agent:' + root.agent_id;
+      text.className = 'settings-row-text';
+      var title = document.createElement('span');
+      title.className = 'settings-row-title';
+      title.textContent = root.label;
+      var meta = document.createElement('span');
+      meta.className = 'settings-row-meta';
+      meta.textContent = root.dir + '  ·  agent: ' + root.agent_id;
+      text.appendChild(title); text.appendChild(meta);
       row.appendChild(text);
-      var edit = document.createElement('button');
-      edit.type = 'button'; edit.textContent = '编辑';
-      edit.className = 'btn btn-secondary';
-      edit.addEventListener('click', function () {
-        editingRootId = root.id;
-        document.getElementById('settingsRootId').value = root.id;
-        document.getElementById('settingsRootId').disabled = true;
-        document.getElementById('settingsRootLabel').value = root.label;
-        document.getElementById('settingsRootDir').value = root.dir;
-        document.getElementById('settingsRootAgent').value = root.agent_id;
-        document.getElementById('settingsRootCancel').hidden = false;
-        // Grants reference the id, so changing dir must not be read as
-        // revoking access. State the consequence before the user commits.
-        var referenced = usersCache.filter(function (user) {
-          return (user.root_ids || []).indexOf(root.id) >= 0;
-        }).length;
-        document.getElementById('settingsRootHint').textContent = referenced
-          ? '该 Rootdir 已被 ' + referenced + ' 位用户引用；修改目录后其授权不受影响（授权引用的是 id）。'
-          : '';
-        showSettingsError('');
-      });
-      var remove = document.createElement('button');
-      remove.type = 'button'; remove.textContent = '删除';
-      remove.className = 'btn btn-secondary danger';
-      remove.addEventListener('click', async function () {
-        if (!window.confirm('删除 Rootdir ' + root.label + '？')) return;
-        try {
-          await settingsRequest('/api/clawmate/settings/roots/' + encodeURIComponent(root.id), {method: 'DELETE'});
-          await loadRoots();
-        } catch (_) {}
-      });
-      row.appendChild(edit); row.appendChild(remove);
+      var referenced = usersCache.filter(function (user) {
+        return (user.root_ids || []).indexOf(root.id) >= 0;
+      }).length;
+      if (referenced) {
+        var note = document.createElement('span');
+        note.className = 'settings-row-note';
+        note.textContent = '已被 ' + referenced + ' 位用户引用';
+        row.appendChild(note);
+      }
+      row.addEventListener('click', function () { openRootForm(root); });
       list.appendChild(row);
     });
+    document.getElementById('settingsRootEmpty').hidden = data.roots.length > 0;
   }
   async function loadUsers() {
     var data = await settingsRequest('/api/clawmate/settings/users');
@@ -3229,37 +3319,26 @@ async function initSettings() {
     data.roots.forEach(function (root) { labels[root.id] = root.label; });
     users.textContent = '';
     data.users.forEach(function (user) {
-      var row = document.createElement('div');
-      row.className = 'settings-user';
+      var row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'settings-row';
       var text = document.createElement('span');
-      var granted = (user.root_ids || []).map(function (id) { return labels[id] || id; }).join(', ');
-      text.textContent = user.username + (user.is_admin ? '（管理员）' : '') + ' · ' + (granted || '—');
+      text.className = 'settings-row-text';
+      var title = document.createElement('span');
+      title.className = 'settings-row-title';
+      title.textContent = user.username + (user.is_admin ? '（管理员）' : '');
+      text.appendChild(title);
+      // The meta line is dropped rather than rendered empty: a dangling
+      // separator read as "holds nothing" while saying nothing.
+      var granted = (user.root_ids || []).map(function (id) { return labels[id] || id; });
+      if (granted.length) {
+        var meta = document.createElement('span');
+        meta.className = 'settings-row-meta';
+        meta.textContent = granted.join(' · ');
+        text.appendChild(meta);
+      }
       row.appendChild(text);
-      var edit = document.createElement('button');
-      edit.type = 'button'; edit.textContent = '编辑';
-      edit.className = 'btn btn-secondary';
-      edit.addEventListener('click', function () {
-        editingUserId = user.id;
-        document.getElementById('settingsUsername').value = user.username;
-        document.getElementById('settingsPassword').value = '';
-        document.getElementById('settingsUserRoots').querySelectorAll('input[name="root_ids"]').forEach(function (box) {
-          box.checked = (user.root_ids || []).indexOf(box.value) >= 0;
-        });
-        document.querySelector('#settingsUserForm button[type="submit"]').textContent = '保存用户';
-        document.getElementById('settingsUserCancel').hidden = false;
-        showSettingsError('');
-      });
-      var remove = document.createElement('button');
-      remove.type = 'button'; remove.textContent = '删除';
-      remove.className = 'btn btn-secondary danger';
-      remove.addEventListener('click', async function () {
-        if (!window.confirm('删除用户 ' + user.username + '？')) return;
-        try {
-          await settingsRequest('/api/clawmate/settings/users/' + encodeURIComponent(user.id), {method: 'DELETE'});
-          await loadUsers();
-        } catch (_) {}
-      });
-      row.appendChild(edit); row.appendChild(remove);
+      row.addEventListener('click', function () { openUserForm(user); });
       users.appendChild(row);
     });
     var fieldset = document.getElementById('settingsUserRoots');
@@ -3274,11 +3353,55 @@ async function initSettings() {
     });
   }
   async function loadSettings() {
-    await loadRoots();
+    // Users first: loadRoots() derives each row's "已被 N 位用户引用" note from
+    // usersCache, so rendering the roots before it is populated would drop the
+    // note on the first paint and never bring it back.
     await loadUsers();
+    await loadRoots();
   }
   modal.querySelectorAll('[data-settings-tab]').forEach(function (tab) {
     tab.addEventListener('click', function () { selectTab(tab.dataset.settingsTab); });
+  });
+  document.getElementById('settingsBack').addEventListener('click', function () {
+    showSettingsView('list');
+  });
+  document.getElementById('settingsRootNew').addEventListener('click', function () { openRootForm(null); });
+  document.getElementById('settingsUserNew').addEventListener('click', function () { openUserForm(null); });
+
+  // Delete lives in the form's danger zone now that a row carries no buttons.
+  // Only the second click issues the request: the first arms the confirmation.
+  document.getElementById('settingsRootDelete').addEventListener('click', function () {
+    armDelete('settingsRootDeleteAsk', 'settingsRootDeleteConfirm');
+  });
+  document.getElementById('settingsRootDeleteNo').addEventListener('click', function () {
+    disarmDelete('settingsRootDeleteAsk', 'settingsRootDeleteConfirm');
+  });
+  document.getElementById('settingsRootDeleteYes').addEventListener('click', async function () {
+    if (!editingRootId) return;
+    try {
+      await settingsRequest('/api/clawmate/settings/roots/' + encodeURIComponent(editingRootId), {method: 'DELETE'});
+      disarmDelete('settingsRootDeleteAsk', 'settingsRootDeleteConfirm');
+      resetRootForm();
+      showSettingsView('list');
+      await loadSettings();
+    } catch (_) {}
+  });
+
+  document.getElementById('settingsUserDelete').addEventListener('click', function () {
+    armDelete('settingsUserDeleteAsk', 'settingsUserDeleteConfirm');
+  });
+  document.getElementById('settingsUserDeleteNo').addEventListener('click', function () {
+    disarmDelete('settingsUserDeleteAsk', 'settingsUserDeleteConfirm');
+  });
+  document.getElementById('settingsUserDeleteYes').addEventListener('click', async function () {
+    if (!editingUserId) return;
+    try {
+      await settingsRequest('/api/clawmate/settings/users/' + encodeURIComponent(editingUserId), {method: 'DELETE'});
+      disarmDelete('settingsUserDeleteAsk', 'settingsUserDeleteConfirm');
+      resetUserForm();
+      showSettingsView('list');
+      await loadSettings();
+    } catch (_) {}
   });
   document.getElementById('settingsRootBrowse').addEventListener('click', function () {
     if (typeof openDirPicker !== 'function') return;
@@ -3313,6 +3436,9 @@ async function initSettings() {
           {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
       }
       resetRootForm();
+      // Back to the inventory: the row that was being edited no longer exists
+      // in the form's own state, so staying there would show a stale editor.
+      showSettingsView('list');
       await loadSettings();
     } catch (_) {}
   });
@@ -3336,6 +3462,7 @@ async function initSettings() {
         body: JSON.stringify(body)
       });
       resetUserForm();
+      showSettingsView('list');
       await loadSettings();
     } catch (_) {}
   });

@@ -306,29 +306,80 @@
       </div>
       <div class="modal-body">
         <p id="settingsError" class="settings-help" role="alert"></p>
-        <section data-settings-panel="roots" role="tabpanel">
+
+        <div data-settings-view="list">
+          <div class="settings-list-head">
+            <button type="button" id="settingsRootNew" class="btn btn-secondary" hidden>+ 新建 Rootdir</button>
+            <button type="button" id="settingsUserNew" class="btn btn-secondary" hidden>+ 新建用户</button>
+          </div>
           <div id="settingsRootList"></div>
-          <form id="settingsRootForm" class="settings-form">
-            <input id="settingsRootId" placeholder="id（留空自动派生）">
-            <input id="settingsRootLabel" placeholder="显示名" required>
-            <input id="settingsRootDir" placeholder="目录（相对系统根目录）" readonly required>
-            <button type="button" id="settingsRootBrowse" class="btn btn-secondary">浏览…</button>
-            <input id="settingsRootAgent" placeholder="Agent（默认 default）">
-            <p id="settingsRootHint" class="settings-help"></p>
-            <button class="btn btn-primary" type="submit">保存 Rootdir</button>
-            <button type="button" id="settingsRootCancel" class="btn btn-secondary" hidden>取消编辑</button>
-          </form>
-        </section>
-        <section data-settings-panel="users" role="tabpanel" hidden>
           <div id="settingsUsers"></div>
-          <form id="settingsUserForm" class="settings-form">
-            <input id="settingsUsername" placeholder="用户名" required>
-            <input id="settingsPassword" type="password" placeholder="初始密码" required>
-            <fieldset id="settingsUserRoots" aria-label="可访问 Rootdir"></fieldset>
-            <button class="btn btn-primary" type="submit">创建用户</button>
-            <button type="button" id="settingsUserCancel" class="btn btn-secondary" hidden>取消编辑</button>
-          </form>
-        </section>
+          <p id="settingsRootEmpty" class="settings-empty" hidden>
+            还没有 Rootdir。Rootdir 是用户可访问的根目录，至少需要一个才能创建普通用户。
+          </p>
+        </div>
+
+        <div data-settings-view="form" hidden>
+          <button type="button" id="settingsBack" class="btn btn-secondary settings-back">← 返回列表</button>
+
+          <section data-settings-panel="roots" role="tabpanel">
+            <form id="settingsRootForm" class="settings-form">
+              <label class="settings-field" for="settingsRootId">id（留空自动派生）</label>
+              <input id="settingsRootId" placeholder="topic-writer">
+              <label class="settings-field" for="settingsRootLabel">显示名</label>
+              <input id="settingsRootLabel" placeholder="Topic Writer" required>
+              <label class="settings-field" for="settingsRootDir">目录（相对系统根目录）</label>
+              <input id="settingsRootDir" placeholder="writer/topics" readonly required>
+              <button type="button" id="settingsRootBrowse" class="btn btn-secondary">浏览…</button>
+              <label class="settings-field" for="settingsRootAgent">Agent</label>
+              <input id="settingsRootAgent" placeholder="writer">
+              <p id="settingsRootHint" class="settings-help"></p>
+              <div class="settings-actions">
+                <button class="btn btn-secondary" type="button" id="settingsRootCancel" hidden>取消编辑</button>
+                <button class="btn btn-primary" type="submit">保存 Rootdir</button>
+              </div>
+            </form>
+            <div class="settings-danger" id="settingsRootDanger" hidden>
+              <p class="settings-danger-title">删除这个 Rootdir</p>
+              <p class="settings-danger-help" id="settingsRootDangerHelp"></p>
+              <div class="settings-danger-confirm" id="settingsRootDeleteAsk">
+                <button type="button" class="btn btn-secondary danger" id="settingsRootDelete">删除</button>
+              </div>
+              <div class="settings-danger-confirm" id="settingsRootDeleteConfirm" hidden>
+                <span class="settings-danger-warning">确定删除？此操作不可恢复。</span>
+                <button type="button" class="btn btn-secondary danger" id="settingsRootDeleteYes">确认删除</button>
+                <button type="button" class="btn btn-secondary" id="settingsRootDeleteNo">取消</button>
+              </div>
+            </div>
+          </section>
+
+          <section data-settings-panel="users" role="tabpanel" hidden>
+            <form id="settingsUserForm" class="settings-form">
+              <label class="settings-field" for="settingsUsername">用户名</label>
+              <input id="settingsUsername" placeholder="updatedb" required>
+              <label class="settings-field" for="settingsPassword">密码</label>
+              <input id="settingsPassword" type="password" placeholder="至少 4 位">
+              <p class="settings-help">留空表示保持当前密码。</p>
+              <fieldset id="settingsUserRoots" aria-label="可访问 Rootdir"></fieldset>
+              <div class="settings-actions">
+                <button type="button" id="settingsUserCancel" class="btn btn-secondary" hidden>取消编辑</button>
+                <button class="btn btn-primary" type="submit">创建用户</button>
+              </div>
+            </form>
+            <div class="settings-danger" id="settingsUserDanger" hidden>
+              <p class="settings-danger-title">删除这个用户</p>
+              <p class="settings-danger-help" id="settingsUserDangerHelp"></p>
+              <div class="settings-danger-confirm" id="settingsUserDeleteAsk">
+                <button type="button" class="btn btn-secondary danger" id="settingsUserDelete">删除</button>
+              </div>
+              <div class="settings-danger-confirm" id="settingsUserDeleteConfirm" hidden>
+                <span class="settings-danger-warning">确定删除？此操作不可恢复。</span>
+                <button type="button" class="btn btn-secondary danger" id="settingsUserDeleteYes">确认删除</button>
+                <button type="button" class="btn btn-secondary" id="settingsUserDeleteNo">取消</button>
+              </div>
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   </div>

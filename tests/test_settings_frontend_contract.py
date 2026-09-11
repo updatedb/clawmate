@@ -75,15 +75,6 @@ def test_user_tab_uses_registry_checkboxes_not_a_path_multiselect():
     assert '<select id="settingsRootDirs"' not in html
 
 
-def test_user_edit_reuses_the_registry_checkbox_form():
-    script = _strip_js_comments((STATIC / "js" / "app.js").read_text(encoding="utf-8"))
-    edit_handler = _handler_body(script, "text.textContent = user.username")
-
-    assert "editingUserId = user.id" in edit_handler
-    assert "settingsUserRoots" in edit_handler
-    assert "window.prompt('授权 Rootdir id" not in edit_handler
-
-
 def test_frontend_sends_root_ids_not_the_removed_root_dirs_key():
     """The API now rejects root_dirs, so a stale payload would 422 silently."""
     script = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
@@ -361,17 +352,91 @@ def test_settings_controls_gated_by_hidden_are_really_hidden():
         "the armed delete step must hide the other one"
 
 
-def test_settings_row_buttons_use_the_btn_family():
-    """The row actions were createElement('button') with no className, and the
-    stylesheet has no bare `button` rule -- only `.btn`. So they rendered as
-    browser defaults next to `.btn .btn-primary` form buttons in the same
-    modal, and 删除 (irreversible) looked identical to 编辑."""
-    script = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
-    assert "edit.className = 'btn btn-secondary'" in script
-    assert "remove.className = 'btn btn-secondary danger'" in script
-
-
 def test_the_settings_button_font_size_fallback_is_gone():
     """`.settings-root button { font-size: 12px }` was the only styling on those
     unstyled buttons; it papered over the class gap instead of closing it."""
     assert ".settings-root button" not in _settings_css()
+
+
+def test_the_modal_body_has_two_views():
+    """The structural fix: the inventory and the single-item editor stop
+    sharing one scroll column."""
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert 'data-settings-view="list"' in html
+    assert 'data-settings-view="form"' in html
+
+
+def test_rows_are_click_targets_not_button_rows():
+    """Clicking the row is the way in, so the row carries no action buttons.
+    (The `.btn .danger` family is still covered: the danger zone's delete
+    buttons use it.)"""
+    script = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert "'settings-row'" in script
+    assert "showSettingsView" in script
+    # The per-row 编辑 button is what the row click replaced.
+    assert "edit.textContent = '编辑'" not in script
+    assert "remove.textContent = '删除'" not in script
+    assert 'class="btn btn-secondary danger"' in html
+
+
+def test_switching_tabs_returns_to_the_list_view():
+    """A half-filled Rootdir form must not be carried into the user tab, and the
+    reset must not recurse: showSettingsView() calls selectTab(), so selectTab()
+    has to be told not to call back into it."""
+    script = _strip_js_comments((STATIC / "js" / "app.js").read_text(encoding="utf-8"))
+    show = _balanced_body(script, "function showSettingsView(")
+    tab = _balanced_body(script, "function selectTab(")
+
+    assert "if (tab) selectTab(tab, true)" in show, \
+        "the view switch must call selectTab with the no-recursion guard"
+    assert "showSettingsView('list', name)" in tab, \
+        "switching tabs must fall back to the list view"
+    # The guard is what makes the pair terminate: without the `true`, selectTab
+    # calls showSettingsView which calls selectTab forever.
+    assert "if (!keepView) showSettingsView('list', name)" in tab
+
+
+def test_the_user_row_form_is_filled_by_open_user_form():
+    """The grant checkboxes and the username still have to be populated when a
+    row opens -- that logic moved out of the deleted 编辑 handler into
+    openUserForm(), so the anchor moved with it."""
+    script = _strip_js_comments((STATIC / "js" / "app.js").read_text(encoding="utf-8"))
+    body = _balanced_body(script, "function openUserForm(")
+
+    assert "editingUserId" in body
+    assert "settingsUsername" in body
+    assert "settingsUserRoots" in body
+    # The row click opens an *existing* account; the same function with no
+    # argument is the "+ 新建用户" path, so it has to tolerate an absent user.
+    assert "user || {}" in body
+    assert "window.prompt('授权 Rootdir id" not in body
+
+
+def test_the_settings_deletes_do_not_use_window_confirm():
+    """style.css opens by declaring a Unified Modal System, yet the settings
+    deletes used window.confirm -- a different visual and focus model from
+    everything around them. They now ask in place, in the danger zone."""
+    script = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
+    assert "window.confirm('删除 Rootdir '" not in script
+    assert "window.confirm('删除用户 '" not in script
+    # The other two are file operations, deliberately left alone.
+    assert script.count("window.confirm") == 2
+
+
+def test_the_first_delete_click_only_arms_the_confirmation():
+    """An irreversible action must not fire on the click that asks about it."""
+    script = _strip_js_comments((STATIC / "js" / "app.js").read_text(encoding="utf-8"))
+
+    arm = _balanced_body(script, "function armDelete(")
+    assert "document.getElementById(askId).hidden = true" in arm
+    assert "document.getElementById(confirmId).hidden = false" in arm
+
+    # The arming handler must not itself call settingsRequest: the DELETE belongs
+    # to the 确认删除 button, and nowhere else.
+    armed = _balanced_body(script, "'settingsRootDelete').addEventListener(")
+    assert "settingsRequest" not in armed
+    assert "armDelete('settingsRootDeleteAsk', 'settingsRootDeleteConfirm')" in armed
+
+    confirmed = _balanced_body(script, "'settingsRootDeleteYes').addEventListener(")
+    assert "method: 'DELETE'" in confirmed

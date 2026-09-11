@@ -629,13 +629,39 @@ def _wait_for_app(page: Page) -> None:
 
 
 def _open_settings(page: Page) -> None:
+    """Open the modal on its list view, which is where it always lands."""
     page.locator("#btnSettings").click()
     page.locator("#settingsModal").wait_for(state="visible")
-    page.locator("#settingsRootList .settings-root").first.wait_for(state="visible")
+    page.locator("#settingsRootList .settings-row").first.wait_for(state="visible")
+
+
+def _open_root_form(page: Page, label: str | None = None) -> None:
+    """Enter the Rootdir form view: a row's label, or the blank create form."""
+    if label is None:
+        page.locator("#settingsRootNew").click()
+    else:
+        page.locator("#settingsRootList .settings-row", has_text=label).first.click()
+    page.locator('[data-settings-view="form"]').wait_for(state="visible")
+
+
+def _open_user_form(page: Page, username: str | None = None) -> None:
+    if username is None:
+        page.locator("#settingsUserNew").click()
+    else:
+        page.locator("#settingsUsers .settings-row", has_text=username).first.click()
+    page.locator('[data-settings-view="form"]').wait_for(state="visible")
+
+
+def _back_to_settings_list(page: Page) -> None:
+    page.locator("#settingsBack").click()
+    page.locator('[data-settings-view="list"]').wait_for(state="visible")
 
 
 def _open_picker(page: Page) -> None:
     _open_settings(page)
+    # #settingsRootBrowse lives in the form view now; the picker needs a target
+    # form to fill, so the blank create form is the natural place to open it.
+    _open_root_form(page)
     page.locator("#settingsRootBrowse").click()
     page.locator("#dirPickerTree .dir-picker-item").first.wait_for(state="visible")
 
@@ -703,6 +729,10 @@ def test_settings_modal_is_admin_only(page: Page):
     check(page.locator("#settingsRootList").get_by_text(SEEDED_ROOT_LABEL).count() > 0,
           "Rootdir 列表已加载")
     page.locator('[data-settings-tab="users"]').click()
+    # The list view is what a tab shows; the grant checkboxes live in the form
+    # view, reached by clicking a row or 新建.
+    check(page.locator('[data-settings-view="list"]').is_visible(), "用户管理默认展示列表视图")
+    _open_user_form(page)
     check(page.locator("#settingsUserRoots").is_visible(), "用户管理展示授权复选框")
     check(page.locator("#settingsUserRoots input[name=root_ids]").count() > 0,
           "授权复选框来自 Rootdir 注册表")
@@ -710,8 +740,12 @@ def test_settings_modal_is_admin_only(page: Page):
 
 @pytest.mark.usefixtures("admin_page")
 def test_admin_registers_edits_and_deletes_a_root(page: Page):
-    """Authenticated root create / edit / delete, plus the reference hint."""
-    page.on("dialog", lambda dialog: dialog.accept())
+    """Authenticated root create / edit / delete, plus the reference hint.
+
+    No dialog handler: the delete asks in place now, so a window.confirm
+    reappearing here would leave the test hanging rather than silently
+    auto-accepted.
+    """
     _open_picker(page)
 
     page.locator("#settingsRootLabel").fill("UI Projects")
@@ -724,22 +758,27 @@ def test_admin_registers_edits_and_deletes_a_root(page: Page):
         state="visible", timeout=10000)
     check(page.locator("#settingsRootList").get_by_text("UI Projects").count() > 0,
           "新建 Rootdir 已出现在列表")
+    check(page.locator('[data-settings-view="list"]').is_visible(),
+          "保存后自动回到列表视图")
 
     # Editing a root a user holds must warn that grants follow the id.
     holders = sum(1 for user in page.request.get(
         f"{BASE_URL}/api/clawmate/settings/users").json()["users"]
         if SEEDED_ROOT_ID in user.get("root_ids", []))
-    shared_row = page.locator("#settingsRootList .settings-root", has_text=SEEDED_ROOT_LABEL).first
-    shared_row.get_by_text("编辑").click()
+    _open_root_form(page, SEEDED_ROOT_LABEL)
     hint = page.locator("#settingsRootHint").inner_text()
     check(holders >= 1 and f"已被 {holders} 位用户引用" in hint,
           f"被引用 Rootdir 显示引用提示（{holders} 位用户；{hint}）")
+    check(holders >= 1 and f"已被 {holders} 位用户引用" in
+          page.locator("#settingsRootDangerHelp").inner_text(),
+          "危险区说明删除会波及这些授权")
     page.locator("#settingsRootCancel").click()
     check(page.locator("#settingsRootHint").inner_text() == "", "取消编辑后清空提示")
+    check(page.locator("#settingsRootDanger").is_hidden(), "取消后危险区一并收起")
 
     # Edit the created root through the same form.
-    created_row = page.locator("#settingsRootList .settings-root", has_text="UI Projects").first
-    created_row.get_by_text("编辑").click()
+    _back_to_settings_list(page)
+    _open_root_form(page, "UI Projects")
     page.locator("#settingsRootLabel").fill("UI Projects Renamed")
     page.locator("#settingsRootForm button[type=submit]").click()
     page.locator("#settingsRootList").get_by_text("UI Projects Renamed").first.wait_for(
@@ -747,9 +786,13 @@ def test_admin_registers_edits_and_deletes_a_root(page: Page):
     check(page.locator("#settingsRootList").get_by_text("UI Projects Renamed").count() > 0,
           "编辑后的 Rootdir 名称已保存")
 
-    # Delete it again (the confirm dialog is accepted by the handler above).
-    page.locator("#settingsRootList .settings-root", has_text="UI Projects Renamed") \
-        .first.get_by_text("删除").click()
+    # Delete it again, through the danger zone's two-step confirmation.
+    _open_root_form(page, "UI Projects Renamed")
+    page.locator("#settingsRootDelete").click()
+    page.locator("#settingsRootDeleteConfirm").wait_for(state="visible", timeout=5000)
+    check(page.locator("#settingsRootList").is_hidden(),
+          "确认期间仍停留在表单视图（未提前提交）")
+    page.locator("#settingsRootDeleteYes").click()
     page.wait_for_function(
         "() => !document.querySelector('#settingsRootList').textContent.includes('UI Projects Renamed')",
         timeout=10000)
@@ -785,7 +828,8 @@ def test_the_grant_checkboxes_are_not_stretched(browser):
         page.locator("#btnSettings").click()
         page.locator("#settingsModal").wait_for(state="visible")
         page.locator("#settingsTabUsers").click()
-        page.locator("#settingsUserRoots input").first.wait_for(state="attached")
+        _open_user_form(page)
+        page.locator("#settingsUserRoots input").first.wait_for(state="visible")
         rect = page.locator("#settingsUserRoots input").first.bounding_box()
         check(rect["width"] < 40, f"勾选框宽度自然（实测 {rect['width']}）")
         check(rect["height"] < 40, f"勾选框高度自然（实测 {rect['height']}）")
@@ -1096,6 +1140,7 @@ def test_grant_post_from_the_user_tab(page: Page):
     _open_settings(page)
     page.locator('[data-settings-tab="users"]').click()
 
+    _open_user_form(page)
     page.locator("#settingsUserRoots input[name=root_ids]").first.check()
     page.locator("#settingsUsername").fill("grantee")
     page.locator("#settingsPassword").fill("grantee-pass")
@@ -1108,6 +1153,7 @@ def test_grant_post_from_the_user_tab(page: Page):
           "新用户带着获授 Rootdir")
 
     # A rejected POST must reach the shared error region, not the console.
+    _open_user_form(page)
     page.locator("#settingsUserRoots input[name=root_ids]").first.check()
     page.locator("#settingsUsername").fill("grantee")
     page.locator("#settingsPassword").fill("grantee-pass")

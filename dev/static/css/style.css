@@ -116,6 +116,13 @@ body { font-family: var(--font-ui); color: var(--text-primary); background: var(
 .settings-modal-box .btn[hidden],
 .settings-modal-box .settings-row[hidden] { display: none; }
 
+.settings-list-head { display: flex; justify-content: flex-end; margin-bottom: var(--space-2); }
+.settings-empty { margin: var(--space-6) 0; text-align: center; color: var(--text-secondary); font-size: var(--font-size-base); }
+.settings-back { margin-bottom: var(--space-4); }
+.settings-field { display: block; margin-top: var(--space-3); font-size: var(--font-size-sm); color: var(--text-secondary); }
+.settings-field:first-child { margin-top: 0; }
+.settings-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-5); }
+
 /* ── Settings tabs (Rootdir / user) ─────────────────────────────────────────
    The tabs swap a single visible panel, so the old two-stacked-sections rule
    that used to live above was dropped with it instead of leaving a divider
