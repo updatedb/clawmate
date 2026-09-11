@@ -2044,18 +2044,22 @@ if (btnToggleSidebar) {
         els.sidebarOverlay.style.display = isHidden ? 'block' : 'none';
       }
     } else {
-      // Desktop: if CSS auto-hides sidebar (agent-open + narrow), close agent first
+      // Desktop: 1241-1500px is the one band where the Dir column and the agent
+      // column both claim real width, and the band where the stylesheet
+      // suppresses the sidebar while the agent is open. So there, and only
+      // there, opening the Dir panel costs the agent panel. Above 1500px both
+      // fit; at 1240px and below the agent is a floating drawer.
       const agentPanel = document.getElementById("agentPanel");
-      const cssHidden = agentPanel && !agentPanel.classList.contains("hidden") && window.innerWidth <= 1500 && document.body.classList.contains("agent-open");
+      const suppressiveBand = window.innerWidth > 1240 && window.innerWidth <= 1500;
+      const cssHidden = suppressiveBand && agentPanel && !agentPanel.classList.contains("hidden") && document.body.classList.contains("agent-open");
       if (cssHidden && sidebar.classList.contains("hidden")) {
         if (window.Agent) window.Agent.close();
       }
       // Toggle with slide animation
       const isHidden = sidebar.classList.contains("hidden");
       if (isHidden) {
-        // Mutual exclusion: opening the sidebar closes the open right panels first
-        if (_isProjectPanelOpen()) _setProjectPanelOpen(false);
-        if (window.Agent && typeof window.Agent.isOpen === 'function' && window.Agent.isOpen()) window.Agent.close();
+        // Dir (col1) and the project panel (col3) are independent grid columns
+        // that coexist by design, so opening one must not close the other.
         // ── Open: slide from left ──
         sidebar.style.display = 'flex';           // override global .hidden display:none
         // Expand grid column directly while sidebar is still "hidden"
@@ -3578,10 +3582,14 @@ function syncSidebarBtn() {
   place();
 })();
 
-// Watch for CSS-driven sidebar auto-hide (agent-open mode)
+// Watch for CSS-driven sidebar auto-hide (agent-open content-first band). Both
+// boundaries matter now that the suppression runs from 1241px to 1500px: the
+// button state has to be re-synced when either edge is crossed.
 if (window.matchMedia) {
-  window.matchMedia('(max-width: 1500px)').addEventListener('change', function () {
-    if (document.body.classList.contains('agent-open')) syncSidebarBtn();
+  ['(max-width: 1500px)', '(max-width: 1240px)'].forEach(function (query) {
+    window.matchMedia(query).addEventListener('change', function () {
+      if (document.body.classList.contains('agent-open')) syncSidebarBtn();
+    });
   });
 }
 

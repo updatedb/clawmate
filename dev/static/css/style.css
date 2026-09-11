@@ -1705,11 +1705,13 @@ body.multiselect .main-scroll { padding-bottom: calc(var(--batch-bar-h, 56px) + 
 }
 
 /* Panel open: content keeps priority — hide the left Dir sidebar first at narrow
-   widths, then compact the toolbar. agent-open keeps the content-first sidebar
-   suppression (the agent terminal genuinely needs width); project-open does NOT
-   hide the sidebar — Dir (col1) and project (col3) coexist, they are independent
-   grid columns with no overlap. */
-@media (max-width: 1500px) {
+   widths, then compact the toolbar. The suppression is confined to 1241-1500px,
+   the only band where the Dir column and the agent column both claim real width.
+   Above it both fit, and at 1240px and below the agent is a floating drawer that
+   occupies no column at all, so hiding the Dir panel there cost the user a panel
+   and bought nothing. project-open never hides the sidebar — Dir (col1) and
+   project (col3) coexist, they are independent grid columns with no overlap. */
+@media (min-width: 1241px) and (max-width: 1500px) {
   body.agent-open .sidebar { display: none; }
 }
 @media (max-width: 1300px) {

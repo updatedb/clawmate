@@ -1369,15 +1369,10 @@ def run_all(page: Page):
 
 # ── Agent history overlay layout ───────────────────────────────────────
 
-def _open_agent_history(page: Page) -> None:
-    """Open the agent panel, then its history overlay. Idempotent.
-
-    The overlay is built lazily by toggleHistory() and is appended to the panel,
-    so a viewport change can take it away with the panel it was mounted in; and
-    the toggle is a toggle, so clicking #btnToggleAgent while the panel is open
-    would close it instead. Both are why this checks before it clicks. On a phone
-    the agent toggle is mirrored into the more-menu, hence the fallback.
-    """
+def _open_agent_panel(page: Page) -> None:
+    """Open the agent panel, idempotent: the toggle is a toggle, so clicking
+    #btnToggleAgent while the panel is open would close it instead. On a phone
+    the toggle is mirrored into the more-menu, hence the fallback."""
     if not page.locator("#agentPanel").is_visible():
         toggle = page.locator("#btnToggleAgent")
         if toggle.is_visible():
@@ -1388,10 +1383,118 @@ def _open_agent_history(page: Page) -> None:
             _toggle_mirror(page, "btnToggleAgent").click()
         page.locator("#agentPanel").wait_for(state="visible")
 
+
+def _close_dir_panel(page: Page) -> None:
+    """The Dir sidebar is open by default on a desktop viewport, so a test that
+    needs the *opening* path has to close it first -- otherwise the toggle never
+    runs and the assertion that follows proves nothing."""
+    page.evaluate("""() => {
+      const sb = document.getElementById('sidebar');
+      if (!sb.classList.contains('hidden')) document.getElementById('btnToggleSidebar').click();
+    }""")
+    page.wait_for_function(
+        "() => document.getElementById('sidebar').classList.contains('hidden')", timeout=10000)
+
+
+def _open_dir_panel(page: Page) -> None:
+    page.evaluate("""() => {
+      const sb = document.getElementById('sidebar');
+      if (sb.classList.contains('hidden')) document.getElementById('btnToggleSidebar').click();
+    }""")
+    page.locator("#sidebar").wait_for(state="visible")
+
+
+def _open_agent_history(page: Page) -> None:
+    """Open the agent panel, then its history overlay. Idempotent.
+
+    The overlay is built lazily by toggleHistory() and is appended to the panel,
+    so a viewport change can take it away with the panel it was mounted in.
+    """
+    _open_agent_panel(page)
     overlay = page.locator(".agent-history-overlay")
     if overlay.count() == 0 or not overlay.is_visible():
         page.locator("#btnAgentHistory").click()
     page.locator(".agent-history-list-header").wait_for(state="visible", timeout=10000)
+
+
+# ── Dir panel vs the right-hand panels ─────────────────────────────────
+
+@pytest.mark.parametrize("width", [1600, 1100])
+def test_opening_the_dir_panel_leaves_the_agent_panel_open(browser, width):
+    """Dir (col1) and the agent (col4) are independent grid columns, and in this
+    band there is no width contention: above 1500px both fit, and at 1240px and
+    below the agent is a floating drawer. Opening the Dir panel closed the agent
+    unconditionally."""
+    context = _content_panel_context(browser)
+    try:
+        page = context.new_page()
+        page.set_viewport_size({"width": width, "height": 800})
+        login(page, E2E_USER_USERNAME, E2E_USER_PASSWORD)
+        _wait_for_app(page)
+        _close_dir_panel(page)
+        _open_agent_panel(page)
+        check(page.locator("#agentPanel").is_visible(), f"{width}px：前置：Agent 面板已打开")
+        check(page.locator("#sidebar").is_hidden(), f"{width}px：前置：Dir 面板是关着的")
+        _open_dir_panel(page)
+        check(page.locator("#sidebar").is_visible(), f"{width}px：Dir 面板已打开")
+        check(page.locator("#agentPanel").is_visible(),
+              f"{width}px：展开 Dir 面板后 Agent 面板仍打开")
+    finally:
+        context.close()
+
+
+def test_opening_the_dir_panel_leaves_the_project_panel_open(browser):
+    """Col1 and col3 coexist by design -- the stylesheet says so in as many words
+    -- yet the JS closed the project panel when the Dir panel opened.
+
+    Needs a project directory: _updateProjectPanelBtn() returns early while
+    state.project is empty, so on a bare page there is no project panel open to
+    preserve.
+    """
+    context = _content_panel_context(browser)
+    try:
+        page = context.new_page()
+        page.set_viewport_size({"width": 1600, "height": 800})
+        login(page, E2E_USER_USERNAME, E2E_USER_PASSWORD)
+        _wait_for_app(page)
+        page.goto(f"{CLAWMATE_URL}/?root={SEEDED_ROOT_ID}&dir={SEEDED_ORDINARY_PROJECT}")
+        page.wait_for_function(
+            "(project) => state.project === project",
+            arg=SEEDED_ORDINARY_PROJECT, timeout=15000)
+        # First visit to a project in this login session opens the panel by
+        # itself, so this does not click the toggle -- clicking it here would
+        # close the very panel the test is about.
+        page.locator("#projectPanel").wait_for(state="visible")
+        check(page.locator("#projectPanel").is_visible(), "前置：项目面板已打开")
+        _close_dir_panel(page)
+        check(page.locator("#sidebar").is_hidden(), "前置：Dir 面板是关着的")
+        _open_dir_panel(page)
+        check(page.locator("#sidebar").is_visible(), "Dir 面板已打开")
+        check(page.locator("#projectPanel").is_visible(),
+              "展开 Dir 面板后项目面板仍打开")
+    finally:
+        context.close()
+
+
+def test_the_content_first_band_still_gives_way_by_closing_the_agent(browser):
+    """1241-1500px is the band where the two genuinely compete for width
+    (`body.agent-open .sidebar` is suppressed there by the content-first rule),
+    so opening the Dir panel there still closes the agent. That is the
+    documented rule, not the bug this change removes."""
+    context = _content_panel_context(browser)
+    try:
+        page = context.new_page()
+        page.set_viewport_size({"width": 1300, "height": 800})
+        login(page, E2E_USER_USERNAME, E2E_USER_PASSWORD)
+        _wait_for_app(page)
+        _open_agent_panel(page)
+        check(page.locator("#agentPanel").is_visible(), "1300px：前置：Agent 面板已打开")
+        _open_dir_panel(page)
+        check(page.locator("#sidebar").is_visible(), "1300px：Dir 面板已打开")
+        check(page.locator("#agentPanel").is_hidden(),
+              "1300px：content-first 区间保持既有规则，Agent 让位")
+    finally:
+        context.close()
 
 
 _BOXES_JS = """
@@ -1664,5 +1767,6 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
 
 
