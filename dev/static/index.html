@@ -312,11 +312,15 @@
             <button type="button" id="settingsRootNew" class="btn btn-secondary" hidden>+ 新建 Rootdir</button>
             <button type="button" id="settingsUserNew" class="btn btn-secondary" hidden>+ 新建用户</button>
           </div>
-          <div id="settingsRootList"></div>
-          <div id="settingsUsers"></div>
-          <p id="settingsRootEmpty" class="settings-empty" hidden>
-            还没有 Rootdir。Rootdir 是用户可访问的根目录，至少需要一个才能创建普通用户。
-          </p>
+          <div data-settings-panel="roots" role="tabpanel">
+            <div id="settingsRootList"></div>
+            <p id="settingsRootEmpty" class="settings-empty" hidden>
+              还没有 Rootdir。Rootdir 是用户可访问的根目录，至少需要一个才能创建普通用户。
+            </p>
+          </div>
+          <div data-settings-panel="users" role="tabpanel" hidden>
+            <div id="settingsUsers"></div>
+          </div>
         </div>
 
         <div data-settings-view="form" hidden>

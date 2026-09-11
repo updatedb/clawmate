@@ -366,6 +366,26 @@ def test_the_modal_body_has_two_views():
     assert 'data-settings-view="form"' in html
 
 
+def test_the_list_view_gates_both_inventories_by_tab():
+    """Both inventories live in the list view, so each needs its own tab gate.
+    Without one the Rootdir tab rendered the user rows beneath the Rootdir
+    rows -- both `#settingsRootList` and `#settingsUsers` are populated
+    regardless of which tab is showing.
+
+    The gate reuses `data-settings-panel`, which selectTab() already toggles,
+    so the form view's own sections and these two wrappers move together.
+    """
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    view = html[html.index('data-settings-view="list"'):html.index('data-settings-view="form"')]
+
+    assert 'data-settings-panel="roots"' in view
+    assert 'data-settings-panel="users"' in view
+    # Each inventory must sit *inside* its own wrapper: a wrapper declared after
+    # both lists would gate nothing.
+    assert view.index('data-settings-panel="roots"') < view.index('id="settingsRootList"')
+    assert view.index('data-settings-panel="users"') < view.index('id="settingsUsers"')
+
+
 def test_rows_are_click_targets_not_button_rows():
     """Clicking the row is the way in, so the row carries no action buttons.
     (The `.btn .danger` family is still covered: the danger zone's delete

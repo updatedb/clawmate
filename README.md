@@ -400,6 +400,8 @@ cp config.example.json config.json
 
 管理员账号用于系统管理（Rootdir 与用户），不参与内容工作：Agent 终端、项目面板与反馈面板对管理员账号既不可见、也不可达。文件浏览、预览与下载不受影响。
 
+系统设置里 Rootdir 与用户各是一个列表：点任意一行进入该条的编辑表单，左上角「← 返回列表」退回。删除是两步的——先点「删除」原位展开确认，再点「确认删除」才执行。
+
 ```bash
 # 交互式修改当前管理员密码（读取并更新私有 users.json）
 python3 dev/main.py --set-password

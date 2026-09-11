@@ -3190,3 +3190,18 @@ body.multiselect .main-scroll { padding-bottom: calc(var(--batch-bar-h, 56px) + 
 .settings-danger-warning { margin: 0 0 var(--space-3); font-size: var(--font-size-sm); color: var(--danger); }
 .settings-danger-confirm { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
 .settings-danger-confirm[hidden] { display: none; }
+
+/* Settings at 768px and below. This block has to stay after the base rules it
+   overrides (.settings-row, #settingsUserRoots and .settings-actions are all
+   declared up in the settings region, well before any media query) -- a base
+   rule landing after a media block wins by source order, which this repo has
+   already been bitten by once. */
+@media (max-width: 768px) {
+  .settings-row { padding: 12px var(--space-2); }
+  .settings-row-meta { font-size: var(--font-size-xs); }
+  #settingsUserRoots { grid-template-columns: 1fr; }
+  /* Reverse column so the primary action sits last visually *and* first in the
+     DOM order users reach: the save button ends up on top. */
+  .settings-actions { flex-direction: column-reverse; }
+  .settings-actions .btn { width: 100%; }
+}

@@ -728,10 +728,15 @@ def test_settings_modal_is_admin_only(page: Page):
     check(page.locator('[data-settings-tab="roots"]').is_visible(), "默认展示 Rootdir 管理")
     check(page.locator("#settingsRootList").get_by_text(SEEDED_ROOT_LABEL).count() > 0,
           "Rootdir 列表已加载")
+    # Both inventories live in the list view, so the tab has to gate them: one
+    # root an ordinary user holds is also a user row, and a missing gate showed
+    # the user inventory under the Rootdir one.
+    check(page.locator("#settingsUsers").is_hidden(), "Rootdir tab 不显示用户清单")
     page.locator('[data-settings-tab="users"]').click()
     # The list view is what a tab shows; the grant checkboxes live in the form
     # view, reached by clicking a row or 新建.
     check(page.locator('[data-settings-view="list"]').is_visible(), "用户管理默认展示列表视图")
+    check(page.locator("#settingsRootList").is_hidden(), "用户 tab 不显示 Rootdir 清单")
     _open_user_form(page)
     check(page.locator("#settingsUserRoots").is_visible(), "用户管理展示授权复选框")
     check(page.locator("#settingsUserRoots input[name=root_ids]").count() > 0,
@@ -833,6 +838,72 @@ def test_the_grant_checkboxes_are_not_stretched(browser):
         rect = page.locator("#settingsUserRoots input").first.bounding_box()
         check(rect["width"] < 40, f"勾选框宽度自然（实测 {rect['width']}）")
         check(rect["height"] < 40, f"勾选框高度自然（实测 {rect['height']}）")
+    finally:
+        context.close()
+
+
+def test_a_row_opens_the_form_and_back_returns_to_the_list(browser):
+    """The structural fix, behaviourally: the inventory is what a tab shows, a
+    row is what opens the editor, and 返回列表 is what brings the inventory back
+    with no row left open behind it.
+
+    Service-worker-blocked like its neighbours: this is app.js behaviour, and
+    the worker serves static assets as silently as it serves routes.
+    """
+    context = _content_panel_context(browser)
+    try:
+        page = context.new_page()
+        login(page)
+        _wait_for_app(page)
+        _open_settings(page)
+        check(page.locator('[data-settings-view="list"]').is_visible(), "默认在列表视图")
+        check(page.locator('[data-settings-view="form"]').is_hidden(), "表单视图默认收起")
+
+        row = page.locator("#settingsRootList .settings-row").first
+        label = row.locator(".settings-row-title").inner_text()
+        row.click()
+        check(page.locator('[data-settings-view="form"]').is_visible(), "点行进入表单视图")
+        check(page.locator("#settingsRootLabel").input_value() == label,
+              f"表单载入的是所点那一行（{label}）")
+        check(page.locator("#settingsRootDanger").is_visible(), "编辑既有条目时危险区可见")
+
+        page.locator("#settingsBack").click()
+        check(page.locator('[data-settings-view="list"]').is_visible(), "返回回到列表视图")
+        check(page.locator('[data-settings-view="form"]').is_hidden(), "表单视图一并收起")
+    finally:
+        context.close()
+
+
+def test_deleting_a_root_needs_a_second_click(browser):
+    """The first click must not issue the DELETE: it arms the confirmation.
+
+    The row's first entry is a seeded root an ordinary account holds, so an
+    accidental delete here would be visible to later tests -- the point of
+    pinning that the request is not sent.
+    """
+    context = _content_panel_context(browser)
+    try:
+        page = context.new_page()
+        login(page)
+        _wait_for_app(page)
+        _open_settings(page)
+        # An existing row, not the blank create form: only an existing entry has
+        # a danger zone, so the create form would have nothing to arm.
+        _open_root_form(page, SEEDED_ROOT_LABEL)
+
+        deletes = []
+        page.on("request", lambda r: deletes.append(r.url) if r.method == "DELETE" else None)
+
+        page.locator("#settingsRootDelete").click()
+        page.locator("#settingsRootDeleteConfirm").wait_for(state="visible", timeout=5000)
+        check(not deletes, f"第一次点击不发 DELETE 请求（{deletes}）")
+        check(page.locator("#settingsRootDeleteAsk").is_hidden(), "原位展开确认，收起首次按钮")
+
+        page.locator("#settingsRootDeleteNo").click()
+        check(page.locator("#settingsRootDeleteConfirm").is_hidden(), "取消收回确认")
+        check(page.locator("#settingsRootDeleteAsk").is_visible(), "取消后回到首次按钮")
+        page.wait_for_timeout(300)
+        check(not deletes, f"取消后仍未发请求（{deletes}）")
     finally:
         context.close()
 
@@ -1365,3 +1436,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
