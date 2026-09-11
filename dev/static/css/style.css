@@ -93,9 +93,28 @@ body { font-family: var(--font-ui); color: var(--text-primary); background: var(
 
 .settings-modal-box { max-width: 640px; }
 .settings-form { display: grid; gap: 8px; }
-.settings-form input { width: 100%; min-height: var(--btn-h); padding: 6px 8px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--text-primary); }
+/* Checkboxes are excluded by type: this rule matches by element name, so it
+   used to stretch each grant checkbox to the full fieldset width and give it
+   the 30px input height, pushing its label onto a second line. */
+.settings-form input:not([type="checkbox"]) { width: 100%; min-height: var(--btn-h); padding: 6px 8px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--text-primary); }
 .settings-help { margin: 0; color: var(--text-secondary); font-size: var(--font-size-sm); }
-.settings-user { display:flex; justify-content:space-between; gap:8px; padding:8px 0; border-bottom:1px solid var(--border-color); }
+/* One row anatomy for both tabs: an inventory row is an inventory row whether
+   it holds a Rootdir or a user. The row itself is the click target, which is
+   why there are no per-row action buttons any more. */
+.settings-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 10px var(--space-2); border-bottom: 1px solid var(--border-color); cursor: pointer; text-align: left; width: 100%; background: none; border-left: 0; border-right: 0; border-top: 0; font: inherit; color: inherit; }
+.settings-row:hover { background: var(--bg-tertiary); }
+.settings-row:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--focus-ring); }
+.settings-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.settings-row-title { font-size: var(--font-size-base); font-weight: 600; color: var(--text-primary); }
+.settings-row-meta { font-size: var(--font-size-sm); color: var(--text-secondary); font-family: var(--font-mono); }
+.settings-row-note { font-size: var(--font-size-sm); color: var(--text-muted); white-space: nowrap; }
+.settings-row-chevron { color: var(--text-muted); flex-shrink: 0; }
+
+/* .btn and .settings-row both set a display value, which outranks the UA
+   `[hidden] { display: none }` -- the same trap the topbar gear hit. Every
+   settings control gated with the attribute needs it to be a real gate. */
+.settings-modal-box .btn[hidden],
+.settings-modal-box .settings-row[hidden] { display: none; }
 
 /* ── Settings tabs (Rootdir / user) ─────────────────────────────────────────
    The tabs swap a single visible panel, so the old two-stacked-sections rule
@@ -104,9 +123,11 @@ body { font-family: var(--font-ui); color: var(--text-primary); background: var(
 .settings-tabs { display: flex; gap: 4px; padding: 0 16px; border-bottom: 1px solid var(--border-color); }
 .settings-tab { appearance: none; background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; font: inherit; font-size: 13px; color: var(--text-secondary); cursor: pointer; }
 .settings-tab[aria-selected="true"] { color: var(--text-primary); border-bottom-color: var(--accent); }
-.settings-root { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; font-size: 13px; }
-.settings-root button { font-size: 12px; }
-#settingsUserRoots { display: flex; flex-direction: column; gap: 4px; border: 0; margin: 0; padding: 0; font-size: 13px; }
+/* accent-color is inherited, so it is set once on the fieldset rather than per
+   checkbox -- the same declaration style.css uses for .list-item .list-check. */
+#settingsUserRoots { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2) var(--space-4); border: 0; margin: 0; padding: 0; font-size: var(--font-size-base); accent-color: var(--accent); }
+#settingsUserRoots label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+#settingsUserRoots input { width: auto; min-height: 0; padding: 0; margin: 0; }
 
 
 
@@ -3125,3 +3146,34 @@ body.multiselect .main-scroll { padding-bottom: calc(var(--batch-bar-h, 56px) + 
     opacity: 1; pointer-events: auto;
   }
 }
+
+/* ═══════════════════════════════════════════════════════
+   Settings modal — appended layer
+
+   These live at the end of the file on purpose: the rules they support
+   (.settings-row and friends) are declared up in the settings region, and the
+   768px overrides that touch them sit in a media block below the base rules.
+   Anything appended here must not re-declare a property a media query sets, or
+   it would win over the mobile value by source order.
+   ═══════════════════════════════════════════════════════ */
+
+/* Chrome fills an autofilled input with its own light background, which beats
+   --bg-primary: in dark mode the username field rendered light while the
+   password field beside it stayed dark. */
+.settings-form input:-webkit-autofill,
+.settings-form input:-webkit-autofill:hover,
+.settings-form input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-primary) inset;
+  -webkit-text-fill-color: var(--text-primary);
+  caret-color: var(--text-primary);
+}
+
+/* Destructive actions live apart from the save action: proximity is the
+   strongest grouping cue, so an irreversible action must not sit in the same
+   cluster as a safe one. */
+.settings-danger { margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--border-color); }
+.settings-danger-title { margin: 0 0 var(--space-1); font-size: var(--font-size-base); font-weight: 600; color: var(--text-primary); }
+.settings-danger-help { margin: 0 0 var(--space-3); font-size: var(--font-size-sm); color: var(--text-secondary); }
+.settings-danger-warning { margin: 0 0 var(--space-3); font-size: var(--font-size-sm); color: var(--danger); }
+.settings-danger-confirm { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+.settings-danger-confirm[hidden] { display: none; }

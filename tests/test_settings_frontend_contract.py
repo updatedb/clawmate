@@ -295,3 +295,67 @@ def test_dir_picker_restores_the_previous_root_on_close():
     # cannot overwrite the stash with the already-overridden root.
     assert "dirPickerRootIdBeforeOpen === null" in open_body
     assert "state.rootId = opts.rootId" in open_body
+
+
+# ── Settings panel redesign ────────────────────────────────────────────
+
+def _settings_css() -> str:
+    return (STATIC / "css" / "style.css").read_text(encoding="utf-8")
+
+
+def _settings_css_without_comments() -> str:
+    return re.sub(r"/\*.*?\*/", "", _settings_css(), flags=re.S)
+
+
+def test_the_form_input_rule_does_not_reach_checkboxes():
+    """`.settings-form input { width: 100% }` matches by element name, so it
+    also hit the grant checkboxes: measured 308x30 each, with their labels
+    pushed to a second line (54.5px rows). A control's size rule must not be
+    applied across control types."""
+    css = _settings_css()
+    assert '.settings-form input:not([type="checkbox"])' in css
+    # The bare form of the rule must be gone, not merely shadowed.
+    assert ".settings-form input {" not in css
+
+
+def test_the_grant_checkboxes_are_reset_to_natural_size():
+    css = _settings_css()
+    assert "#settingsUserRoots" in css
+    block = css[css.index("#settingsUserRoots"):]
+    block = block[:block.index("}")]
+    assert "grid-template-columns" in block          # two-column grid
+    assert "accent-color: var(--accent)" in block    # matches style.css:958
+    # A reset for the leaked width/min-height lives on the input itself.
+    assert "#settingsUserRoots input" in css
+
+
+def test_autofill_follows_the_theme():
+    """Chrome paints autofilled inputs with its own light fill, which wins over
+    --bg-primary: in dark mode one field rendered light next to a dark one."""
+    css = _settings_css()
+    assert "-webkit-autofill" in css
+    assert "0 0 0 1000px var(--bg-primary) inset" in css
+
+
+def test_the_two_tabs_share_one_row_rule():
+    """`.settings-user` had a border-bottom and `.settings-root` did not, so
+    the two tabs of one modal looked like different screens."""
+    css = _settings_css()
+    assert ".settings-row" in css
+    assert ".settings-root" not in css
+    assert ".settings-user" not in css
+
+
+def test_settings_controls_gated_by_hidden_are_really_hidden():
+    """`.btn` and `.settings-row` both set a display value, which outranks the
+    UA `[hidden] { display: none }` -- the same trap the topbar gear hit (see
+    the comment above .topbar-btn[hidden]). Without this rule the "+ 新建" and
+    "取消编辑" controls stay visible in every view, and the paired
+    .settings-danger-confirm rule keeps the in-place delete confirmation from
+    showing both of its steps at once."""
+    css = _settings_css_without_comments()
+
+    assert re.search(r"\.settings-modal-box \.btn\[hidden\][^{]*\{[^}]*display:\s*none", css), \
+        "settings buttons must obey their own hidden attribute"
+    assert re.search(r"\.settings-danger-confirm\[hidden\][^{]*\{[^}]*display:\s*none", css), \
+        "the armed delete step must hide the other one"

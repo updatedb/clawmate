@@ -759,6 +759,40 @@ def test_admin_registers_edits_and_deletes_a_root(page: Page):
           "删除未影响其它 Rootdir")
 
 
+def test_the_grant_checkboxes_are_not_stretched(browser):
+    """A grant checkbox renders at its natural 13x13, not the 308x30 the leaked
+    `.settings-form input` rule gave it (with each label pushed to a second
+    line, 54.5px rows).
+
+    This pins the *outcome*, and deliberately not the mechanism: the narrowed
+    selector is not what makes the difference here. The reset rule
+    `#settingsUserRoots input { width: auto; min-height: 0; padding: 0 }` is an
+    ID selector, so it outranks `.settings-form input` and masks the leak
+    entirely -- reverting the selector alone leaves this test green. The
+    selector narrowing is pinned by
+    test_the_form_input_rule_does_not_reach_checkboxes; what this catches is a
+    regression of *both* halves at once, which is the state a user would see.
+
+    Runs in a service-worker-blocked context: the worker serves *static assets*
+    as silently as it serves routes, so an unblocked run can measure the
+    stylesheet from before the change and still look green.
+    """
+    context = _content_panel_context(browser)
+    try:
+        page = context.new_page()
+        login(page)
+        _wait_for_app(page)
+        page.locator("#btnSettings").click()
+        page.locator("#settingsModal").wait_for(state="visible")
+        page.locator("#settingsTabUsers").click()
+        page.locator("#settingsUserRoots input").first.wait_for(state="attached")
+        rect = page.locator("#settingsUserRoots input").first.bounding_box()
+        check(rect["width"] < 40, f"勾选框宽度自然（实测 {rect['width']}）")
+        check(rect["height"] < 40, f"勾选框高度自然（实测 {rect['height']}）")
+    finally:
+        context.close()
+
+
 def test_ordinary_user_does_not_render_the_settings_entry(browser):
     """An ordinary user must not get a rendered, clickable settings entry.
 
