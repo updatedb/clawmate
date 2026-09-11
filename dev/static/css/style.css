@@ -208,6 +208,12 @@ button svg, .btn svg, a svg {
 }
 .btn-secondary:hover { background: var(--bg-tertiary); }
 
+/* Destructive button modifier for the .btn family, declared once here rather
+   than scoped per surface (the card and batch action bars each had their own
+   copy of these two declarations). */
+.btn.danger { color: var(--danger); border-color: var(--danger-border); }
+.btn.danger:hover { background: var(--danger-bg); border-color: var(--danger); }
+
 /* Active state (toggles) */
 .btn.active {
   background: var(--accent);

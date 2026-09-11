@@ -359,3 +359,19 @@ def test_settings_controls_gated_by_hidden_are_really_hidden():
         "settings buttons must obey their own hidden attribute"
     assert re.search(r"\.settings-danger-confirm\[hidden\][^{]*\{[^}]*display:\s*none", css), \
         "the armed delete step must hide the other one"
+
+
+def test_settings_row_buttons_use_the_btn_family():
+    """The row actions were createElement('button') with no className, and the
+    stylesheet has no bare `button` rule -- only `.btn`. So they rendered as
+    browser defaults next to `.btn .btn-primary` form buttons in the same
+    modal, and 删除 (irreversible) looked identical to 编辑."""
+    script = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
+    assert "edit.className = 'btn btn-secondary'" in script
+    assert "remove.className = 'btn btn-secondary danger'" in script
+
+
+def test_the_settings_button_font_size_fallback_is_gone():
+    """`.settings-root button { font-size: 12px }` was the only styling on those
+    unstyled buttons; it papered over the class gap instead of closing it."""
+    assert ".settings-root button" not in _settings_css()

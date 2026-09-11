@@ -3188,6 +3188,7 @@ async function initSettings() {
       row.appendChild(text);
       var edit = document.createElement('button');
       edit.type = 'button'; edit.textContent = '编辑';
+      edit.className = 'btn btn-secondary';
       edit.addEventListener('click', function () {
         editingRootId = root.id;
         document.getElementById('settingsRootId').value = root.id;
@@ -3208,6 +3209,7 @@ async function initSettings() {
       });
       var remove = document.createElement('button');
       remove.type = 'button'; remove.textContent = '删除';
+      remove.className = 'btn btn-secondary danger';
       remove.addEventListener('click', async function () {
         if (!window.confirm('删除 Rootdir ' + root.label + '？')) return;
         try {
@@ -3235,6 +3237,7 @@ async function initSettings() {
       row.appendChild(text);
       var edit = document.createElement('button');
       edit.type = 'button'; edit.textContent = '编辑';
+      edit.className = 'btn btn-secondary';
       edit.addEventListener('click', function () {
         editingUserId = user.id;
         document.getElementById('settingsUsername').value = user.username;
@@ -3248,6 +3251,7 @@ async function initSettings() {
       });
       var remove = document.createElement('button');
       remove.type = 'button'; remove.textContent = '删除';
+      remove.className = 'btn btn-secondary danger';
       remove.addEventListener('click', async function () {
         if (!window.confirm('删除用户 ' + user.username + '？')) return;
         try {
