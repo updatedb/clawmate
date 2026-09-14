@@ -86,11 +86,15 @@ openclaw-*-test.png
 # Docs (not for public)
 docs/
 
-# Agent runtime artifacts (OpenClaw persona/memory seeds — not app code)
-SOUL.md
-IDENTITY.md
-USER.md
-memory/
+# Agent runtime artifacts (OpenClaw persona/memory seeds — not app code).
+# Anchored to the repo root on purpose: unanchored, these also matched same-named
+# paths at any depth (src/memory/, src/SOUL.md), which would hide real source
+# files from git silently. None of these artifacts exist here any more; the
+# patterns are kept only so a future in-repo agent workspace stays out of git.
+/SOUL.md
+/IDENTITY.md
+/USER.md
+/memory/
 
 # Tool/generated artifacts
 .superpowers/
