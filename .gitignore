@@ -55,6 +55,11 @@ feedback.json
 /test/
 archive/
 config.json.bak
+# Timestamped backups (config.json.bak-YYYYmmdd-HHMMSS) carry the same secrets
+# as the originals, but the exact-name patterns above do not match them.
+config.json.bak*
+users.json.bak*
+roots.json.bak*
 .*.swp
 share_links.json
 CHANGELOG.md
