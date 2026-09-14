@@ -6,11 +6,20 @@
 - **新增配置键 `project.harness_template_dir`**：指向治理仓库的 `project-template/`（即 `project-harness/` 的父目录）。与既有 `project` 段同构解析：缺段/缺键逐键回退 `ProjectConfig` 默认值，未配置时为空串。
 - **新增 `_scaffold_governance()`**：convert 时（1）幂等补齐 `.clawmate/` 运行子目录（state/tasks/runs/logs/evidence/audit/decisions/schemas/reports）；（2）从模板按「**绝不覆盖**」语义复制 `project-harness/` 及同级的 `docs/reports/`。模板缺失、为空或已存在骨架都**不是错误**——转换照常成功，由响应 `governance.skipped_reason` 说明原因，交由引导流程补齐。
 - **响应新增 `governance` 字段**：报告 `template` / `project_harness` / `seeded` / `runtime_dirs` / `skipped_reason`，使调用方（skill）能判断骨架是否就位，而不是靠猜。
-- **`skills/clawmate/SKILL.md` 的 Phase I 新增步骤 1.5 / 1.6**：给出「调用 convert 自动铺骨架」与「手动复制模板」两种方式，并明确骨架只是占位符，必须在同一轮引导中填全 `manifest.yaml` / `workflow.yaml` / `roles.yaml` / `acceptance.yaml` 四项，否则 `project-harness` 只是空壳。同时写明：项目只**引用**角色、不复制不修改角色定义；建项目是项目创建者（人类）的专属行为。
+- **`skills/clawmate/SKILL.md` 的 Phase I 重写并整合**：convert 现在是项目初始化的**唯一入口**（步骤 2），
+  `.clawmate/`、基础文档、`git init`、`project-harness/` 骨架一次完成。原「步骤 1」不再预建 `.clawmate/`
+  ——否则 convert 判定「已是项目」返回 409，照旧文档走会把自身卡死；原「步骤 3：初始化 Git」降级为
+  「步骤 5：通常无需手工执行」，只用于对已存在项目补做。步骤重编号为 0–5。
+- **缺内容必须澄清**：skill 与网页端「转换为项目」都读响应 `governance` 字段；骨架未铺时
+  弹窗/输出明确告知原因（未配置模板 / 模板缺失 / 已存在 / HTTP 409），不再静默略过。
+- **角色定义不随项目复制**：明确项目只**引用**角色（`roles.yaml`），不复制不修改；建项目是
+  项目创建者（人类）的专属行为。
+- **`skills/clawmate/_meta.json`**：版本 2.7.2 → 2.8.0，`clawmate init` 描述补充治理骨架。
 - **`config.example.json`** 补充 `project.harness_template_dir` 示例值。
 
 ### 测试
 - 新增 `tests/test_project_harness_scaffold.py`：锁定无模板时仍创建运行子目录且 convert 不失败、模板存在时骨架正确落地、**已存在的 `project-harness/` 绝不覆盖**、模板路径缺失时降级为 skip 而非异常、`_copy_tree_no_clobber` 保留既有文件、以及新配置键的解析与逐键回退。
+- 新增 `tests/test_project_convert_governance_contract.py`：锁定网页端「转换为项目」声明会创建 `project-harness/`，且骨架未铺时会弹窗告知原因（不得静默）。
 - 全量测试：`568 passed, 46 deselected`；`test_preview_refresh.py` 的 1 个失败在 `git archive HEAD` 隔离树上同样复现（工作区既有问题，与本次改动无关，未触碰 `dev/static/js/preview.js`）。
 
 ## v1.56 (2026-09-14)

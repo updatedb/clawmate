@@ -178,28 +178,33 @@ flowchart LR
 3. **研发需求** — 需要开发 + 测试的完整工程
 ```
 
-**步骤 1：创建目录结构**
+**步骤 1：创建项目目录**
 
-确认类型后立即创建：
+确认类型后创建目录树。**先不要创建 `.clawmate/`**——它由下一步的服务创建；
+若你提前建好，convert 会判定该目录「已是项目」并返回 409。
 
 ```bash
 # 观点收集
-mkdir -p {项目根路径}/{.clawmate,research,collect}
+mkdir -p {项目根路径}/{research,collect}
 
 # 产品方案
-mkdir -p {项目根路径}/{.clawmate,research,collect,prd}
+mkdir -p {项目根路径}/{research,collect,prd}
 
 # 研发需求
-mkdir -p {项目根路径}/{.clawmate,research,collect,prd,dev,test}
+mkdir -p {项目根路径}/{research,collect,prd,dev,test}
 ```
 
-> **`.clawmate/` marker 作用**：ClawMate 服务通过此目录识别 project 边界，实现 session 隔离和 Agent Panel 项目切换。每个 project 必须包含此目录。
+**步骤 2：调用 convert，一次完成项目初始化**
 
-**步骤 1.5：初始化治理骨架（project-harness）**
+`POST /api/clawmate/project/convert` 是项目初始化的**唯一入口**（网页端「转换为项目」
+走的也是它），一次完成四件事：
 
-每个项目都应带一份公开、版本化的治理契约 `project-harness/`。两种方式二选一：
-
-**方式 A（推荐）— 调用 convert API，由服务自动铺骨架**：
+| 产物 | 说明 |
+|------|------|
+| `.clawmate/` marker | 项目边界；ClawMate 靠它做 session 隔离与 Agent Panel 项目切换 |
+| `PROJECT_NOTE.md` / `CLAWLIST.md` / `AGENTS.md` / `.gitignore` | 基础文档，已存在则不覆盖 |
+| `git init` + 作者身份 + 首次提交 | 项目自有 git 历史，**无需再手工 `git init`** |
+| `project-harness/` 骨架 + `.clawmate/` 运行子目录 | 从 `project.harness_template_dir` 复制，已存在则不覆盖 |
 
 ```bash
 curl -s -X POST "{CLAWMATE_URL}/api/clawmate/project/convert" \
@@ -207,23 +212,25 @@ curl -s -X POST "{CLAWMATE_URL}/api/clawmate/project/convert" \
   -d '{"root":"{root}","path":"{项目名}"}' 2>/dev/null
 ```
 
-服务会幂等地补齐 `.clawmate/` 运行子目录，并从 `config.json` 的
-`project.harness_template_dir` 复制 `project-harness/` 骨架（**已存在则不覆盖**）。
-响应中的 `governance` 字段说明结果：
+**必须读响应中的 `governance` 字段并如实告知用户**——缺少内容时要澄清，不得静默略过：
 
-- `project_harness: true` — 骨架已就位
-- `skipped_reason` — 未铺骨架及原因（未配置模板 / 模板缺失 / 已存在）
+| 现象 | 含义与动作 |
+|------|------------|
+| `governance.project_harness: true` | 治理骨架已就位，可继续下一步 |
+| `skipped_reason: 未配置模板` | 请项目创建者在 `config.json` 设 `project.harness_template_dir`，或改用手动复制 |
+| `skipped_reason: 模板缺失` | 模板路径失效，报告创建者核查 |
+| `skipped_reason: 已存在` | 骨架已在，跳过即可 |
+| HTTP 409 | 该目录已是项目：**不要重复初始化**；若它尚无 `project-harness/`，走方式 B 补铺 |
 
-**方式 B — 手动复制模板**：
+> **`.clawmate/` marker 作用**：ClawMate 服务通过此目录识别 project 边界，实现 session 隔离和 Agent Panel 项目切换。每个 project 必须包含此目录。
+
+**方式 B — 手动复制模板（仅当 convert 未铺骨架、或项目已存在需补铺时）**：
 
 ```bash
 cp -r {harness_template_dir}/. {项目根路径}/
 ```
 
-> 只有 `project.harness_template_dir` 配置后方式 A 才有效；未配置时 commit 与 convert
-> 仍会成功，只是不铺 `project-harness/`。此时改用方式 B，或请项目创建者补配置。
-
-**步骤 1.6：填全 project-harness 四项（必做，否则只是空壳）**
+**步骤 3：填全 project-harness 四项（必做，否则只是空壳）**
 
 骨架只有占位符，必须在同一轮引导中逐项确认填写：
 
@@ -241,7 +248,7 @@ cp -r {harness_template_dir}/. {项目根路径}/
 > ⚠️ **建项目是项目创建者（人类）的专属行为**，角色不得自行执行 `/clawmate init`
 > 或铺治理骨架。
 
-**步骤 2：创建核心文档 + 归档机制**
+**步骤 4：创建核心文档 + 归档机制**
 
 > **关键原则**：所有文档必须有明确的「更新触发器」和「归档边界」，避免过期信息堆积。
 > 
@@ -482,16 +489,21 @@ cp -r {harness_template_dir}/. {项目根路径}/
 {可复用的代码模式 / 设计模式}
 ```
 
-**步骤 3：初始化 Git**
+**步骤 5：初始化 Git（通常无需手工执行）**
+
+`convert` 已在步骤 2 完成 `git init`、作者身份与首次提交，因此**正常流程到此结束**，
+不要再重复 `git init`。仅当你是对**已存在**的项目补做（当时 convert 返回 409）时，
+才需要手工执行：
 
 ```bash
 cd {项目根路径}
-git init
+git init   # 已有 .git 时跳过
 git config user.email "updatedb@qq.com"
 git config user.name "OpenClaw"
+git add -A && git commit -m "Initial commit: {项目名}"
 ```
 
-.gitignore 模板：
+.gitignore 模板（`convert` 未创建时才需手写）：
 ```
 node_modules/ .npm/ .pnpm-store/
 __pycache__/ *.py[cod] .venv/ venv/ .env*
@@ -500,8 +512,6 @@ __pycache__/ *.py[cod] .venv/ venv/ .env*
 .vscode/ .idea/
 dist/ build/
 ```
-
-首次提交：`git add -A && git commit -m "Initial commit: {项目名}"`
 
 ### Phase II：需求澄清
 

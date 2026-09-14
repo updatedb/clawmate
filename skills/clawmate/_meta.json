@@ -1,6 +1,6 @@
 {
   "name": "clawmate",
-  "version": "2.7.2",
+  "version": "2.8.0",
   "description": "ClawMate 文件管理 + 预览 + 反馈闭环 + 项目管理。GitHub: https://github.com/updatedb/clawmate",
   "author": "openclaw",
   "license": "MIT",
@@ -32,7 +32,7 @@
   ],
   "commands": {
     "clawmate link <filename>": "搜索文件并生成可点击的预览链接",
-    "clawmate init [root] <project>": "项目初始化与前期梳理（Phase I-V）",
+    "clawmate init [root] <project>": "项目初始化与前期梳理（Phase I-V），含 project-harness 治理骨架",
     "clawmate plan [root] <project>": "规划/更新分层项目计划（CLAWLIST）",
     "clawmate list [root_id]": "列出指定 root 下所有项目",
     "clawmate feed [status] [filename] [date]": "查询 feedback 列表",
