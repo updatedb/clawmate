@@ -324,6 +324,7 @@ def _parse_config(raw: dict) -> AppConfig:
             local_hosts=[str(h) for h in (ac.get("local_hosts") or [])],
         ),
         search=_parse_search_config(raw.get("search") or {}),
+        project=_parse_project_config(raw.get("project") or {}),
     )
 
 
@@ -332,6 +333,21 @@ def _bounded_int(value: object, default: int, low: int, high: int) -> int:
         return max(low, min(high, int(value)))
     except (TypeError, ValueError):
         return default
+
+
+def _parse_project_config(raw: dict) -> ProjectConfig:
+    """Parse project section from config dict.
+
+    Mirrors `_parse_search_config`: a missing (or partial) section keeps the
+    dataclass default for each absent key.  Passing the parsed result to
+    AppConfig is what makes config.json authoritative -- `project_routes`
+    reads `cfg.project.git_user_email` / `.git_user_name` for project commits.
+    """
+    defaults = ProjectConfig()
+    return ProjectConfig(
+        git_user_email=str(raw.get("git_user_email", defaults.git_user_email)),
+        git_user_name=str(raw.get("git_user_name", defaults.git_user_name)),
+    )
 
 
 def _parse_search_config(raw: dict) -> SearchConfig:

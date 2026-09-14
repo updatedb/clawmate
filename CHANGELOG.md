@@ -20,9 +20,21 @@
 - 该配置授予的是**完整管理员权限**而非仅文件访问：命中本机绕过的客户端被绑定为 `is_admin=true` 的 `local-admin`，设置类接口（账户列表 / 增删用户 / 改授权）同样开放。README 已显式警示，并说明它与 `_is_local_network_host()`（仅影响 WS 地址计算，不参与认证决策）是两件不同的事。
 - 本机 `config.json` 原有 `local_hosts: ["openclaw.lan"]`（解析到 192.168.254.130，**另一台机器**），近 7 天该来源请求数为 0，已改为 `[]`（只保留硬编码回环绕过）。
 
+### 修复 `project` 配置段被静默忽略（真 bug）
+- **根因**：`AppConfig.project` 声明为 `field(default_factory=ProjectConfig)`，但 `_parse_config()` 的返回里**从不传 `project=`**。于是无论 `config.json` 写什么，运行时永远拿 dataclass 默认值 `updatedb@qq.com` / `OpenClaw`。消费方是真实存在的：`dev/project_routes.py` 的 `_git_identity()` 读取 `cfg.project.git_user_email` / `cfg.project.git_user_name` 来签署项目提交。本机 `config.json` 的值恰与默认值相同，所以没有可见差异——这正是它危险的地方：改配置看起来生效了，实际没有。
+- **修复**：新增 `_parse_project_config()`（与既有 `_parse_search_config()` 同构：缺段/缺键逐键回退默认值），并在 `_parse_config()` 中传 `project=`。
+
+### 清理死配置键 `search.ai_summary` 与 `agent.terminal_v2`
+- **`search.ai_summary`**：`SearchConfig` 只声明 `content` 字段，`_parse_search_config()` 只读 `raw["content"]`；全树确认 `dev/` 下无任何消费者。该功能此前已被移除（`search_routes` 至今显式 `result.pop("summary", None)`），但 `config.json` 里仍认真配着 `enabled` / `timeout_seconds` / `max_input_files` / `max_snippets_per_file` 四个参数。**决定：删除该配置块**，不再假装生效；若日后要恢复 AI 摘要，应按新功能重新设计而非沿用这段无消费者的键。
+- **`agent.terminal_v2`**：`dev/config.py` 从未解析该键。protocol v2 端点 **无条件注册**（`agent_routes.py` 的 `@router.websocket("/api/clawmate/agent/terminal/v2")`，随 `agent_router` 始终挂载），`_terminal_v2_manager` 等只是内部变量名，与配置字段无关——这个开关从来关不掉任何东西。**决定：删除该配置键**。灰度期的回退说明只存在于历史 spec/plan 文档中，本仓库 README 与 CHANGELOG 均未承诺该开关。
+- 两键均已从本机 `config.json` 移除（移除前已生成 `config.json.bak-*` 时间戳备份）；`config.example.json` 本就不含这两键。旧配置残留该键不会报错——解析忽略未知字段。
+
 ### 测试
 - 新增 `tests/test_graceful_shutdown_budget.py`：锁定有界预算、环境变量覆盖与安全回退，并断言预算必须小于服务管理器强杀超时。
 - 新增 `tests/test_dead_openclaw_ws_url_key.py`：锁定死键已移除、旧配置兼容，且 `/config` 仍输出动态计算的 `openclaw_ws_url`。
+- 新增 `tests/test_config_project_section.py`：锁定 `config.json` 的非默认 project 值能传到 `cfg.project`，缺失/部分配置逐键回退默认值，`project_routes._git_identity()` 消费到解析值（而非 dataclass 默认值），且本机 `config.json` 的 project 段与解析结果一致。
+- 新增 `tests/test_dead_config_keys.py`：锁定两个死键已移除、旧配置兼容，且 v2 终端 WebSocket 确实无条件注册。
+- 全量测试：`563 passed, 46 deselected`。
 
 ## v1.55 (2026-09-11)
 ### 设置面板改版
