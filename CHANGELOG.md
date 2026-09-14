@@ -39,8 +39,15 @@
 - **现有项目不强制迁移**（保留旧名仍可工作）；新项目与文档一律用 `src/` + `tests/`。
 - 需注意的陷阱：ClawMate 仓库**自身**的源码目录就叫 `dev/`、测试叫 `tests/`，因此修改时只改「项目目录约定」文本，绝不能误改仓库真实路径（已校验 `/dev/null` 等未被误伤）。
 
+### `collect/` 并入 `research/`
+- **依据**：`collect/` 是纯约定目录，在 ClawMate 与治理可执行物中**零代码消费者**，职责（存放收集的素材与来源材料）与 `research/` 完全重叠。实测仅 RAS 有内容（12 项），content-studio 为空目录。
+- **标准侧**：`skills/clawmate/SKILL.md` 的类型表、`mkdir` 目录树、目录权威树与启用表均去除 `collect/`；`research/` 说明改为「研究计划/进度 + 收集的素材与来源材料」。
+- **顺手修掉上一轮的验证漏洞**：`mkdir` 行用的是花括号展开 `{research,collect,prd,dev,test}`——里面没有斜杠，所以逃过了我上一轮 `dev/\|test/` 正则，旧目录名其实仍在生成。现已改为 `{research,prd,src,tests}`。
+- **存量项目迁移**（磁盘层，未动 git index）：RAS 的 12 项内容 `mv` 到 `research/` 并改写 10 处交叉引用（`prd/` 追溯矩阵与需求列表、`harness/examples/ras-v1-definition.json`、`PROJECT_NOTE.md`、`CLAWLIST.md`、`scripts/relativize_preview_links.py` 默认目录列表）；content-studio 删除空目录并更新目录树；carpad / marketresearch 的旧版 `AGENTS.md` 按新模板重新生成。
+- 刻意**保留**的两处 `collect`：content-studio `PROJECT_NOTE.md` 决策日志行（记录当时事实，改它等于篡改历史）、`dev/project_routes.py` 的 `_LLM_KINDS` 任务关键字（是任务语义，不是目录名）。
+
 ### 测试
-- 新增 `tests/test_agents_template_dirs.py`：锁定 AGENTS 模板只描述真实存在的目录、不重新引入 legacy `.clawmate/reports`、且**只**用 `src/`/`tests/`（旧别名不得回归）。
+- 新增 `tests/test_agents_template_dirs.py`：锁定 AGENTS 模板只描述真实存在的目录、不重新引入 legacy `.clawmate/reports`、**只**用 `src/`/`tests/`、且不再提供 `collect/`（`_AGENTS_TEMPLATE` 与 `_CLAWLIST_TEMPLATE` 双向断言）。
 - `tests/test_project_harness_scaffold.py` 重写：锁定运行目录集收敛、legacy 与懒创建目录**绝不**被播种、模板白名单不外溢、以及校验的 issue/pending 区分。
 - 全量测试：`580 passed, 46 deselected`；`test_preview_refresh.py` 的 1 个失败在 `git archive HEAD` 隔离树上同样复现（工作区既有问题，与本次改动无关，未触碰 `dev/static/js/preview.js`）。
 

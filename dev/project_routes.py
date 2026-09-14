@@ -139,7 +139,7 @@ _AGENTS_TEMPLATE = """# AGENTS.md — {name} 项目操作规范
 | `project-harness/` | 治理契约（manifest / workflow / roles / acceptance）；公开、版本化 |
 | `.clawmate/` | 隐藏运行态：`state/` `tasks/` `evidence/` `audit/`（audit 仅项目创建者可写） |
 | `docs/` | 正式文档与报告（`docs/reports/`） |
-| `research/` `collect/` `prd/` | 按项目类型建立的资料/方案目录 |
+| `research/` `prd/` | 按项目类型建立的资料/方案目录 |
 | `src/` | 源码目录 |
 | `tests/` | 测试目录，与源码严格分离 |
 | `archive/` | 统一归档（严禁在子目录内建 archive/） |

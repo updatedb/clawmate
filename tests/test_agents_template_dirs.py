@@ -60,3 +60,13 @@ def test_agents_template_does_not_reintroduce_legacy_reports_path():
 
     assert ".clawmate/reports" not in tpl
     assert "docs/reports" in tpl
+
+
+def test_agents_template_does_not_reintroduce_collect_dir():
+    """`collect/` merged into `research/`; it had no code consumer and no
+    distinct purpose. A template that still offers it would re-split one
+    directory's job across two names in every new project."""
+    import project_routes
+
+    assert "collect/" not in project_routes._AGENTS_TEMPLATE
+    assert "collect/" not in project_routes._CLAWLIST_TEMPLATE

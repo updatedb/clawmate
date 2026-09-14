@@ -90,7 +90,7 @@ Phase I 确认三种类型之一，决定后续全流程和目录结构：
 
 | 类型 | 目录 | 流程 | 产出 |
 |------|------|------|------|
-| **观点收集** | research/ collect/ | I→II→III→研究报告 | 结构化研究报告 |
+| **观点收集** | research/ | I→II→III→研究报告 | 结构化研究报告 |
 | **产品方案** | + prd/ | I→II→III→IV(MRD)→V(PRD) | MRD + PRD |
 | **研发需求** | + prd/ src/ tests/ | I→II→III→IV(MRD)→V(PRD) | MRD + PRD + 可运行系统 |
 
@@ -185,13 +185,13 @@ flowchart LR
 
 ```bash
 # 观点收集
-mkdir -p {项目根路径}/{research,collect}
+mkdir -p {项目根路径}/research
 
 # 产品方案
-mkdir -p {项目根路径}/{research,collect,prd}
+mkdir -p {项目根路径}/{research,prd}
 
 # 研发需求
-mkdir -p {项目根路径}/{research,collect,prd,dev,test}
+mkdir -p {项目根路径}/{research,prd,src,tests}
 ```
 
 **步骤 2：调用 convert，一次完成项目初始化**
@@ -588,10 +588,9 @@ dist/ build/
 ├── CLAWLIST.md              ← 项目级总览：Phase I-V + 研发/测试/研究进展汇总
 ├── PROJECT_NOTE.md          ← 产品决策唯一来源 + 信息架构规则（顶部「当前焦点」）
 ├── AGENTS.md                ← agent 操作规范
-├── research/                ← 研究目录
+├── research/                ← 研究目录（研究计划/进度 + 收集的素材与来源材料）
 │   ├── CLAWLIST.md          ← 研究计划与进度
-│   └── {主题}/
-├── collect/                 ← 收集素材（观点收集类）
+│   └── {主题}/              ← 按主题组织的材料与结论
 ├── prd/                     ← 产品方案 / 研发需求
 │   ├── MRD.md
 │   ├── PRD.md
@@ -602,7 +601,7 @@ dist/ build/
 │   ├── reports/             ← 测试报告
 │   ├── results/             ← 测试结果、日志、截图
 │   └── scripts/             ← 测试脚本
-└── archive/                 ← 统一归档目录（根目录，严禁子目录建 archive/）
+├── archive/                 ← 统一归档目录（根目录，严禁子目录建 archive/）
 │   ├── research/
 │   ├── decisions/
 │   ├── iterations/
@@ -614,7 +613,7 @@ dist/ build/
 
 | 项目类型 | 启用目录 | 交付物 |
 |---|---|---|
-| 观点收集 | `research/ collect/` | 结构化研究报告 |
+| 观点收集 | `research/` | 结构化研究报告 |
 | 产品方案 | + `prd/` | MRD + PRD |
 | 研发需求 | + `prd/ src/ tests/` | MRD + PRD + 可运行系统 |
 
