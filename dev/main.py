@@ -26,6 +26,8 @@ from constants import (
     PUBLIC_BASE_URL_ENV,
     ONLYOFFICE_JWT_SECRET_ENV,
     ONLYOFFICE_URL_ENV,
+    GRACEFUL_SHUTDOWN_TIMEOUT_ENV,
+    DEFAULT_GRACEFUL_SHUTDOWN_SECONDS,
 )
 
 from config import set_config_path, load as load_cfg
@@ -338,10 +340,18 @@ if __name__ == "__main__":
     t = threading.Thread(target=_start_periodic_cron_tick, name="cron-tick", daemon=True)
     t.start()
 
+    try:
+        graceful_shutdown = int(
+            os.environ.get(GRACEFUL_SHUTDOWN_TIMEOUT_ENV, DEFAULT_GRACEFUL_SHUTDOWN_SECONDS)
+        )
+    except ValueError:
+        graceful_shutdown = DEFAULT_GRACEFUL_SHUTDOWN_SECONDS
+
     uvicorn.run(
         app, host="0.0.0.0", port=port, log_level="info",
         ws_ping_interval=30,
         ws_ping_timeout=60,
         timeout_keep_alive=120,
+        timeout_graceful_shutdown=graceful_shutdown,
         reload=os.environ.get("CLAWMATE_AUTO_RELOAD", "").lower() in ("1", "true", "yes"),
     )
