@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.62 (2026-09-15)
+### 修复 SKILL.md 示例中的未转义插值（ClawHub ClawScan 判定 `suspicious`）
+- **背景**：`clawmate@2.9.0` 发布后，ClawHub **主安全判定 ClawScan** 返回 `suspicious`（confidence: high）——「its file-changing shell and API examples interpolate project data and feedback content without enough validation or encoding」。**注意**：列表页/`inspect` 显示的是 `Moderate CLEAN`，与 ClawScan 判定不一致；ClawHub 扫描报告自述「ClawScan is the primary security verdict」，故以扫描报告为准（`virustotal.json` 为 `null`，无 VT 数据，也是本次 reason code 不是 `scanner.vt.clean` 的原因）。
+- **根因在文档，不在代码**：对 `src/` 全量检索确认实现是安全的——唯一的 `subprocess.Popen`（`src/task_executor.py:114`）传 **argv 列表**、无 `shell=True`，用户文本作为单个参数元素传递、不经 shell 解释；URL 构造统一走 `urllib.parse.quote()`；无 `eval` / `exec` / `pickle.loads` / `yaml.load`。问题仅存在于 `SKILL.md` 的示例，而 agent 会**逐字照抄**这些示例。
+- **最严重一处**：`task/run` 示例把用户 feedback 正文 `<content>` 同时拼进**单引号 shell 字符串**与 JSON——正文中一个单引号即提前闭合引号，其余文本被当作 shell token 解释；`2>/dev/null` 还会吞掉报错，使失败静默。
+- **修复**：新增「参数编码约定」四条硬性规则——查询参数一律 `curl -G --data-urlencode`；JSON 体一律引号 heredoc（`<<'JSON'`）配 `--data-binary @-`（关闭 shell 全部展开）；写入 JSON 的值按 JSON 规则转义；禁止把任意文本放进双引号 shell 字符串。据此改写全部 9 处示例（link / convert / list / feedback list / task run）。
+- **版本**：`skills/clawmate/_meta.json` 2.9.0 → 2.9.1。
+- **验证**：`src/.venv/bin/python -m pytest tests -q` → **586 passed, 0 failed**（与 v1.61 基线一致，无回归）。
+
 ## v1.61 (2026-09-14)
 ### 仓库自身源码目录 `dev/` → `src/`（对齐治理契约）
 - **背景**：治理契约 `project-harness/roles.yaml` 的 sandbox bind 授权 `src/**`、`tests/**`、`docs/**`，而本仓源码目录叫 `dev/`。授权的是一个项目里并不存在的目录，实际被写入的 `dev/**` 不在授权范围内——属「看起来生效、实际没有」的缺口。

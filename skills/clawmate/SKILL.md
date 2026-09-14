@@ -13,6 +13,15 @@ license: MIT
 > - `init`/`plan` 会创建目录、写入文件并初始化 Git，执行前会展示路径并等待你确认。
 > - 本 Skill 使用 `exec curl` 调用本地 API（`web_fetch` 的 SSRF 保护会拦截 localhost 请求）。
 
+## 参数编码约定（必须遵守）
+
+本 Skill 的示例普遍要把**项目数据与用户 feedback 内容**拼进命令。这些值是任意文本，直接拼接会导致参数截断、shell 注入或请求体损坏。四条硬性约定：
+
+1. **查询参数一律用 `curl -G --data-urlencode`**，不要手工拼 `?a={x}&b={y}`。搜索词、文件名、项目名都可能含 `&`、`#`、空格、中文——手工拼接会截断参数或注入额外参数（`--data-urlencode` 会自动做 percent-encoding）。
+2. **JSON 请求体一律用引号 heredoc（`<<'JSON'`）+ `--data-binary @-`**，不要写进 `-d '...'`。`<<'JSON'` 关闭 shell 的全部展开，`$`、反引号、单引号、双引号都不会被解释；`-d '...'` 则会被内容里的单引号提前闭合。
+3. **写进 JSON 的值必须按 JSON 规则转义**：`"` → `\"`，`\` → `\\`，换行 → `\n`。用户 feedback 内容是任意文本，不转义会破坏请求体结构。
+4. **不要把 `<content>`、`<note>` 这类任意文本放进双引号 shell 字符串**（例如 `--arg content "{content}"`）。双引号内 `"`、`$`、反引号仍会被解释，等于把转义责任推给了调用方。
+
 ---
 
 ## 功能概览
@@ -36,7 +45,10 @@ OpenClaw 编写文件并保存后，使用 `/clawmate link {filename}` 搜索文
 **步骤**：
 1. 调用 `/api/clawmate/link`（一步完成搜索 + 链接生成）：
    ```bash
-   curl -s "{CLAWMATE_URL}/api/clawmate/link?q={关键词}&root={root}&ext={扩展名}" 2>/dev/null
+   curl -s -G "{CLAWMATE_URL}/api/clawmate/link" \
+     --data-urlencode "q={关键词}" \
+     --data-urlencode "root={root}" \
+     --data-urlencode "ext={扩展名}" 2>/dev/null
    ```
    如需限定文件类型，传 `ext` 参数（如 `ext=md` 只搜索 Markdown）；模糊匹配时简化搜索词（如去空格、取核心词）重试
 2. 从响应中的 `results[].preview_url` 直接获取完整预览链接
@@ -135,8 +147,9 @@ mkdir -p {项目根路径}/{research,prd,src,tests}
 
 ```bash
 curl -s -X POST "{CLAWMATE_URL}/api/clawmate/project/convert" \
-  -H 'Content-Type: application/json' \
-  -d '{"root":"{root}","path":"{项目名}"}' 2>/dev/null
+  -H 'Content-Type: application/json' --data-binary @- 2>/dev/null <<'JSON'
+{"root":"{root}","path":"{项目名}"}
+JSON
 ```
 
 **必须读响应中的 `governance` 字段并如实告知用户**——缺少内容时要澄清，不得静默略过：
@@ -180,8 +193,8 @@ cp -r {harness_template_dir}/. {项目根路径}/
 > **关键原则**：所有文档必须有明确的「更新触发器」和「归档边界」，避免过期信息堆积。
 > 
 > **硬性规则**：每次保存文档到磁盘后，必须生成 ClawMate 可点击预览链接并回复给用户。
-> 链接格式：`[文件名]({base_url}/clawmate/preview.html?root={root}&file={relative_path})`
-> 使用 `curl -s "{CLAWMATE_URL}/api/clawmate/link?q={关键词}&root={root}"` 一步完成搜索 + 链接生成，从响应的 `results[].preview_url` 获取完整链接。
+> 链接格式：`[文件名]({base_url}/clawmate/preview.html?root={root}&file={relative_path})`（`root`/`file` 需 percent-encode，如 `clawmate%2FCLAWLIST.md`）
+> 使用 `curl -s -G "{CLAWMATE_URL}/api/clawmate/link" --data-urlencode "q={关键词}" --data-urlencode "root={root}"` 一步完成搜索 + 链接生成，从响应的 `results[].preview_url` 获取完整链接（该字段已编码，直接使用）。
 
 **活跃文档（始终加载）**：
 - **CLAWLIST.md**（项目级 — 总览）— 管理所有非研发、测试的项目进展（Phase I-V），并包含研发级/测试级/研究级 CLAWLIST 的整体进展简要汇总（分组体现）
@@ -511,7 +524,7 @@ clawmate plan [root] <project>
 ### 功能说明
 
 1. 读取项目根目录的 CLAWLIST.md（如不存在则创建模板）
-2. 使用 `curl -s "{CLAWMATE_URL}/api/clawmate/list?root={root}&marker_filter=true"` 列出项目，确认目标项目是否存在
+2. 使用 `curl -s -G "{CLAWMATE_URL}/api/clawmate/list" --data-urlencode "root={root}" --data-urlencode "marker_filter=true"` 列出项目，确认目标项目是否存在
 3. 读取 PROJECT_NOTE.md 了解当前阶段
 4. 更新 CLAWLIST.md：
    - 检查当前阶段，标记已完成项
@@ -580,7 +593,12 @@ flowchart LR
 **步骤**：
 1. 查询 feedback（使用 exec curl）：
    ```bash
-   curl -s "{CLAWMATE_URL}/api/clawmate/feedback/list?root={root}&project={project}&status={status}&file={filename}&since={date}" 2>/dev/null
+   curl -s -G "{CLAWMATE_URL}/api/clawmate/feedback/list" \
+     --data-urlencode "root={root}" \
+     --data-urlencode "project={project}" \
+     --data-urlencode "status={status}" \
+     --data-urlencode "file={filename}" \
+     --data-urlencode "since={date}" 2>/dev/null
    ```
 2. 格式化输出：
 
@@ -610,13 +628,18 @@ clawmate do FD-CM-042
 **处理步骤（全部处理）**：
 1. 查询所有 pending feedback：
    ```bash
-   curl -s "{CLAWMATE_URL}/api/clawmate/feedback/list?status=pending" 2>/dev/null
+   curl -s -G "{CLAWMATE_URL}/api/clawmate/feedback/list" --data-urlencode "status=pending" 2>/dev/null
    ```
 2. 列出待处理项（ID / 文件 / 用户备注）
 3. 等待用户确认是否继续处理
 4. 用户确认后，对每项调用 `/api/clawmate/task/run` 执行：
    ```bash
-   curl -s -X POST "{CLAWMATE_URL}/api/clawmate/task/run" -H 'Content-Type: application/json' -d '{"root":"<root>","file":"<file_path>","selections":[{"task_id":"review_modify","content":"<content>","note":"<user_note>"}]}' 2>/dev/null
+   # content / note 是用户任意文本：必须按 JSON 规则转义（" → \"，\ → \\，换行 → \n）
+   # <<'JSON' 关闭 shell 全部展开，避免文本中的引号 / $ / 反引号被解释
+   curl -s -X POST "{CLAWMATE_URL}/api/clawmate/task/run" \
+     -H 'Content-Type: application/json' --data-binary @- 2>/dev/null <<'JSON'
+{"root":"<root>","file":"<file_path>","selections":[{"task_id":"review_modify","content":"<content>","note":"<user_note>"}]}
+JSON
    ```
 该接口逐条处理：读取 feedback → 执行变更 → 标记 done/failed。
 
@@ -656,7 +679,7 @@ for root in cfg['roots']:
 
 对每个 root 列出项目（带 `.clawmate/` marker 的目录）：
 ```bash
-curl -s "{CLAWMATE_URL}/api/clawmate/list?root=<root_id>&marker_filter=true" 2>/dev/null | python3 -c "
+curl -s -G "{CLAWMATE_URL}/api/clawmate/list" --data-urlencode "root=<root_id>" --data-urlencode "marker_filter=true" 2>/dev/null | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 for e in data.get('entries', []):
@@ -733,7 +756,7 @@ for root in cfg['roots']:
 **步骤 3：通过 API 列出带 .clawmate/ marker 的项目**
 
 ```bash
-curl -s "{CLAWMATE_URL}/api/clawmate/list?root={root_id}&dir=&marker_filter=true" 2>/dev/null | python3 -c "
+curl -s -G "{CLAWMATE_URL}/api/clawmate/list" --data-urlencode "root={root_id}" --data-urlencode "dir=" --data-urlencode "marker_filter=true" 2>/dev/null | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 for e in data.get('entries', []):
