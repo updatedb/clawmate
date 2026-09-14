@@ -12,8 +12,17 @@
 - **修复**：助手气泡改 `align-self: stretch` 并满宽（`max-width: 100%`）；用户气泡保留 90% 上限并右对齐，维持「谁说的」视觉区分。移动端仅继续限制用户气泡。
 - **同时修复样式缺失**：提交 `ee808c0` 的大范围清理**误删了仍在使用的 `.agent-chat-user` 与 `.agent-chat-error`**（同一提交还删掉了 `.card-actions-left/right`）。前端仍输出这两个类名，因此用户消息与错误消息完全没有气泡样式——背景透明、无主题色、无危险色，浅色主题下几乎不可见。已恢复两条规则。
 
+### 清理死配置键 `agent.openclaw_ws_url`
+- 该键**无任何消费者**：`/api/clawmate/config` 返回的同名值由 `routes._openclaw_ws_url()` 按请求 host 与 `public_base_url` 动态计算，从不读此字段。全树追踪确认 `dev/` 无读取方、无测试依赖、无属性访问，且 `AgentConfig` 构造为纯关键字形式，删除不会造成位置参数错位。
+- 保留它是个陷阱：改它看起来像修好了，实际生效值来自别处。已从 `dev/config.py`、`config.example.json` 及本机 `config.json` 移除；旧配置残留该键不会报错（解析忽略未知字段）。
+
+### 文档：`auth.local_hosts` 的权限边界
+- 该配置授予的是**完整管理员权限**而非仅文件访问：命中本机绕过的客户端被绑定为 `is_admin=true` 的 `local-admin`，设置类接口（账户列表 / 增删用户 / 改授权）同样开放。README 已显式警示，并说明它与 `_is_local_network_host()`（仅影响 WS 地址计算，不参与认证决策）是两件不同的事。
+- 本机 `config.json` 原有 `local_hosts: ["openclaw.lan"]`（解析到 192.168.254.130，**另一台机器**），近 7 天该来源请求数为 0，已改为 `[]`（只保留硬编码回环绕过）。
+
 ### 测试
 - 新增 `tests/test_graceful_shutdown_budget.py`：锁定有界预算、环境变量覆盖与安全回退，并断言预算必须小于服务管理器强杀超时。
+- 新增 `tests/test_dead_openclaw_ws_url_key.py`：锁定死键已移除、旧配置兼容，且 `/config` 仍输出动态计算的 `openclaw_ws_url`。
 
 ## v1.55 (2026-09-11)
 ### 设置面板改版
