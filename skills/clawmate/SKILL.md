@@ -195,6 +195,52 @@ mkdir -p {项目根路径}/{.clawmate,research,collect,prd,dev,test}
 
 > **`.clawmate/` marker 作用**：ClawMate 服务通过此目录识别 project 边界，实现 session 隔离和 Agent Panel 项目切换。每个 project 必须包含此目录。
 
+**步骤 1.5：初始化治理骨架（project-harness）**
+
+每个项目都应带一份公开、版本化的治理契约 `project-harness/`。两种方式二选一：
+
+**方式 A（推荐）— 调用 convert API，由服务自动铺骨架**：
+
+```bash
+curl -s -X POST "{CLAWMATE_URL}/api/clawmate/project/convert" \
+  -H 'Content-Type: application/json' \
+  -d '{"root":"{root}","path":"{项目名}"}' 2>/dev/null
+```
+
+服务会幂等地补齐 `.clawmate/` 运行子目录，并从 `config.json` 的
+`project.harness_template_dir` 复制 `project-harness/` 骨架（**已存在则不覆盖**）。
+响应中的 `governance` 字段说明结果：
+
+- `project_harness: true` — 骨架已就位
+- `skipped_reason` — 未铺骨架及原因（未配置模板 / 模板缺失 / 已存在）
+
+**方式 B — 手动复制模板**：
+
+```bash
+cp -r {harness_template_dir}/. {项目根路径}/
+```
+
+> 只有 `project.harness_template_dir` 配置后方式 A 才有效；未配置时 commit 与 convert
+> 仍会成功，只是不铺 `project-harness/`。此时改用方式 B，或请项目创建者补配置。
+
+**步骤 1.6：填全 project-harness 四项（必做，否则只是空壳）**
+
+骨架只有占位符，必须在同一轮引导中逐项确认填写：
+
+| 文件 | 填什么 |
+|------|--------|
+| `project-harness/manifest.yaml` | `project.id` / `name` / `owner` / `classification` / `approval_required` |
+| `project-harness/workflow.yaml` | `objective` / `inputs` / `outputs` / `stages`（每阶段 `owner` + `depends_on`） |
+| `project-harness/roles.yaml` | 在本项目启用的角色，逐角色填 `paths`（`read`/`write`/`deny_write`）与 `enforcement.gateway_bind` |
+| `project-harness/acceptance.yaml` | 本项目验收规则；`evidence_dir: .clawmate/evidence`、`formal_reports_dir: docs/reports` |
+
+> ⚠️ **项目不复制、不修改角色定义**。角色的职责与红线是全局唯一的（见
+> `~/projects/multiagent-governance/roles/`）；项目只在 `roles.yaml` 里**引用**
+> 角色并声明路径契约。详见 `docs/project-harness-onboarding.md`。
+>
+> ⚠️ **建项目是项目创建者（人类）的专属行为**，角色不得自行执行 `/clawmate init`
+> 或铺治理骨架。
+
 **步骤 2：创建核心文档 + 归档机制**
 
 > **关键原则**：所有文档必须有明确的「更新触发器」和「归档边界」，避免过期信息堆积。

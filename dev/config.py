@@ -125,6 +125,10 @@ class ProjectConfig:
     """Project-management settings."""
     git_user_email: str = "updatedb@qq.com"
     git_user_name: str = "OpenClaw"
+    # Governance harness skeleton copied into a new project's project-harness/.
+    # Empty means "not configured": project conversion still succeeds, it just
+    # does not lay down the harness skeleton.
+    harness_template_dir: str = ""
 
 
 @dataclass
@@ -347,6 +351,8 @@ def _parse_project_config(raw: dict) -> ProjectConfig:
     return ProjectConfig(
         git_user_email=str(raw.get("git_user_email", defaults.git_user_email)),
         git_user_name=str(raw.get("git_user_name", defaults.git_user_name)),
+        harness_template_dir=str(
+            raw.get("harness_template_dir", defaults.harness_template_dir)),
     )
 
 

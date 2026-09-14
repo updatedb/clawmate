@@ -18,6 +18,7 @@ import hashlib
 import logging
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -215,6 +216,98 @@ def _ensure_git_repo(target: Path) -> None:
             _run_git(target, ["commit", "-m", f"Initial commit: {target.name}"])
 
 
+# ── Governance skeleton scaffolding (project-harness/) ───────────────
+
+# Runtime subdirectories that make up the hidden `.clawmate/` surface. The
+# governance template ships these, but a project converted from a plain
+# directory still needs them so the boundary marker and runtime data plane
+# exist even when no template is configured.
+_CLAWMATE_RUNTIME_DIRS = (
+    "state", "tasks", "runs", "logs", "evidence", "audit", "decisions",
+    "schemas", "reports",
+)
+
+
+def _copy_tree_no_clobber(src: Path, dst: Path) -> list[str]:
+    """Copy `src/` into `dst/` recursively, never overwriting existing files.
+
+    Returns the relative paths actually written. This mirrors the governance
+    rule that an existing `project-harness/` is never replaced: a converted
+    directory that already carries governance files keeps them untouched.
+    """
+    written: list[str] = []
+    for path in sorted(src.rglob("*")):
+        rel = path.relative_to(src)
+        dest = dst / rel
+        if path.is_dir():
+            dest.mkdir(parents=True, exist_ok=True)
+            continue
+        if dest.exists():
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, dest)
+        written.append(str(rel))
+    return written
+
+
+def _scaffold_governance(target: Path) -> dict:
+    """Lay down the governance skeleton (`project-harness/`) for a project.
+
+    Reads `project.harness_template_dir` from config; that path is the
+    governance repo's `project-template/` directory (the parent of
+    `project-harness/`). Only the skeleton is copied -- the skill guide is
+    what walks the operator through filling manifest/workflow/roles/acceptance.
+
+    A blank, missing, or unreadable template is **not** an error: the
+    directory is still converted, and the returned `skipped_reason` tells the
+    caller to finish the harness through the guided flow instead.
+    """
+    result: dict = {
+        "template": "",
+        "project_harness": False,
+        "seeded": [],
+        "runtime_dirs": [],
+        "skipped_reason": "",
+    }
+
+    # Runtime `.clawmate/` subdirectories -- always ensured, template or not.
+    clawmate_dir = target / ".clawmate"
+    for sub in _CLAWMATE_RUNTIME_DIRS:
+        d = clawmate_dir / sub
+        if not d.is_dir():
+            d.mkdir(parents=True, exist_ok=True)
+            result["runtime_dirs"].append(sub)
+
+    try:
+        cfg = load_cfg()
+        template_dir = str(getattr(cfg.project, "harness_template_dir", "") or "").strip()
+    except Exception:
+        logger.warning("[project.convert] config unavailable; harness template skipped")
+        template_dir = ""
+    result["template"] = template_dir
+
+    if not template_dir:
+        result["skipped_reason"] = "project.harness_template_dir not configured"
+        return result
+
+    template_root = Path(template_dir).expanduser()
+    harness_src = template_root / "project-harness"
+    if not harness_src.is_dir():
+        result["skipped_reason"] = f"harness template not found: {harness_src}"
+        logger.warning("[project.convert] harness template missing: %s", harness_src)
+        return result
+
+    if (target / "project-harness").is_dir():
+        result["skipped_reason"] = "project-harness/ already exists"
+        return result
+
+    result["seeded"] = _copy_tree_no_clobber(template_root, target)
+    result["project_harness"] = (target / "project-harness" / "manifest.yaml").exists()
+    if not result["project_harness"]:
+        result["skipped_reason"] = "template copied but manifest.yaml missing"
+    return result
+
+
 @router.post("/api/clawmate/project/convert")
 async def project_convert(request: Request):
     """Convert a plain directory under a root into a ClawMate project.
@@ -276,6 +369,11 @@ async def project_convert(request: Request):
             encoding="utf-8",
         )
 
+    # ── Governance skeleton (project-harness/ + runtime dirs) ─────────
+    # Never clobbers an existing harness: a directory that already carries
+    # governance files keeps them.
+    governance = _scaffold_governance(target)
+
     # ── Git init + author + initial commit ──────────────────────────
     _ensure_git_repo(target)
 
@@ -295,6 +393,7 @@ async def project_convert(request: Request):
             "AGENTS.md": (target / "AGENTS.md").exists(),
             ".gitignore": (target / ".gitignore").exists(),
         },
+        "governance": governance,
     })
 
 

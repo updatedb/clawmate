@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.57 (2026-09-14)
+### `project/convert` 初始化治理骨架 `project-harness/`（新增）
+- **背景**：项目治理标准要求每个项目带一份公开、版本化的 `project-harness/` 契约，但 `project/convert` 此前只铺 `.clawmate/` marker 与核心文档，从不创建治理骨架；「新建项目」与「引入治理契约」是脱节的两步，模板 `project-template/` 靠人工手动 `cp`。
+- **新增配置键 `project.harness_template_dir`**：指向治理仓库的 `project-template/`（即 `project-harness/` 的父目录）。与既有 `project` 段同构解析：缺段/缺键逐键回退 `ProjectConfig` 默认值，未配置时为空串。
+- **新增 `_scaffold_governance()`**：convert 时（1）幂等补齐 `.clawmate/` 运行子目录（state/tasks/runs/logs/evidence/audit/decisions/schemas/reports）；（2）从模板按「**绝不覆盖**」语义复制 `project-harness/` 及同级的 `docs/reports/`。模板缺失、为空或已存在骨架都**不是错误**——转换照常成功，由响应 `governance.skipped_reason` 说明原因，交由引导流程补齐。
+- **响应新增 `governance` 字段**：报告 `template` / `project_harness` / `seeded` / `runtime_dirs` / `skipped_reason`，使调用方（skill）能判断骨架是否就位，而不是靠猜。
+- **`skills/clawmate/SKILL.md` 的 Phase I 新增步骤 1.5 / 1.6**：给出「调用 convert 自动铺骨架」与「手动复制模板」两种方式，并明确骨架只是占位符，必须在同一轮引导中填全 `manifest.yaml` / `workflow.yaml` / `roles.yaml` / `acceptance.yaml` 四项，否则 `project-harness` 只是空壳。同时写明：项目只**引用**角色、不复制不修改角色定义；建项目是项目创建者（人类）的专属行为。
+- **`config.example.json`** 补充 `project.harness_template_dir` 示例值。
+
+### 测试
+- 新增 `tests/test_project_harness_scaffold.py`：锁定无模板时仍创建运行子目录且 convert 不失败、模板存在时骨架正确落地、**已存在的 `project-harness/` 绝不覆盖**、模板路径缺失时降级为 skip 而非异常、`_copy_tree_no_clobber` 保留既有文件、以及新配置键的解析与逐键回退。
+- 全量测试：`568 passed, 46 deselected`；`test_preview_refresh.py` 的 1 个失败在 `git archive HEAD` 隔离树上同样复现（工作区既有问题，与本次改动无关，未触碰 `dev/static/js/preview.js`）。
+
 ## v1.56 (2026-09-14)
 ### 关停阻塞修复（重启需 90 秒强杀）
 - **根因**：入口调用 `uvicorn.run()` 时未传 `timeout_graceful_shutdown`，其默认值为 `None`，即**无限等待**连接与后台任务排空。而本服务必然同时持有两者：面板存续期间一直打开的 WebSocket 代理（OpenClaw 聊天、terminal v2），以及永不自行结束的 `_idle_reaper` 后台循环。于是进程卡在 `deactivating`，直到服务管理器在 `TimeoutStopUSec` 到期后 `SIGKILL`——实测 90 秒，日志为 `Main process exited, code=killed, status=9/KILL`。
