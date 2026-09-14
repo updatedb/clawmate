@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.58 (2026-09-14)
+### `/clawmate` skill 结构性重构（目录收敛 / Phase I 归位 / 方法学下沉）
+- **背景**：`skills/clawmate/SKILL.md` 自称的「唯一权威结构」与两处既有事实不一致——代码脚手架 `_TEMPLATE_INCLUDE` 只铺 `project-harness/` 与 `docs/`，治理标准 `DIRECTORIES.md` 同样以 `docs/` 承载正式文档；而 skill 却在根目录声明 `research/`、`prd/` 且**没有 `docs/`**。同一个 skill 又在步骤 3 要求 `acceptance.yaml` 填 `formal_reports_dir: docs/reports`，自相矛盾。
+- **项目内容目录收敛到 `docs/`**：`research/` → `docs/research/`，`prd/` → `docs/prd/`，`docs/reports/` 维持不变；`CLAWLIST.md` 与 `PROJECT_NOTE.md` **保留在项目根目录**（代码直接读取，搬走会打断待办统计与文档学习）。根级 `archive/` 下的 `archive/research/`、`archive/prd-versions/` 不受影响。
+- **删除「推荐 Skill 依赖」整节**：原表列出 9 个 skill，实测 7 个在本机不存在（`academic-deep-research`、`cto-advisor`、`business-writing`、`prd-writer`、`clawlist`、`mermaid-diagrams`、`tavily_search`），既承诺了未安装的能力，又与能力矩阵重复。
+- **Phase I 从 `plan` 归入 `init`**：项目初始化（确认路径/类型 → `mkdir` → `convert` → 铺 `project-harness/` → 建核心文档 → `git init`）以及「项目目录结构」原本整块压在 `clawmate plan` 下，而 `clawmate init` 只剩一段说明与命令签名，职责倒置。现已归位。
+- **Phase II–V 方法学下沉**：删除 MRD 七章框架、PRD 评审检查单、Phase II 五项必问等可复用的方法学内容，代之以「本 skill 负责哪个产物路径 + 方法学由哪个 skill 提供」的对照表（`discovery-process` / `deep-research` / `competitive-analysis-process` / `prd-development`）。ClawMate 私有契约（`.clawmate/` marker、`convert`、`project-harness/`、根级 `archive/`、保存后必须回可点击链接、CLAWLIST/PROJECT_NOTE 模板）全部保留。
+- **Git 提交规范与图表规范移出 skill**：二者是项目约定而非 skill 命令语义，改由 `convert` 生成的 `AGENTS.md` 承载。
+- **台账边界写明**：`CLAWLIST.md` 是持久阶段台账，运行态任务以 OpenClaw Tasks / TaskFlow 为准；避免与文件式任务跟踪重复登记。`PROJECT_NOTE.md` 模板去掉技术细节章节（开发规范/架构/常见问题/代码模式），只保留决策与当前焦点。
+- **代码同步（`dev/project_routes.py`）**：`_AGENTS_TEMPLATE` 目录表与 `_CLAWLIST_TEMPLATE` 注释改指 `docs/research/`、`docs/prd/` 并接收提交/图表规范；`_PROJECT_NOTE_TEMPLATE` 同步瘦身；**项目类型启发式修正**——原先只看顶层目录名判断 `prd`/`research`，目录收敛后会完全失效，现同时扫描 `docs/` 子目录。
+- **兼容性**：既有项目的根级 `prd/`、`research/` **不强制迁移**，skill 中已注明两种布局均被接受；新项目一律使用 `docs/` 布局。
+- **验证**：`dev/.venv/bin/python -m pytest tests -q` → 585 passed, 1 failed；该失败在 `tests/test_preview_refresh.py`，经 `git archive HEAD` 隔离确认在 HEAD 上同样失败，与本次改动无关。
+
 ## v1.57 (2026-09-14)
 ### `project/convert` 初始化治理骨架 `project-harness/`（新增）
 - **背景**：项目治理标准要求每个项目带一份公开、版本化的 `project-harness/` 契约，但 `project/convert` 此前只铺 `.clawmate/` marker 与核心文档，从不创建治理骨架；「新建项目」与「引入治理契约」是脱节的两步，模板 `project-template/` 靠人工手动 `cp`。

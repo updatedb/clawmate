@@ -77,17 +77,14 @@ _PROJECT_NOTE_TEMPLATE = """# {name} 产品笔记
 |------|------|------|------|
 | {date} | 项目初始化 | 将 {name} 标记为 ClawMate 项目 | 建立 .clawmate 边界 |
 
-## 开发规范（研发需求项目）
-- 代码风格：{{规范}}
-- 测试要求：{{覆盖率}}
-- 文档要求：必须更新哪些文档
+> 技术细节（代码风格、测试要求、架构说明）不放这里——归 `AGENTS.md` 与 `docs/`。
 """
 
 
 _CLAWLIST_TEMPLATE = """# CLAWLIST — {name}（项目级 — 总览）
 
 > 本项目级 CLAWLIST 管理所有非研发、测试的项目进展，并汇总各分组的简要状态。
-> 明细任务分别在 src/、tests/、research/ 的 CLAWLIST 中管理。
+> 明细任务分别在 src/、tests/、docs/research/ 的 CLAWLIST 中管理。
 
 ## Phase I 项目初始化
 - [x] 确认项目类型
@@ -139,7 +136,7 @@ _AGENTS_TEMPLATE = """# AGENTS.md — {name} 项目操作规范
 | `project-harness/` | 治理契约（manifest / workflow / roles / acceptance）；公开、版本化 |
 | `.clawmate/` | 隐藏运行态：`state/` `tasks/` `evidence/` `audit/`（audit 仅项目创建者可写） |
 | `docs/` | 正式文档与报告（`docs/reports/`） |
-| `research/` `prd/` | 按项目类型建立的资料/方案目录 |
+| `docs/research/` `docs/prd/` | 按项目类型建立的资料/方案目录 |
 | `src/` | 源码目录 |
 | `tests/` | 测试目录，与源码严格分离 |
 | `archive/` | 统一归档（严禁在子目录内建 archive/） |
@@ -151,6 +148,21 @@ _AGENTS_TEMPLATE = """# AGENTS.md — {name} 项目操作规范
 - 文档决策记录在 `PROJECT_NOTE.md`（产品决策唯一来源）。
 - 任务清单记录在 `CLAWLIST.md`。
 - 每次保存文件到磁盘后，生成 ClawMate 可点击预览链接。
+
+## 提交规范
+
+| 时机 | 类型 | 格式 |
+|------|------|------|
+| 新功能 | `feat:` | `feat: 添加xxx功能` |
+| Bug 修复 | `fix:` | `fix: 修复xxx问题` |
+| 文档 | `docs:` | `docs: 更新xxx文档` |
+| 重构 | `refactor:` | `refactor: 重构xxx` |
+| 测试 | `test:` | `test: 添加xxx测试` |
+| 杂项 | `chore:` | `chore: 更新依赖` |
+
+## 图表规范
+
+所有文档图表使用 **Mermaid 语法**，禁止截图替代。
 """
 
 
@@ -1037,6 +1049,11 @@ def _recommendations_for(target: Path) -> list[dict]:
 
     names = {p.name.lower() for p in target.iterdir() if p.is_file()}
     dirs = {p.name.lower() for p in target.iterdir() if p.is_dir()}
+    # Project content lives under docs/ since the dirs migration; a top-level-only
+    # scan would stop recognising product/research projects entirely.
+    _docs = target / "docs"
+    docs_dirs = ({p.name.lower() for p in _docs.iterdir() if p.is_dir()}
+                 if _docs.is_dir() else set())
 
     def _add(label: str, kind: str, detail: str = "") -> None:
         recs.append({"source": "rule", "label": label, "kind": kind, "detail": detail})
@@ -1044,10 +1061,11 @@ def _recommendations_for(target: Path) -> list[dict]:
     if ptype == "meeting" or any("meeting" in d for d in dirs) or any("meeting" in n for n in names):
         _add("更新会议信息", "meeting", "刷新进度/纪要/日程")
         _add("生成/更新会议纪要", "meeting", "沉淀本次会议结论")
-    if ptype == "product" or any("changelog" in n for n in names) or any("prd" in d for d in dirs):
+    if (ptype == "product" or any("changelog" in n for n in names)
+            or any("prd" in d for d in dirs) or "prd" in docs_dirs):
         _add("更新 CHANGELOG", "release", "记录本次变更")
         _add("评审未关闭项", "review", "推进待评审/已评审项")
-    if ptype == "research" or "research" in dirs:
+    if ptype == "research" or "research" in dirs or "research" in docs_dirs:
         _add("整理调研结论", "research", "归档到 archive/research")
     _add("完善项目说明", "doc", "更新 PROJECT_NOTE.md")
     _add("规划待办", "plan", "推进 CLAWLIST 未完成项")
