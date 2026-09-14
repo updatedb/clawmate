@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.56 (2026-09-14)
+### 关停阻塞修复（重启需 90 秒强杀）
+- **根因**：入口调用 `uvicorn.run()` 时未传 `timeout_graceful_shutdown`，其默认值为 `None`，即**无限等待**连接与后台任务排空。而本服务必然同时持有两者：面板存续期间一直打开的 WebSocket 代理（OpenClaw 聊天、terminal v2），以及永不自行结束的 `_idle_reaper` 后台循环。于是进程卡在 `deactivating`，直到服务管理器在 `TimeoutStopUSec` 到期后 `SIGKILL`——实测 90 秒，日志为 `Main process exited, code=killed, status=9/KILL`。
+- **修复**：显式设定有界预算 `timeout_graceful_shutdown`（默认 15 秒，可用 `CLAWMATE_GRACEFUL_SHUTDOWN_SECONDS` 覆盖，非数字回退默认值）。到期由 uvicorn 主动取消残留任务后正常退出。
+- **实测**：重启耗时 15.1 秒，日志 `Cancel 1 running task(s), timeout graceful shutdown exceeded` 后 `Stopped`，**不再出现 SIGKILL**。systemd 单元同步显式声明 `TimeoutStopSec=30`。
+- 该预算必须显著小于服务管理器自身的强杀超时，否则进程会在 uvicorn 完成取消前先被杀掉。
+
+### Agent 聊天气泡未占满面板、右侧留白
+- **根因**：`.agent-chat-assistant` 声明 `align-self: flex-start`，覆盖了 flex 纵向容器默认的 `stretch`，使气泡按文字内容收缩，再由 `max-width: 90%` 封顶——右侧那片空白是「收缩后宽度」与「可用宽度」之差，而非留白设计。这也是为什么同一容器里的 `.agent-chat-input-wrap`（无 `max-width`、无 `align-self`）看起来正常。实测 680px 面板下内容盒 651px、助手气泡 585.9px，右侧固定损失约 65px。
+- **修复**：助手气泡改 `align-self: stretch` 并满宽（`max-width: 100%`）；用户气泡保留 90% 上限并右对齐，维持「谁说的」视觉区分。移动端仅继续限制用户气泡。
+- **同时修复样式缺失**：提交 `ee808c0` 的大范围清理**误删了仍在使用的 `.agent-chat-user` 与 `.agent-chat-error`**（同一提交还删掉了 `.card-actions-left/right`）。前端仍输出这两个类名，因此用户消息与错误消息完全没有气泡样式——背景透明、无主题色、无危险色，浅色主题下几乎不可见。已恢复两条规则。
+
+### 测试
+- 新增 `tests/test_graceful_shutdown_budget.py`：锁定有界预算、环境变量覆盖与安全回退，并断言预算必须小于服务管理器强杀超时。
+
 ## v1.55 (2026-09-11)
 ### 设置面板改版
 - 模态拆成**列表视图**与**聚焦表单**：列表独占高度、整行可点，表单按需唤出。此前两者共用一个单列滚动，导致「读要滚过一张空表单」「编辑时看不见自己在改哪行」。
