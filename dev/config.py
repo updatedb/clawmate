@@ -46,7 +46,6 @@ class AgentConfig:
     backend: str = "claude"          # "claude" | "openclaw" | "codex" | "auto"
     ui_backend: str = "claude"       # interactive panel: concrete backend only
     project_backend: str = "auto"    # project-panel (recommendation) backend: codex-first w/ fallback
-    openclaw_ws_url: str = ""        # wss://ai.updatedb.online:18443
     openclaw_token: str = ""         # gateway auth token
     openclaw_device_secret: str = "" # HMAC secret for device pairing
     openclaw_device_token: str = ""  # device token from Gateway (saved after pairing)
@@ -298,7 +297,6 @@ def _parse_config(raw: dict) -> AppConfig:
             backend=_agent_backend(env_agent_backend or str(ag.get("backend", "claude"))),
             ui_backend=_ui_agent_backend(str(ag.get("ui_backend", "")), env_agent_backend or str(ag.get("backend", "claude"))),
             project_backend=_agent_backend(str(env_project_backend or ag.get("project_backend") or "auto")),
-            openclaw_ws_url=str(ag.get("openclaw_ws_url", "")),
             openclaw_token=str(ag.get("openclaw_token", "")),
             openclaw_device_secret=str(ag.get("openclaw_device_secret", "")),
             openclaw_device_token=str(ag.get("openclaw_device_token", "")),

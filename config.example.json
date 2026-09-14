@@ -13,7 +13,6 @@
   "agent": {
     "backend": "claude",
     "ui_backend": "claude",
-    "openclaw_ws_url": "ws://openclaw.lan:18789",
     "openclaw_token": "",
     "max_sessions": 10,
     "terminal_idle_seconds": 86400,
