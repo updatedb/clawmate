@@ -575,66 +575,53 @@ dist/ build/
 
 ### 项目目录结构
 
-**观点收集**：
-```
-{项目名}/
-├── .clawmate/               ← marker 目录（session 隔离 & project 识别）
-├── CLAWLIST.md
-├── PROJECT_NOTE.md          ← 含「需求澄清记录」+「信息架构规则」
-├── research/
-│   └── CLAWLIST.md            ← 研究计划与进度
-└── collect/
-```
+**唯一权威结构**：
 
-**产品方案**：
 ```
 {项目名}/
 ├── .clawmate/               ← marker 目录（session 隔离 & project 识别）
-├── CLAWLIST.md
-├── PROJECT_NOTE.md          ← 含「需求澄清记录」+「信息架构规则」
-├── research/
-│   └── CLAWLIST.md            ← 研究计划与进度
-├── collect/
-└── prd/
-    ├── MRD.md
-    ├── PRD.md
-    └── sub_prd/
-```
-
-**研发需求**：
-```
-{项目名}/
-├── .clawmate/               ← marker 目录（session 隔离 & project 识别）
+│   ├── state/               ← 运行状态      （治理契约锚点，convert 自动建）
+│   ├── tasks/               ← 任务实例快照   （治理契约锚点，convert 自动建）
+│   ├── evidence/            ← 验收证据       （治理契约锚点，convert 自动建）
+│   └── audit/               ← 审计日志       （仅项目创建者可写）
+├── project-harness/         ← 治理契约（manifest / workflow / roles / acceptance）
 ├── CLAWLIST.md              ← 项目级总览：Phase I-V + 研发/测试/研究进展汇总
 ├── PROJECT_NOTE.md          ← 产品决策唯一来源 + 信息架构规则（顶部「当前焦点」）
+├── AGENTS.md                ← agent 操作规范
 ├── research/                ← 研究目录
-│   ├── CLAWLIST.md          ← 研究计划与进度（替代 RESEARCH_PLAN.md）
+│   ├── CLAWLIST.md          ← 研究计划与进度
 │   └── {主题}/
-├── collect/                 ← 收集素材
-├── prd/
-│   ├── MRD.md               ← 当前版本
-│   ├── PRD.md               ← 当前版本
-│   └── sub_prd/             ← 当前子场景
+├── collect/                 ← 收集素材（观点收集类）
+├── prd/                     ← 产品方案 / 研发需求
+│   ├── MRD.md
+│   ├── PRD.md
+│   └── sub_prd/
 ├── dev/                     ← 源码
-│   ├── main.py
-│   ├── requirements.txt
-│   └── ...
 ├── test/                    ← 测试（与源码严格分离）
 │   ├── CLAWLIST.md          ← 测试级：测试任务明细
 │   ├── reports/             ← 测试报告
 │   ├── results/             ← 测试结果、日志、截图
 │   └── scripts/             ← 测试脚本
-├── archive/                 ← 统一归档目录（根目录，严禁子目录建 archive/）
+└── archive/                 ← 统一归档目录（根目录，严禁子目录建 archive/）
 │   ├── research/
-│   │   └── 2026-06-技术选型/
 │   ├── decisions/
-│   │   └── 2026-06-10-数据库选型.md
 │   ├── iterations/
-│   │   └── sprint-1.md
 │   └── prd-versions/
-│       └── PRD-v1.2-2026-05-20.md
 └── .gitignore
 ```
+
+**按项目类型启用**：
+
+| 项目类型 | 启用目录 | 交付物 |
+|---|---|---|
+| 观点收集 | `research/ collect/` | 结构化研究报告 |
+| 产品方案 | + `prd/` | MRD + PRD |
+| 研发需求 | + `prd/ dev/ test/` | MRD + PRD + 可运行系统 |
+
+> **只建本项目用得到的目录，不预建空目录。** `.clawmate/` 的 state/tasks/evidence/audit
+> 由 `convert` 建好；`sessions/`、`cache/` 等由服务按需懒创建。
+> 正式报告写入 `docs/reports/`（**不是** `.clawmate/reports/`）；运行证据写入
+> `.clawmate/evidence/`，二者不混用。
 
 #### 测试目录隔离规则（硬性）
 
@@ -652,36 +639,6 @@ dist/ build/
 - 源码目录（dev/）只放代码和配置文件
 - 测试目录独立便于 CI/CD 打包时排除
 - 测试历史归档在 archive/iterations/，不污染源码
-
-**目录结构**：
-```
-{项目名}/
-├── .clawmate/               ← marker 目录
-├── CLAWLIST.md              ← 项目级总览
-├── PROJECT_NOTE.md          ← 产品决策唯一来源 + 信息架构规则
-├── research/                ← 研究目录
-│   ├── CLAWLIST.md          ← 研究计划与进度（替代 RESEARCH_PLAN.md）
-│   └── {主题}/
-├── collect/
-├── prd/
-│   ├── MRD.md
-│   ├── PRD.md
-│   └── sub_prd/
-├── dev/                     ← 源码
-│   ├── main.py
-│   └── ...
-├── test/                    ← 测试（与源码严格分离）
-│   ├── CLAWLIST.md          ← 测试级：测试任务明细
-│   ├── reports/             ← 测试报告
-│   ├── results/             ← 测试结果、日志
-│   └── scripts/             ← 测试脚本
-├── archive/                 ← 统一归档目录（根目录）
-│   ├── research/
-│   ├── decisions/
-│   ├── iterations/
-│   └── prd-versions/
-└── .gitignore
-```
 
 ### Git 提交规范
 

@@ -4,7 +4,7 @@
 ### `project/convert` 初始化治理骨架 `project-harness/`（新增）
 - **背景**：项目治理标准要求每个项目带一份公开、版本化的 `project-harness/` 契约，但 `project/convert` 此前只铺 `.clawmate/` marker 与核心文档，从不创建治理骨架；「新建项目」与「引入治理契约」是脱节的两步，模板 `project-template/` 靠人工手动 `cp`。
 - **新增配置键 `project.harness_template_dir`**：指向治理仓库的 `project-template/`（即 `project-harness/` 的父目录）。与既有 `project` 段同构解析：缺段/缺键逐键回退 `ProjectConfig` 默认值，未配置时为空串。
-- **新增 `_scaffold_governance()`**：convert 时（1）幂等补齐 `.clawmate/` 运行子目录（state/tasks/runs/logs/evidence/audit/decisions/schemas/reports）；（2）从模板按「**绝不覆盖**」语义复制 `project-harness/` 及同级的 `docs/reports/`。模板缺失、为空或已存在骨架都**不是错误**——转换照常成功，由响应 `governance.skipped_reason` 说明原因，交由引导流程补齐。
+- **新增 `_scaffold_governance()`**：convert 时（1）幂等补齐 `.clawmate/` 运行子目录（仅 state/tasks/evidence/audit，见下节目录收敛）；（2）从模板按「**绝不覆盖**」语义复制 `project-harness/` 及 `docs/reports/`。模板缺失、为空或已存在骨架都**不是错误**——转换照常成功，由响应 `governance.skipped_reason` 说明原因，交由引导流程补齐。
 - **响应新增 `governance` 字段**：报告 `template` / `project_harness` / `seeded` / `runtime_dirs` / `skipped_reason`，使调用方（skill）能判断骨架是否就位，而不是靠猜。
 - **`skills/clawmate/SKILL.md` 的 Phase I 重写并整合**：convert 现在是项目初始化的**唯一入口**（步骤 2），
   `.clawmate/`、基础文档、`git init`、`project-harness/` 骨架一次完成。原「步骤 1」不再预建 `.clawmate/`
@@ -17,10 +17,26 @@
 - **`skills/clawmate/_meta.json`**：版本 2.7.2 → 2.8.0，`clawmate init` 描述补充治理骨架。
 - **`config.example.json`** 补充 `project.harness_template_dir` 示例值。
 
+### 目录收敛：只保留有消费者的目录
+- **`.clawmate/` 运行子目录 9 → 4**：原先铺 state/tasks/runs/logs/evidence/audit/decisions/schemas/reports，逐个追消费方后确认只有 4 个需要预建——state/tasks/evidence/audit 是 `project-harness/roles.yaml` 路径契约（Gateway sandbox bind）的锚点。其余全部由各自消费方**懒创建**：`sessions/`（`SessionLogger.__init__` 的 `mkdir(parents=True, exist_ok=True)`）、`cache/text/`（search_service）、`generated-tasks/`（generated_assets）；`runs`/`logs`/`decisions`/`schemas` 在 ClawMate 代码与治理可执行物中**零消费者**。
+- **不再播种 `.clawmate/reports/`**：这是治理侧明确拒绝的 legacy 路径（`scripts/test-deliver-report.sh` 断言它必须被拒），正式报告属于 `docs/reports/`。之前把它预建出来等于播种一个被否决的目录。
+- **模板复制改为白名单** `_TEMPLATE_INCLUDE = (project-harness, docs)`，取代整棵 `rglob` 复制。模板里的空目录（`decisions/`、`reports/`、`schemas/`）与治理仓库自用的 `.clawmate/README.md`（含相对治理仓的链接）因此不会再泄进新项目。
+
+### convert 结果校验（新增 `_validate_project`）
+- **取代原先的 `created` 布尔组**（4 个 `exists()`，无任何消费方）。现在返回 `validation`：`{ok, checks, issues, pending}`。
+- **`issues`（结构性，决定 `ok`）**：marker / 基础文档 / harness 四文件 / git 仓库 / 运行目录缺失。
+- **`pending`（预期待办，不影响 `ok`）**：harness 仍是占位符（探测 `project-alpha` / `项目名称` / `明确本项目要达成的目标`）——刚 convert 完本就未填写，由引导流程接管，因此不能当成失败。
+- **`_ensure_git_repo` 改为返回 bool**：原先 `git init` 失败会被静默吞掉，现在会进入 `validation.issues`。
+- **skill 与网页端同时消费**：骨架未铺、校验未通过、待填写项三类都会明确告知，不再静默。
+
+### 目录文档去重（SKILL.md）
+- **4 份近乎重复的目录树合并为 1 份权威结构**（原先「观点收集 / 产品方案 / 研发需求」各一份 + 测试隔离规则后又一份），改为单棵树 + 一张「按项目类型启用」对应表；并修正树形连接符错误。
+- **AGENTS.md 模板重写**：原先把 `feedback.audit.jsonl / sessions / cache` 列为运行态（这些并不由 convert 创建），现改为治理锚点四目录 + 明确 `dev/`↔`src/`、`test/`↔`tests/` 的命名对应，并注明 `sessions/`、`cache/` 按需创建、报告与证据路径不混用。
+
 ### 测试
-- 新增 `tests/test_project_harness_scaffold.py`：锁定无模板时仍创建运行子目录且 convert 不失败、模板存在时骨架正确落地、**已存在的 `project-harness/` 绝不覆盖**、模板路径缺失时降级为 skip 而非异常、`_copy_tree_no_clobber` 保留既有文件、以及新配置键的解析与逐键回退。
-- 新增 `tests/test_project_convert_governance_contract.py`：锁定网页端「转换为项目」声明会创建 `project-harness/`，且骨架未铺时会弹窗告知原因（不得静默）。
-- 全量测试：`568 passed, 46 deselected`；`test_preview_refresh.py` 的 1 个失败在 `git archive HEAD` 隔离树上同样复现（工作区既有问题，与本次改动无关，未触碰 `dev/static/js/preview.js`）。
+- 新增 `tests/test_agents_template_dirs.py`：锁定 AGENTS 模板只描述真实存在的目录、不重新引入 legacy `.clawmate/reports`、且写明 `src/`/`tests/` 命名对应。
+- `tests/test_project_harness_scaffold.py` 重写：锁定运行目录集收敛、legacy 与懒创建目录**绝不**被播种、模板白名单不外溢、以及校验的 issue/pending 区分。
+- 全量测试：`580 passed, 46 deselected`；`test_preview_refresh.py` 的 1 个失败在 `git archive HEAD` 隔离树上同样复现（工作区既有问题，与本次改动无关，未触碰 `dev/static/js/preview.js`）。
 
 ## v1.56 (2026-09-14)
 ### 关停阻塞修复（重启需 90 秒强杀）

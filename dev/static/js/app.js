@@ -1040,7 +1040,7 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
         if (entry.is_dir && !entry.marker && !(entry.relPath || '').includes('/')) {
           addItem('folder-project', '转换为项目', function () {
             var pname = entry.name;
-            var msg = '将目录「' + pname + '」转换为 ClawMate 项目？\n\n将创建：\n- .clawmate/（项目标识/运行态）\n- PROJECT_NOTE.md（项目入口/决策）\n- CLAWLIST.md（任务清单）\n- AGENTS.md（agent 操作规范）\n- project-harness/（治理契约骨架）\n- .gitignore + git init 初始提交';
+            var msg = '将目录「' + pname + '」转换为 ClawMate 项目？\n\n将创建：\n- .clawmate/（项目标识/运行态）\n- PROJECT_NOTE.md（项目入口/决策）\n- CLAWLIST.md（任务清单）\n- AGENTS.md（agent 操作规范）\n- project-harness/（治理契约骨架，待填写）\n- .gitignore + git init 初始提交';
             if (!confirm(msg)) return;
             authFetch('/api/clawmate/project/convert', {
               method: 'POST',
@@ -1051,14 +1051,22 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
               .then(function (data) {
                 if (data.ok) {
                   updateStatus('已转换为项目：' + (data.project || pname));
-                  // A governance skeleton that did not land must be surfaced, not
-                  // swallowed: the project exists but is missing its contract.
+                  // Anything the converter could not complete must be surfaced,
+                  // not swallowed: a half-built project is worse than a failure.
                   var gov = data.governance || {};
+                  var val = data.validation || {};
+                  var notes = [];
                   if (!gov.project_harness) {
-                    alert('项目已创建，但治理骨架 project-harness/ 未铺。\n\n原因：' +
-                      (gov.skipped_reason || '未知') +
-                      '\n\n请在 config.json 配置 project.harness_template_dir 后重试，或手动复制 project-template/。');
+                    notes.push('治理骨架 project-harness/ 未铺：' + (gov.skipped_reason || '未知') +
+                      '\n  请在 config.json 配置 project.harness_template_dir 后重试，或手动复制 project-template/。');
                   }
+                  if (val.ok === false) {
+                    notes.push('结构校验未通过：\n  - ' + (val.issues || []).join('\n  - '));
+                  }
+                  if ((val.pending || []).length) {
+                    notes.push('待填写（引导流程下一步）：\n  - ' + val.pending.join('\n  - '));
+                  }
+                  if (notes.length) alert('项目已创建，但有未完成事项：\n\n' + notes.join('\n\n'));
                   invalidateDirCache();
                   if (state.rootId) loadDir(state.dir); else loadConfig();
                 } else { alert('转换失败：' + (data.detail || data.error || '未知错误')); }

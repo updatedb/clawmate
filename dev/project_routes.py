@@ -131,11 +131,21 @@ _AGENTS_TEMPLATE = """# AGENTS.md — {name} 项目操作规范
 - 本文件描述{name}项目的工作约定，帮助 openclaw / codex / claude 在项目内正确工作。
 
 ## 目录约定
-- `.clawmate/`：项目标识与运行态（feedback.json、feedback.audit.jsonl / sessions / cache）。
-- `dev/`：源码目录（如研发需求项目）。
-- `test/`：测试目录，与源码严格分离。
-- `archive/`：统一归档（严禁在子目录内建 archive/）。
-- `research/ collect/ prd/`：按项目类型建立的资料/方案目录。
+
+> **只建本项目用得到的目录，不预建空目录。** 下列目录按项目类型启用。
+
+| 目录 | 用途 |
+|---|---|
+| `project-harness/` | 治理契约（manifest / workflow / roles / acceptance）；公开、版本化 |
+| `.clawmate/` | 隐藏运行态：`state/` `tasks/` `evidence/` `audit/`（audit 仅项目创建者可写） |
+| `docs/` | 正式文档与报告（`docs/reports/`） |
+| `research/` `collect/` `prd/` | 按项目类型建立的资料/方案目录 |
+| `dev/` | 源码目录（对应治理契约中的 `src/`） |
+| `test/` | 测试目录，与源码严格分离（对应治理契约中的 `tests/`） |
+| `archive/` | 统一归档（严禁在子目录内建 archive/） |
+
+> `sessions/`、`cache/` 等由服务按需创建，无需手工预建。
+> 正式报告写入 `docs/reports/`，运行证据写入 `.clawmate/evidence/`，二者不混用。
 
 ## 规范
 - 文档决策记录在 `PROJECT_NOTE.md`（产品决策唯一来源）。
@@ -193,8 +203,12 @@ def _run_git(target: Path, args: list[str]) -> subprocess.CompletedProcess | Non
         return None
 
 
-def _ensure_git_repo(target: Path) -> None:
-    """git init (idempotent) + set author identity + initial commit."""
+def _ensure_git_repo(target: Path) -> bool:
+    """git init (idempotent) + set author identity + initial commit.
+
+    Returns True when the directory ends up a usable git work tree. Callers
+    surface a False as a convert issue instead of assuming success.
+    """
     email, name = _git_identity()
     if not (target / ".git").exists():
         _run_git(target, ["init"])
@@ -203,7 +217,7 @@ def _ensure_git_repo(target: Path) -> None:
     _run_git(target, ["config", "user.name", name])
     # Commit only if there is something new and no prior commit.
     if not _run_git(target, ["rev-parse", "--is-inside-work-tree"]):
-        return
+        return False
     if (target / ".git").exists():
         try:
             st = subprocess.run(["git", "status", "--porcelain"], cwd=str(target),
@@ -214,40 +228,130 @@ def _ensure_git_repo(target: Path) -> None:
         if pending:
             _run_git(target, ["add", "-A"])
             _run_git(target, ["commit", "-m", f"Initial commit: {target.name}"])
+    return True
 
 
 # ── Governance skeleton scaffolding (project-harness/) ───────────────
 
-# Runtime subdirectories that make up the hidden `.clawmate/` surface. The
-# governance template ships these, but a project converted from a plain
-# directory still needs them so the boundary marker and runtime data plane
-# exist even when no template is configured.
-_CLAWMATE_RUNTIME_DIRS = (
-    "state", "tasks", "runs", "logs", "evidence", "audit", "decisions",
-    "schemas", "reports",
-)
+# `.clawmate/` subdirectories created at convert time.
+#
+# Only directories that must pre-exist belong here -- i.e. the ones anchored in
+# the `project-harness/roles.yaml` path contract (`state`, `tasks`, `evidence`,
+# `audit`), which the Gateway sandbox bind targets.
+#
+# Everything else is created lazily by its own consumer and must NOT be seeded:
+#   sessions/         session_logger.mkdir(parents=True, exist_ok=True)
+#   cache/text/       search_service.mkdir(parents=True, exist_ok=True)
+#   generated-tasks/  generated_assets (per-task)
+# Empty directories nothing reads are noise. In particular `.clawmate/reports/`
+# is deliberately NOT created: formal reports belong in `docs/reports/`, and the
+# governance delivery check rejects `.clawmate/reports/` as a legacy path.
+_CLAWMATE_RUNTIME_DIRS = ("state", "tasks", "evidence", "audit")
+
+# Template entries copied into a new project. Deliberately an allowlist: the
+# template's `.clawmate/` is never copied wholesale, so template-only empty
+# directories (decisions/, reports/, schemas/) cannot leak into a project, and
+# the governance repo's `.clawmate/README.md` (which carries repo-relative links
+# that would break outside it) is not shipped either.
+_TEMPLATE_INCLUDE = ("project-harness", "docs")
+
+# Harness files that must exist, and the strings that mean one is still the
+# unfilled template. Detecting placeholders is what lets convert report
+# "governance contract not filled in" instead of implying it is ready.
+_HARNESS_REQUIRED = ("manifest.yaml", "workflow.yaml", "roles.yaml", "acceptance.yaml")
+_HARNESS_PLACEHOLDERS = ("project-alpha", "项目名称", "明确本项目要达成的目标")
 
 
-def _copy_tree_no_clobber(src: Path, dst: Path) -> list[str]:
-    """Copy `src/` into `dst/` recursively, never overwriting existing files.
+def _seed_template(template_root: Path, target: Path) -> list[str]:
+    """Copy `_TEMPLATE_INCLUDE` entries into `target`, never overwriting files.
 
-    Returns the relative paths actually written. This mirrors the governance
-    rule that an existing `project-harness/` is never replaced: a converted
-    directory that already carries governance files keeps them untouched.
+    Returns the relative paths actually written. Copying an explicit allowlist
+    (rather than the whole template) is what keeps template-only cruft out of
+    converted projects.
     """
     written: list[str] = []
-    for path in sorted(src.rglob("*")):
-        rel = path.relative_to(src)
-        dest = dst / rel
-        if path.is_dir():
-            dest.mkdir(parents=True, exist_ok=True)
+    for rel in _TEMPLATE_INCLUDE:
+        src = template_root / rel
+        dest = target / rel
+        if not src.exists():
             continue
-        if dest.exists():
+        if not src.is_dir():
+            if not dest.exists():
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dest)
+                written.append(rel)
             continue
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(path, dest)
-        written.append(str(rel))
+        for path in sorted(src.rglob("*")):
+            sub = path.relative_to(src)
+            d = dest / sub
+            if path.is_dir():
+                d.mkdir(parents=True, exist_ok=True)
+                continue
+            if d.exists():
+                continue
+            d.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, d)
+            written.append(f"{rel}/{sub}")
     return written
+
+
+def _validate_project(target: Path) -> dict:
+    """Post-convert integrity check.
+
+    Structural problems (missing marker / docs / harness files / git) make
+    `ok` False and are listed in `issues` -- those mean the conversion did not
+    produce a usable project. Unfilled harness placeholders are *expected*
+    right after convert, because the guided flow fills them next; they are
+    reported in `pending` and never fail the conversion.
+    """
+    clawmate_dir = target / ".clawmate"
+    checks: dict[str, bool] = {"marker": clawmate_dir.is_dir()}
+    issues: list[str] = []
+    pending: list[str] = []
+
+    if not checks["marker"]:
+        issues.append(".clawmate/ marker missing")
+
+    missing_docs = [
+        d for d in ("PROJECT_NOTE.md", "CLAWLIST.md", "AGENTS.md", ".gitignore")
+        if not (target / d).is_file()
+    ]
+    checks["docs"] = not missing_docs
+    if missing_docs:
+        issues.append("missing project docs: " + ", ".join(missing_docs))
+
+    harness_dir = target / "project-harness"
+    missing_harness = [f for f in _HARNESS_REQUIRED if not (harness_dir / f).is_file()]
+    checks["harness"] = harness_dir.is_dir() and not missing_harness
+    if missing_harness:
+        issues.append("missing project-harness files: " + ", ".join(missing_harness))
+
+    unfilled: list[str] = []
+    for f in _HARNESS_REQUIRED:
+        p = harness_dir / f
+        if not p.is_file():
+            continue
+        try:
+            text = p.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if any(mark in text for mark in _HARNESS_PLACEHOLDERS):
+            unfilled.append(f)
+    checks["harness_filled"] = not unfilled
+    if unfilled:
+        pending.append("harness placeholders unfilled: " + ", ".join(unfilled))
+
+    checks["git"] = (target / ".git").exists()
+    if not checks["git"]:
+        issues.append("git repository not initialised")
+
+    checks["runtime_dirs"] = all(
+        (clawmate_dir / sub).is_dir() for sub in _CLAWMATE_RUNTIME_DIRS
+    )
+    if not checks["runtime_dirs"]:
+        issues.append("missing .clawmate/ runtime directories")
+
+    return {"ok": not issues, "checks": checks, "issues": issues, "pending": pending}
 
 
 def _scaffold_governance(target: Path) -> dict:
@@ -272,6 +376,7 @@ def _scaffold_governance(target: Path) -> dict:
 
     # Runtime `.clawmate/` subdirectories -- always ensured, template or not.
     clawmate_dir = target / ".clawmate"
+    clawmate_dir.mkdir(parents=True, exist_ok=True)
     for sub in _CLAWMATE_RUNTIME_DIRS:
         d = clawmate_dir / sub
         if not d.is_dir():
@@ -301,7 +406,7 @@ def _scaffold_governance(target: Path) -> dict:
         result["skipped_reason"] = "project-harness/ already exists"
         return result
 
-    result["seeded"] = _copy_tree_no_clobber(template_root, target)
+    result["seeded"] = _seed_template(template_root, target)
     result["project_harness"] = (target / "project-harness" / "manifest.yaml").exists()
     if not result["project_harness"]:
         result["skipped_reason"] = "template copied but manifest.yaml missing"
@@ -375,10 +480,24 @@ async def project_convert(request: Request):
     governance = _scaffold_governance(target)
 
     # ── Git init + author + initial commit ──────────────────────────
-    _ensure_git_repo(target)
+    git_ok = _ensure_git_repo(target)
+
+    # ── Post-convert integrity check ────────────────────────────────
+    # Reports what actually landed so the caller never has to infer it from
+    # ad-hoc exists() guesses. Structural gaps (`issues`) mean the project is
+    # not usable; unfilled harness placeholders are expected right after
+    # convert -- the guided flow fills them -- so they are only `pending`.
+    validation = _validate_project(target)
+    if not git_ok and "git repository not initialised" not in validation["issues"]:
+        validation["issues"].append("git init failed")
+        validation["checks"]["git"] = False
+        validation["ok"] = False
 
     project = find_project_marker(root_path, safe_rel) or name
-    logger.info("[project.convert] root=%s path=%s project=%s", root, safe_rel, project)
+    logger.info(
+        "[project.convert] root=%s path=%s project=%s validation_ok=%s pending=%d",
+        root, safe_rel, project, validation["ok"], len(validation["pending"]),
+    )
 
     return JSONResponse(content={
         "ok": True,
@@ -386,14 +505,8 @@ async def project_convert(request: Request):
         "path": safe_rel,
         "project": project,
         "name": name,
-        "created": {
-            "clawmate": True,
-            "PROJECT_NOTE.md": (target / "PROJECT_NOTE.md").exists(),
-            "CLAWLIST.md": (target / "CLAWLIST.md").exists(),
-            "AGENTS.md": (target / "AGENTS.md").exists(),
-            ".gitignore": (target / ".gitignore").exists(),
-        },
         "governance": governance,
+        "validation": validation,
     })
 
 

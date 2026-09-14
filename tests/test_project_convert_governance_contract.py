@@ -25,7 +25,7 @@ def _convert_block() -> str:
 
 def test_confirm_dialog_announces_project_harness():
     block = _convert_block()
-    assert "project-harness/（治理契约骨架）" in block
+    assert "project-harness/（治理契约骨架" in block
 
 
 def test_skipped_harness_is_surfaced_not_swallowed():
@@ -36,6 +36,20 @@ def test_skipped_harness_is_surfaced_not_swallowed():
     # ...and reported with its reason rather than silently ignored.
     assert "skipped_reason" in block
     assert "alert(" in block
+
+
+def test_structural_validation_failures_are_surfaced():
+    """A convert that leaves a structurally broken project must say so."""
+    block = _convert_block()
+    assert "data.validation" in block
+    assert "val.ok === false" in block
+    assert "issues" in block
+
+
+def test_unfilled_placeholders_are_reported_as_pending():
+    """Pending items are expected post-convert; they must still be shown."""
+    block = _convert_block()
+    assert "val.pending" in block
 
 
 def test_ui_does_not_claim_harness_on_a_skip_path():
