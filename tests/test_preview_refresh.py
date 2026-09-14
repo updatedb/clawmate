@@ -24,7 +24,10 @@ def test_markdown_refresh_preserves_outline_state_and_bypasses_cached_assets():
     assert "source.pathname = '/clawmate/'" in source
     assert "_clawmate_refresh" in source
     assert "{ cache: 'no-store' }" in source
-    assert "refreshRenderedImageSources(mdDiv, refreshToken);" in source
+    # The third argument carries the entry's relative path so doc-relative image
+    # sources can be resolved; asserting the 2-arg form silently kept this suite
+    # red after the signature gained that parameter.
+    assert "refreshRenderedImageSources(mdDiv, refreshToken, filePath);" in source
 
 
 def test_responsive_outline_state_tracks_actual_visibility_and_can_be_forced_open():

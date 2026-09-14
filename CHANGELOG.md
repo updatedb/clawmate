@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.59 (2026-09-14)
+### 修复 GitHub Docker 发布流水线（连续 6 次红灯）
+- **现象**：`Build and Publish Docker Image` 自 10:30 起连续 6 次失败，失败步骤恒为 `Verify Python unit suite`，后续 QEMU/Buildx/推送全部 skipped → **镜像无法发布**。
+- **根因**：`831cb4b`（fix: resolve doc-relative image and link paths in preview）给 `refreshRenderedImageSources()` 增加了第三个参数 `entryRelPath` 并同步了调用点，但 `tests/test_preview_refresh.py` 仍断言旧的 2 参调用形式。函数签名变更后该断言恒假，**一处陈旧断言卡住了整条发布链**。
+- **修复**：断言同步为三分参形式，并补注释说明该参数的用途（文档相对路径解析），避免再次静默漂移。
+- **验证**：`tests/test_preview_refresh.py` 2 passed；全量 `pytest tests -q` → **586 passed, 0 failed**（修复前为 585 passed, 1 failed）。
+- **未改动**：`dev/static/js/preview.js` 源码行为不变——透传第三参已是正确实现，本次只修正测试。
+
 ## v1.58 (2026-09-14)
 ### `/clawmate` skill 结构性重构（目录收敛 / Phase I 归位 / 方法学下沉）
 - **背景**：`skills/clawmate/SKILL.md` 自称的「唯一权威结构」与两处既有事实不一致——代码脚手架 `_TEMPLATE_INCLUDE` 只铺 `project-harness/` 与 `docs/`，治理标准 `DIRECTORIES.md` 同样以 `docs/` 承载正式文档；而 skill 却在根目录声明 `research/`、`prd/` 且**没有 `docs/`**。同一个 skill 又在步骤 3 要求 `acceptance.yaml` 填 `formal_reports_dir: docs/reports`，自相矛盾。
