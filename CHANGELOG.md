@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.60 (2026-09-14)
+### 修正 skill 目录树的双前缀渲染错误
+- **背景**：v1.58 把内容目录收敛到 `docs/` 时，迁移脚本对**已有** `docs/prd/`、`docs/research/` 加了保护标记，但目录树里这两个条目原本就是要**改写**的裸路径。结果在 `docs/` 块内部渲染成 `docs/prd/`、`docs/prd/sub_prd/`、`docs/research/` —— 缩进层级已表示在 `docs/` 下，再带前缀即为**双重前缀**，照此建目录会得到 `docs/docs/prd/`。
+- **同时修正** `archive/` 块：`docs/research/` → `research/`（archive 下本就没有 `docs/` 层级）。
+- **影响面**：仅限 SKILL.md 的展示树，无代码路径引用该文本；但它是 agent 建目录时直接照抄的「唯一权威结构」，属可复现的错误指令。
+- **验证**：`grep -n 'docs/docs\|archive/docs'` 无残留；`prd/`、`research/` 裸路径仅出现在树内正确层级；`pytest tests -q` → 586 passed。
+
 ## v1.59 (2026-09-14)
 ### 修复 GitHub Docker 发布流水线（连续 6 次红灯）
 - **现象**：`Build and Publish Docker Image` 自 10:30 起连续 6 次失败，失败步骤恒为 `Verify Python unit suite`，后续 QEMU/Buildx/推送全部 skipped → **镜像无法发布**。

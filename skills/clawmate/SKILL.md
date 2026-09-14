@@ -440,11 +440,11 @@ dist/ build/
 │   └── audit/               ← 审计日志       （仅项目创建者可写）
 ├── project-harness/         ← 治理契约（manifest / workflow / roles / acceptance）
 ├── docs/                    ← 正式项目文档（convert 铺骨架，_TEMPLATE_INCLUDE）
-│   ├── docs/prd/                 ← 产品方案 / 研发需求
+│   ├── prd/                 ← 产品方案 / 研发需求
 │   │   ├── MRD.md
 │   │   ├── PRD.md
-│   │   └── docs/prd/sub_prd/
-│   ├── docs/research/            ← 研究目录（研究计划/进度 + 收集的素材与来源材料）
+│   │   └── sub_prd/
+│   ├── research/            ← 研究目录（研究计划/进度 + 收集的素材与来源材料）
 │   │   ├── CLAWLIST.md      ← 研究计划与进度
 │   │   └── {主题}/          ← 按主题组织的材料与结论
 │   └── reports/             ← 正式报告
@@ -458,7 +458,7 @@ dist/ build/
 │   ├── results/             ← 测试结果、日志、截图
 │   └── scripts/             ← 测试脚本
 ├── archive/                 ← 统一归档目录（根目录，严禁子目录建 archive/）
-│   ├── docs/research/
+│   ├── research/
 │   ├── decisions/
 │   ├── iterations/
 │   └── prd-versions/
