@@ -92,7 +92,7 @@ Phase I 确认三种类型之一，决定后续全流程和目录结构：
 |------|------|------|------|
 | **观点收集** | research/ collect/ | I→II→III→研究报告 | 结构化研究报告 |
 | **产品方案** | + prd/ | I→II→III→IV(MRD)→V(PRD) | MRD + PRD |
-| **研发需求** | + prd/ dev/ test/ | I→II→III→IV(MRD)→V(PRD) | MRD + PRD + 可运行系统 |
+| **研发需求** | + prd/ src/ tests/ | I→II→III→IV(MRD)→V(PRD) | MRD + PRD + 可运行系统 |
 
 ### 命令签名
 
@@ -124,13 +124,13 @@ clawmate plan [root] <project>
 4. 更新 CLAWLIST.md：
    - 检查当前阶段，标记已完成项
    - 按阶段结构（Phase I-V）列出未完成任务
-   - 如有 dev/test/research 子目录，生成对应汇总条目
+   - 如有 src/tests/research 子目录，生成对应汇总条目
 5. 输出更新后的计划摘要
 
 ### 目录约定
 
 - **默认路径**：`{root_dir}/{项目名}/`（root_dir 由 root_id 解析）
-- **源码目录**：统一使用 `dev/`
+- **源码目录**：统一使用 `src/`（测试目录为 `tests/`，与源码严格分离）
 
 ### 全流程概览
 
@@ -258,9 +258,9 @@ cp -r {harness_template_dir}/. {项目根路径}/
 
 **活跃文档（始终加载）**：
 - **CLAWLIST.md**（项目级 — 总览）— 管理所有非研发、测试的项目进展（Phase I-V），并包含研发级/测试级/研究级 CLAWLIST 的整体进展简要汇总（分组体现）
-- **CLAWLIST.md**（研发级 — 明细，可选）— 研发需求项目在 `dev/` 下创建，管理开发任务明细
+- **CLAWLIST.md**（研发级 — 明细，可选）— 研发需求项目在 `src/` 下创建，管理开发任务明细
 - **CLAWLIST.md**（研究级 — 明细，可选）— 放在 `research/` 下，管理研究计划与进度（替代独立的 RESEARCH_PLAN.md）
-- **CLAWLIST.md**（测试级 — 明细，可选）— 放在 `test/` 下，管理测试任务明细
+- **CLAWLIST.md**（测试级 — 明细，可选）— 放在 `tests/` 下，管理测试任务明细
 - **PROJECT_NOTE.md** — 产品决策唯一来源 + 信息架构规则
 
 **归档文档（按需加载，详见「懒加载机制」）**：
@@ -284,7 +284,7 @@ cp -r {harness_template_dir}/. {项目根路径}/
 # CLAWLIST — {项目名}（项目级 — 总览）
 
 > 本项目级 CLAWLIST 管理所有非研发、测试的项目进展，并汇总各分组的简要状态。
-> 明细任务分别在 dev/、test/、research/ 的 CLAWLIST 中管理。
+> 明细任务分别在 src/、tests/、research/ 的 CLAWLIST 中管理。
 
 ## Phase I 项目初始化
 - [x] 确认项目类型
@@ -319,14 +319,14 @@ cp -r {harness_template_dir}/. {项目根路径}/
 - [ ] 子场景 PRD: {场景1}
 - [ ] 用户评审通过
 
-## 研发进展汇总（明细见 dev/CLAWLIST.md）
-- [ ] 架构设计 → [dev/CLAWLIST.md](dev/CLAWLIST.md)
+## 研发进展汇总（明细见 src/CLAWLIST.md）
+- [ ] 架构设计 → [src/CLAWLIST.md](src/CLAWLIST.md)
 - [ ] 核心功能开发
 - [ ] 接口联调
 - [ ] 单元测试覆盖
 
-## 测试进展汇总（明细见 test/CLAWLIST.md）
-- [ ] 集成测试 → [test/CLAWLIST.md](test/CLAWLIST.md)
+## 测试进展汇总（明细见 tests/CLAWLIST.md）
+- [ ] 集成测试 → [tests/CLAWLIST.md](tests/CLAWLIST.md)
 - [ ] 回归验证
 - [ ] 性能测试
 
@@ -596,8 +596,8 @@ dist/ build/
 │   ├── MRD.md
 │   ├── PRD.md
 │   └── sub_prd/
-├── dev/                     ← 源码
-├── test/                    ← 测试（与源码严格分离）
+├── src/                     ← 源码
+├── tests/                   ← 测试（与源码严格分离）
 │   ├── CLAWLIST.md          ← 测试级：测试任务明细
 │   ├── reports/             ← 测试报告
 │   ├── results/             ← 测试结果、日志、截图
@@ -616,7 +616,7 @@ dist/ build/
 |---|---|---|
 | 观点收集 | `research/ collect/` | 结构化研究报告 |
 | 产品方案 | + `prd/` | MRD + PRD |
-| 研发需求 | + `prd/ dev/ test/` | MRD + PRD + 可运行系统 |
+| 研发需求 | + `prd/ src/ tests/` | MRD + PRD + 可运行系统 |
 
 > **只建本项目用得到的目录，不预建空目录。** `.clawmate/` 的 state/tasks/evidence/audit
 > 由 `convert` 建好；`sessions/`、`cache/` 等由服务按需懒创建。
@@ -625,18 +625,18 @@ dist/ build/
 
 #### 测试目录隔离规则（硬性）
 
-> **测试工作结果必须存放在 test/ 目录，严禁与源码混放。**
+> **测试工作结果必须存放在 tests/ 目录，严禁与源码混放。**
 
 | 内容 | 正确位置 | 错误位置 |
 |------|---------|---------|
-| 测试报告 | `test/reports/` | `dev/reports/` ❌ |
-| 测试结果/日志 | `test/results/` | `dev/logs/` ❌ |
-| 测试脚本 | `test/scripts/` | `dev/scripts/` ❌ |
-| 测试截图 | `test/results/screenshots/` | `dev/` ❌ |
-| 测试计划/CLAWLIST | `test/CLAWLIST.md` | `dev/CLAWLIST.md` ❌ |
+| 测试报告 | `tests/reports/` | `src/reports/` ❌ |
+| 测试结果/日志 | `tests/results/` | `src/logs/` ❌ |
+| 测试脚本 | `tests/scripts/` | `src/scripts/` ❌ |
+| 测试截图 | `tests/results/screenshots/` | `src/` ❌ |
+| 测试计划/CLAWLIST | `tests/CLAWLIST.md` | `src/CLAWLIST.md` ❌ |
 
 **理由**：
-- 源码目录（dev/）只放代码和配置文件
+- 源码目录（src/）只放代码和配置文件
 - 测试目录独立便于 CI/CD 打包时排除
 - 测试历史归档在 archive/iterations/，不污染源码
 
@@ -946,7 +946,7 @@ archive/
     └── PRD-v1.2-2026-05-20.md          ← 文件名-版本-日期
 ```
 
-> ⚠️ **严禁**在 `prd/`、`research/`、`dev/` 等子目录中创建 `archive/` 或 `done/` 子目录。所有归档统一在根目录 `archive/` 下。
+> ⚠️ **严禁**在 `prd/`、`research/`、`src/` 等子目录中创建 `archive/` 或 `done/` 子目录。所有归档统一在根目录 `archive/` 下。
 
 ### 9.5 文档同步检查清单
 

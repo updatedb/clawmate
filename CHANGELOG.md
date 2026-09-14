@@ -33,8 +33,14 @@
 - **4 份近乎重复的目录树合并为 1 份权威结构**（原先「观点收集 / 产品方案 / 研发需求」各一份 + 测试隔离规则后又一份），改为单棵树 + 一张「按项目类型启用」对应表；并修正树形连接符错误。
 - **AGENTS.md 模板重写**：原先把 `feedback.audit.jsonl / sessions / cache` 列为运行态（这些并不由 convert 创建），现改为治理锚点四目录 + 明确 `dev/`↔`src/`、`test/`↔`tests/` 的命名对应，并注明 `sessions/`、`cache/` 按需创建、报告与证据路径不混用。
 
+### 目录命名统一：`dev/`+`test/` → `src/`+`tests/`
+- **问题**：两套标准在打架。`project-harness/roles.yaml`（随每个新项目播种）的 Gateway sandbox bind 授权的是 `src/**`、`tests/**`；而 skill 与现有项目用的是 `dev/`、`test/`。结果是 sandbox 授权了一个**项目里并不存在的目录**，而实际存在且被写入的 `dev/**` 根本不在授权范围内——正是本项目一直在清理的那类「看起来生效、实际没有」的配置。
+- **决定**：统一为 `src/` + `tests/`（治理契约是权威且被实际强制；非代码类项目用 `src/` 语义也比 `dev/` 更准）。已更新 `skills/clawmate/SKILL.md`（含「统一使用 `src/`」约定、CLAWLIST 汇总链接、测试目录隔离规则表）与 `_AGENTS_TEMPLATE` / `_CLAWLIST_TEMPLATE`。
+- **现有项目不强制迁移**（保留旧名仍可工作）；新项目与文档一律用 `src/` + `tests/`。
+- 需注意的陷阱：ClawMate 仓库**自身**的源码目录就叫 `dev/`、测试叫 `tests/`，因此修改时只改「项目目录约定」文本，绝不能误改仓库真实路径（已校验 `/dev/null` 等未被误伤）。
+
 ### 测试
-- 新增 `tests/test_agents_template_dirs.py`：锁定 AGENTS 模板只描述真实存在的目录、不重新引入 legacy `.clawmate/reports`、且写明 `src/`/`tests/` 命名对应。
+- 新增 `tests/test_agents_template_dirs.py`：锁定 AGENTS 模板只描述真实存在的目录、不重新引入 legacy `.clawmate/reports`、且**只**用 `src/`/`tests/`（旧别名不得回归）。
 - `tests/test_project_harness_scaffold.py` 重写：锁定运行目录集收敛、legacy 与懒创建目录**绝不**被播种、模板白名单不外溢、以及校验的 issue/pending 区分。
 - 全量测试：`580 passed, 46 deselected`；`test_preview_refresh.py` 的 1 个失败在 `git archive HEAD` 隔离树上同样复现（工作区既有问题，与本次改动无关，未触碰 `dev/static/js/preview.js`）。
 

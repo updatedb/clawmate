@@ -87,7 +87,7 @@ _PROJECT_NOTE_TEMPLATE = """# {name} 产品笔记
 _CLAWLIST_TEMPLATE = """# CLAWLIST — {name}（项目级 — 总览）
 
 > 本项目级 CLAWLIST 管理所有非研发、测试的项目进展，并汇总各分组的简要状态。
-> 明细任务分别在 dev/、test/、research/ 的 CLAWLIST 中管理。
+> 明细任务分别在 src/、tests/、research/ 的 CLAWLIST 中管理。
 
 ## Phase I 项目初始化
 - [x] 确认项目类型
@@ -140,8 +140,8 @@ _AGENTS_TEMPLATE = """# AGENTS.md — {name} 项目操作规范
 | `.clawmate/` | 隐藏运行态：`state/` `tasks/` `evidence/` `audit/`（audit 仅项目创建者可写） |
 | `docs/` | 正式文档与报告（`docs/reports/`） |
 | `research/` `collect/` `prd/` | 按项目类型建立的资料/方案目录 |
-| `dev/` | 源码目录（对应治理契约中的 `src/`） |
-| `test/` | 测试目录，与源码严格分离（对应治理契约中的 `tests/`） |
+| `src/` | 源码目录 |
+| `tests/` | 测试目录，与源码严格分离 |
 | `archive/` | 统一归档（严禁在子目录内建 archive/） |
 
 > `sessions/`、`cache/` 等由服务按需创建，无需手工预建。
