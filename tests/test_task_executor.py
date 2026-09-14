@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from pathlib import Path
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "dev"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from task_executor import LaunchReceipt, TaskExecutor, persist_project_receipt, refresh_project_runs
 

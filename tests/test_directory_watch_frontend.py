@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_directory_sse_change_reloads_current_listing_and_tracks_marks():
     """An SSE add/delete is reflected by a cache-bypassing load of the open dir."""
-    source = ROOT / "dev/static/js/app.js"
+    source = ROOT / "src/static/js/app.js"
     probe = r'''
 const fs = require('fs'), vm = require('vm'), assert = require('assert');
 const app = fs.readFileSync(process.argv[1], 'utf8');

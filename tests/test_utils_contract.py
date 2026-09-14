@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-UTILS = ROOT / "dev" / "static" / "js" / "utils.js"
+UTILS = ROOT / "src" / "static" / "js" / "utils.js"
 
 
 def test_utils_are_pure_and_export_the_shared_contract():
@@ -58,8 +58,8 @@ const utils = context.window.utils;
 
 
 def test_index_loads_utils_before_app_and_app_uses_shared_exports():
-    index = (ROOT / "dev" / "static" / "index.html").read_text(encoding="utf-8")
-    app = (ROOT / "dev" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    index = (ROOT / "src" / "static" / "index.html").read_text(encoding="utf-8")
+    app = (ROOT / "src" / "static" / "js" / "app.js").read_text(encoding="utf-8")
 
     assert index.index('./js/utils.js') < index.index('./js/app.js')
     for name in ("escHtml", "formatSize", "formatMtime", "copyText", "showToast", "setStatus"):
@@ -72,10 +72,10 @@ def test_index_loads_utils_before_app_and_app_uses_shared_exports():
 
 
 def test_preview_and_share_load_utils_before_preview_common_without_duplicate_exports():
-    preview = (ROOT / "dev" / "static" / "preview.html").read_text(encoding="utf-8")
-    share = (ROOT / "dev" / "static" / "share-view.html").read_text(encoding="utf-8")
-    common = (ROOT / "dev" / "static" / "js" / "preview-common.js").read_text(encoding="utf-8")
-    index = (ROOT / "dev" / "static" / "index.html").read_text(encoding="utf-8")
+    preview = (ROOT / "src" / "static" / "preview.html").read_text(encoding="utf-8")
+    share = (ROOT / "src" / "static" / "share-view.html").read_text(encoding="utf-8")
+    common = (ROOT / "src" / "static" / "js" / "preview-common.js").read_text(encoding="utf-8")
+    index = (ROOT / "src" / "static" / "index.html").read_text(encoding="utf-8")
 
     for page in (preview, share):
         assert page.index('./js/utils.js') < page.index('./js/preview-common.js')

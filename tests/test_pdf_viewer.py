@@ -2,8 +2,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VIEWER = ROOT / "dev" / "static" / "pdfjs" / "viewer.html"
-PREVIEW_JS = ROOT / "dev" / "static" / "js" / "preview.js"
+VIEWER = ROOT / "src" / "static" / "pdfjs" / "viewer.html"
+PREVIEW_JS = ROOT / "src" / "static" / "js" / "preview.js"
 
 
 def test_pdf_viewer_builds_selectable_text_layer_for_each_page():

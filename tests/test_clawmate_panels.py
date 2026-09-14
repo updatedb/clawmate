@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_panel_registry_is_idempotent_and_scopes_surfaces_and_endpoints():
-    source = ROOT / "dev/static/js/clawmate-panels.js"
+    source = ROOT / "src/static/js/clawmate-panels.js"
     probe = r'''
 const fs = require('fs'), vm = require('vm'), assert = require('assert');
 const calls = [], events = {};
@@ -47,10 +47,10 @@ assert.notStrictEqual(panels.getPanel('project', 'index'), panels.getPanel('proj
 
 
 def test_index_and_preview_load_the_scoped_registry_without_duplicate_project_renderer():
-    index = (ROOT / "dev/static/index.html").read_text(encoding="utf-8")
-    app = (ROOT / "dev/static/js/app.js").read_text(encoding="utf-8")
-    common = (ROOT / "dev/static/js/preview-common.js").read_text(encoding="utf-8")
-    project = (ROOT / "dev/static/js/project-panel.js").read_text(encoding="utf-8")
+    index = (ROOT / "src/static/index.html").read_text(encoding="utf-8")
+    app = (ROOT / "src/static/js/app.js").read_text(encoding="utf-8")
+    common = (ROOT / "src/static/js/preview-common.js").read_text(encoding="utf-8")
+    project = (ROOT / "src/static/js/project-panel.js").read_text(encoding="utf-8")
 
     assert 'src="./js/clawmate-panels.js"' in index
     assert "ClawMatePanels.install('index'" in app

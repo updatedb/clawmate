@@ -1,4 +1,4 @@
-from dev.terminal_replay import ReplayRing
+from src.terminal_replay import ReplayRing
 
 
 def test_replay_is_byte_bounded_and_slices_first_chunk():

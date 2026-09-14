@@ -2,8 +2,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PREVIEW_HTML = ROOT / "dev" / "static" / "preview.html"
-PREVIEW_JS = ROOT / "dev" / "static" / "js" / "preview.js"
+PREVIEW_HTML = ROOT / "src" / "static" / "preview.html"
+PREVIEW_JS = ROOT / "src" / "static" / "js" / "preview.js"
 
 
 def test_preview_defers_pdf_and_terminal_bundles_until_the_feature_is_used():

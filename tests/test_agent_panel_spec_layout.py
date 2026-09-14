@@ -3,9 +3,9 @@ import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
-INDEX_HTML = ROOT / "dev" / "static" / "index.html"
-PREVIEW_HTML = ROOT / "dev" / "static" / "preview.html"
-APP_JS = ROOT / "dev" / "static" / "js" / "app.js"
+INDEX_HTML = ROOT / "src" / "static" / "index.html"
+PREVIEW_HTML = ROOT / "src" / "static" / "preview.html"
+APP_JS = ROOT / "src" / "static" / "js" / "app.js"
 
 
 def test_agent_panel_has_terminal_toolbar_and_status_contract():
@@ -35,7 +35,7 @@ def test_topbar_search_bindings_no_longer_reference_deleted_controls():
 
 
 def test_mobile_topbar_no_longer_references_file_and_content_search_buttons():
-    css = (ROOT / "dev" / "static" / "css" / "style.css").read_text(
+    css = (ROOT / "src" / "static" / "css" / "style.css").read_text(
         encoding="utf-8"
     )
 
@@ -43,7 +43,7 @@ def test_mobile_topbar_no_longer_references_file_and_content_search_buttons():
 
 
 def test_terminal_panel_width_uses_same_responsive_track_as_grid():
-    css = (ROOT / "dev" / "frontend" / "terminal" / "terminal.css").read_text(
+    css = (ROOT / "src" / "frontend" / "terminal" / "terminal.css").read_text(
         encoding="utf-8"
     )
     assert "grid-template-columns" not in css
@@ -51,7 +51,7 @@ def test_terminal_panel_width_uses_same_responsive_track_as_grid():
 
 
 def test_openclaw_chat_bubbles_preserve_gateway_line_breaks():
-    css = (ROOT / "dev" / "static" / "css" / "style.css").read_text(
+    css = (ROOT / "src" / "static" / "css" / "style.css").read_text(
         encoding="utf-8"
     )
     assert "white-space: pre-wrap" in css
@@ -76,7 +76,7 @@ def test_clear_screen_toolbar_action_matches_ctrl_l_semantics():
 
 
 def test_mobile_agent_header_hides_session_text_labels():
-    css = (ROOT / "dev" / "static" / "css" / "style.css").read_text(
+    css = (ROOT / "src" / "static" / "css" / "style.css").read_text(
         encoding="utf-8"
     )
     assert ".agent-panel-header .agent-panel-btn-label { display: none; }" in css
@@ -85,7 +85,7 @@ def test_mobile_agent_header_hides_session_text_labels():
 
 
 def test_main_toolbar_hides_text_by_main_container_width():
-    css = (ROOT / "dev" / "static" / "css" / "style.css").read_text(
+    css = (ROOT / "src" / "static" / "css" / "style.css").read_text(
         encoding="utf-8"
     )
     main_start = css.index(".main {")
@@ -107,18 +107,18 @@ def test_main_toolbar_hides_text_by_main_container_width():
 
 
 def test_history_runtime_contract_includes_search_backend_and_pagination():
-    source = (ROOT / "dev" / "frontend" / "terminal" / "agent-panel-adapter.ts").read_text(
+    source = (ROOT / "src" / "frontend" / "terminal" / "agent-panel-adapter.ts").read_text(
         encoding="utf-8"
     )
     for token in ("agent-history-search-input", "agent-history-backend-input", "agent-history-prev", "agent-history-next", "offset"):
         assert token in source
     assert "agent-history-date-input" not in source
-    assert '.search-clear { display: none;' in (ROOT / "dev" / "static" / "css" / "style.css").read_text(encoding="utf-8")
+    assert '.search-clear { display: none;' in (ROOT / "src" / "static" / "css" / "style.css").read_text(encoding="utf-8")
 
 
 def test_agent_search_controls_use_compact_30px_layout_and_history_filters_only_supported_backends():
-    css = (ROOT / "dev" / "static" / "css" / "style.css").read_text(encoding="utf-8")
-    source = (ROOT / "dev" / "frontend" / "terminal" / "agent-panel-adapter.ts").read_text(encoding="utf-8")
+    css = (ROOT / "src" / "static" / "css" / "style.css").read_text(encoding="utf-8")
+    source = (ROOT / "src" / "frontend" / "terminal" / "agent-panel-adapter.ts").read_text(encoding="utf-8")
 
     # The agent backend select is shared by the panel header + history filter (one
     # `.agent-backend-select` rule). Width was widened to 108px so backend names
@@ -130,7 +130,7 @@ def test_agent_search_controls_use_compact_30px_layout_and_history_filters_only_
 
 
 def test_history_header_modes_respect_hidden_attribute():
-    css = (ROOT / "dev" / "static" / "css" / "style.css").read_text(
+    css = (ROOT / "src" / "static" / "css" / "style.css").read_text(
         encoding="utf-8"
     )
     assert ".agent-history-detail-header[hidden]" in css
@@ -141,7 +141,7 @@ def test_history_header_modes_respect_hidden_attribute():
 
 
 def test_terminal_toolbar_actions_have_compact_icon_contract():
-    css = (ROOT / "dev" / "frontend" / "terminal" / "terminal.css").read_text(
+    css = (ROOT / "src" / "frontend" / "terminal" / "terminal.css").read_text(
         encoding="utf-8"
     )
     assert "font: 500 var(--btn-font)/1 Arial, sans-serif" in css
@@ -156,10 +156,10 @@ def test_terminal_toolbar_actions_have_compact_icon_contract():
 
 
 def test_history_typography_matches_index_card_scale_and_refreshes_bundle_cache():
-    css = (ROOT / "dev" / "static" / "css" / "style.css").read_text(
+    css = (ROOT / "src" / "static" / "css" / "style.css").read_text(
         encoding="utf-8"
     )
-    sw = (ROOT / "dev" / "static" / "sw.js").read_text(encoding="utf-8")
+    sw = (ROOT / "src" / "static" / "sw.js").read_text(encoding="utf-8")
     assert ".agent-history-item-title { color: var(--text-primary); font-size: 12px;" in css
     assert ".agent-history-item-meta { display: block; margin-top: 3px; color: var(--text-muted); font-size: 10px;" in css
     assert "font: 500 12px/1 var(--font-ui); white-space: nowrap" in css
@@ -170,10 +170,10 @@ def test_history_typography_matches_index_card_scale_and_refreshes_bundle_cache(
 
 
 def test_agent_panel_separates_terminal_and_web_typography():
-    terminal_css = (ROOT / "dev" / "frontend" / "terminal" / "terminal.css").read_text(
+    terminal_css = (ROOT / "src" / "frontend" / "terminal" / "terminal.css").read_text(
         encoding="utf-8"
     )
-    css = (ROOT / "dev" / "static" / "css" / "style.css").read_text(
+    css = (ROOT / "src" / "static" / "css" / "style.css").read_text(
         encoding="utf-8"
     )
     assert ".agent-panel-v2 .xterm" in terminal_css
@@ -190,7 +190,7 @@ def test_agent_panel_separates_terminal_and_web_typography():
 
 
 def test_xterm_overlay_scrollbar_matches_application_scrollbar_contract():
-    css = (ROOT / "dev" / "frontend" / "terminal" / "terminal.css").read_text(
+    css = (ROOT / "src" / "frontend" / "terminal" / "terminal.css").read_text(
         encoding="utf-8"
     )
     assert ".xterm-scrollable-element > .scrollbar.vertical" in css
@@ -200,7 +200,7 @@ def test_xterm_overlay_scrollbar_matches_application_scrollbar_contract():
 
 
 def test_history_list_and_detail_header_labels_share_typography():
-    css = (ROOT / "dev" / "static" / "css" / "style.css").read_text(
+    css = (ROOT / "src" / "static" / "css" / "style.css").read_text(
         encoding="utf-8"
     )
     assert "font: 500 12px/1 var(--font-ui)" in css
@@ -209,10 +209,10 @@ def test_history_list_and_detail_header_labels_share_typography():
 
 
 def test_history_list_and_detail_headers_share_close_button_contract():
-    source = (ROOT / "dev" / "frontend" / "terminal" / "agent-panel-adapter.ts").read_text(
+    source = (ROOT / "src" / "frontend" / "terminal" / "agent-panel-adapter.ts").read_text(
         encoding="utf-8"
     )
-    css = (ROOT / "dev" / "static" / "css" / "style.css").read_text(
+    css = (ROOT / "src" / "static" / "css" / "style.css").read_text(
         encoding="utf-8"
     )
     assert "agent-history-overlay-close agent-history-header-close" in source

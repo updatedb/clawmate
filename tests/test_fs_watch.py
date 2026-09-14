@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "dev"))
+sys.path.insert(0, str(ROOT / "src"))
 
 import fs_routes  # noqa: E402
 import fs_watch as fs_watch_mod  # noqa: E402

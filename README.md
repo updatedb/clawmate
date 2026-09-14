@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="dev/static/asset/clawmate-logo.png" alt="ClawMate" width="80" />
+  <img src="src/static/asset/clawmate-logo.png" alt="ClawMate" width="80" />
 </p>
 
 # ClawMate
@@ -76,7 +76,7 @@ flowchart LR
 
 围绕 AI Agent 工作流的项目全生命周期：
 
-- **`/clawmate init`** — 一键初始化标准项目结构（CLAWLIST + PROJECT_NOTE + research/prd/dev/test）
+- **`/clawmate init`** — 一键初始化标准项目结构（CLAWLIST + PROJECT_NOTE + research/prd/src/test）
 - **`/clawmate plan`** — 五阶段分层计划（Phase I 初始化 → II 需求澄清 → III 信息收集 → IV MRD → V PRD）
 - **`/clawmate project`** — 秒级切换会话上下文，Agent 自动加载项目状态
 - `.clawmate/` marker 自动识别项目边界，多项目并行 + session 隔离
@@ -311,9 +311,9 @@ docker run -d \
 
 ```bash
 cp config.example.json config.json
-python3 -m venv dev/.venv
-dev/.venv/bin/pip install -r requirements.txt
-cd dev && ../.venv/bin/python main.py
+python3 -m venv src/.venv
+src/.venv/bin/pip install -r requirements.txt
+cd src && ../.venv/bin/python main.py
 ```
 
 ### 一键部署（systemd）
@@ -404,10 +404,10 @@ cp config.example.json config.json
 
 ```bash
 # 交互式修改当前管理员密码（读取并更新私有 users.json）
-python3 dev/main.py --set-password
+python3 src/main.py --set-password
 
 # 忘记当前密码时使用本机恢复模式（仍会提示输入新密码两次）
-python3 dev/main.py --set-password --force
+python3 src/main.py --set-password --force
 ```
 
 启用后，`127.0.0.1` 及 `auth.local_hosts` 中的主机自动绕过认证。

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "dev"))
+sys.path.insert(0, str(ROOT / "src"))
 
 from root_migration import MigrationError, migrate_legacy_roots  # noqa: E402
 from root_registry import RootRegistry  # noqa: E402

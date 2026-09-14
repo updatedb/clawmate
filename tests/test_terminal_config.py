@@ -1,4 +1,4 @@
-from dev.config import _parse_config
+from src.config import _parse_config
 
 
 def test_terminal_defaults_are_safe():

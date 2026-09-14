@@ -14,7 +14,7 @@ def test_xterm_6_dependencies_are_pinned():
 
 
 def test_terminal_assets_are_shipped_without_runtime_cdn_dependencies():
-    service_worker = (ROOT / "dev/static/sw.js").read_text(encoding="utf-8")
+    service_worker = (ROOT / "src/static/sw.js").read_text(encoding="utf-8")
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     install = (ROOT / "install.sh").read_text(encoding="utf-8")
     workflow = (ROOT / ".github/workflows/docker.yml").read_text(encoding="utf-8")
@@ -31,7 +31,7 @@ def test_terminal_assets_are_shipped_without_runtime_cdn_dependencies():
 
 
 def test_service_worker_refreshes_protocol_bearing_agent_assets_from_network():
-    service_worker = (ROOT / "dev/static/sw.js").read_text(encoding="utf-8")
+    service_worker = (ROOT / "src/static/sw.js").read_text(encoding="utf-8")
 
     assert "const APP_CODE_ASSETS = new Set([" in service_worker
     assert "'/clawmate/dist/terminal.js'" in service_worker
@@ -41,7 +41,7 @@ def test_service_worker_refreshes_protocol_bearing_agent_assets_from_network():
 
 
 def test_service_worker_does_not_cache_sse_or_leak_cache_write_failures():
-    service_worker = (ROOT / "dev/static/sw.js").read_text(encoding="utf-8")
+    service_worker = (ROOT / "src/static/sw.js").read_text(encoding="utf-8")
 
     assert "function isCacheableResponse(response)" in service_worker
     assert "response.headers.get('content-type')" in service_worker
@@ -52,7 +52,7 @@ def test_service_worker_does_not_cache_sse_or_leak_cache_write_failures():
 
 
 def test_replay_exposes_loading_status_until_terminal_output_is_restored():
-    source = (ROOT / "dev/frontend/terminal/agent-panel-adapter.ts").read_text(encoding="utf-8")
+    source = (ROOT / "src/frontend/terminal/agent-panel-adapter.ts").read_text(encoding="utf-8")
 
     assert "this.setStatus('加载中')" in source
     assert "replayComplete" in source

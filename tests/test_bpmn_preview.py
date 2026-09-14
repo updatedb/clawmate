@@ -2,10 +2,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PREVIEW_JS = ROOT / "dev" / "static" / "js" / "preview.js"
-PREVIEW_COMMON_JS = ROOT / "dev" / "static" / "js" / "preview-common.js"
-BPMN_JS = ROOT / "dev" / "static" / "js" / "bpmn-preview.js"
-PREVIEW_HTML = ROOT / "dev" / "static" / "preview.html"
+PREVIEW_JS = ROOT / "src" / "static" / "js" / "preview.js"
+PREVIEW_COMMON_JS = ROOT / "src" / "static" / "js" / "preview-common.js"
+BPMN_JS = ROOT / "src" / "static" / "js" / "bpmn-preview.js"
+PREVIEW_HTML = ROOT / "src" / "static" / "preview.html"
 
 
 def test_bpmn_is_a_previewable_standalone_format():
@@ -81,7 +81,7 @@ def test_bpmn_exposes_png_export_without_svg_export_controls():
 
 def test_bpmn_matches_mermaid_resize_and_zoom_affordances():
     source = BPMN_JS.read_text(encoding="utf-8")
-    styles = (ROOT / "dev" / "static" / "css" / "style.css").read_text(encoding="utf-8")
+    styles = (ROOT / "src" / "static" / "css" / "style.css").read_text(encoding="utf-8")
 
     assert "function setupBpmnResizeHandle" in source
     assert 'data-bpmn-action="zoom-out"' in source
@@ -92,7 +92,7 @@ def test_bpmn_matches_mermaid_resize_and_zoom_affordances():
 
 def test_bpmn_file_view_fills_and_centers_without_hover_outline():
     source = BPMN_JS.read_text(encoding="utf-8")
-    styles = (ROOT / "dev" / "static" / "css" / "style.css").read_text(encoding="utf-8")
+    styles = (ROOT / "src" / "static" / "css" / "style.css").read_text(encoding="utf-8")
 
     assert "function fitViewer" in source
     assert "function centerViewerViewport" in source
@@ -102,7 +102,7 @@ def test_bpmn_file_view_fills_and_centers_without_hover_outline():
 
 
 def test_bpmn_removes_svg_focus_ring_and_has_dark_theme_contrast():
-    styles = (ROOT / "dev" / "static" / "css" / "style.css").read_text(encoding="utf-8")
+    styles = (ROOT / "src" / "static" / "css" / "style.css").read_text(encoding="utf-8")
 
     assert ".bpmn-canvas .djs-container svg:focus" in styles
     assert "outline: none;" in styles

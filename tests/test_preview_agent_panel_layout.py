@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PREVIEW_CSS = ROOT / "dev" / "static" / "css" / "preview.css"
+PREVIEW_CSS = ROOT / "src" / "static" / "css" / "preview.css"
 
 
 def test_mobile_agent_panel_is_bounded_not_fullscreen():

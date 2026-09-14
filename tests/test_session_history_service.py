@@ -1,4 +1,4 @@
-from dev.session_history_service import SessionHistoryService
+from src.session_history_service import SessionHistoryService
 import pytest
 
 

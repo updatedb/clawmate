@@ -10,10 +10,10 @@ from pathlib import Path
 
 import bcrypt
 
-try:  # dev/ on sys.path (app runtime, bare `root_registry` imports)
+try:  # src/ on sys.path (app runtime, bare `root_registry` imports)
     from root_registry import atomic_write_json
-except ImportError:  # imported as `dev.user_store` (package-style tests)
-    from dev.root_registry import atomic_write_json
+except ImportError:  # imported as `src.user_store` (package-style tests)
+    from src.root_registry import atomic_write_json
 
 _RID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 

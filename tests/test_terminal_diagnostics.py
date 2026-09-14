@@ -5,11 +5,11 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-DEV = ROOT / "dev"
+DEV = ROOT / "src"
 if str(DEV) not in sys.path:
     sys.path.insert(0, str(DEV))
 
-from dev.terminal_manager import SessionRequest, TerminalManager
+from src.terminal_manager import SessionRequest, TerminalManager
 import agent_routes
 
 

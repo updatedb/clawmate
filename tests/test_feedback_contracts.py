@@ -9,9 +9,9 @@ import sys
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-ROOT = Path(__file__).resolve().parent.parent / "dev"
+ROOT = Path(__file__).resolve().parent.parent / "src"
 # Without this the module only collects when another test file has already put
-# dev/ on sys.path, so `pytest tests/test_feedback_contracts.py` fails on its own.
+# src/ on sys.path, so `pytest tests/test_feedback_contracts.py` fails on its own.
 sys.path.insert(0, str(ROOT))
 
 import auth  # noqa: E402

@@ -14,7 +14,7 @@ from dataclasses import dataclass
 try:
     from terminal_session import PtyAdapter, TerminalConnection, TerminalSession
 except ModuleNotFoundError:  # pragma: no cover - exercised by the test import path
-    from dev.terminal_session import PtyAdapter, TerminalConnection, TerminalSession
+    from src.terminal_session import PtyAdapter, TerminalConnection, TerminalSession
 
 
 @dataclass(frozen=True, slots=True)

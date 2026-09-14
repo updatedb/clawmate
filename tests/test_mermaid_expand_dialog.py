@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-STYLE_CSS = ROOT / "dev" / "static" / "css" / "style.css"
+STYLE_CSS = ROOT / "src" / "static" / "css" / "style.css"
 
 
 def test_mermaid_expand_dialog_uses_near_full_viewport_with_compact_body_padding():

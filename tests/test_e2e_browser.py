@@ -26,7 +26,7 @@ ClawMate E2E Smoke Tests — Playwright (self-contained, no pytest fixtures need
   HEADED=1 python tests/test_e2e_browser.py
 
   # pytest: 未设置 CLAWMATE_BASE_URL 时自动拉起一个临时实例
-  PYTHONPATH=. dev/.venv/bin/python -m pytest tests/test_e2e_browser.py -m e2e -q
+  PYTHONPATH=. src/.venv/bin/python -m pytest tests/test_e2e_browser.py -m e2e -q
 
 pytest 运行说明:
   * 下面「Rootdir registry + settings acceptance」一节的用例需要一个真实
@@ -399,11 +399,11 @@ def test_anti_flash_theme(page: Page):
 # The fixtures below stand up a throwaway instance whose config.json,
 # users.json, roots.json and system root all live under pytest's tmp dir. The
 # repository's real config.json / users.json / roots.json are never read or
-# written, and dev/sessions.json (which login rewrites) is restored afterwards.
+# written, and src/sessions.json (which login rewrites) is restored afterwards.
 # ══════════════════════════════════════════════════════════════════════
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-BACKEND_DIR = ROOT_DIR / "dev"
+BACKEND_DIR = ROOT_DIR / "src"
 
 E2E_ADMIN_USERNAME = "e2e-admin"
 E2E_ADMIN_PASSWORD = "e2e-admin-pass"
@@ -531,7 +531,7 @@ def live_server(tmp_path_factory):
 
     log_path = tmp_path / "server.log"
 
-    # Login rewrites dev/sessions.json (auth._sessions_file is fixed to the
+    # Login rewrites src/sessions.json (auth._sessions_file is fixed to the
     # source tree). Snapshot it so the operator's runtime state is left alone.
     sessions_file = BACKEND_DIR / "sessions.json"
     sessions_backup = sessions_file.read_bytes() if sessions_file.exists() else None

@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PREVIEW_JS = ROOT / "dev" / "static" / "js" / "preview.js"
+PREVIEW_JS = ROOT / "src" / "static" / "js" / "preview.js"
 
 
 def test_image_preview_toolbar_exposes_ten_percent_zoom_controls():

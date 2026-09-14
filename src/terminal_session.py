@@ -6,12 +6,12 @@ from dataclasses import dataclass
 from collections.abc import Awaitable, Callable
 from typing import Protocol
 
-try:  # FastAPI imports modules from dev/, while tests import dev.* packages.
+try:  # FastAPI imports modules from src/, while tests import src.* packages.
     from terminal_protocol import ProtocolError, validate_dimensions
     from terminal_replay import OutputChunk, ReplayRing
 except ModuleNotFoundError:  # pragma: no cover - exercised by the test import path
-    from dev.terminal_protocol import ProtocolError, validate_dimensions
-    from dev.terminal_replay import OutputChunk, ReplayRing
+    from src.terminal_protocol import ProtocolError, validate_dimensions
+    from src.terminal_replay import OutputChunk, ReplayRing
 
 
 class PtyAdapter(Protocol):

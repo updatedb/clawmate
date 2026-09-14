@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "dev"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from service import safe_path, guess_category, _normalize_rel_path
 from config import set_config_path

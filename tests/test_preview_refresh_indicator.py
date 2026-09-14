@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_file_watch_change_and_manual_refresh_contract():
     """One file EventSource owns its indicator, callback, and panel refreshes."""
-    source = ROOT / "dev/static/js/file-watch.js"
+    source = ROOT / "src/static/js/file-watch.js"
     probe = r'''
 const fs = require('fs'), vm = require('vm'), assert = require('assert');
 const sources = [], classes = new Set(), calls = [];
@@ -41,7 +41,7 @@ vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), {window, Boolean, P
 
 
 def test_preview_refresh_delegates_to_file_watch_and_keeps_spinning_feedback():
-    source = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
+    source = (ROOT / "src/static/js/preview.js").read_text(encoding="utf-8")
     assert "ClawMateFileWatch.start" in source
     assert "previewFileWatch.manualRefresh(refreshContent)" in source
     assert "btnRefreshContent.classList.add('spinning')" in source

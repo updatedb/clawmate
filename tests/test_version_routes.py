@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "dev"))
+sys.path.insert(0, str(ROOT / "src"))
 
 import version_routes  # noqa: E402
 
@@ -23,8 +23,8 @@ def test_build_commit_message_for_modified_file():
 
 
 def test_version_modal_has_auto_commit_control():
-    html = (ROOT / "dev" / "static" / "preview.html").read_text(encoding="utf-8")
-    script = (ROOT / "dev" / "static" / "js" / "preview.js").read_text(encoding="utf-8")
+    html = (ROOT / "src" / "static" / "preview.html").read_text(encoding="utf-8")
+    script = (ROOT / "src" / "static" / "js" / "preview.js").read_text(encoding="utf-8")
 
     assert 'id="versionModalCommit"' in html
     assert "commitVersionFromModal" in script

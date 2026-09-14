@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _app_js() -> str:
-    return (ROOT / "dev/static/js/app.js").read_text(encoding="utf-8")
+    return (ROOT / "src/static/js/app.js").read_text(encoding="utf-8")
 
 
 def _convert_block() -> str:

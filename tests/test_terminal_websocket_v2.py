@@ -8,7 +8,7 @@ import pytest
 from fastapi import WebSocketDisconnect
 
 ROOT = Path(__file__).resolve().parents[1]
-DEV = ROOT / "dev"
+DEV = ROOT / "src"
 if str(DEV) not in sys.path:
     sys.path.insert(0, str(DEV))
 

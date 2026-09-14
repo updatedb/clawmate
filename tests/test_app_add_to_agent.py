@@ -2,8 +2,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-APP_JS = ROOT / "dev" / "static" / "js" / "app.js"
-INDEX_HTML = ROOT / "dev" / "static" / "index.html"
+APP_JS = ROOT / "src" / "static" / "js" / "app.js"
+INDEX_HTML = ROOT / "src" / "static" / "index.html"
 
 
 def test_index_add_to_agent_uses_insert_text_with_at_path_newline():

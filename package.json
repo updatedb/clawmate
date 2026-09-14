@@ -2,9 +2,9 @@
   "name": "clawmate-terminal-assets",
   "private": true,
   "scripts": {
-    "build:terminal": "esbuild dev/frontend/terminal/index.ts --bundle --format=iife --global-name=ClawMateTerminal --target=es2021 --outfile=dev/static/dist/terminal.js --sourcemap",
+    "build:terminal": "esbuild src/frontend/terminal/index.ts --bundle --format=iife --global-name=ClawMateTerminal --target=es2021 --outfile=src/static/dist/terminal.js --sourcemap",
     "typecheck": "tsc --noEmit",
-    "test:terminal": "vitest run dev/frontend/terminal",
+    "test:terminal": "vitest run src/frontend/terminal",
     "test": "npm run typecheck && npm run test:terminal"
   },
   "dependencies": {

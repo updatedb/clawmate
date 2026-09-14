@@ -1,11 +1,11 @@
 from pathlib import Path
 
-from dev.cache_bust import StaticCacheMiddleware
+from src.cache_bust import StaticCacheMiddleware
 
 
 def test_index_leaves_app_script_versioning_to_cache_bust_middleware():
     index_html = (
-        Path(__file__).resolve().parents[1] / "dev" / "static" / "index.html"
+        Path(__file__).resolve().parents[1] / "src" / "static" / "index.html"
     ).read_text(encoding="utf-8")
 
     assert 'src="./js/app.js"' in index_html

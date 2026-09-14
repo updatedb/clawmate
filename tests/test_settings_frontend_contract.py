@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-STATIC = Path(__file__).resolve().parents[1] / "dev" / "static"
+STATIC = Path(__file__).resolve().parents[1] / "src" / "static"
 
 
 def _strip_js_comments(source: str) -> str:

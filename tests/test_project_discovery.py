@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "dev"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import project_routes
 from project_routes import discover_project_tasks

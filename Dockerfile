@@ -16,7 +16,7 @@ FROM node:22-alpine AS frontend
 WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY dev/frontend ./dev/frontend
+COPY src/frontend ./src/frontend
 RUN npm run build:terminal
 
 FROM python:3.11-slim AS builder
@@ -42,11 +42,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /usr/local/lib/python3.11/site-packages/ /usr/local/lib/python3.11/site-packages/
 COPY --from=builder /usr/local/bin/uvicorn /usr/local/bin/uvicorn
 
-# copy application (dev/ 子目录)
-COPY dev/*.py ./
+# copy application (src/ 子目录)
+COPY src/*.py ./
 COPY task_templates.json ./
-COPY dev/static/ static/
-COPY --from=frontend /src/dev/static/dist/ static/dist/
+COPY src/static/ static/
+COPY --from=frontend /src/src/static/dist/ static/dist/
 
 ENV CLAWMATE_PORT=5533
 EXPOSE 5533

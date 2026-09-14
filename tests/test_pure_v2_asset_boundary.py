@@ -5,9 +5,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_pages_load_only_the_xterm6_bundle_for_agent_runtime():
-    index_html = (ROOT / "dev" / "static" / "index.html").read_text(encoding="utf-8")
-    preview_html = (ROOT / "dev" / "static" / "preview.html").read_text(encoding="utf-8")
-    preview_js = (ROOT / "dev" / "static" / "js" / "preview.js").read_text(encoding="utf-8")
+    index_html = (ROOT / "src" / "static" / "index.html").read_text(encoding="utf-8")
+    preview_html = (ROOT / "src" / "static" / "preview.html").read_text(encoding="utf-8")
+    preview_js = (ROOT / "src" / "static" / "js" / "preview.js").read_text(encoding="utf-8")
 
     assert "./dist/terminal.js" in index_html
     # The preview loads the same v2 bundle only after its Agent panel opens.
@@ -18,6 +18,6 @@ def test_pages_load_only_the_xterm6_bundle_for_agent_runtime():
 
 
 def test_runtime_bundle_has_no_legacy_agent_reference():
-    source = (ROOT / "dev" / "frontend" / "terminal" / "index.ts").read_text(encoding="utf-8")
+    source = (ROOT / "src" / "frontend" / "terminal" / "index.ts").read_text(encoding="utf-8")
     assert "legacyAgent" not in source
     assert "switchBackend" not in source

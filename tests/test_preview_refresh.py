@@ -2,8 +2,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PREVIEW_JS = ROOT / "dev" / "static" / "js" / "preview.js"
-PREVIEW_CSS = ROOT / "dev" / "static" / "css" / "preview.css"
+PREVIEW_JS = ROOT / "src" / "static" / "js" / "preview.js"
+PREVIEW_CSS = ROOT / "src" / "static" / "css" / "preview.css"
 
 
 def test_markdown_refresh_preserves_outline_state_and_bypasses_cached_assets():
@@ -20,7 +20,9 @@ def test_markdown_refresh_preserves_outline_state_and_bypasses_cached_assets():
     assert "if (!preserveSidebarVisibility && window.innerWidth > 768)" in source
     assert "function buildPreviewUrl(path, refreshToken)" in source
     assert "function buildStaticAssetUrl(path, refreshToken)" in source
-    assert "^\\/?dev\\/static\\/" in source
+    # The shim normalises both the legacy `dev/` and the current
+    # `src/` prefix, so documents written before the rename still resolve.
+    assert "(?:dev|src)\\/static" in source
     assert "source.pathname = '/clawmate/'" in source
     assert "_clawmate_refresh" in source
     assert "{ cache: 'no-store' }" in source

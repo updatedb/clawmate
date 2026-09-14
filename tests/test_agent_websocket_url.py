@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from starlette.requests import Request
 
-DEV = Path(__file__).resolve().parents[1] / "dev"
+DEV = Path(__file__).resolve().parents[1] / "src"
 if str(DEV) not in sys.path:
     sys.path.insert(0, str(DEV))
 

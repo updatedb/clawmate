@@ -4,11 +4,11 @@ from pathlib import Path
 
 def test_preview_uses_shared_panel_and_single_file_watch_contract():
     root = Path(__file__).resolve().parents[1]
-    common = (root / "dev/static/js/preview-common.js").read_text(encoding="utf-8")
-    panel = (root / "dev/static/js/project-panel.js").read_text(encoding="utf-8")
-    watch = (root / "dev/static/js/file-watch.js").read_text(encoding="utf-8")
-    preview = (root / "dev/static/js/preview.js").read_text(encoding="utf-8")
-    preview_html = (root / "dev/static/preview.html").read_text(encoding="utf-8")
+    common = (root / "src/static/js/preview-common.js").read_text(encoding="utf-8")
+    panel = (root / "src/static/js/project-panel.js").read_text(encoding="utf-8")
+    watch = (root / "src/static/js/file-watch.js").read_text(encoding="utf-8")
+    preview = (root / "src/static/js/preview.js").read_text(encoding="utf-8")
+    preview_html = (root / "src/static/preview.html").read_text(encoding="utf-8")
     assert "project-panel.js" in common
     assert "ClawMateProjectPanel" in panel
     assert "/overview" in panel
@@ -24,17 +24,17 @@ def test_preview_uses_shared_panel_and_single_file_watch_contract():
 
 def test_directory_file_watcher_is_not_changed_by_preview_file_watch():
     root = Path(__file__).resolve().parents[1]
-    app = (root / "dev/static/js/app.js").read_text(encoding="utf-8")
+    app = (root / "src/static/js/app.js").read_text(encoding="utf-8")
     assert "let _fsEventSource = null;" in app
     assert "&dir=" in app
 
 
 def test_directory_and_preview_mount_the_same_complete_project_panel_renderer():
     root = Path(__file__).resolve().parents[1]
-    panel = (root / "dev/static/js/project-panel.js").read_text(encoding="utf-8")
-    app = (root / "dev/static/js/app.js").read_text(encoding="utf-8")
-    preview = (root / "dev/static/js/preview.js").read_text(encoding="utf-8")
-    index = (root / "dev/static/index.html").read_text(encoding="utf-8")
+    panel = (root / "src/static/js/project-panel.js").read_text(encoding="utf-8")
+    app = (root / "src/static/js/app.js").read_text(encoding="utf-8")
+    preview = (root / "src/static/js/preview.js").read_text(encoding="utf-8")
+    index = (root / "src/static/index.html").read_text(encoding="utf-8")
     assert "ClawMateProjectPanel.mount" in app
     assert 'src="./js/project-panel.js"' in index
     assert "mountPreview" in panel and "openFeedback" in panel
@@ -47,8 +47,8 @@ def test_directory_and_preview_mount_the_same_complete_project_panel_renderer():
 
 def test_project_summary_is_a_conditional_body_section_not_header_chrome():
     root = Path(__file__).resolve().parents[1]
-    index = (root / "dev/static/index.html").read_text(encoding="utf-8")
-    panel = (root / "dev/static/js/project-panel.js").read_text(encoding="utf-8")
+    index = (root / "src/static/index.html").read_text(encoding="utf-8")
+    panel = (root / "src/static/js/project-panel.js").read_text(encoding="utf-8")
     assert 'id="projectPanelSummary"' not in index
     assert 'id="projectPanelSummary"' not in panel
     assert "项目摘要" in panel
@@ -59,7 +59,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_recommendation_controls_present():
-    js = (ROOT / "dev/static/js/project-panel.js").read_text(encoding="utf-8")
+    js = (ROOT / "src/static/js/project-panel.js").read_text(encoding="utf-8")
     assert "data-project-analyze" in js
     assert "data-recommend-delete" in js
     assert "recommendations/analyze" in js
@@ -107,7 +107,7 @@ def test_closing_the_panel_hands_focus_back_to_its_toggle():
     run *before* the class lands, and it cannot aim at a toggle that is itself
     folded away on mobile.
     """
-    app = (ROOT / "dev/static/js/app.js").read_text(encoding="utf-8")
+    app = (ROOT / "src/static/js/app.js").read_text(encoding="utf-8")
     body = _strip_js_comments(_function_body(app, "_setProjectPanelOpen"))
 
     assert "projectPanel.contains(document.activeElement)" in body

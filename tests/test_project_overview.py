@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "dev"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from project_routes import (
     _count_clawlist_todo,
@@ -108,9 +108,9 @@ def test_clawlist_completion_requires_one_exact_unchecked_match(tmp_path):
 def test_main_project_panel_is_switchable_and_auto_opens_once_per_session_project():
 
     root = Path(__file__).resolve().parents[1]
-    html = (root / "dev" / "static" / "index.html").read_text(encoding="utf-8")
-    js = (root / "dev" / "static" / "js" / "app.js").read_text(encoding="utf-8")
-    css = (root / "dev" / "static" / "css" / "style.css").read_text(encoding="utf-8")
+    html = (root / "src" / "static" / "index.html").read_text(encoding="utf-8")
+    js = (root / "src" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    css = (root / "src" / "static" / "css" / "style.css").read_text(encoding="utf-8")
     assert 'id="projectPanel" class="project-panel hidden"' in html
     assert '<aside id="projectPanel"' in html
     assert 'id="btnCloseProjectPanel"' in html
@@ -168,8 +168,8 @@ def test_project_runs_api_is_bounded_and_excludes_prompt(tmp_path, monkeypatch):
 
 def test_project_panel_frontend_uses_run_contract_without_full_poll_redraw():
     root = Path(__file__).resolve().parents[1]
-    js = (root / "dev" / "static" / "js" / "app.js").read_text(encoding="utf-8")
-    css = (root / "dev" / "static" / "css" / "style.css").read_text(encoding="utf-8")
+    js = (root / "src" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    css = (root / "src" / "static" / "css" / "style.css").read_text(encoding="utf-8")
 
     assert "data-project-runs" in js
     assert "renderProjectRuns()" in js

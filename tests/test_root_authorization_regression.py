@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "dev"))
+sys.path.insert(0, str(ROOT / "src"))
 
 import auth  # noqa: E402
 import config  # noqa: E402
@@ -129,7 +129,7 @@ def test_registry_entry_escaping_the_system_root_is_never_served(tmp_path: Path,
     _login_admin(client)
 
     # The reported set comes from get_roots() directly, not /api/clawmate/config:
-    # that route's admin branch still hardcodes ["."] (dev/routes.py:65) and never
+    # that route's admin branch still hardcodes ["."] (src/routes.py:65) and never
     # consults the registry, so it cannot report a registered root either way. The
     # boundary that matters for reads is the one resolve_root() -> _root_map() ->
     # get_roots() walks.

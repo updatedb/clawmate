@@ -6,8 +6,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_agent_panel_mount_is_idempotent_scoped_and_cleans_up():
-    registry = ROOT / "dev/static/js/clawmate-panels.js"
-    panel = ROOT / "dev/static/js/agent-panel.js"
+    registry = ROOT / "src/static/js/clawmate-panels.js"
+    panel = ROOT / "src/static/js/agent-panel.js"
     probe = r'''
 const fs = require('fs'), vm = require('vm'), assert = require('assert');
 const events = {}, nodes = {};
@@ -42,9 +42,9 @@ assert.strictEqual(window.ClawMatePanels.getPanel('agent', 'preview'), null);
 
 
 def test_index_and_preview_mount_the_shared_agent_adapter_lazily():
-    index = (ROOT / "dev/static/index.html").read_text(encoding="utf-8")
-    app = (ROOT / "dev/static/js/app.js").read_text(encoding="utf-8")
-    common = (ROOT / "dev/static/js/preview-common.js").read_text(encoding="utf-8")
+    index = (ROOT / "src/static/index.html").read_text(encoding="utf-8")
+    app = (ROOT / "src/static/js/app.js").read_text(encoding="utf-8")
+    common = (ROOT / "src/static/js/preview-common.js").read_text(encoding="utf-8")
 
     assert 'src="./js/agent-panel.js"' in index
     assert "ClawMateAgentPanel.mount({\n  surface: 'index'" in app

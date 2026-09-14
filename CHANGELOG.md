@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.61 (2026-09-14)
+### 仓库自身源码目录 `dev/` → `src/`（对齐治理契约）
+- **背景**：治理契约 `project-harness/roles.yaml` 的 sandbox bind 授权 `src/**`、`tests/**`、`docs/**`，而本仓源码目录叫 `dev/`。授权的是一个项目里并不存在的目录，实际被写入的 `dev/**` 不在授权范围内——属「看起来生效、实际没有」的缺口。
+- **改动**：`dev/` → `src/`（359 个文件重命名）；`prd/` → `docs/prd/`。`tests/` 本就是契约名，未动。
+- **引用同步**：74 处代码/配置/测试引用改指新路径，含 `from dev.X` → `from src.X` 导入、`ROOT / "dev"` 路径拼接、`Dockerfile` 的 `COPY dev/...`、`package.json` 的 esbuild/vitest 路径、`tsconfig.json` 的 include、`.gitignore`、`install.sh` 生成的 systemd unit 模板。
+- **preview.js 兼容 shim**：`/dev/static/` 与 `/src/static/` 前缀**都**被规范化（`^\/?(?:dev|src)\/static\/`），改名**之前**写入的文档正文里的图片引用仍能解析，不会因为目录改名而碎图。
+- **测试同步**：断言 shim 的两个测试更新为匹配双前缀形式。
+- **未改动（有意）**：历史记录 `docs/superpowers/**` 与 `CHANGELOG.md` 旧条目、`package-lock.json`、两个 `tests/` 里证明「旧别名不得回归」的守卫断言（`assert "`dev/`" not in tpl`）——改写它们等于篡改历史或反转断言语义。
+- **运行环境修复**：`src/.venv` 的 38 个 console-script shebang 与 `pyvenv.cfg` 原先指向 `/home/openclaw/webprojects/...`（本机不存在），导致 `pip`/`pytest` 包装器早已失效；已指向 `src/.venv`。用户级 `clawmate.service` 的 `WorkingDirectory` 改为 `.../src`。
+- **验证**：`src/.venv/bin/python -m pytest tests -q` → **586 passed, 0 failed**；服务重启后 `/api/health` → `{"status":"ok"}`，`/clawmate/` 与 `/clawmate/js/app.js` 均 200；`npm run build:terminal` 通过。
+
 ## v1.60 (2026-09-14)
 ### 修正 skill 目录树的双前缀渲染错误
 - **背景**：v1.58 把内容目录收敛到 `docs/` 时，迁移脚本对**已有** `docs/prd/`、`docs/research/` 加了保护标记，但目录树里这两个条目原本就是要**改写**的裸路径。结果在 `docs/` 块内部渲染成 `docs/prd/`、`docs/prd/sub_prd/`、`docs/research/` —— 缩进层级已表示在 `docs/` 下，再带前缀即为**双重前缀**，照此建目录会得到 `docs/docs/prd/`。

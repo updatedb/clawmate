@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "dev"))
+sys.path.insert(0, str(ROOT / "src"))
 
 import auth  # noqa: E402
 import config  # noqa: E402

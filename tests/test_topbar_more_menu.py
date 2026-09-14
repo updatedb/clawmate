@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-STATIC = ROOT / "dev" / "static"
+STATIC = ROOT / "src" / "static"
 
 _FOLD_SELECTOR = re.compile(r"#btnMoreMenu\)\s*#([\w-]+)")
 

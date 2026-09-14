@@ -63,7 +63,7 @@ Feedback JSON 格式迁移（FEEDBACK.md→feedback.json）、Standalone 三栏�
 - feedback.json 归档（90 天 done 项归档到 feedback.archive.json）
 
 ## v1.9 删除操作鉴权强化 + 审计日志 ✅
-- DELETE 操作写 audit log（JSONL 格式到 dev/audit.json）
+- DELETE 操作写 audit log（JSONL 格式到 src/audit.json）
 - 字段：timestamp/username/client_ip/operation/root_id/path/result/error
 - 本机 bypass 保留（cron 任务需要），但记录 caller=local-bypass
 
@@ -144,7 +144,7 @@ disk audit 完全移除（强哥决策），journalctl 保留 5 端点全字段�
 
 ## v1.28 移动端独立页面 m/index.html + m/preview.html ❌
 - 标记为已完成但实际未创建，已被 v1.19 全面回退覆盖
-- 移动端页面实际位于 dev/static/m/
+- 移动端页面实际位于 src/static/m/
 
 ## v1.29 Task Template 统一体系 ✅
 - 创建 task_templates.json（6 个模板）
@@ -180,7 +180,7 @@ Task: schema 补全 action/scope/task_id 字段、note 优先保留不因模板�
 - 桌面版不变
 
 ## v1.35 移动端 authFetch 统一 401 处理 ✅
-- dev/static/m/index.html + preview.html 添加 authFetch 统一处理 401 跳转登录（与 desktop app.js 对齐）
+- src/static/m/index.html + preview.html 添加 authFetch 统一处理 401 跳转登录（与 desktop app.js 对齐）
 - ⚠️ 重复写了函数头导致 JS SyntaxError，后修复
 
 ## v1.36 clawmate skill 增强：clawmate project 命令 ✅
@@ -328,7 +328,7 @@ Task: schema 补全 action/scope/task_id 字段、note 优先保留不因模板�
 - 清理：.playwright-mcp/（22MB）、test PDF（9.6MB）、归档已完成 plans/specs
 
 ## v1.52 目录自动监听刷新 + 会话级变更标记 ✅ (2026-09-06)
-- 新增 dev/fs_watch.py（watchdog/inotify 非递归监听当前目录，引用计数、0.4s debounce、正常运行时零轮询）与 dev/fs_routes.py（GET /api/clawmate/fs/events SSE 事件流）
+- 新增 src/fs_watch.py（watchdog/inotify 非递归监听当前目录，引用计数、0.4s debounce、正常运行时零轮询）与 src/fs_routes.py（GET /api/clawmate/fs/events SSE 事件流）
 - 前端 app.js：loadDir 建立/切换/关闭当前目录 SSE 连接；会话级 recentChanges（path→kind），400ms debounce 刷新当前目录（绕过 30s 缓存）
 - 列表/卡片对本次会话新增/修改条目加「新增」「已修改」badge + mtime 高亮（删除只刷新不标记）
 - 修复：面包屑手动刷新清 _recentChanges（视为干净视图）；点击文件打开预览就地清除该条标记

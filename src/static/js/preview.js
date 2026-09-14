@@ -249,7 +249,7 @@
   }
 
   function buildStaticAssetUrl(path, refreshToken) {
-    var url = './' + path.replace(/^\/?dev\/static\//i, '');
+    var url = './' + path.replace(/^\/?(?:dev|src)\/static\//i, '');
     return refreshToken ? url + '?_clawmate_refresh=' + encodeURIComponent(refreshToken) : url;
   }
 
@@ -301,8 +301,8 @@
         if (source.pathname === '/api/clawmate/preview' && refreshToken) {
           source.searchParams.set('_clawmate_refresh', refreshToken);
           image.src = source.href;
-        } else if (/^\/dev\/static\//i.test(source.pathname)) {
-          source.pathname = '/clawmate/' + source.pathname.replace(/^\/dev\/static\//i, '');
+        } else if (/^\/?(?:dev|src)\/static\//i.test(source.pathname)) {
+          source.pathname = '/clawmate/' + source.pathname.replace(/^\/?(?:dev|src)\/static\//i, '');
           if (refreshToken) source.searchParams.set('_clawmate_refresh', refreshToken);
           image.src = source.href;
         }
@@ -335,7 +335,7 @@
       let href = token.attrGet('src') || '';
       const title = token.attrGet('title') || '';
       const text = token.content || '';
-      if (/^\/?dev\/static\//i.test(href)) {
+      if (/^\/?(?:dev|src)\/static\//i.test(href)) {
         href = buildStaticAssetUrl(href, refreshToken);
       } else if (!/^https?:\/\//i.test(href) && !href.startsWith('/')) {
         const fullPath = resolveDocRelativePath(entryRelPath, href);

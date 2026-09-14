@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_selection_action_filter_is_shared_extension_safe_and_execute_free_fallback():
     """The shared client filter must not leak exe-only actions to text files."""
-    common = ROOT / "dev/static/js/preview-common.js"
+    common = ROOT / "src/static/js/preview-common.js"
     templates = json.loads((ROOT / "task_templates.json").read_text(encoding="utf-8"))
     script = """
 const fs = require('fs');
@@ -32,8 +32,8 @@ console.log(JSON.stringify({
     assert "execute" in filtered["exe"]
     assert filtered["fallback"] == ["replace"]
 
-    preview = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
-    share = (ROOT / "dev/static/share-view.html").read_text(encoding="utf-8")
+    preview = (ROOT / "src/static/js/preview.js").read_text(encoding="utf-8")
+    share = (ROOT / "src/static/share-view.html").read_text(encoding="utf-8")
     assert "getSelectionActionTemplates(_taskTemplates" in preview
     assert "getSelectionActionTemplates(_shareTemplates" in share
     assert "match_ext.indexOf" not in preview
@@ -44,8 +44,8 @@ console.log(JSON.stringify({
 
 def test_review_templates_refresh_from_api_over_session_cache_and_filter_by_extension():
     """A cached old template must not override the current /config response."""
-    preview = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
-    common = ROOT / "dev/static/js/preview-common.js"
+    preview = (ROOT / "src/static/js/preview.js").read_text(encoding="utf-8")
+    common = ROOT / "src/static/js/preview-common.js"
     loader = preview.split("  async function getRootsConfig() {", 1)[1].split(
         "\n\n  function getRelativePath", 1
     )[0]
@@ -99,7 +99,7 @@ vm.runInNewContext(`
 
 def test_preview_uses_single_atomic_execute_request_for_feedback_submission():
     """Batch execution has no user-visible plan/confirm/task-run loop."""
-    source = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
+    source = (ROOT / "src/static/js/preview.js").read_text(encoding="utf-8")
     review_panel = source.split("// ── Internal review queue", 1)[1]
     assert "/api/clawmate/review/execute" in review_panel
     assert "/api/clawmate/review/confirm" not in review_panel
@@ -111,8 +111,8 @@ def test_preview_uses_single_atomic_execute_request_for_feedback_submission():
 def test_preview_review_panel_has_3row_layout_and_review_actions():
     """评审面板：3-row layout, 5-state filter, 已取消(deleted) in 已拒绝, editable 待评审,
     only reviewable cards cancel; rejected/executed cards delete, no multi-select checkboxes."""
-    js = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
-    html = (ROOT / "dev/static/preview.html").read_text(encoding="utf-8")
+    js = (ROOT / "src/static/js/preview.js").read_text(encoding="utf-8")
+    html = (ROOT / "src/static/preview.html").read_text(encoding="utf-8")
     for label in ("待提交", "待评审", "已评审", "已拒绝", "已执行"):
         assert label in js
     assert "previewFilterBar" in html
@@ -136,7 +136,7 @@ def test_preview_review_panel_has_3row_layout_and_review_actions():
 def test_share_view_exposes_feedback_but_not_review_or_execution_controls():
     """分享页反馈面板：图标反馈按钮(在大纲后), 图标操作按钮, 无独立 note 输入框,
     浮窗 加入待办/提交评审; 不暴露 review/task 控制."""
-    source = (ROOT / "dev/static/share-view.html").read_text(encoding="utf-8")
+    source = (ROOT / "src/static/share-view.html").read_text(encoding="utf-8")
     assert "/feedback" in source
     assert "提交评审" in source
     assert "加入待办" in source
@@ -156,8 +156,8 @@ def test_share_view_exposes_feedback_but_not_review_or_execution_controls():
 def test_share_and_review_share_dynamic_action_templates_and_readonly_views():
     """本轮需求：action 动态取后台 task_templates（不写死）、已提交/只读视图压缩、
     已提交隐藏提交评审按钮。"""
-    share = (ROOT / "dev/static/share-view.html").read_text(encoding="utf-8")
-    js = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
+    share = (ROOT / "src/static/share-view.html").read_text(encoding="utf-8")
+    js = (ROOT / "src/static/js/preview.js").read_text(encoding="utf-8")
     # 分享页动态加载 /api/clawmate/config 的 task_templates
     assert "_shareLoadTemplates" in share
     assert "/config" in share
@@ -177,8 +177,8 @@ def test_share_and_review_share_dynamic_action_templates_and_readonly_views():
 
 def test_card_submit_review_uses_the_same_button_style_as_review_approval():
     """待提交卡片的“提交评审”与待评审“评审通过”共用 preview-bottom-btn。"""
-    js = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
-    share = (ROOT / "dev/static/share-view.html").read_text(encoding="utf-8")
+    js = (ROOT / "src/static/js/preview.js").read_text(encoding="utf-8")
+    share = (ROOT / "src/static/share-view.html").read_text(encoding="utf-8")
     assert "submit.className = 'preview-bottom-btn';" in js
     assert "submit.textContent = '提交评审';" in js
     assert "b.className = 'preview-bottom-btn'" in js
@@ -189,9 +189,9 @@ def test_card_submit_review_uses_the_same_button_style_as_review_approval():
 def test_feedback_cards_follow_status_visibility_order_sorting_and_manual_refresh():
     """Pending cards expose tags; completed cards expose their selected action.
     Lists are newest-first and no feedback list is background-polled."""
-    js = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
-    share = (ROOT / "dev/static/share-view.html").read_text(encoding="utf-8")
-    css = (ROOT / "dev/static/css/preview.css").read_text(encoding="utf-8")
+    js = (ROOT / "src/static/js/preview.js").read_text(encoding="utf-8")
+    share = (ROOT / "src/static/share-view.html").read_text(encoding="utf-8")
+    css = (ROOT / "src/static/css/preview.css").read_text(encoding="utf-8")
 
     assert "var isPendingReview = (item.status === 'pending_review');" in js
     assert "if (!isReadOnly)" in share
@@ -210,7 +210,7 @@ def test_feedback_cards_follow_status_visibility_order_sorting_and_manual_refres
 
 def test_review_feedback_submission_preserves_template_action_scope_and_task_id():
     """Adding/submitting feedback must keep all template fields, not task_id alone."""
-    js = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
+    js = (ROOT / "src/static/js/preview.js").read_text(encoding="utf-8")
     assert "var _lastPstSelection = null;" in js
     assert "_lastPstSelection = { action: t.action, scope: t.scope, task_id: t.id };" in js
     assert "var _mapEntry = _lastPstSelection ||" in js
@@ -224,7 +224,7 @@ def test_review_feedback_submission_preserves_template_action_scope_and_task_id(
 def test_selection_tooltip_action_state_is_scoped_away_from_feedback_cards():
     """Selecting or closing the floating tooltip must not clear active actions
     on pending feedback cards, which deliberately share the pst-tag style."""
-    js = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
+    js = (ROOT / "src/static/js/preview.js").read_text(encoding="utf-8")
     hide_tooltip = js.split("function hideTooltip()", 1)[1].split("function findContentBody", 1)[0]
     init_tags = js.split("function initPstTags()", 1)[1].split("function _resolvePstAction", 1)[0]
     assert "pstTags.querySelectorAll('.pst-tag')" in hide_tooltip
@@ -235,10 +235,10 @@ def test_selection_tooltip_action_state_is_scoped_away_from_feedback_cards():
 
 def test_feedback_position_contract_uses_canonical_position_and_visible_fallback():
     """All client submissions normalize legacy location and every card labels an empty locator."""
-    js = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
-    share = (ROOT / "dev/static/share-view.html").read_text(encoding="utf-8")
-    store = (ROOT / "dev/store.py").read_text(encoding="utf-8")
-    share_routes = (ROOT / "dev/share_routes.py").read_text(encoding="utf-8")
+    js = (ROOT / "src/static/js/preview.js").read_text(encoding="utf-8")
+    share = (ROOT / "src/static/share-view.html").read_text(encoding="utf-8")
+    store = (ROOT / "src/store.py").read_text(encoding="utf-8")
+    share_routes = (ROOT / "src/share_routes.py").read_text(encoding="utf-8")
 
     assert "function _feedbackPosition(item)" in js
     assert "return '定位：' + (_feedbackPosition(item) || '—');" in js
@@ -259,8 +259,8 @@ def test_feedback_position_contract_uses_canonical_position_and_visible_fallback
 
 def test_share_history_and_panel_state_contracts():
     """Share history uses the token-scoped API; tooltip sends preserve panel state."""
-    share = (ROOT / "dev/static/share-view.html").read_text(encoding="utf-8")
-    routes = (ROOT / "dev/share_routes.py").read_text(encoding="utf-8")
+    share = (ROOT / "src/static/share-view.html").read_text(encoding="utf-8")
+    routes = (ROOT / "src/share_routes.py").read_text(encoding="utf-8")
     assert "'/share/' + TOKEN + '/feedback'" in share
     assert "await _shareLoadSubmitted();" in share
     assert "closeShareFeedback();" not in share[share.index("async function _shareSubmitPending"):share.index("// Selection tooltip logic")]
@@ -278,9 +278,9 @@ def test_share_history_and_panel_state_contracts():
 def test_readonly_feedback_cards_share_locator_time_and_content_contracts():
     """Every read-only state omits file-prefix locators, uses a space-separated
     timestamp, and presents selected text through the shared content class."""
-    js = (ROOT / "dev/static/js/preview.js").read_text(encoding="utf-8")
-    share = (ROOT / "dev/static/share-view.html").read_text(encoding="utf-8")
-    css = (ROOT / "dev/static/css/preview.css").read_text(encoding="utf-8")
+    js = (ROOT / "src/static/js/preview.js").read_text(encoding="utf-8")
+    share = (ROOT / "src/static/share-view.html").read_text(encoding="utf-8")
+    css = (ROOT / "src/static/css/preview.css").read_text(encoding="utf-8")
 
     assert "function _feedbackCardTime(item)" in js
     assert "time.textContent = _feedbackCardTime(item);" in js

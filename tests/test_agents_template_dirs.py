@@ -17,8 +17,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 import sys
 
-if str(ROOT / "dev") not in sys.path:
-    sys.path.insert(0, str(ROOT / "dev"))
+if str(ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(ROOT / "src"))
 
 
 def test_agents_template_names_the_governance_anchors():
@@ -44,7 +44,7 @@ def test_agents_template_does_not_promise_lazily_created_dirs():
 
 
 def test_agents_template_uses_contract_dir_names():
-    """`src/`/`tests/` are the only names; the old dev/test aliases must not return."""
+    """`src/`/`tests/` are the only names; the old src/test aliases must not return."""
     import project_routes
 
     tpl = project_routes._AGENTS_TEMPLATE

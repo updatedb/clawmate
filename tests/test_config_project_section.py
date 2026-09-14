@@ -2,7 +2,7 @@
 
 `_parse_config()` declared `project=field(default_factory=ProjectConfig)` but
 never passed `project=` to `AppConfig(...)`, so the dataclass defaults always
-won at runtime.  `dev/project_routes.py` reads `cfg.project.git_user_email` /
+won at runtime.  `src/project_routes.py` reads `cfg.project.git_user_email` /
 `cfg.project.git_user_name` to author project commits, so editing the section
 in `config.json` silently changed nothing -- files landed under the default
 identity while the file said otherwise.
@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-DEV = ROOT / "dev"
+DEV = ROOT / "src"
 if str(DEV) not in sys.path:
     sys.path.insert(0, str(DEV))
 

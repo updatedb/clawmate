@@ -15,7 +15,7 @@ Thumbs.db
 .idea/
 dist/
 build/
-dev/static/dist/
+src/static/dist/
 playwright-report/
 test-results/
 .playwright-cli/
@@ -39,7 +39,7 @@ test/DeepSeek*.pdf
 
 # v1.25: audit.json 已删除（webhook_wake 移除, 不再需要独立审计）
 # v1.19 dev 评估: sessions.json 是运行时 session 状态 (用户+token+TTL)，非源码，加 gitignore 防止误提交
-dev/sessions.json
+src/sessions.json
 users.json
 roots.json
 # root_migration.py copies users.json here before rewriting it on upgrade; the

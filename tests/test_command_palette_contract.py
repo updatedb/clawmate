@@ -6,25 +6,25 @@ def _read(rel):
     return (ROOT / rel).read_text(encoding="utf-8")
 
 def test_title_wraps_vertical_center_not_horizontal():
-    style = _read("dev/static/css/style.css")
+    style = _read("src/static/css/style.css")
     i = style.index(".path-title-wrap {")
     assert "align-items: center" in style[i:i + 220]
     assert "justify-content: center" not in style[i:i + 220]
 
-    preview = _read("dev/static/css/preview.css")
+    preview = _read("src/static/css/preview.css")
     j = preview.rindex(".preview-topbar-title-wrap {")
     assert "align-items: center" in preview[j:j + 240]
     assert "justify-content: center" not in preview[j:j + 240]
 
 def test_mru_helpers_in_app_js():
-    src = _read("dev/static/js/app.js")
+    src = _read("src/static/js/app.js")
     assert "function recordProjectUse(rootId, name)" in src
     assert "function projectUseAt(rootId, name)" in src
     assert "clawmate.recentProjects" in src
 
 def test_palette_search_chips_and_cards():
-    html = _read("dev/static/index.html")
-    css = _read("dev/static/css/command-palette.css")
+    html = _read("src/static/index.html")
+    css = _read("src/static/css/command-palette.css")
     assert "cp-chips" in html
     assert "data-cp-search" in html
     assert "文件搜索" in html
@@ -35,7 +35,7 @@ def test_palette_search_chips_and_cards():
     assert "grid-template-columns: repeat(auto-fill" in css
 
 def test_palette_projects_only_and_mru():
-    src = _read("dev/static/js/command-palette.js")
+    src = _read("src/static/js/command-palette.js")
     assert "projectUseAt" in src
     assert "recordProjectUse" in src
     assert "data-cp-search" in src          # 绑定 chip 点击
@@ -43,6 +43,6 @@ def test_palette_projects_only_and_mru():
     assert "_pushSearchActions" not in src  # 搜索项不再是列表 item
 
 def test_project_panel_open_records_mru():
-    src = _read("dev/static/js/app.js")
+    src = _read("src/static/js/app.js")
     # 在项目面板打开/激活路径里必须调用 recordProjectUse
     assert "recordProjectUse(state.rootId, state.project)" in src

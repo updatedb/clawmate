@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from dev.terminal_session import TerminalSession
+from src.terminal_session import TerminalSession
 
 
 class FakePty:

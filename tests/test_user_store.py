@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from dev.config import _parse_config
-from dev.user_store import UserStore, resolve_granted_root
+from src.config import _parse_config
+from src.user_store import UserStore, resolve_granted_root
 
 
 def test_config_parses_one_system_root(tmp_path: Path):

@@ -2,8 +2,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-APP_JS = ROOT / "dev" / "static" / "js" / "app.js"
-INDEX_HTML = ROOT / "dev" / "static" / "index.html"
+APP_JS = ROOT / "src" / "static" / "js" / "app.js"
+INDEX_HTML = ROOT / "src" / "static" / "index.html"
 
 
 def test_directory_page_excludes_unused_preview_rendering_helpers():

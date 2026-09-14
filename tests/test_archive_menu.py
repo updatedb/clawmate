@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-APP_JS = ROOT / "dev" / "static" / "js" / "app.js"
+APP_JS = ROOT / "src" / "static" / "js" / "app.js"
 
 
 def test_index_archive_card_menu_exposes_extract_action():

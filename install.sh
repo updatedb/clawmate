@@ -47,7 +47,7 @@ if [ ! -f "$_CFG_PATH" ]; then
 fi
 
 # 准备 venv
-_VENV="$CLAWMATE_DIR/dev/.venv"
+_VENV="$CLAWMATE_DIR/src/.venv"
 if [ ! -f "$_VENV/bin/pip" ]; then
   echo "创建 Python 虚拟环境..."
   if ! python3 -m venv "$_VENV" 2>/dev/null; then
@@ -75,7 +75,7 @@ After=network.target
 [Service]
 Type=simple
 User=$CLAWMATE_USER
-WorkingDirectory=$CLAWMATE_DIR/dev
+WorkingDirectory=$CLAWMATE_DIR/src
 ExecStart=$_VENV/bin/python main.py
 Restart=on-failure
 RestartSec=5

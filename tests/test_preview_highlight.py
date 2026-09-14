@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PREVIEW_JS = ROOT / "dev" / "static" / "js" / "preview.js"
+PREVIEW_JS = ROOT / "src" / "static" / "js" / "preview.js"
 
 
 def test_dark_markdown_theme_does_not_override_highlight_tokens():

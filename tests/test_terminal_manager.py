@@ -7,7 +7,7 @@ import tty
 
 import pytest
 
-from dev.terminal_manager import PosixPtyAdapter, SessionRequest, TerminalManager
+from src.terminal_manager import PosixPtyAdapter, SessionRequest, TerminalManager
 
 
 class FakePty:

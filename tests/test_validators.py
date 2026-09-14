@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "dev"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from validators import validate_json, validate_css, validate_html
 

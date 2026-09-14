@@ -27,7 +27,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-CSS = Path(__file__).resolve().parents[1] / "dev" / "static" / "css" / "preview.css"
+CSS = Path(__file__).resolve().parents[1] / "src" / "static" / "css" / "preview.css"
 PREVIEW_JS = CSS.parents[1] / "js" / "preview.js"
 
 

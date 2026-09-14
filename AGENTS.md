@@ -2,19 +2,19 @@
 
 ## Project Structure & Module Organization
 
-ClawMate is a FastAPI service with a framework-free frontend. Backend modules live in `dev/`: `main.py` creates the application, `*_routes.py` files define endpoints, and service/configuration logic lives in modules such as `service.py`, `store.py`, and `config.py`. Browser assets are under `dev/static/` (`js/`, `css/`, vendor libraries, and HTML). Tests belong in `tests/`; use `scripts/` for maintenance utilities. Deployment files are at the repository root, while screenshots and documentation live in `assets/` and `docs/`.
+ClawMate is a FastAPI service with a framework-free frontend. Backend modules live in `src/`: `main.py` creates the application, `*_routes.py` files define endpoints, and service/configuration logic lives in modules such as `service.py`, `store.py`, and `config.py`. Browser assets are under `src/static/` (`js/`, `css/`, vendor libraries, and HTML). Tests belong in `tests/`; use `scripts/` for maintenance utilities. Deployment files are at the repository root, while screenshots and documentation live in `assets/` and `docs/`.
 
 ## Build, Test, and Development Commands
 
 - `cp config.example.json config.json` creates a local configuration; update root paths and service URLs before starting.
-- `python3 -m venv dev/.venv && dev/.venv/bin/pip install -r requirements.txt` prepares the Python environment.
-- `cd dev && .venv/bin/python main.py` starts the service on the configured port (5533 by default).
-- `dev/.venv/bin/python -m pytest` runs the test suite from the repository root. Install `pytest` if needed.
+- `python3 -m venv src/.venv && src/.venv/bin/pip install -r requirements.txt` prepares the Python environment.
+- `cd src && .venv/bin/python main.py` starts the service on the configured port (5533 by default).
+- `src/.venv/bin/python -m pytest` runs the test suite from the repository root. Install `pytest` if needed.
 - `docker build -t clawmate:latest .` verifies the production image. `docker compose up -d` runs the configured container stack.
 
 ## Coding Style & Naming Conventions
 
-Use four-space indentation and type annotations for new Python code. Follow existing module boundaries: route modules handle HTTP concerns, while reusable filesystem or business logic belongs in services or stores. Name Python functions and files with `snake_case`, classes with `PascalCase`, and tests `test_<behavior>`. Frontend code uses vanilla JavaScript and CSS; preserve the local formatting and reuse tokens from `dev/static/css/tokens.css`. No repository-wide formatter or linter is currently enforced, so keep diffs focused and consistent with neighboring code.
+Use four-space indentation and type annotations for new Python code. Follow existing module boundaries: route modules handle HTTP concerns, while reusable filesystem or business logic belongs in services or stores. Name Python functions and files with `snake_case`, classes with `PascalCase`, and tests `test_<behavior>`. Frontend code uses vanilla JavaScript and CSS; preserve the local formatting and reuse tokens from `src/static/css/tokens.css`. No repository-wide formatter or linter is currently enforced, so keep diffs focused and consistent with neighboring code.
 
 ## Frontend Panel Layout Conventions
 
@@ -67,7 +67,7 @@ Conventions for new frontend code. Existing code was not migrated wholesale (hig
 - **Element** (child of a block): flat kebab `block-element` — `project-panel-header`, `cp-card-name`, `agent-history-item-title`.
 - **State classes**: `.active`, `.hidden`, `.is-selected`.
 - **Sizing/tiers**: always via design tokens (`--btn-h-lg/h/sm`, `--radius-*`, `--bg-*`); no magic numbers. Button height tiers: 34 (`--btn-h-lg`) icons / 30 (`--btn-h`) standard / 26 (`--btn-h-sm`) compact.
-- `:root`-level tokens live in `dev/static/css/tokens.css`; surfaces must not define their own hardcoded sizes/colors if a token exists.
+- `:root`-level tokens live in `src/static/css/tokens.css`; surfaces must not define their own hardcoded sizes/colors if a token exists.
 
 ## Testing Guidelines
 

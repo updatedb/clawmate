@@ -8,9 +8,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_share_and_preview_load_one_feedback_panel_contract():
     """Both surfaces load the card factory; only share keeps its token endpoint."""
-    share = (ROOT / "dev/static/share-view.html").read_text(encoding="utf-8")
-    common = (ROOT / "dev/static/js/preview-common.js").read_text(encoding="utf-8")
-    panel = ROOT / "dev/static/js/feedback-panel.js"
+    share = (ROOT / "src/static/share-view.html").read_text(encoding="utf-8")
+    common = (ROOT / "src/static/js/preview-common.js").read_text(encoding="utf-8")
+    panel = ROOT / "src/static/js/feedback-panel.js"
     assert panel.exists()
     assert "feedback-panel.js" in share
     assert "feedback-panel.js" in common
@@ -22,8 +22,8 @@ def test_share_and_preview_load_one_feedback_panel_contract():
 
 
 def test_shared_panel_filters_actions_and_normalizes_submission_payload():
-    common = ROOT / "dev/static/js/preview-common.js"
-    panel = ROOT / "dev/static/js/feedback-panel.js"
+    common = ROOT / "src/static/js/preview-common.js"
+    panel = ROOT / "src/static/js/feedback-panel.js"
     script = r'''
 const fs = require('fs'), vm = require('vm');
 const context = { window: {}, document: { head: null } };
@@ -50,7 +50,7 @@ console.log(JSON.stringify({
 
 def test_shared_panel_validation_rule_enforces_required_fields():
     """The review/share 浮窗 share one required-field rule via validateSubmission."""
-    panel = ROOT / "dev/static/js/feedback-panel.js"
+    panel = ROOT / "src/static/js/feedback-panel.js"
     script = r'''
 const fs = require('fs'), vm = require('vm');
 const context = { window: {}, document: { head: null } };

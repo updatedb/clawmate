@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PREVIEW_JS = ROOT / "dev" / "static" / "js" / "preview.js"
+PREVIEW_JS = ROOT / "src" / "static" / "js" / "preview.js"
 
 
 def test_agent_selection_mode_routes_to_agent_input():
@@ -76,6 +76,6 @@ def test_mermaid_expand_dialog_can_export_the_unzoomed_diagram_as_png():
 def test_preview_markdown_renderer_normalizes_dev_static_asset_paths():
     js = PREVIEW_JS.read_text(encoding="utf-8")
 
-    assert "dev\\/static" in js
+    assert "(?:dev|src)\\/static" in js
     assert "asset/clawmate-logo.png" not in js[js.index("function createMarkdownRenderer"):js.index("function createMarkdownRenderer") + 2200]
     assert "const range = sel.getRangeAt(0);" not in js

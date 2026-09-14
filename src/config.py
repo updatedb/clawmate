@@ -2,7 +2,7 @@
 ConfigLoader — 类型化 data class + 模块级单例。
 
 Usage:
-    from dev.config import set_config_path, load as config
+    from src.config import set_config_path, load as config
 
     config.roots                     # list[RootEntry]
     config.root_agent("writer")      # → "writer"

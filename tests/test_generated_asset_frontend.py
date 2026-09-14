@@ -2,10 +2,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PREVIEW_HTML = ROOT / "dev/static/preview.html"
-PREVIEW_JS = ROOT / "dev/static/js/preview.js"
-PANEL_JS = ROOT / "dev/static/js/image-assets-panel.js"
-PREVIEW_CSS = ROOT / "dev/static/css/preview.css"
+PREVIEW_HTML = ROOT / "src/static/preview.html"
+PREVIEW_JS = ROOT / "src/static/js/preview.js"
+PANEL_JS = ROOT / "src/static/js/image-assets-panel.js"
+PREVIEW_CSS = ROOT / "src/static/css/preview.css"
 
 
 def test_image_asset_panel_is_lazy_registered_without_base64_transport():

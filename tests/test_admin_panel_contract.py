@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-STATIC = Path(__file__).resolve().parents[1] / "dev" / "static"
+STATIC = Path(__file__).resolve().parents[1] / "src" / "static"
 ENTRIES = ("btnToggleAgent", "btnProjectPanel", "btnToggleFeedback")
 # The containers the entries close through. index and preview name theirs
 # differently (agentPanel vs previewAgentPanel) and preview has no project

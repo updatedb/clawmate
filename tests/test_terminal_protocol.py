@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from dev.terminal_protocol import (
+from src.terminal_protocol import (
     ProtocolError,
     decode_binary_frame,
     encode_binary_frame,
