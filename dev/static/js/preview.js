@@ -253,10 +253,49 @@
     return refreshToken ? url + '?_clawmate_refresh=' + encodeURIComponent(refreshToken) : url;
   }
 
-  function refreshRenderedImageSources(container, refreshToken) {
+  // Resolve a document-relative href into a path relative to the root the file
+  // itself lives under, collapsing "." and ".." segments. Shared by the
+  // markdown-it image/link rules and the post-render pass that catches raw
+  // HTML <img> tags.
+  //
+  // Two details make this more than a string join:
+  //   * markdown-it hands the destination over percent-encoded (mdurl.encode
+  //     escapes every non-ASCII byte), so decoding first is what keeps
+  //     encodeURIComponent from turning "%E9" into "%25E9".
+  //   * ".." has to be folded away rather than passed through: the server's
+  //     _normalize_rel_path rejects any ".." segment with a 400.
+  //
+  // Returns null when the href climbs above the root, which callers treat as
+  // "not a resolvable doc-relative link".
+  function resolveDocRelativePath(entryRelPath, href) {
+    var decoded = href;
+    try { decoded = decodeURIComponent(href); } catch (_) {}
+    var stack = String(entryRelPath || '').split('/').slice(0, -1).filter(Boolean);
+    var parts = decoded.split('/');
+    for (var i = 0; i < parts.length; i++) {
+      var part = parts[i];
+      if (!part || part === '.') continue;
+      if (part === '..') {
+        if (!stack.length) return null;
+        stack.pop();
+        continue;
+      }
+      stack.push(part);
+    }
+    return stack.join('/');
+  }
+
+  function refreshRenderedImageSources(container, refreshToken, entryRelPath) {
     if (!container) return;
     container.querySelectorAll('img[src]').forEach(function(image) {
       try {
+        // Raw HTML <img> tags pass through markdown-it untouched, so a
+        // doc-relative src reaches the DOM unresolved and is handled here.
+        var raw = image.getAttribute('src') || '';
+        if (raw && !/^https?:\/\//i.test(raw) && !/^data:/i.test(raw) && !raw.startsWith('/')) {
+          var resolved = resolveDocRelativePath(entryRelPath, raw);
+          if (resolved) image.setAttribute('src', buildPreviewUrl(resolved, refreshToken));
+        }
         var source = new URL(image.getAttribute('src'), window.location.origin);
         if (source.origin !== window.location.origin) return;
         if (source.pathname === '/api/clawmate/preview' && refreshToken) {
@@ -299,9 +338,8 @@
       if (/^\/?dev\/static\//i.test(href)) {
         href = buildStaticAssetUrl(href, refreshToken);
       } else if (!/^https?:\/\//i.test(href) && !href.startsWith('/')) {
-        const dir = entryRelPath.split('/').slice(0, -1).join('/');
-        const fullPath = dir ? dir + '/' + href : href;
-        href = buildPreviewUrl(fullPath, refreshToken);
+        const fullPath = resolveDocRelativePath(entryRelPath, href);
+        if (fullPath) href = buildPreviewUrl(fullPath, refreshToken);
       }
       return `<img src="${href}" alt="${escHtml(text)}"${title ? ` title="${escHtml(title)}"` : ''}>`;
     };
@@ -314,10 +352,11 @@
       const token = tokens[idx];
       let href = token.attrGet('href') || '';
       if (href && !/^https?:\/\//i.test(href) && !href.startsWith('/') && !href.startsWith('#')) {
-        const dir = entryRelPath.split('/').slice(0, -1).join('/');
-        const fullPath = dir ? dir + '/' + href : href;
-        href = `preview.html?root=${encodeURIComponent(rootId)}&file=${encodeURIComponent(fullPath)}`;
-        token.attrSet('href', href);
+        const fullPath = resolveDocRelativePath(entryRelPath, href);
+        if (fullPath) {
+          href = `preview.html?root=${encodeURIComponent(rootId)}&file=${encodeURIComponent(fullPath)}`;
+          token.attrSet('href', href);
+        }
       }
       return defaultLinkOpen(tokens, idx, options, env, slf);
     };
@@ -2726,7 +2765,7 @@
         }
         // Parse succeeded — render markdown
         mdDiv.innerHTML = html;
-        refreshRenderedImageSources(mdDiv, refreshToken);
+        refreshRenderedImageSources(mdDiv, refreshToken, filePath);
         contentBody.appendChild(mdDiv);
         window._mermaidContainer = mdDiv;
 
