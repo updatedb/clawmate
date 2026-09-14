@@ -3,7 +3,7 @@ Unit tests for validators.py — format validation (JSON, CSS, HTML).
 
 Usage:
     cd /home/openclaw/webprojects/clawmate
-    python -m pytest test/test_validators.py -v
+    python -m pytest tests/test_validators.py -v
 """
 
 from __future__ import annotations

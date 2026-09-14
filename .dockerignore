@@ -18,5 +18,5 @@ build/
 config.json
 sessions.json
 feedback.json
-test/*.pdf
+tests/*.pdf
 *.swp
