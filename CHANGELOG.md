@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.63 (2026-09-16)
+### 图片预览与画廊性能优化
+- **根因**：图片画廊和预览页左侧大纲把数 MB 的原图直接作为缩略图；打开单张图片时会并发下载同目录全部原图，且响应统一使用 `no-store`，重复访问无法复用浏览器缓存。真实 Chromium 采样的 13 张图片目录中，单图 preview 冷加载传输了约 41.94 MiB。
+- **缩略图派生与缓存**：新增受授权 root/path 约束的 `/api/clawmate/thumbnail` 接口，按源文件路径、mtime、大小与目标尺寸缓存 WebP 派生图；index 画廊和 preview 图片大纲均改用 160px 缩略图，原图只用于当前详情预览。
+- **原图可验证缓存**：图片预览响应改为 `private, max-age=86400, must-revalidate`，保留文件元数据的 ETag/Last-Modified 重新验证；文本、音视频等既有无缓存响应策略不变。
+- **图片模式减负**：Markdown、DOMPurify 和代码高亮依赖改为仅在 Markdown 分支首次需要时动态加载，图片预览首屏不再解析这组工具链。
+- **验证**：新增缩略图尺寸/格式/缓存响应头回归测试，以及图片模式不阻塞 Markdown vendor 脚本的契约测试；`src/.venv/bin/python -m pytest tests -q` → **590 passed**。真实 Chromium 复测确认当前详情原图约 7.64 MB 时，13 个大纲缩略图合计约 43 KB，Markdown 预览正常且无控制台错误。
+
 ## v1.62 (2026-09-15)
 ### 修复 SKILL.md 示例中的未转义插值（ClawHub ClawScan 判定 `suspicious`）
 - **背景**：`clawmate@2.9.0` 发布后，ClawHub **主安全判定 ClawScan** 返回 `suspicious`（confidence: high）——「its file-changing shell and API examples interpolate project data and feedback content without enough validation or encoding」。**注意**：列表页/`inspect` 显示的是 `Moderate CLEAN`，与 ClawScan 判定不一致；ClawHub 扫描报告自述「ClawScan is the primary security verdict」，故以扫描报告为准（`virustotal.json` 为 `null`，无 VT 数据，也是本次 reason code 不是 `scanner.vt.clean` 的原因）。

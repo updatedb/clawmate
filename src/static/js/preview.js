@@ -207,7 +207,20 @@
     return _scriptLoads[src];
   }
 
-  var _mermaidLoaded = false, _katexLoaded = false, _pdfJsLoaded = false, _terminalLoaded = false;
+  var _markdownRendererLoaded = false, _mermaidLoaded = false, _katexLoaded = false, _pdfJsLoaded = false, _terminalLoaded = false;
+
+  async function ensureMarkdownRenderer() {
+    if (_markdownRendererLoaded) return;
+    if (!window.DOMPurify) await loadScript('./vendor/purify.min.js');
+    if (!window.markdownit) await loadScript('./vendor/markdown-it.min.js');
+    if (!window.markdownitContainer) await loadScript('./vendor/markdown-it-container.min.js');
+    if (!window.markdownitEmoji) await loadScript('./vendor/markdown-it-emoji.min.js');
+    if (!window.markdownitFootnote) await loadScript('./vendor/markdown-it-footnote.min.js');
+    if (!window.markdownitTaskLists) await loadScript('./vendor/markdown-it-task-lists.min.js');
+    if (!window.hljs) await loadScript('./vendor/highlight.min.js');
+    if (window.hljs) window.hljs.configure({ ignoreUnescapedHTML: true });
+    _markdownRendererLoaded = true;
+  }
 
   async function ensureMermaid() {
     if (_mermaidLoaded) return;
@@ -239,9 +252,6 @@
     await loadScript('./dist/terminal.js');
     _terminalLoaded = true;
   }
-
-  // ============ Markdown Renderer Setup ============
-  if (window.hljs) window.hljs.configure({ ignoreUnescapedHTML: true });
 
   function buildPreviewUrl(path, refreshToken) {
     var url = `/api/clawmate/preview?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(path)}`;
@@ -2348,9 +2358,10 @@
       a.style.cssText = 'display:flex;align-items:center;justify-content:center;padding:4px 8px;';
 
       const thumb = document.createElement('img');
-      thumb.src = '/api/clawmate/preview?root=' + encodeURIComponent(rootId) + '&path=' + encodeURIComponent(imgPath);
+      thumb.src = '/api/clawmate/thumbnail?root=' + encodeURIComponent(rootId) + '&path=' + encodeURIComponent(imgPath) + '&size=160';
       thumb.style.cssText = 'max-width:100%;max-height:80px;object-fit:contain;border-radius:4px;flex-shrink:0;border:1px solid var(--border-color);';
       thumb.loading = 'lazy';
+      thumb.decoding = 'async';
       thumb.alt = imgEntry.name;
       thumb.title = imgEntry.name;
       a.appendChild(thumb);
@@ -2687,6 +2698,7 @@
       }
 
       // ======== Markdown: render both views, then apply mode ========
+      if (isMarkdownMode) await ensureMarkdownRenderer();
       if (isMarkdownMode && window.markdownit && window.DOMPurify) {
         // Clear any previous content before building
         contentBody.innerHTML = '';

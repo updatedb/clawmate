@@ -34,3 +34,13 @@ def test_markdown_text_is_shown_before_optional_diagram_and_math_assets_load():
     assert js.index("removeLoading();\n        updateMarkdownDynamicButtons();\n        var enhancementLoads") < js.index(
         "if (needsMermaid) enhancementLoads.push(ensureMermaid());"
     )
+
+
+def test_image_preview_does_not_block_on_markdown_vendor_scripts():
+    html = PREVIEW_HTML.read_text(encoding="utf-8")
+    js = PREVIEW_JS.read_text(encoding="utf-8")
+
+    assert '<script src="./vendor/markdown-it.min.js" defer>' not in html
+    assert '<script src="./vendor/purify.min.js" defer>' not in html
+    assert "async function ensureMarkdownRenderer()" in js
+    assert "await ensureMarkdownRenderer();" in js

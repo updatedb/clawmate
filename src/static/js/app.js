@@ -929,7 +929,7 @@ function renderGallery(markdownEntries, folderEntries, otherEntries) {
       thumb.className = "thumb";
       if (entry.category === "image") {
         const img = document.createElement("img");
-        img.src = `/api/clawmate/preview?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}`;
+        img.src = `/api/clawmate/thumbnail?root=${encodeURIComponent(state.rootId)}&path=${encodeURIComponent(entry.relPath)}&size=160`;
         img.loading = "lazy";
         img.decoding = "async";
         thumb.appendChild(img);

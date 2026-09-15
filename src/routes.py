@@ -9,11 +9,14 @@ from urllib.parse import quote, unquote_to_bytes
 import hashlib
 import hmac
 import os
+import tempfile
 import time
 import zipfile
 import httpx
 import jwt as pyjwt
 from pathlib import Path
+
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from service import (
     list_dir,
@@ -278,6 +281,8 @@ def verify_preview_token(root_id: str, rel_path: str, token: str) -> bool:
 
 
 _NO_CACHE = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
+_MEDIA_CACHE = {"Cache-Control": "private, max-age=86400, must-revalidate"}
+_THUMBNAIL_CACHE_DIR = Path(tempfile.gettempdir()) / "clawmate-thumbnail-cache"
 
 
 def _nocache_json(content: dict, status: int = 200) -> JSONResponse:
@@ -287,6 +292,70 @@ def _nocache_json(content: dict, status: int = 200) -> JSONResponse:
 def _nocache_file(path: Path, **kw) -> FileResponse:
     headers = {**_NO_CACHE, **(kw.pop("headers", {}) or {})}
     return FileResponse(path, headers=headers, **kw)
+
+
+def _cacheable_media_file(path: Path, **kw) -> FileResponse:
+    headers = {**_MEDIA_CACHE, **(kw.pop("headers", {}) or {})}
+    return FileResponse(path, headers=headers, **kw)
+
+
+def _thumbnail_path(source: Path, size: int) -> Path:
+    stat = source.stat()
+    cache_key = f"{source.resolve()}:{stat.st_mtime_ns}:{stat.st_size}:{size}".encode()
+    return _THUMBNAIL_CACHE_DIR / f"{hashlib.sha256(cache_key).hexdigest()}.webp"
+
+
+def _create_thumbnail(source: Path, size: int) -> Path:
+    """Return a cached WebP thumbnail whose key changes with the source version."""
+    target = _thumbnail_path(source, size)
+    if target.exists():
+        return target
+
+    _THUMBNAIL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        with Image.open(source) as image:
+            normalized = ImageOps.exif_transpose(image)
+            normalized.thumbnail((size, size), Image.Resampling.LANCZOS)
+            if normalized.mode != "RGB":
+                normalized = normalized.convert("RGB")
+            with tempfile.NamedTemporaryFile(dir=_THUMBNAIL_CACHE_DIR, suffix=".webp", delete=False) as handle:
+                temporary = Path(handle.name)
+            try:
+                normalized.save(temporary, format="WEBP", quality=78, method=4)
+                temporary.replace(target)
+            finally:
+                if temporary.exists():
+                    temporary.unlink(missing_ok=True)
+    except (UnidentifiedImageError, OSError) as exc:
+        raise HTTPException(status_code=415, detail="Unsupported image thumbnail format") from exc
+    return target
+
+
+@router.get("/api/clawmate/thumbnail")
+async def clawmate_thumbnail(
+    root: str = "",
+    path: str = "",
+    size: int = Query(160, ge=32, le=512),
+):
+    """Serve an authorized, versioned raster thumbnail for gallery surfaces."""
+    if not root or not root.strip():
+        return RedirectResponse(url="/clawmate/", status_code=302)
+    try:
+        _, source, _ = safe_path(root, path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Root not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    if not source.exists() or source.is_dir():
+        raise HTTPException(status_code=404, detail="File not found")
+    if guess_category(source) != "image":
+        raise HTTPException(status_code=415, detail="Thumbnail is only available for images")
+
+    thumbnail = _create_thumbnail(source, size)
+    return _cacheable_media_file(thumbnail, media_type="image/webp")
 
 
 @router.get("/api/clawmate/preview")
@@ -306,7 +375,9 @@ async def clawmate_preview(root: str = "", path: str = ""):
         raise HTTPException(status_code=404, detail="File not found")
 
     category = guess_category(target)
-    if category in ("image", "audio", "video"):
+    if category == "image":
+        return _cacheable_media_file(target)
+    if category in ("audio", "video"):
         return _nocache_file(target)
 
     meta = file_info(target, safe_rel)
